@@ -229,6 +229,29 @@ app.post('/admin/login', async (req, res, next) => {
 
 app.post('/admin/logout', (req, res) => { auth.clearSession(res); res.redirect('/admin/login'); });
 
+// Public diagnostic (no secrets): reports whether the service key can read staff accounts.
+app.get('/admin/health', async (req, res) => {
+  const st = db();
+  const out = { serviceKeyConfigured: !!st };
+  if (!st) {
+    out.diagnosis = 'MASALAH: SUPABASE_SERVICE_ROLE_KEY belum di-set di Railway.';
+  } else {
+    try {
+      const staff = await st.listStaff();
+      out.canReadStaff = true;
+      out.staffCount = staff.length;
+      out.diagnosis = staff.length > 0
+        ? 'OK: service key jalan, login admin harusnya bisa.'
+        : 'MASALAH: 0 akun staff terbaca. SUPABASE_SERVICE_ROLE_KEY kemungkinan salah (terisi anon key, bukan service_role key).';
+    } catch (e) {
+      out.canReadStaff = false;
+      out.error = String(e.message || '').slice(0, 160);
+      out.diagnosis = 'MASALAH: gagal membaca data (' + out.error + ').';
+    }
+  }
+  res.type('application/json').send(JSON.stringify(out, null, 2));
+});
+
 app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
