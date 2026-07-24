@@ -86,7 +86,19 @@ tr:last-child td{border-bottom:none}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
-@media(max-width:560px){.topbar nav a{padding:7px 9px;font-size:13px}}
+@media(max-width:600px){
+  .topbar nav a{padding:7px 9px;font-size:13px}
+  /* Reflow wide tables into stacked cards on phones */
+  table{min-width:0 !important}
+  thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);margin:-1px;border:0;padding:0}
+  table,tbody,tr,td{display:block}
+  tr{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;padding:4px 2px}
+  tr:last-child{margin-bottom:0}
+  td{border:none;display:flex;flex-direction:column;gap:5px;padding:9px 14px;align-items:flex-start}
+  td[data-label]::before{content:attr(data-label);font:600 11px/1.2 -apple-system,BlinkMacSystemFont,sans-serif;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .rank{width:auto}
+  .section-head{flex-wrap:wrap}
+}
 `;
 
 function layout({ title, body, admin, brand, home }) {
@@ -320,9 +332,9 @@ function kolSuccess(name, campaign) {
 
 function adminPage({ totalSubs, uniqueKol, camps, recent }) {
   const campRows = camps.map((c) => `<tr>
-    <td><b>${esc(c.name)}</b></td>
-    <td>${c.count}</td>
-    <td><span class="pill ${c.is_active ? 'pill-ok' : 'pill-off'}">${c.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+    <td data-label="Campaign"><b>${esc(c.name)}</b></td>
+    <td data-label="Submission">${c.count}</td>
+    <td data-label="Status"><span class="pill ${c.is_active ? 'pill-ok' : 'pill-off'}">${c.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
     <td style="text-align:right">
       <form class="inline-form" method="post" action="/admin/campaigns/${esc(c.id)}/toggle">
         <button class="btn btn-ghost btn-sm">${c.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
@@ -330,10 +342,10 @@ function adminPage({ totalSubs, uniqueKol, camps, recent }) {
     </td></tr>`).join('');
 
   const recentRows = recent.length ? recent.map((s) => `<tr>
-    <td><b>${esc(s.kol_name)}</b><div class="muted" style="font-size:12px">${fmtDate(s.created_at)}</div></td>
-    <td>${esc(s.campaign_name || '—')}</td>
-    <td><div class="thumbs">${(s.images || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('') || '<span class="muted">—</span>'}</div></td>
-    <td class="linklist">${(s.links || []).map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>`).join('') || '<span class="muted">—</span>'}</td>
+    <td data-label="KOL"><b>${esc(s.kol_name)}</b><div class="muted" style="font-size:12px">${fmtDate(s.created_at)}</div></td>
+    <td data-label="Campaign">${esc(s.campaign_name || '—')}</td>
+    <td data-label="Gambar"><div class="thumbs">${(s.images || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('') || '<span class="muted">—</span>'}</div></td>
+    <td class="linklist" data-label="Link Postingan">${(s.links || []).map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>`).join('') || '<span class="muted">—</span>'}</td>
   </tr>`).join('') : `<tr><td colspan="4" class="muted" style="padding:22px;text-align:center">Belum ada submission.</td></tr>`;
 
   const body = `<div class="wrap">
@@ -371,12 +383,12 @@ function adminPage({ totalSubs, uniqueKol, camps, recent }) {
 
 function performancePage(board, totalSubs) {
   const rows = board.length ? board.map((e, i) => `<tr>
-    <td class="rank rank-${i + 1}">${i + 1}</td>
-    <td><b>${esc(e.kol_name)}</b></td>
-    <td>${e.submissions}</td>
-    <td>${e.posts}</td>
-    <td>${e.images}</td>
-    <td class="muted">${fmtDate(e.last)}</td>
+    <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
+    <td data-label="KOL"><b>${esc(e.kol_name)}</b></td>
+    <td data-label="Submission">${e.submissions}</td>
+    <td data-label="Link Postingan">${e.posts}</td>
+    <td data-label="Gambar">${e.images}</td>
+    <td class="muted" data-label="Terakhir">${fmtDate(e.last)}</td>
   </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">Belum ada data.</td></tr>`;
 
   const body = `<div class="wrap">
