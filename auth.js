@@ -49,7 +49,9 @@ function unsign(token) {
 }
 
 function setSession(res, account) {
-  const token = sign({ id: account.id, type: account.talent_type, name: account.name, exp: Date.now() + MAX_AGE_MS });
+  // Talents carry talent_type; staff carry role. Both become the session "type".
+  const type = account.talent_type || account.role;
+  const token = sign({ id: account.id, type, name: account.name, exp: Date.now() + MAX_AGE_MS });
   res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', maxAge: MAX_AGE_MS, path: '/' });
 }
 
@@ -67,4 +69,13 @@ function requireTalent(type) {
   };
 }
 
-module.exports = { hashPassword, verifyPassword, setSession, clearSession, currentTalent, requireTalent, COOKIE };
+/** Middleware: require a logged-in staff member whose role is in `roles`, else /admin/login. */
+function requireStaff(roles) {
+  return (req, res, next) => {
+    const t = currentTalent(req);
+    if (t && roles.includes(t.type)) { req.staff = t; return next(); }
+    res.redirect('/admin/login');
+  };
+}
+
+module.exports = { hashPassword, verifyPassword, setSession, clearSession, currentTalent, requireTalent, requireStaff, COOKIE };

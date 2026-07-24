@@ -465,7 +465,36 @@ function kolSuccess(name, campaign) {
   return layout({ title: 'Terkirim — 20FIT KOL', body, home: '/' });
 }
 
-function adminPage({ totalSubs, uniqueKol, camps, recent }) {
+/** Staff (Super Admin / EO) login page. */
+function staffLogin(opts = {}) {
+  const v = opts.values || {};
+  const errorBanner = (opts.errors && opts.errors.length)
+    ? `<div class="banner banner-err"><b>Gagal:</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
+  <h1>Login Admin</h1>
+  <p class="sub">Masuk sebagai Super Admin atau Event Organizer.</p>
+  ${errorBanner}
+  <div class="card">
+    <form method="post" action="/admin/login">
+      <div class="field"><label for="login">Email</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
+      <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
+      <button type="submit" class="btn btn-block">Masuk</button>
+    </form>
+  </div>
+</div>`;
+  return layout({ title: 'Login Admin — 20FIT', body, brand: 'ADMIN', home: '/' });
+}
+
+/**
+ * Staff dashboard, role-aware.
+ *   super_admin: EO management + campaign management + all talent submissions.
+ *   eo:          read-only view of talent submissions (no EO/super-admin visibility).
+ */
+function adminPage({ staff, totalSubs, uniqueKol, camps, recent, eos }) {
+  const isSuper = staff && staff.role === 'super_admin';
+  const roleLabel = isSuper ? 'Super Admin' : 'Event Organizer';
+
   const campRows = camps.map((c) => `<tr>
     <td data-label="Campaign"><b>${esc(c.name)}</b></td>
     <td data-label="Submission">${c.count}</td>
@@ -477,22 +506,28 @@ function adminPage({ totalSubs, uniqueKol, camps, recent }) {
     </td></tr>`).join('');
 
   const recentRows = recent.length ? recent.map((s) => `<tr>
-    <td data-label="KOL"><b>${esc(s.kol_name)}</b><div class="muted" style="font-size:12px">${fmtDate(s.created_at)}</div></td>
+    <td data-label="Talent"><b>${esc(s.kol_name)}</b><div class="muted" style="font-size:12px">${fmtDate(s.created_at)}</div></td>
     <td data-label="Campaign">${esc(s.campaign_name || '—')}</td>
     <td data-label="Gambar"><div class="thumbs">${(s.images || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('') || '<span class="muted">—</span>'}</div></td>
     <td class="linklist" data-label="Link Postingan">${(s.links || []).map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>`).join('') || '<span class="muted">—</span>'}</td>
   </tr>`).join('') : `<tr><td colspan="4" class="muted" style="padding:22px;text-align:center">Belum ada submission.</td></tr>`;
 
-  const body = `<div class="wrap">
-  <h1>Dashboard Admin</h1>
-  <p class="sub">Ringkasan submission KOL dan pengelolaan campaign.</p>
+  const eoSection = isSuper ? `
+  <div class="section-head"><h2 style="margin:0">Event Organizer</h2></div>
+  <div class="card" style="margin-top:14px">
+    <form method="post" action="/admin/eos" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <input type="text" name="name" placeholder="Nama EO" required maxlength="120" style="flex:1;min-width:150px">
+      <input type="text" name="login" placeholder="Email login" required style="flex:1;min-width:170px">
+      <input type="text" name="password" placeholder="Password (min 6)" required minlength="6" style="flex:1;min-width:150px">
+      <button class="btn btn-sm">Buat EO</button>
+    </form>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nama</th><th>Email</th><th>Dibuat</th></tr></thead>
+      <tbody>${(eos && eos.length) ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
+    </table></div>
+  </div>` : '';
 
-  <div class="stat-grid">
-    <div class="stat"><div class="n">${totalSubs}</div><div class="l">Total submission</div></div>
-    <div class="stat"><div class="n">${uniqueKol}</div><div class="l">KOL unik</div></div>
-    <div class="stat"><div class="n">${camps.filter((c) => c.is_active).length}</div><div class="l">Campaign aktif</div></div>
-  </div>
-
+  const campaignSection = isSuper ? `
   <div class="section-head"><h2 style="margin:0">Campaign</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/campaigns" class="repeat-row" style="margin-bottom:18px">
@@ -503,17 +538,35 @@ function adminPage({ totalSubs, uniqueKol, camps, recent }) {
       <thead><tr><th>Campaign</th><th>Submission</th><th>Status</th><th></th></tr></thead>
       <tbody>${campRows || '<tr><td colspan="4" class="muted">Belum ada campaign.</td></tr>'}</tbody>
     </table></div>
+  </div>` : '';
+
+  const body = `<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1>Dashboard ${isSuper ? 'Super Admin' : 'EO'}</h1>
+      <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
+    </div>
+    <form method="post" action="/admin/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
   </div>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="n">${totalSubs}</div><div class="l">Total submission</div></div>
+    <div class="stat"><div class="n">${uniqueKol}</div><div class="l">Talent unik</div></div>
+    <div class="stat"><div class="n">${camps.filter((c) => c.is_active).length}</div><div class="l">Campaign aktif</div></div>
+    ${isSuper ? `<div class="stat"><div class="n">${(eos || []).length}</div><div class="l">Event Organizer</div></div>` : ''}
+  </div>
+  ${eoSection}
+  ${campaignSection}
 
   <div class="section-head"><h2 style="margin:0">Submission Terbaru</h2><a href="/performance" class="btn btn-ghost btn-sm">Lihat Leaderboard →</a></div>
   <div class="card" style="margin-top:14px">
     <div class="table-wrap"><table>
-      <thead><tr><th>KOL</th><th>Campaign</th><th>Gambar</th><th>Link postingan</th></tr></thead>
+      <thead><tr><th>Talent</th><th>Campaign</th><th>Gambar</th><th>Link postingan</th></tr></thead>
       <tbody>${recentRows}</tbody>
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Admin — 20FIT KOL', body, admin: 'admin' });
+  return layout({ title: 'Dashboard — 20FIT', body, admin: 'admin' });
 }
 
 function performancePage(board, totalSubs) {
@@ -569,5 +622,5 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, adminPage, performancePage,
-  talentLogin, talentRegister, configError, adminNoService, page500,
+  talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };

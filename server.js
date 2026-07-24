@@ -35,8 +35,6 @@ const auth = require('./auth');
 
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
@@ -208,27 +206,39 @@ app.post('/kol/submit', auth.requireTalent('kol'), upload.array('images', MAX_IM
 
 // ----------------------------------------------------------------- admin ----
 
-function safeEqual(a, b) {
-  const ab = Buffer.from(String(a || ''));
-  const bb = Buffer.from(String(b || ''));
-  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
-}
+app.get('/admin/login', (req, res) => {
+  const t = auth.currentTalent(req);
+  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  res.send(V.staffLogin());
+});
 
-function requireAdmin(req, res, next) {
-  if (!ADMIN_PASSWORD) return res.status(503).send(V.configError('ADMIN_PASSWORD'));
-  const [scheme, encoded] = (req.headers.authorization || '').split(' ');
-  if (scheme === 'Basic' && encoded) {
-    const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
-    if (safeEqual(user, ADMIN_USER) && safeEqual(pass, ADMIN_PASSWORD)) return next();
-  }
-  res.set('WWW-Authenticate', 'Basic realm="20FIT KOL Admin"').status(401).type('text').send('Autentikasi admin diperlukan.');
-}
-
-app.get('/admin', requireAdmin, async (req, res, next) => {
+app.post('/admin/login', async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
-    const [subs, camps] = await Promise.all([st.listSubmissions(), st.listCampaigns()]);
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const staff = await st.findStaff(login);
+    if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
+      return res.status(401).send(V.staffLogin({ errors: ['Email atau password salah.'], values: { login } }));
+    }
+    auth.setSession(res, staff);
+    res.redirect('/admin');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/logout', (req, res) => { auth.clearSession(res); res.redirect('/admin/login'); });
+
+app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const isSuper = req.staff.type === 'super_admin';
+    const [subs, camps, eos] = await Promise.all([
+      st.listSubmissions(),
+      st.listCampaigns(),
+      isSuper ? st.listStaff('eo') : Promise.resolve([]),
+    ]);
 
     const countByCampaign = new Map();
     subs.forEach((s) => countByCampaign.set(s.campaign_id, (countByCampaign.get(s.campaign_id) || 0) + 1));
@@ -244,15 +254,34 @@ app.get('/admin', requireAdmin, async (req, res, next) => {
     })));
 
     res.send(V.adminPage({
+      staff: { role: req.staff.type, name: req.staff.name },
       totalSubs: subs.length,
       uniqueKol: new Set(subs.map((s) => s.kol_name)).size,
       camps: campsWithCount,
       recent,
+      eos,
     }));
   } catch (e) { next(e); }
 });
 
-app.post('/admin/campaigns', requireAdmin, async (req, res, next) => {
+// Super admin only: create an Event Organizer account.
+app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const name = String(req.body.name || '').trim();
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (name && login && password.length >= 6) {
+      try {
+        await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+      } catch (e) { if (e.code !== 'DUP') throw e; }
+    }
+    res.redirect('/admin');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/campaigns', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
@@ -262,7 +291,7 @@ app.post('/admin/campaigns', requireAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/admin/campaigns/:id/toggle', requireAdmin, async (req, res, next) => {
+app.post('/admin/campaigns/:id/toggle', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
@@ -271,7 +300,7 @@ app.post('/admin/campaigns/:id/toggle', requireAdmin, async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
-app.get('/performance', requireAdmin, async (req, res, next) => {
+app.get('/performance', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
