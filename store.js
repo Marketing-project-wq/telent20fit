@@ -83,6 +83,29 @@ function supabaseStore() {
       const { data } = await sb.from('talent_accounts').select('id,talent_type,name,login').eq('id', id).maybeSingle();
       return data || null;
     },
+    async createStaff(acc) {
+      const { data, error } = await sb.from('staff_accounts').insert(acc).select('id,role,name,login').maybeSingle();
+      if (error) {
+        if (/duplicate|unique/i.test(error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+        throw new Error(error.message);
+      }
+      return data;
+    },
+    async findStaff(login) {
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login,password_hash').eq('login', login).maybeSingle();
+      return data || null;
+    },
+    async getStaffById(id) {
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login').eq('id', id).maybeSingle();
+      return data || null;
+    },
+    async listStaff(role) {
+      let q = sb.from('staff_accounts').select('id,role,name,login,created_at').order('created_at');
+      if (role) q = q.eq('role', role);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
   };
 }
 
@@ -95,6 +118,10 @@ function memoryStore() {
   const submissions = [];
   const accounts = [];
   const images = new Map();
+  const staff = [{
+    id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
+    password_hash: require('./auth').hashPassword('Admin_12345'), created_at: now(),
+  }];
   let seq = 0;
 
   return {
@@ -118,6 +145,15 @@ function memoryStore() {
     },
     async findAccount(talentType, login) { return accounts.find((a) => a.talent_type === talentType && a.login === login) || null; },
     async getAccountById(id) { const a = accounts.find((a) => a.id === id); return a ? { id: a.id, talent_type: a.talent_type, name: a.name, login: a.login } : null; },
+    async createStaff(acc) {
+      if (staff.find((s) => s.login === acc.login)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+      const rec = { id: 'staff-' + (++seq), ...acc, created_at: now() };
+      staff.push(rec);
+      return { id: rec.id, role: rec.role, name: rec.name, login: rec.login };
+    },
+    async findStaff(login) { return staff.find((s) => s.login === login) || null; },
+    async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
+    async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
   };
 }
 
