@@ -1,0 +1,12 @@
+{
+  "name": "20fit-talent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static hosting for the 20FIT Talent bundled page",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
