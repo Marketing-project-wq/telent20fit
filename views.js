@@ -255,7 +255,7 @@ a{text-decoration:none}
     <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t.finalCta)}</h2>
     <p style="color:#8a8990;font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
     <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot}</div>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/admin/login" style="color:#8a8990">Login Admin / EO</a></div>
   </section>
 </div>
 </body></html>`;
