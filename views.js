@@ -83,14 +83,6 @@ tr:last-child td{border-bottom:none}
 .success{text-align:center;padding:46px 20px}
 .success .check{width:78px;height:78px;background:var(--ok-soft);color:var(--ok);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px}
 .muted{color:var(--muted)}
-.hero-tag{display:inline-block;background:var(--red-soft);color:var(--red);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:100px}
-.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:26px}
-.cat-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:13px}
-.cat-card.soon{opacity:.72}
-.cat-card.cat-active{border-color:var(--red);box-shadow:0 6px 24px rgba(228,18,31,.09)}
-.cat-tag{width:48px;height:48px;border-radius:13px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
-.cat-name{font-size:20px;font-weight:800}
-.cat-desc{color:var(--muted);font-size:14px;flex:1;margin:0}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
@@ -116,30 +108,105 @@ ${body}
 </body></html>`;
 }
 
-/** Landing / talent-category chooser at "/". Only KOL is active for now. */
-function chooseCategory() {
-  const cats = [
-    { tag: 'MP', name: 'Main Power', desc: 'Talent utama untuk event — brand ambassador, booth, aktivasi.', active: false },
-    { tag: 'KOL', name: 'KOL', desc: 'Submit hasil campaign kamu: upload konten & link postingan.', active: true, href: '/kol' },
-    { tag: 'FG', name: 'Fotografer', desc: 'Dokumentasi event & portofolio foto.', active: false },
+/**
+ * Landing page at "/", reproducing the original 20FIT Talent prototype hero
+ * (dark theme, Barlow typography). CTAs point to the live KOL flow (/kol).
+ */
+function landingPage() {
+  const heroStats = [
+    { n: '8', l: 'Kota' },
+    { n: '3', l: 'Kategori Talent' },
+    { n: 'AI', l: 'Verifikasi Foto' },
   ];
-  const cards = cats.map((c) => `
-    <div class="cat-card ${c.active ? 'cat-active' : 'soon'}">
-      <div class="cat-tag">${esc(c.tag)}</div>
-      <div class="cat-name">${esc(c.name)}</div>
-      <p class="cat-desc">${esc(c.desc)}</p>
-      ${c.active
-        ? `<a href="${esc(c.href)}" class="btn btn-block">Mulai →</a>`
-        : '<span class="pill pill-off" style="align-self:flex-start">Segera hadir</span>'}
+  const features = [
+    { i: 'ID', t: 'Validasi KTP', d: '1 nomor KTP = 1 akun. Sistem blok otomatis registrasi ganda.' },
+    { i: 'AI', t: 'Verifikasi Foto 3 Sudut', d: 'Full face, full body, samping — divalidasi AI dalam hitungan detik.' },
+    { i: 'SOW', t: 'SOW Per Peran', d: 'Ekspektasi tugas, durasi, dan kompensasi jelas sebelum apply.' },
+    { i: '★', t: '3 Kategori Talent', d: 'Main Power, KOL, dan Fotografer — masing-masing alur berbeda.' },
+    { i: '@', t: 'Notifikasi Otomatis', d: 'Email station Judges & link grup WA terkirim otomatis saat approved.' },
+    { i: '⬢', t: 'Multi-Tenant', d: 'Dipakai 20FIT maupun event organizer lain dalam satu platform.' },
+  ];
+  const statHtml = heroStats.map((s) => `<div>
+      <div style="font:800 30px/1 'Barlow Condensed',sans-serif;color:var(--red)">${esc(s.n)}</div>
+      <div style="font-size:13px;color:#8a8990;margin-top:4px">${esc(s.l)}</div>
+    </div>`).join('');
+  const featHtml = features.map((f) => `<div style="background:#141419;border:1px solid #26262d;border-radius:14px;padding:24px">
+      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(f.i)}</div>
+      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(f.t)}</div>
+      <p style="color:#8a8990;font-size:14px;line-height:1.5;margin:0">${esc(f.d)}</p>
     </div>`).join('');
 
-  const body = `<div class="wrap">
-  <span class="hero-tag">Talent Platform</span>
-  <h1 style="margin-top:14px">Selamat datang di 20FIT Talent</h1>
-  <p class="sub">Pilih kategori talent kamu. Saat ini submission untuk <b>KOL</b> sudah dibuka.</p>
-  <div class="cat-grid">${cards}</div>
-</div>`;
-  return layout({ title: '20FIT Talent', body, brand: 'TALENT', home: '/' });
+  return `<!doctype html><html lang="id"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>20FIT Talent — Rekrut talent event tanpa ribet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E4121F;--ink:#101013;--ok:#178A54}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--ink);color:#fff;line-height:1.5}
+a{text-decoration:none}
+.stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
+.resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+.resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}}
+@media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
+</style></head>
+<body>
+<div style="min-height:100vh">
+  <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:11px">
+      <div style="width:40px;height:40px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 20px/1 'Barlow Condensed',sans-serif;transform:skewX(-7deg)">20</div>
+      <div style="font:800 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.02em">20FIT<span style="color:var(--red)"> TALENT</span></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a href="/kol" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Masuk</a>
+      <a href="/kol" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Daftar</a>
+    </div>
+  </header>
+
+  <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
+    <div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:#ff5b66;padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Talent Management · Multi-Tenant</div>
+      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">Rekrut talent event<span style="color:var(--red)"> tanpa ribet.</span></h1>
+      <p style="font-size:18px;line-height:1.55;color:#b9b8bf;max-width:520px;margin:0 0 30px">Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="/kol" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
+        <a href="/kol" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">Masuk</a>
+      </div>
+      <div style="display:flex;gap:30px;margin-top:42px">${statHtml}</div>
+    </div>
+    <div style="position:relative">
+      <div style="background:linear-gradient(150deg,#1d1d24,#141419);border:1px solid #2c2c34;border-radius:20px;padding:22px">
+        <div class="stripe" style="height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;opacity:.5;margin-bottom:16px;filter:grayscale(1)">
+          <span style="font:600 12px/1 monospace;color:#555;background:#0e0e12;padding:6px 12px;border-radius:6px">event.jpg — foto event lari</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Jakarta Run Series</div>
+          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">4 slot tersisa</span>
+        </div>
+        <div style="font-size:13px;color:#8a8990">12 Sep 2026 · Jakarta · Judges</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#0b0b0e;padding:56px 0">
+    <div style="max-width:1180px;margin:0 auto;padding:0 28px">
+      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">Kenapa 20FIT Talent</h2>
+      <p style="color:#8a8990;margin:0 0 34px;font-size:15px">Dibangun untuk skala — dari 1 event ke ratusan.</p>
+      <div class="resp3">${featHtml}</div>
+    </div>
+  </section>
+
+  <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
+    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">Siap jadi bagian dari event berikutnya?</h2>
+    <p style="color:#8a8990;font-size:16px;margin:0 0 26px">Daftar gratis, verifikasi otomatis, langsung apply.</p>
+    <a href="/kol" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · Digunakan 20FIT &amp; Event Organizer lain</div>
+  </section>
+</div>
+</body></html>`;
 }
 
 /** Public KOL submission form. `opts.errors` and `opts.values` re-render on validation failure. */
@@ -354,6 +421,6 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, chooseCategory, kolForm, kolSuccess, adminPage, performancePage,
+  esc, fmtDate, landingPage, kolForm, kolSuccess, adminPage, performancePage,
   configError, adminNoService, page500,
 };
