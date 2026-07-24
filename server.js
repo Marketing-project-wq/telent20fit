@@ -67,7 +67,7 @@ try {
 
 app.get('/health', (req, res) => res.type('text').send('ok'));
 
-app.get('/', (req, res) => res.redirect('/kol'));
+app.get('/', (req, res) => res.send(V.chooseCategory()));
 
 app.get('/prototype', (req, res) => {
   if (!prototypeHtml) return res.status(404).type('text').send('No prototype file found.');
