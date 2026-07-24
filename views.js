@@ -235,8 +235,9 @@ function kolForm(campaigns, opts = {}) {
   const prefLinks = (v.links && v.links.length ? v.links : ['']);
 
   const body = `<div class="wrap narrow">
+  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
   <h1>Submit Hasil KOL</h1>
-  <p class="sub">Isi form di bawah untuk mengirim hasil campaign kamu ke tim 20FIT.</p>
+  <p class="sub">Isi form di bawah untuk mengirim hasil campaign kamu ke tim 20FIT. Isi setelah kamu selesai menjalankan event.</p>
   ${errorBanner}
   ${noCampaigns ? '<div class="banner banner-warn">Belum ada campaign aktif. Hubungi admin untuk membuka campaign.</div>' : ''}
   <form class="card" method="post" action="/kol/submit" enctype="multipart/form-data" id="kolForm">
@@ -324,7 +325,10 @@ function kolSuccess(name, campaign) {
     <h1>Submission Terkirim!</h1>
     <p class="sub" style="margin:10px 0 24px">Terima kasih, <b>${esc(name)}</b>. Hasil kamu untuk campaign
       <b>${esc(campaign)}</b> sudah masuk dan menunggu review tim 20FIT.</p>
-    <a href="/kol" class="btn btn-ghost">Kirim submission lagi</a>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="/kol" class="btn btn-ghost">Kirim submission lagi</a>
+      <a href="/" class="btn btn-ghost">← Beranda</a>
+    </div>
   </div>
 </div>`;
   return layout({ title: 'Terkirim — 20FIT KOL', body, home: '/' });
