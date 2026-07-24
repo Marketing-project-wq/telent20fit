@@ -173,8 +173,8 @@ a{text-decoration:none}
       <div style="font:800 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.02em">20FIT<span style="color:var(--red)"> TALENT</span></div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <a href="/kol" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Masuk</a>
-      <a href="/kol" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Daftar</a>
+      <a href="/kol/login" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Masuk</a>
+      <a href="/kol/register" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Daftar</a>
     </div>
   </header>
 
@@ -184,8 +184,8 @@ a{text-decoration:none}
       <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">Rekrut talent event<span style="color:var(--red)"> tanpa ribet.</span></h1>
       <p style="font-size:18px;line-height:1.55;color:#b9b8bf;max-width:520px;margin:0 0 30px">Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/kol" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
-        <a href="/kol" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">Masuk</a>
+        <a href="/kol/register" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
+        <a href="/kol/login" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">Masuk</a>
       </div>
       <div style="display:flex;gap:30px;margin-top:42px">${statHtml}</div>
     </div>
@@ -214,7 +214,7 @@ a{text-decoration:none}
   <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
     <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">Siap jadi bagian dari event berikutnya?</h2>
     <p style="color:#8a8990;font-size:16px;margin:0 0 26px">Daftar gratis, verifikasi otomatis, langsung apply.</p>
-    <a href="/kol" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
+    <a href="/kol/register" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
     <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · Digunakan 20FIT &amp; Event Organizer lain</div>
   </section>
 </div>
@@ -225,6 +225,7 @@ a{text-decoration:none}
 function kolForm(campaigns, opts = {}) {
   const errors = opts.errors || [];
   const v = opts.values || {};
+  const talent = opts.talent || {};
   const options = (campaigns || [])
     .map((c) => `<option value="${esc(c.id)}"${v.campaign_id === c.id ? ' selected' : ''}>${esc(c.name)}</option>`)
     .join('');
@@ -235,17 +236,15 @@ function kolForm(campaigns, opts = {}) {
   const prefLinks = (v.links && v.links.length ? v.links : ['']);
 
   const body = `<div class="wrap narrow">
-  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
+    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+  </div>
   <h1>Submit Hasil KOL</h1>
-  <p class="sub">Isi form di bawah untuk mengirim hasil campaign kamu ke tim 20FIT. Isi setelah kamu selesai menjalankan event.</p>
+  <p class="sub">Halo <b>${esc(talent.name || '')}</b> — isi form ini setelah kamu selesai menjalankan event. Nama KOL otomatis dari akunmu.</p>
   ${errorBanner}
   ${noCampaigns ? '<div class="banner banner-warn">Belum ada campaign aktif. Hubungi admin untuk membuka campaign.</div>' : ''}
   <form class="card" method="post" action="/kol/submit" enctype="multipart/form-data" id="kolForm">
-    <div class="field">
-      <label for="kol_name">Nama KOL</label>
-      <input type="text" id="kol_name" name="kol_name" required maxlength="120" placeholder="Nama lengkap / nama akun" value="${esc(v.kol_name || '')}">
-    </div>
-
     <div class="field">
       <label for="campaign_id">Campaign</label>
       <select id="campaign_id" name="campaign_id" required ${noCampaigns ? 'disabled' : ''}>
@@ -316,6 +315,65 @@ function kolForm(campaigns, opts = {}) {
 })();
 </script>`;
   return layout({ title: 'Submit Hasil KOL — 20FIT', body, home: '/' });
+}
+
+const TALENT_LABEL = { kol: 'KOL', main_power: 'Main Power', fotografer: 'Fotografer' };
+function talentPath(type) { return type.replace(/_/g, '-'); }
+
+function authShell(type, title, sub, formHtml, footHtml, errors) {
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>Gagal:</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
+  <h1>${esc(title)}</h1>
+  <p class="sub">${esc(sub)}</p>
+  ${errorBanner}
+  <div class="card">${formHtml}</div>
+  <p style="text-align:center;color:var(--muted);font-size:14px;margin-top:18px">${footHtml}</p>
+</div>`;
+  return layout({ title: `${title} — 20FIT ${TALENT_LABEL[type] || ''}`, body, brand: TALENT_LABEL[type] || 'Talent', home: '/' });
+}
+
+function talentLogin(type, opts = {}) {
+  const p = talentPath(type);
+  const v = opts.values || {};
+  const form = `<form method="post" action="/${p}/login">
+    <div class="field">
+      <label for="login">Email / No. HP</label>
+      <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn btn-block">Masuk</button>
+  </form>`;
+  const foot = `Belum punya akun? <a href="/${p}/register">Daftar di sini</a>`;
+  return authShell(type, `Masuk ${TALENT_LABEL[type] || ''}`, 'Masuk ke akun kamu untuk submit hasil.', form, foot, opts.errors);
+}
+
+function talentRegister(type, opts = {}) {
+  const p = talentPath(type);
+  const v = opts.values || {};
+  const form = `<form method="post" action="/${p}/register">
+    <div class="field">
+      <label for="name">Nama Lengkap</label>
+      <input type="text" id="name" name="name" required maxlength="120" value="${esc(v.name || '')}">
+    </div>
+    <div class="field">
+      <label for="login">Email / No. HP</label>
+      <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
+      <div class="hint" style="margin-top:6px">Dipakai untuk login.</div>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
+      <div class="hint" style="margin-top:6px">Minimal 6 karakter.</div>
+    </div>
+    <button type="submit" class="btn btn-block">Daftar</button>
+  </form>`;
+  const foot = `Sudah punya akun? <a href="/${p}/login">Masuk di sini</a>`;
+  return authShell(type, `Daftar ${TALENT_LABEL[type] || ''}`, 'Buat akun untuk mulai submit hasil campaign.', form, foot, opts.errors);
 }
 
 function kolSuccess(name, campaign) {
@@ -438,5 +496,5 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, kolForm, kolSuccess, adminPage, performancePage,
-  configError, adminNoService, page500,
+  talentLogin, talentRegister, configError, adminNoService, page500,
 };
