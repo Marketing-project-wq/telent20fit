@@ -265,8 +265,8 @@ a{text-decoration:none}
 function talentPicker(mode, lang) {
   const L = (lang === 'en') ? 'en' : 'id';
   const T = {
-    id: { reg: 'Daftar sebagai', log: 'Masuk sebagai', regSub: 'Pilih tipe talent kamu untuk membuat akun.', logSub: 'Pilih tipe talent kamu untuk masuk.', soon: 'Segera hadir', go: mode === 'register' ? 'Daftar' : 'Masuk', back: '← Kembali' },
-    en: { reg: 'Sign up as', log: 'Log in as', regSub: 'Choose your talent type to create an account.', logSub: 'Choose your talent type to sign in.', soon: 'Coming soon', go: mode === 'register' ? 'Sign up' : 'Log in', back: '← Back' },
+    id: { reg: 'Daftar sebagai', log: 'Masuk sebagai', regSub: 'Pilih tipe talent kamu untuk membuat akun.', logSub: 'Pilih tipe talent kamu untuk masuk.', soon: 'Segera hadir', go: mode === 'register' ? 'Daftar' : 'Masuk', back: '← Kembali', adminLink: 'Masuk sebagai Admin / EO', adminNote: 'Untuk staf 20FIT & Event Organizer' },
+    en: { reg: 'Sign up as', log: 'Log in as', regSub: 'Choose your talent type to create an account.', logSub: 'Choose your talent type to sign in.', soon: 'Coming soon', go: mode === 'register' ? 'Sign up' : 'Log in', back: '← Back', adminLink: 'Log in as Admin / EO', adminNote: 'For 20FIT staff & Event Organizers' },
   }[L];
   const cats = [
     { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
@@ -290,6 +290,10 @@ function talentPicker(mode, lang) {
   <h1>${esc(title)}</h1>
   <p class="sub">${esc(sub)}</p>
   <div class="cat-grid">${cards}</div>
+  <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--line);text-align:center">
+    <a href="/admin/login" class="btn btn-ghost">🔑 ${esc(T.adminLink)} →</a>
+    <div class="muted" style="font-size:13px;margin-top:8px">${esc(T.adminNote)}</div>
+  </div>
 </div>`;
   return layout({ title: `${title} — 20FIT Talent`, body, brand: 'TALENT', home: '/' + q });
 }
