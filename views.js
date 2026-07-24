@@ -83,13 +83,23 @@ tr:last-child td{border-bottom:none}
 .success{text-align:center;padding:46px 20px}
 .success .check{width:78px;height:78px;background:var(--ok-soft);color:var(--ok);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px}
 .muted{color:var(--muted)}
+.hero-tag{display:inline-block;background:var(--red-soft);color:var(--red);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;border-radius:100px}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:26px}
+.cat-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:13px}
+.cat-card.soon{opacity:.72}
+.cat-card.cat-active{border-color:var(--red);box-shadow:0 6px 24px rgba(228,18,31,.09)}
+.cat-tag{width:48px;height:48px;border-radius:13px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+.cat-name{font-size:20px;font-weight:800}
+.cat-desc{color:var(--muted);font-size:14px;flex:1;margin:0}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
 @media(max-width:560px){.topbar nav a{padding:7px 9px;font-size:13px}}
 `;
 
-function layout({ title, body, admin }) {
+function layout({ title, body, admin, brand, home }) {
+  const label = brand || 'KOL';
+  const homeHref = home || (admin ? '/admin' : '/kol');
   const nav = admin
     ? `<a href="/admin"${admin === 'admin' ? ' class="active"' : ''}>Admin</a>
        <a href="/performance"${admin === 'perf' ? ' class="active"' : ''}>Performance</a>`
@@ -99,11 +109,37 @@ function layout({ title, body, admin }) {
 <title>${esc(title)}</title><style>${STYLE}</style></head>
 <body>
 <div class="topbar"><div class="in">
-  <a href="${admin ? '/admin' : '/kol'}" class="logo">20FIT<b> KOL</b></a>
+  <a href="${homeHref}" class="logo">20FIT<b> ${esc(label)}</b></a>
   <nav>${nav}</nav>
 </div></div>
 ${body}
 </body></html>`;
+}
+
+/** Landing / talent-category chooser at "/". Only KOL is active for now. */
+function chooseCategory() {
+  const cats = [
+    { tag: 'MP', name: 'Main Power', desc: 'Talent utama untuk event — brand ambassador, booth, aktivasi.', active: false },
+    { tag: 'KOL', name: 'KOL', desc: 'Submit hasil campaign kamu: upload konten & link postingan.', active: true, href: '/kol' },
+    { tag: 'FG', name: 'Fotografer', desc: 'Dokumentasi event & portofolio foto.', active: false },
+  ];
+  const cards = cats.map((c) => `
+    <div class="cat-card ${c.active ? 'cat-active' : 'soon'}">
+      <div class="cat-tag">${esc(c.tag)}</div>
+      <div class="cat-name">${esc(c.name)}</div>
+      <p class="cat-desc">${esc(c.desc)}</p>
+      ${c.active
+        ? `<a href="${esc(c.href)}" class="btn btn-block">Mulai →</a>`
+        : '<span class="pill pill-off" style="align-self:flex-start">Segera hadir</span>'}
+    </div>`).join('');
+
+  const body = `<div class="wrap">
+  <span class="hero-tag">Talent Platform</span>
+  <h1 style="margin-top:14px">Selamat datang di 20FIT Talent</h1>
+  <p class="sub">Pilih kategori talent kamu. Saat ini submission untuk <b>KOL</b> sudah dibuka.</p>
+  <div class="cat-grid">${cards}</div>
+</div>`;
+  return layout({ title: '20FIT Talent', body, brand: 'TALENT', home: '/' });
 }
 
 /** Public KOL submission form. `opts.errors` and `opts.values` re-render on validation failure. */
@@ -199,7 +235,7 @@ function kolForm(campaigns, opts = {}) {
   prefLinks.forEach(function(l){ linkRow(l); });
 })();
 </script>`;
-  return layout({ title: 'Submit Hasil KOL — 20FIT', body });
+  return layout({ title: 'Submit Hasil KOL — 20FIT', body, home: '/' });
 }
 
 function kolSuccess(name, campaign) {
@@ -212,7 +248,7 @@ function kolSuccess(name, campaign) {
     <a href="/kol" class="btn btn-ghost">Kirim submission lagi</a>
   </div>
 </div>`;
-  return layout({ title: 'Terkirim — 20FIT KOL', body });
+  return layout({ title: 'Terkirim — 20FIT KOL', body, home: '/' });
 }
 
 function adminPage({ totalSubs, uniqueKol, camps, recent }) {
@@ -318,6 +354,6 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, kolForm, kolSuccess, adminPage, performancePage,
+  esc, fmtDate, chooseCategory, kolForm, kolSuccess, adminPage, performancePage,
   configError, adminNoService, page500,
 };
