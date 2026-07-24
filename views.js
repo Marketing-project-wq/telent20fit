@@ -83,6 +83,13 @@ tr:last-child td{border-bottom:none}
 .success{text-align:center;padding:46px 20px}
 .success .check{width:78px;height:78px;background:var(--ok-soft);color:var(--ok);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto 20px}
 .muted{color:var(--muted)}
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:24px}
+.cat-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px}
+.cat-card.soon{opacity:.72}
+.cat-card.cat-active{border-color:var(--red);box-shadow:0 6px 24px rgba(228,18,31,.09)}
+.cat-tag{width:46px;height:46px;border-radius:12px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+.cat-name{font-size:20px;font-weight:800}
+.cat-desc{color:var(--muted);font-size:14px;flex:1;margin:0}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
@@ -121,36 +128,68 @@ ${body}
 }
 
 /**
- * Landing page at "/", reproducing the original 20FIT Talent prototype hero
- * (dark theme, Barlow typography). CTAs point to the live KOL flow (/kol).
+ * Landing page at "/" (dark prototype hero) with an ID/EN language toggle.
+ * CTAs lead to the talent-type picker for sign up (/register) and log in (/login).
  */
-function landingPage() {
-  const heroStats = [
-    { n: '8', l: 'Kota' },
-    { n: '3', l: 'Kategori Talent' },
-    { n: 'AI', l: 'Verifikasi Foto' },
-  ];
-  const features = [
-    { i: 'ID', t: 'Validasi KTP', d: '1 nomor KTP = 1 akun. Sistem blok otomatis registrasi ganda.' },
-    { i: 'AI', t: 'Verifikasi Foto 3 Sudut', d: 'Full face, full body, samping — divalidasi AI dalam hitungan detik.' },
-    { i: 'SOW', t: 'SOW Per Peran', d: 'Ekspektasi tugas, durasi, dan kompensasi jelas sebelum apply.' },
-    { i: '★', t: '3 Kategori Talent', d: 'Main Power, KOL, dan Fotografer — masing-masing alur berbeda.' },
-    { i: '@', t: 'Notifikasi Otomatis', d: 'Email station Judges & link grup WA terkirim otomatis saat approved.' },
-    { i: '⬢', t: 'Multi-Tenant', d: 'Dipakai 20FIT maupun event organizer lain dalam satu platform.' },
-  ];
-  const statHtml = heroStats.map((s) => `<div>
-      <div style="font:800 30px/1 'Barlow Condensed',sans-serif;color:var(--red)">${esc(s.n)}</div>
-      <div style="font-size:13px;color:#8a8990;margin-top:4px">${esc(s.l)}</div>
+function landingPage(lang) {
+  const L = (lang === 'en') ? 'en' : 'id';
+  const t = {
+    id: {
+      badge: 'Talent Management · Multi-Tenant', title: 'Rekrut talent event', accent: 'tanpa ribet.',
+      sub: 'Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.',
+      join: 'Gabung Sekarang', login: 'Masuk',
+      featTitle: 'Kenapa 20FIT Talent', featSub: 'Dibangun untuk skala — dari 1 event ke ratusan.',
+      finalCta: 'Siap jadi bagian dari event berikutnya?', finalCtaSub: 'Daftar gratis, verifikasi otomatis, langsung apply.',
+      slot: '4 slot tersisa', foot: 'Digunakan 20FIT &amp; Event Organizer lain',
+      stats: [['8', 'Kota'], ['3', 'Kategori Talent'], ['AI', 'Verifikasi Foto']],
+      feats: [
+        ['ID', 'Validasi KTP', '1 nomor KTP = 1 akun. Sistem blok otomatis registrasi ganda.'],
+        ['AI', 'Verifikasi Foto 3 Sudut', 'Full face, full body, samping — divalidasi AI dalam hitungan detik.'],
+        ['SOW', 'SOW Per Peran', 'Ekspektasi tugas, durasi, dan kompensasi jelas sebelum apply.'],
+        ['★', '3 Kategori Talent', 'Main Power, KOL, dan Fotografer — masing-masing alur berbeda.'],
+        ['@', 'Notifikasi Otomatis', 'Email station Judges &amp; link grup WA terkirim otomatis saat approved.'],
+        ['⬢', 'Multi-Tenant', 'Dipakai 20FIT maupun event organizer lain dalam satu platform.'],
+      ],
+    },
+    en: {
+      badge: 'Talent Management · Multi-Tenant', title: 'Recruit event talent', accent: 'the easy way.',
+      sub: 'A recruitment &amp; talent management platform for sports events. ID verification, 3-angle AI photo checks, and clear per-role SOWs — all in one system.',
+      join: 'Join Now', login: 'Log in',
+      featTitle: 'Why 20FIT Talent', featSub: 'Built to scale — from 1 event to hundreds.',
+      finalCta: 'Ready to be part of the next event?', finalCtaSub: 'Free sign-up, automatic verification, apply instantly.',
+      slot: '4 slots left', foot: 'Used by 20FIT &amp; other Event Organizers',
+      stats: [['8', 'Cities'], ['3', 'Talent Types'], ['AI', 'Photo Check']],
+      feats: [
+        ['ID', 'ID Validation', '1 ID number = 1 account. Duplicate sign-ups blocked automatically.'],
+        ['AI', '3-Angle Photo Check', 'Full face, full body, side — validated by AI in seconds.'],
+        ['SOW', 'Per-Role SOW', 'Clear task, duration, and compensation before you apply.'],
+        ['★', '3 Talent Types', 'Main Power, KOL, and Photographer — each with its own flow.'],
+        ['@', 'Auto Notifications', 'Judges station email &amp; WA group link sent automatically on approval.'],
+        ['⬢', 'Multi-Tenant', 'Used by 20FIT and other event organizers on one platform.'],
+      ],
+    },
+  }[L];
+
+  const statHtml = t.stats.map(([n, l]) => `<div>
+      <div style="font:800 30px/1 'Barlow Condensed',sans-serif;color:var(--red)">${esc(n)}</div>
+      <div style="font-size:13px;color:#8a8990;margin-top:4px">${esc(l)}</div>
     </div>`).join('');
-  const featHtml = features.map((f) => `<div style="background:#141419;border:1px solid #26262d;border-radius:14px;padding:24px">
-      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(f.i)}</div>
-      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(f.t)}</div>
-      <p style="color:#8a8990;font-size:14px;line-height:1.5;margin:0">${esc(f.d)}</p>
+  const featHtml = t.feats.map(([i, ti, d]) => `<div style="background:#141419;border:1px solid #26262d;border-radius:14px;padding:24px">
+      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(i)}</div>
+      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(ti)}</div>
+      <p style="color:#8a8990;font-size:14px;line-height:1.5;margin:0">${d}</p>
     </div>`).join('');
 
-  return `<!doctype html><html lang="id"><head>
+  const langBtn = (code, label) => {
+    const on = code === L;
+    return `<a href="/?lang=${code}" style="padding:6px 11px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;color:${on ? '#fff' : '#8a8990'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
+  };
+  const toggle = `<div style="display:flex;background:#1c1c22;border:1px solid #2c2c34;border-radius:8px;padding:3px;gap:2px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const q = `?lang=${L}`;
+
+  return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>20FIT Talent — Rekrut talent event tanpa ribet</title>
+<title>20FIT Talent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
@@ -167,36 +206,37 @@ a{text-decoration:none}
 </style></head>
 <body>
 <div style="min-height:100vh">
-  <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between">
+  <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:11px">
       <div style="width:40px;height:40px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 20px/1 'Barlow Condensed',sans-serif;transform:skewX(-7deg)">20</div>
       <div style="font:800 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.02em">20FIT<span style="color:var(--red)"> TALENT</span></div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
-      <a href="/kol/login" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Masuk</a>
-      <a href="/kol/register" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">Daftar</a>
+      ${toggle}
+      <a href="/login${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.login)}</a>
+      <a href="/register${q}" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.join)}</a>
     </div>
   </header>
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:#ff5b66;padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">Talent Management · Multi-Tenant</div>
-      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">Rekrut talent event<span style="color:var(--red)"> tanpa ribet.</span></h1>
-      <p style="font-size:18px;line-height:1.55;color:#b9b8bf;max-width:520px;margin:0 0 30px">Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:#ff5b66;padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">${esc(t.badge)}</div>
+      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(t.title)}<span style="color:var(--red)"> ${esc(t.accent)}</span></h1>
+      <p style="font-size:18px;line-height:1.55;color:#b9b8bf;max-width:520px;margin:0 0 30px">${t.sub}</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/kol/register" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
-        <a href="/kol/login" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">Masuk</a>
+        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
+        <a href="/login${q}" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
       </div>
       <div style="display:flex;gap:30px;margin-top:42px">${statHtml}</div>
     </div>
     <div style="position:relative">
       <div style="background:linear-gradient(150deg,#1d1d24,#141419);border:1px solid #2c2c34;border-radius:20px;padding:22px">
         <div class="stripe" style="height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;opacity:.5;margin-bottom:16px;filter:grayscale(1)">
-          <span style="font:600 12px/1 monospace;color:#555;background:#0e0e12;padding:6px 12px;border-radius:6px">event.jpg — foto event lari</span>
+          <span style="font:600 12px/1 monospace;color:#555;background:#0e0e12;padding:6px 12px;border-radius:6px">event.jpg</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Jakarta Run Series</div>
-          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">4 slot tersisa</span>
+          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t.slot)}</span>
         </div>
         <div style="font-size:13px;color:#8a8990">12 Sep 2026 · Jakarta · Judges</div>
       </div>
@@ -205,20 +245,53 @@ a{text-decoration:none}
 
   <section style="background:#0b0b0e;padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">Kenapa 20FIT Talent</h2>
-      <p style="color:#8a8990;margin:0 0 34px;font-size:15px">Dibangun untuk skala — dari 1 event ke ratusan.</p>
+      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">${esc(t.featTitle)}</h2>
+      <p style="color:#8a8990;margin:0 0 34px;font-size:15px">${esc(t.featSub)}</p>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
 
   <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
-    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">Siap jadi bagian dari event berikutnya?</h2>
-    <p style="color:#8a8990;font-size:16px;margin:0 0 26px">Daftar gratis, verifikasi otomatis, langsung apply.</p>
-    <a href="/kol/register" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">Gabung Sekarang →</a>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · Digunakan 20FIT &amp; Event Organizer lain</div>
+    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t.finalCta)}</h2>
+    <p style="color:#8a8990;font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
+    <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot}</div>
   </section>
 </div>
 </body></html>`;
+}
+
+/** Talent-type picker shown for sign up (mode='register') and log in (mode='login'). */
+function talentPicker(mode, lang) {
+  const L = (lang === 'en') ? 'en' : 'id';
+  const T = {
+    id: { reg: 'Daftar sebagai', log: 'Masuk sebagai', regSub: 'Pilih tipe talent kamu untuk membuat akun.', logSub: 'Pilih tipe talent kamu untuk masuk.', soon: 'Segera hadir', go: mode === 'register' ? 'Daftar' : 'Masuk', back: '← Kembali' },
+    en: { reg: 'Sign up as', log: 'Log in as', regSub: 'Choose your talent type to create an account.', logSub: 'Choose your talent type to sign in.', soon: 'Coming soon', go: mode === 'register' ? 'Sign up' : 'Log in', back: '← Back' },
+  }[L];
+  const cats = [
+    { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
+    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Talent utama event — brand ambassador, aktivasi.', en: 'Core event talent — brand ambassador, activation.', active: false },
+    { type: 'fotografer', tag: 'FG', name: 'Fotografer', id: 'Dokumentasi & portofolio foto.', en: 'Documentation & photo portfolio.', active: false },
+  ];
+  const q = `?lang=${L}`;
+  const cards = cats.map((c) => `
+    <div class="cat-card ${c.active ? 'cat-active' : 'soon'}">
+      <div class="cat-tag">${esc(c.tag)}</div>
+      <div class="cat-name">${esc(c.name)}</div>
+      <p class="cat-desc">${esc(L === 'en' ? c.en : c.id)}</p>
+      ${c.active
+        ? `<a href="/${talentPath(c.type)}/${mode}${q}" class="btn btn-block">${esc(T.go)} →</a>`
+        : `<span class="pill pill-off" style="align-self:flex-start">${esc(T.soon)}</span>`}
+    </div>`).join('');
+  const title = mode === 'register' ? T.reg : T.log;
+  const sub = mode === 'register' ? T.regSub : T.logSub;
+  const body = `<div class="wrap">
+  <a href="/${q}" class="btn btn-ghost btn-sm" style="margin-bottom:18px">${esc(T.back)}</a>
+  <h1>${esc(title)}</h1>
+  <p class="sub">${esc(sub)}</p>
+  <div class="cat-grid">${cards}</div>
+</div>`;
+  return layout({ title: `${title} — 20FIT Talent`, body, brand: 'TALENT', home: '/' + q });
 }
 
 /** Public KOL submission form. `opts.errors` and `opts.values` re-render on validation failure. */
@@ -495,6 +568,6 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, landingPage, kolForm, kolSuccess, adminPage, performancePage,
+  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, adminPage, performancePage,
   talentLogin, talentRegister, configError, adminNoService, page500,
 };

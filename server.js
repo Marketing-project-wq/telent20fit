@@ -65,7 +65,18 @@ try {
 
 app.get('/health', (req, res) => res.type('text').send('ok'));
 
-app.get('/', (req, res) => res.send(V.landingPage()));
+function readLang(req, res) {
+  let lang = req.query.lang;
+  if (lang !== 'id' && lang !== 'en') lang = (req.cookies && req.cookies.lang) || 'id';
+  if (req.query.lang === 'id' || req.query.lang === 'en') {
+    res.cookie('lang', lang, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
+  }
+  return lang;
+}
+
+app.get('/', (req, res) => res.send(V.landingPage(readLang(req, res))));
+app.get('/register', (req, res) => res.send(V.talentPicker('register', readLang(req, res))));
+app.get('/login', (req, res) => res.send(V.talentPicker('login', readLang(req, res))));
 
 app.get('/prototype', (req, res) => {
   if (!prototypeHtml) return res.status(404).type('text').send('No prototype file found.');
