@@ -32,6 +32,7 @@ const cookieParser = require('cookie-parser');
 const V = require('./views');
 const { store, MODE } = require('./store');
 const auth = require('./auth');
+const llm = require('./llm');
 
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
@@ -144,63 +145,84 @@ app.post('/kol/logout', (req, res) => { auth.clearSession(res); res.redirect('/k
 
 // ------------------------------------------------------------- KOL form ------
 
+// Sign thumbnails + attach event/talent names to a list of proofs.
+async function enrichProofs(st, proofs, ctx) {
+  ctx = ctx || {};
+  const events = ctx.events || await st.listEvents();
+  const eventName = new Map(events.map((e) => [e.id, e.name]));
+  const paths = proofs.map((p) => p.screenshot_path).filter(Boolean);
+  const signed = paths.length ? await st.signImageUrls(paths) : [];
+  const urlByPath = new Map(paths.map((p, i) => [p, signed[i]]));
+  return proofs.map((p) => ({
+    ...p,
+    event_name: eventName.get(p.event_id) || null,
+    talent_name: ctx.talentNameById ? (ctx.talentNameById.get(p.talent_id) || null) : null,
+    thumb: p.screenshot_path ? urlByPath.get(p.screenshot_path) : null,
+  }));
+}
+
+// Extract stats from a proof screenshot via the LLM, in the background.
+async function runExtraction(st, proofId, buffer, mimeType) {
+  try {
+    await st.updateProof(proofId, { status: 'processing' });
+    const { model, extracted, ocr_text } = await llm.extractFromImage(buffer, mimeType);
+    await st.updateProof(proofId, {
+      status: 'extracted', platform: extracted.platform || null,
+      extracted, ocr_text, extract_model: model, extract_error: null,
+      processed_at: new Date().toISOString(),
+    });
+  } catch (e) {
+    const noKey = e && e.code === 'NO_KEY';
+    await st.updateProof(proofId, {
+      status: noKey ? 'pending' : 'failed',
+      extract_error: String((e && e.message) || 'error').slice(0, 300),
+      processed_at: new Date().toISOString(),
+    }).catch(() => {});
+    if (!noKey) console.error('[extract]', proofId, e && e.message);
+  }
+}
+
 app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
-    const campaigns = await st.listActiveCampaigns();
-    res.send(V.kolForm(campaigns, { talent: req.talent }));
+    const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
+    const proofs = await enrichProofs(st, myProofs, { events });
+    res.send(V.kolProofPage({ talent: req.talent, events, proofs }));
   } catch (e) { next(e); }
 });
 
-app.post('/kol/submit', auth.requireTalent('kol'), upload.array('images', MAX_IMAGES), async (req, res, next) => {
+app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
-
-    const campaignId = String(req.body.campaign_id || '').trim();
-    let links = req.body.post_links;
-    if (!Array.isArray(links)) links = links ? [links] : [];
-    links = links.map((s) => String(s || '').trim()).filter(Boolean);
-    const files = req.files || [];
+    const eventId = String(req.body.event_id || '').trim();
+    const postLink = String(req.body.post_link || '').trim();
+    const file = req.file;
 
     const errors = [];
-    if (!campaignId) errors.push('Campaign wajib dipilih.');
-    if (files.length < 1) errors.push('Upload minimal 1 gambar.');
-    if (files.length > MAX_IMAGES) errors.push('Maksimal ' + MAX_IMAGES + ' gambar.');
-    if (links.length < 1) errors.push('Minimal 1 link postingan.');
-    links.forEach((l) => { if (!/^https?:\/\/.+/i.test(l)) errors.push('Link tidak valid: ' + l); });
-    files.forEach((f) => { if (!/^image\//i.test(f.mimetype || '')) errors.push('File bukan gambar: ' + (f.originalname || '')); });
-
-    let campaignName = '';
-    if (campaignId) {
-      const c = await st.getActiveCampaign(campaignId);
-      if (!c) errors.push('Campaign tidak ditemukan / tidak aktif.');
-      else campaignName = c.name;
-    }
+    if (!eventId) errors.push('Event wajib dipilih.');
+    if (!file) errors.push('Screenshot wajib diupload.');
+    else if (!/^image\//i.test(file.mimetype || '')) errors.push('File harus berupa gambar.');
+    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push('Link postingan tidak valid.');
 
     if (errors.length) {
-      const campaigns = await st.listActiveCampaigns();
-      return res.status(400).send(V.kolForm(campaigns, {
-        errors, values: { campaign_id: campaignId, links }, talent: req.talent,
-      }));
+      const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
+      const proofs = await enrichProofs(st, myProofs, { events });
+      return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors }));
     }
 
-    const subId = crypto.randomUUID();
-    const paths = [];
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      const ext = (path.extname(f.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
-      const key = `${subId}/${i}${ext}`;
-      await st.uploadImage(key, f.buffer, f.mimetype);
-      paths.push(key);
-    }
-
-    await st.createSubmission({
-      id: subId, talent_id: req.talent.id, kol_name: req.talent.name,
-      campaign_id: campaignId, image_urls: paths, post_links: links,
+    const proofId = crypto.randomUUID();
+    const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+    const key = `proofs/${proofId}${ext}`;
+    await st.uploadImage(key, file.buffer, file.mimetype);
+    await st.createProof({
+      id: proofId, talent_id: req.talent.id, talent_type: 'kol',
+      event_id: eventId, screenshot_path: key, post_link: postLink || null, status: 'pending',
     });
-    res.send(V.kolSuccess(req.talent.name, campaignName));
+
+    runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
+    res.redirect('/kol');
   } catch (e) { next(e); }
 });
 
@@ -257,32 +279,20 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
     const st = db();
     if (!st) return needConfig(res);
     const isSuper = req.staff.type === 'super_admin';
-    const [subs, camps, eos] = await Promise.all([
-      st.listSubmissions(),
-      st.listCampaigns(),
+    const [rawProofs, events, assignments, talentsAll, eos] = await Promise.all([
+      st.listProofs(),
+      st.listEvents(),
+      isSuper ? st.listAssignments() : Promise.resolve([]),
+      st.listTalents(),
       isSuper ? st.listStaff('eo') : Promise.resolve([]),
     ]);
-
-    const countByCampaign = new Map();
-    subs.forEach((s) => countByCampaign.set(s.campaign_id, (countByCampaign.get(s.campaign_id) || 0) + 1));
-    const campNameById = new Map(camps.map((c) => [c.id, c.name]));
-    const campsWithCount = camps.map((c) => ({ ...c, count: countByCampaign.get(c.id) || 0 }));
-
-    const recent = await Promise.all(subs.slice(0, 50).map(async (s) => ({
-      kol_name: s.kol_name,
-      campaign_name: campNameById.get(s.campaign_id) || null,
-      created_at: s.created_at,
-      images: await st.signImageUrls(Array.isArray(s.image_urls) ? s.image_urls : []),
-      links: Array.isArray(s.post_links) ? s.post_links : [],
-    })));
+    const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
+    const proofs = await enrichProofs(st, rawProofs.slice(0, 100), { events, talentNameById });
 
     res.send(V.adminPage({
       staff: { role: req.staff.type, name: req.staff.name },
-      totalSubs: subs.length,
-      uniqueKol: new Set(subs.map((s) => s.kol_name)).size,
-      camps: campsWithCount,
-      recent,
-      eos,
+      events, assignments, proofs, eos,
+      talents: isSuper ? talentsAll : [],
     }));
   } catch (e) { next(e); }
 });
@@ -304,21 +314,64 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
   } catch (e) { next(e); }
 });
 
-app.post('/admin/campaigns', auth.requireStaff(['super_admin']), async (req, res, next) => {
+// Super admin: create event with per-talent-type needs.
+app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
     const name = String(req.body.name || '').trim();
-    if (name) await st.createCampaign(name);
+    const needs = [];
+    if (req.body.need_kol) needs.push({ talent_type: 'kol' });
+    if (req.body.need_main_power) needs.push({ talent_type: 'main_power' });
+    if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
+    if (name) await st.createEvent({ name, created_by: req.staff.id, needs });
     res.redirect('/admin');
   } catch (e) { next(e); }
 });
 
-app.post('/admin/campaigns/:id/toggle', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
-    await st.toggleCampaign(req.params.id);
+    await st.toggleEvent(req.params.id);
+    res.redirect('/admin');
+  } catch (e) { next(e); }
+});
+
+// Super admin: assign a talent to an event.
+app.post('/admin/assignments', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const talentId = String(req.body.talent_id || '').trim();
+    const eventId = String(req.body.event_id || '').trim();
+    if (talentId && eventId) {
+      const t = (await st.listTalents()).find((x) => x.id === talentId);
+      if (t) await st.createAssignment({ event_id: eventId, talent_id: talentId, talent_type: t.talent_type, assigned_by: req.staff.id });
+    }
+    res.redirect('/admin');
+  } catch (e) { next(e); }
+});
+
+// Super admin: verify / reject / re-extract a proof.
+async function setProofStatus(st, id, status, staffId) {
+  await st.updateProof(id, { status, verified_by: staffId || null, verified_at: new Date().toISOString() });
+}
+app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin'); } catch (e) { next(e); }
+});
+app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin'); } catch (e) { next(e); }
+});
+app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const p = await st.getProof(req.params.id);
+    if (p && p.screenshot_path) {
+      const buf = await st.downloadImage(p.screenshot_path);
+      if (buf) runExtraction(st, p.id, buf, 'image/jpeg');
+    }
     res.redirect('/admin');
   } catch (e) { next(e); }
 });
