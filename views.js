@@ -495,26 +495,96 @@ function staffLogin(opts = {}) {
  *   super_admin: EO management + campaign management + all talent submissions.
  *   eo:          read-only view of talent submissions (no EO/super-admin visibility).
  */
-function adminPage({ staff, totalSubs, uniqueKol, camps, recent, eos }) {
+function fmtNum(v) {
+  if (v === null || v === undefined || v === '') return '–';
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+function statusBadge(status) {
+  const map = {
+    pending: ['Menunggu', 'pill-off'], processing: ['Diproses', 'pill-off'],
+    extracted: ['Terekstrak', 'pill-ok'], failed: ['Gagal', 'pill-off'],
+    verified: ['Terverifikasi', 'pill-ok'], rejected: ['Ditolak', 'pill-off'],
+  };
+  const [label, cls] = map[status] || [status || '—', 'pill-off'];
+  return `<span class="pill ${cls}">${esc(label)}</span>`;
+}
+function statsLine(x) {
+  if (!x) return '<span class="muted">—</span>';
+  const plat = x.platform ? `<b style="text-transform:capitalize">${esc(x.platform)}</b> · ` : '';
+  return `${plat}❤️ ${fmtNum(x.likes)} · 💬 ${fmtNum(x.comments)} · 👁 ${fmtNum(x.views)}`;
+}
+
+/** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
+function kolProofPage({ talent, events, proofs, errors }) {
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>Periksa lagi:</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const noEvents = !events || events.length === 0;
+  const eventOpts = (events || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+  const proofCards = (proofs && proofs.length) ? proofs.map((p) => `
+    <div class="card" style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
+      ${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0"></a>` : ''}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || 'Tanpa event')}</b>${statusBadge(p.status)}</div>
+        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted)}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">link post</a>` : ''}</div>
+      </div>
+    </div>`).join('') : '<p class="muted" style="margin-top:12px">Belum ada bukti. Upload screenshot pertama kamu di atas.</p>';
+
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
+    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+  </div>
+  <h1>Bukti Post KOL</h1>
+  <p class="sub">Halo <b>${esc((talent && talent.name) || '')}</b> — upload screenshot performa post kamu (like / komentar / view). Sistem membaca angkanya otomatis.</p>
+  ${errorBanner}
+  ${noEvents ? '<div class="banner banner-warn">Belum ada event aktif. Hubungi admin.</div>' : ''}
+  <form class="card" method="post" action="/kol/proofs" enctype="multipart/form-data">
+    <div class="field">
+      <label for="event_id">Event / Campaign</label>
+      <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}>
+        <option value="" disabled selected>— Pilih event —</option>${eventOpts}
+      </select>
+    </div>
+    <div class="field">
+      <label>Screenshot performa post <span class="hint">(gambar insight/statistik)</span></label>
+      <input type="file" name="screenshot" accept="image/*" required>
+    </div>
+    <div class="field">
+      <label for="post_link">Link postingan <span class="hint">(opsional)</span></label>
+      <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…">
+    </div>
+    <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>Upload &amp; Ekstrak</button>
+  </form>
+
+  <div class="section-head"><h2 style="margin:0">Bukti Saya</h2></div>
+  ${proofCards}
+</div>`;
+  return layout({ title: 'Bukti Post KOL — 20FIT', body, home: '/' });
+}
+
+/** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
+function adminPage({ staff, events, assignments, talents, proofs, eos }) {
   const isSuper = staff && staff.role === 'super_admin';
   const roleLabel = isSuper ? 'Super Admin' : 'Event Organizer';
+  events = events || []; assignments = assignments || []; talents = talents || []; proofs = proofs || []; eos = eos || [];
+  const activeEvents = events.filter((e) => e.is_active).length;
+  const uniqueTalents = new Set(proofs.map((p) => p.talent_name).filter(Boolean)).size;
+  const eventNameById = new Map(events.map((e) => [e.id, e.name]));
+  const talentNameById = new Map(talents.map((t) => [t.id, t.name]));
 
-  const campRows = camps.map((c) => `<tr>
-    <td data-label="Campaign"><b>${esc(c.name)}</b></td>
-    <td data-label="Submission">${c.count}</td>
-    <td data-label="Status"><span class="pill ${c.is_active ? 'pill-ok' : 'pill-off'}">${c.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
-    <td style="text-align:right">
-      <form class="inline-form" method="post" action="/admin/campaigns/${esc(c.id)}/toggle">
-        <button class="btn btn-ghost btn-sm">${c.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
-      </form>
-    </td></tr>`).join('');
-
-  const recentRows = recent.length ? recent.map((s) => `<tr>
-    <td data-label="Talent"><b>${esc(s.kol_name)}</b><div class="muted" style="font-size:12px">${fmtDate(s.created_at)}</div></td>
-    <td data-label="Campaign">${esc(s.campaign_name || '—')}</td>
-    <td data-label="Gambar"><div class="thumbs">${(s.images || []).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('') || '<span class="muted">—</span>'}</div></td>
-    <td class="linklist" data-label="Link Postingan">${(s.links || []).map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(l)}</a>`).join('') || '<span class="muted">—</span>'}</td>
-  </tr>`).join('') : `<tr><td colspan="4" class="muted" style="padding:22px;text-align:center">Belum ada submission.</td></tr>`;
+  const proofRows = proofs.length ? proofs.map((p) => `<tr>
+    <td data-label="Talent"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(TALENT_LABEL[p.talent_type] || p.talent_type || '')} · ${fmtDate(p.created_at)}</div></td>
+    <td data-label="Event">${esc(p.event_name || '—')}</td>
+    <td data-label="SS">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
+    <td data-label="Hasil">${statsLine(p.extracted)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">post</a></div>` : ''}</td>
+    <td data-label="Status">${statusBadge(p.status)}</td>
+    ${isSuper ? `<td style="text-align:right;white-space:nowrap">
+      ${(p.status === 'failed' || p.status === 'pending') ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="Ekstrak ulang">↻</button></form> ` : ''}
+      ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="Verifikasi">✓</button></form> ` : ''}
+      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="Tolak">✕</button></form>` : ''}
+    </td>` : ''}
+  </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">Belum ada bukti post.</td></tr>`;
 
   const eoSection = isSuper ? `
   <div class="section-head"><h2 style="margin:0">Event Organizer</h2></div>
@@ -527,20 +597,50 @@ function adminPage({ staff, totalSubs, uniqueKol, camps, recent, eos }) {
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>Nama</th><th>Email</th><th>Dibuat</th></tr></thead>
-      <tbody>${(eos && eos.length) ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
     </table></div>
   </div>` : '';
 
-  const campaignSection = isSuper ? `
-  <div class="section-head"><h2 style="margin:0">Campaign</h2></div>
+  const eventRows = events.map((e) => `<tr>
+    <td data-label="Event"><b>${esc(e.name)}</b></td>
+    <td data-label="Butuh">${(e.needs || []).map((n) => `${TALENT_LABEL[n.talent_type] || n.talent_type}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
+    <td data-label="Status"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+    <td style="text-align:right"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button></form></td>
+  </tr>`).join('');
+  const eventsSection = isSuper ? `
+  <div class="section-head"><h2 style="margin:0">Event / Campaign</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/campaigns" class="repeat-row" style="margin-bottom:18px">
-      <input type="text" name="name" placeholder="Nama campaign baru" required maxlength="120">
-      <button class="btn btn-sm">Tambah</button>
+    <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px">
+      <input type="text" name="name" placeholder="Nama event" required maxlength="140" style="flex:2;min-width:180px">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> KOL</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> Main Power</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> Fotografer</label>
+      <button class="btn btn-sm">Buat Event</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Campaign</th><th>Submission</th><th>Status</th><th></th></tr></thead>
-      <tbody>${campRows || '<tr><td colspan="4" class="muted">Belum ada campaign.</td></tr>'}</tbody>
+      <thead><tr><th>Event</th><th>Butuh</th><th>Status</th><th></th></tr></thead>
+      <tbody>${eventRows || '<tr><td colspan="4" class="muted">Belum ada event.</td></tr>'}</tbody>
+    </table></div>
+  </div>` : '';
+
+  const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+  const talentOpts = talents.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${TALENT_LABEL[t.talent_type] || t.talent_type})</option>`).join('');
+  const assignRows = assignments.map((a) => `<tr>
+    <td data-label="Talent"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${TALENT_LABEL[a.talent_type] || a.talent_type})</span></td>
+    <td data-label="Event">${esc(eventNameById.get(a.event_id) || '—')}</td>
+    <td data-label="Waktu" class="muted">${fmtDate(a.assigned_at)}</td>
+  </tr>`).join('');
+  const assignSection = isSuper ? `
+  <div class="section-head"><h2 style="margin:0">Assignment Talent</h2></div>
+  <div class="card" style="margin-top:14px">
+    <form method="post" action="/admin/assignments" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <select name="talent_id" required style="flex:1;min-width:180px"><option value="" disabled selected>— Pilih talent —</option>${talentOpts}</select>
+      <select name="event_id" required style="flex:1;min-width:180px"><option value="" disabled selected>— Pilih event —</option>${eventOpts}</select>
+      <button class="btn btn-sm">Assign</button>
+    </form>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Talent</th><th>Event</th><th>Waktu</th></tr></thead>
+      <tbody>${assignRows || '<tr><td colspan="3" class="muted">Belum ada assignment.</td></tr>'}</tbody>
     </table></div>
   </div>` : '';
 
@@ -554,19 +654,20 @@ function adminPage({ staff, totalSubs, uniqueKol, camps, recent, eos }) {
   </div>
 
   <div class="stat-grid">
-    <div class="stat"><div class="n">${totalSubs}</div><div class="l">Total submission</div></div>
-    <div class="stat"><div class="n">${uniqueKol}</div><div class="l">Talent unik</div></div>
-    <div class="stat"><div class="n">${camps.filter((c) => c.is_active).length}</div><div class="l">Campaign aktif</div></div>
-    ${isSuper ? `<div class="stat"><div class="n">${(eos || []).length}</div><div class="l">Event Organizer</div></div>` : ''}
+    <div class="stat"><div class="n">${proofs.length}</div><div class="l">Total bukti post</div></div>
+    <div class="stat"><div class="n">${uniqueTalents}</div><div class="l">Talent unik</div></div>
+    <div class="stat"><div class="n">${activeEvents}</div><div class="l">Event aktif</div></div>
+    ${isSuper ? `<div class="stat"><div class="n">${eos.length}</div><div class="l">Event Organizer</div></div>` : ''}
   </div>
+  ${eventsSection}
+  ${assignSection}
   ${eoSection}
-  ${campaignSection}
 
-  <div class="section-head"><h2 style="margin:0">Submission Terbaru</h2><a href="/performance" class="btn btn-ghost btn-sm">Lihat Leaderboard →</a></div>
+  <div class="section-head"><h2 style="margin:0">Bukti Post${isSuper ? '' : ' (read-only)'}</h2></div>
   <div class="card" style="margin-top:14px">
     <div class="table-wrap"><table>
-      <thead><tr><th>Talent</th><th>Campaign</th><th>Gambar</th><th>Link postingan</th></tr></thead>
-      <tbody>${recentRows}</tbody>
+      <thead><tr><th>Talent</th><th>Event</th><th>SS</th><th>Hasil ekstraksi</th><th>Status</th>${isSuper ? '<th></th>' : ''}</tr></thead>
+      <tbody>${proofRows}</tbody>
     </table></div>
   </div>
 </div>`;
@@ -625,6 +726,6 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, adminPage, performancePage,
+  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, adminPage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };
