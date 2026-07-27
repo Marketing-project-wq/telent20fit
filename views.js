@@ -1,5 +1,7 @@
 'use strict';
 
+const { t: tr, normLang } = require('./i18n');
+
 /** HTML-escape a value for safe interpolation. */
 function esc(s) {
   return String(s == null ? '' : s)
@@ -137,10 +139,10 @@ tr:last-child td{border-bottom:none}
 `;
 
 /** Plain shell (top logo bar, no sidebar) — landing/auth/picker/error pages. */
-function layout({ title, body, brand, home }) {
+function layout({ title, body, brand, home, lang }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
-  return `<!doctype html><html lang="id"><head>
+  return `<!doctype html><html lang="${normLang(lang)}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style></head>
 <body>
@@ -169,28 +171,31 @@ function navLink(href, key, active, icon, label) {
  *   super_admin -> Dashboard, Bukti Post, Kelola
  * Fixed sidebar on desktop; off-canvas drawer with a hamburger on mobile.
  */
-function appLayout({ title, body, role, active, user }) {
+function appLayout({ title, body, role, active, user, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const isStaff = role === 'super_admin' || role === 'eo';
-  const roleLabel = role === 'super_admin' ? 'Super Admin' : role === 'eo' ? 'Event Organizer' : 'KOL';
+  const roleLabel = t('role.' + (role || 'kol'));
   const homeHref = isStaff ? '/admin' : '/kol';
   const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
   const items = isStaff
-    ? navLink('/admin', 'dashboard', active, 'dashboard', 'Dashboard')
-      + navLink('/admin/proofs', 'proofs', active, 'proofs', 'Bukti Post')
-      + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', 'Kelola') : '')
-    : navLink('/kol', 'kol', active, 'proofs', 'Bukti Post');
+    ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+      + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
+      + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
+    : navLink('/kol', 'kol', active, 'proofs', t('nav.proofs'));
 
-  return `<!doctype html><html lang="id"><head>
+  return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style></head>
 <body>
-<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Buka menu">
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo">20FIT<b> TALENT</b></a>
   <nav class="side-nav">${items}</nav>
   <div class="side-foot">
+    <div style="margin-bottom:12px">${langToggle(L)}</div>
     <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
-    <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">Keluar</button></form>
+    <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>
   </div>
 </aside>
 <label for="nav-cb" class="nav-scrim"></label>
@@ -472,62 +477,79 @@ function kolForm(campaigns, opts = {}) {
 }
 
 const TALENT_LABEL = { kol: 'KOL', main_power: 'Main Power', fotografer: 'Fotografer' };
+function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
 function talentPath(type) { return type.replace(/_/g, '-'); }
 
-function authShell(type, title, sub, formHtml, footHtml, errors) {
+/** EN/ID language switch — links hit /lang/:code (sets cookie, redirects back). */
+function langToggle(lang) {
+  const L = normLang(lang);
+  const item = (code, label) => `<a href="/lang/${code}" style="padding:5px 11px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;${code === L ? 'background:var(--red);color:#fff' : 'color:var(--muted)'}">${label}</a>`;
+  return `<div style="display:inline-flex;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px">${item('id', 'ID')}${item('en', 'EN')}</div>`;
+}
+
+function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const errorBanner = (errors && errors.length)
-    ? `<div class="banner banner-err"><b>Gagal:</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
-  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    ${langToggle(L)}
+  </div>
   <h1>${esc(title)}</h1>
   <p class="sub">${esc(sub)}</p>
   ${errorBanner}
   <div class="card">${formHtml}</div>
   <p style="text-align:center;color:var(--muted);font-size:14px;margin-top:18px">${footHtml}</p>
 </div>`;
-  return layout({ title: `${title} — 20FIT ${TALENT_LABEL[type] || ''}`, body, brand: TALENT_LABEL[type] || 'Talent', home: '/' });
+  return layout({ title: `${title} — 20FIT ${talentLabel(L, type)}`, body, brand: talentLabel(L, type) || 'Talent', home: '/?lang=' + L, lang: L });
 }
 
 function talentLogin(type, opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
   const p = talentPath(type);
   const v = opts.values || {};
   const form = `<form method="post" action="/${p}/login">
     <div class="field">
-      <label for="login">Email / No. HP</label>
+      <label for="login">${t('common.emailphone')}</label>
       <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
     </div>
     <div class="field">
-      <label for="password">Password</label>
+      <label for="password">${t('common.password')}</label>
       <input type="password" id="password" name="password" required autocomplete="current-password">
     </div>
-    <button type="submit" class="btn btn-block">Masuk</button>
+    <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
   </form>`;
-  const foot = `Belum punya akun? <a href="/${p}/register">Daftar di sini</a>`;
-  return authShell(type, `Masuk ${TALENT_LABEL[type] || ''}`, 'Masuk ke akun kamu untuk submit hasil.', form, foot, opts.errors);
+  const foot = t('auth.foot.toRegister', { href: `/${p}/register?lang=${L}` });
+  return authShell(type, t('auth.login.title', { role: talentLabel(L, type) }), t('auth.login.sub'), form, foot, opts.errors, L);
 }
 
 function talentRegister(type, opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
   const p = talentPath(type);
   const v = opts.values || {};
   const form = `<form method="post" action="/${p}/register">
     <div class="field">
-      <label for="name">Nama Lengkap</label>
+      <label for="name">${t('common.fullname')}</label>
       <input type="text" id="name" name="name" required maxlength="120" value="${esc(v.name || '')}">
     </div>
     <div class="field">
-      <label for="login">Email / No. HP</label>
+      <label for="login">${t('common.emailphone')}</label>
       <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
-      <div class="hint" style="margin-top:6px">Dipakai untuk login.</div>
+      <div class="hint" style="margin-top:6px">${t('hint.usedForLogin')}</div>
     </div>
     <div class="field">
-      <label for="password">Password</label>
+      <label for="password">${t('common.password')}</label>
       <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
-      <div class="hint" style="margin-top:6px">Minimal 6 karakter.</div>
+      <div class="hint" style="margin-top:6px">${t('hint.min6')}</div>
     </div>
-    <button type="submit" class="btn btn-block">Daftar</button>
+    <button type="submit" class="btn btn-block">${t('btn.register')}</button>
   </form>`;
-  const foot = `Sudah punya akun? <a href="/${p}/login">Masuk di sini</a>`;
-  return authShell(type, `Daftar ${TALENT_LABEL[type] || ''}`, 'Buat akun untuk mulai submit hasil campaign.', form, foot, opts.errors);
+  const foot = t('auth.foot.toLogin', { href: `/${p}/login?lang=${L}` });
+  return authShell(type, t('auth.register.title', { role: talentLabel(L, type) }), t('auth.register.sub'), form, foot, opts.errors, L);
 }
 
 function kolSuccess(name, campaign) {
@@ -548,23 +570,28 @@ function kolSuccess(name, campaign) {
 
 /** Staff (Super Admin / EO) login page. */
 function staffLogin(opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
   const v = opts.values || {};
   const errorBanner = (opts.errors && opts.errors.length)
-    ? `<div class="banner banner-err"><b>Gagal:</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
-  <a href="/" class="btn btn-ghost btn-sm" style="margin-bottom:18px">← Kembali</a>
-  <h1>Login Admin</h1>
-  <p class="sub">Masuk sebagai Super Admin atau Event Organizer.</p>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    ${langToggle(L)}
+  </div>
+  <h1>${t('staffLogin.title')}</h1>
+  <p class="sub">${t('staffLogin.sub')}</p>
   ${errorBanner}
   <div class="card">
     <form method="post" action="/admin/login">
-      <div class="field"><label for="login">Email</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
-      <div class="field"><label for="password">Password</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
-      <button type="submit" class="btn btn-block">Masuk</button>
+      <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
+      <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
+      <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
   </div>
 </div>`;
-  return layout({ title: 'Login Admin — 20FIT', body, brand: 'ADMIN', home: '/' });
+  return layout({ title: t('staffLogin.title') + ' — 20FIT', body, brand: 'ADMIN', home: '/?lang=' + L, lang: L });
 }
 
 /**
@@ -576,27 +603,19 @@ function fmtNum(v) {
   if (v === null || v === undefined || v === '') return '–';
   return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
-function statusBadge(status) {
-  const map = {
-    pending: ['Menunggu', 'pill-off'], processing: ['Diproses', 'pill-off'],
-    extracted: ['Terekstrak', 'pill-ok'], failed: ['Gagal', 'pill-off'],
-    verified: ['Terverifikasi', 'pill-ok'], rejected: ['Ditolak', 'pill-off'],
-  };
-  const [label, cls] = map[status] || [status || '—', 'pill-off'];
+function statusBadge(status, lang) {
+  const cls = { extracted: 'pill-ok', verified: 'pill-ok' }[status] || 'pill-off';
+  const label = tr(lang, 'status.' + status, {}) !== 'status.' + status ? tr(lang, 'status.' + status) : (status || '—');
   return `<span class="pill ${cls}">${esc(label)}</span>`;
 }
-function statsLine(x) {
+function statsLine(x, lang) {
   if (!x) return '<span class="muted">—</span>';
   const metrics = [
-    ['views', '👁', 'Views'],
-    ['likes', '❤️', 'Likes'],
-    ['comments', '💬', 'Komentar'],
-    ['saves', '🔖', 'Saves'],
-    ['shares', '📤', 'Shares'],
+    ['views', '👁'], ['likes', '❤️'], ['comments', '💬'], ['saves', '🔖'], ['shares', '📤'],
   ];
   const rows = metrics
     .filter(([k]) => x[k] !== null && x[k] !== undefined && x[k] !== '')
-    .map(([k, icon, label]) => `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${label}</span><b>${fmtNum(x[k])}</b></div>`);
+    .map(([k, icon]) => `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(lang, 'stats.' + k)}</span><b>${fmtNum(x[k])}</b></div>`);
   const plat = x.platform
     ? `<div style="text-transform:capitalize;font-weight:700;margin-bottom:2px">${esc(x.platform)}</div>` : '';
   if (!rows.length) return `${plat || ''}<span class="muted">—</span>`;
@@ -604,89 +623,97 @@ function statsLine(x) {
 }
 
 /** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
-function kolProofPage({ talent, events, proofs, errors }) {
+function kolProofPage({ talent, events, proofs, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const errorBanner = (errors && errors.length)
-    ? `<div class="banner banner-err"><b>Periksa lagi:</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const noEvents = !events || events.length === 0;
   const eventOpts = (events || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
   const proofCards = (proofs && proofs.length) ? proofs.map((p) => `
     <div class="card" style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
       ${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0"></a>` : ''}
       <div style="flex:1;min-width:0">
-        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || 'Tanpa event')}</b>${statusBadge(p.status)}</div>
-        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted)}</div>
-        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">link post</a>` : ''}</div>
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
+        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L)}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
       </div>
-    </div>`).join('') : '<p class="muted" style="margin-top:12px">Belum ada bukti. Upload screenshot pertama kamu di atas.</p>';
+    </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
-    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <div style="display:flex;gap:10px;align-items:center">
+      ${langToggle(L)}
+      <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
+    </div>
   </div>
-  <h1>Bukti Post KOL</h1>
-  <p class="sub">Halo <b>${esc((talent && talent.name) || '')}</b> — upload screenshot performa post kamu (like / komentar / view). Sistem membaca angkanya otomatis.</p>
+  <h1>${t('kol.title')}</h1>
+  <p class="sub">${t('kol.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${errorBanner}
-  ${noEvents ? '<div class="banner banner-warn">Belum ada event aktif. Hubungi admin.</div>' : ''}
+  ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
   <form class="card" method="post" action="/kol/proofs" enctype="multipart/form-data">
     <div class="field">
-      <label for="event_id">Event / Campaign</label>
+      <label for="event_id">${t('kol.eventLabel')}</label>
       <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}>
-        <option value="" disabled selected>— Pilih event —</option>${eventOpts}
+        <option value="" disabled selected>${t('kol.pickEvent')}</option>${eventOpts}
       </select>
     </div>
     <div class="field">
-      <label>Screenshot performa post <span class="hint">(gambar insight/statistik)</span></label>
+      <label>${t('kol.ssLabel')} <span class="hint">${t('kol.ssHint')}</span></label>
       <input type="file" name="screenshot" accept="image/*" required>
     </div>
     <div class="field">
-      <label for="post_link">Link postingan <span class="hint">(opsional)</span></label>
+      <label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label>
       <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…">
     </div>
-    <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>Upload &amp; Ekstrak</button>
+    <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>${t('kol.uploadBtn')}</button>
   </form>
 
-  <div class="section-head"><h2 style="margin:0">Bukti Saya</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('kol.myProofs')}</h2></div>
   ${proofCards}
 </div>`;
-  return layout({ title: 'Bukti Post KOL — 20FIT', body, home: '/' });
+  return layout({ title: t('kol.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
 // Shared header for every staff page: title + who's logged in + logout.
-function staffHead(staff, title) {
-  const isSuper = staff && staff.role === 'super_admin';
-  const roleLabel = isSuper ? 'Super Admin' : 'Event Organizer';
+function staffHead(staff, title, lang) {
+  const L = normLang(lang);
+  const roleLabel = tr(L, 'role.' + ((staff && staff.role) || 'eo'));
   return `<div>
     <h1>${esc(title)}</h1>
-    <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
+    <p class="sub">${tr(L, 'staff.signedInAs', { name: esc(staff ? staff.name : ''), role: roleLabel })}</p>
   </div>`;
 }
 
 // Shared proof table. Super admin gets an actions column (verify/reject/re-extract).
-function proofTable(proofs, isSuper) {
+function proofTable(proofs, isSuper, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => `<tr>
-    <td data-label="Talent"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(TALENT_LABEL[p.talent_type] || p.talent_type || '')} · ${fmtDate(p.created_at)}</div></td>
-    <td data-label="Event">${esc(p.event_name || '—')}</td>
-    <td data-label="SS">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
-    <td data-label="Hasil">${statsLine(p.extracted)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">post</a></div>` : ''}</td>
-    <td data-label="Status">${statusBadge(p.status)}</td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div></td>
+    <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
+    <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
+    <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
+    <td data-label="${t('th.status')}">${statusBadge(p.status, L)}</td>
     ${isSuper ? `<td style="text-align:right;white-space:nowrap">
-      ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="Baca ulang (ekstrak)">↻</button></form> ` : ''}
-      ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="Verifikasi">✓</button></form> ` : ''}
-      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="Tolak">✕</button></form>` : ''}
+      ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="${t('title.reextract')}">↻</button></form> ` : ''}
+      ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="${t('title.verify')}">✓</button></form> ` : ''}
+      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="${t('title.reject')}">✕</button></form>` : ''}
     </td>` : ''}
-  </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">Belum ada bukti post.</td></tr>`;
+  </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
   return `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
-    <thead><tr><th>Talent</th><th>Event</th><th>SS</th><th>Hasil ekstraksi</th><th>Status</th>${isSuper ? '<th></th>' : ''}</tr></thead>
+    <thead><tr><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.ss')}</th><th>${t('th.extraction')}</th><th>${t('th.status')}</th>${isSuper ? '<th></th>' : ''}</tr></thead>
     <tbody>${rows}</tbody>
   </table></div></div>`;
 }
 
 // Tab 1 — Dashboard: aggregate statistics across all KOL (all talents).
-function adminDashboard({ staff, proofs, events }) {
-  const isSuper = staff && staff.role === 'super_admin';
+function adminDashboard({ staff, proofs, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   proofs = proofs || []; events = events || [];
   const activeEvents = events.filter((e) => e.is_active).length;
 
@@ -705,123 +732,127 @@ function adminDashboard({ staff, proofs, events }) {
     (b.likes + b.comments + b.saves + b.shares) - (a.likes + a.comments + a.saves + a.shares) || b.proofs - a.proofs);
 
   const boardRows = board.length ? board.map((e, i) => `<tr>
-    <td data-label="#">${i + 1}</td>
-    <td data-label="KOL"><b>${esc(e.name)}</b><div class="muted" style="font-size:12px">${esc(TALENT_LABEL[e.type] || e.type || '')}</div></td>
-    <td data-label="Bukti" style="text-align:right">${e.proofs}</td>
-    <td data-label="Views" style="text-align:right">${fmtNum(e.views)}</td>
-    <td data-label="Likes" style="text-align:right">${fmtNum(e.likes)}</td>
-    <td data-label="Komentar" style="text-align:right">${fmtNum(e.comments)}</td>
-    <td data-label="Saves" style="text-align:right">${fmtNum(e.saves)}</td>
-    <td data-label="Shares" style="text-align:right">${fmtNum(e.shares)}</td>
-  </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:22px;text-align:center">Belum ada data KOL.</td></tr>`;
+    <td data-label="${t('th.rank')}">${i + 1}</td>
+    <td data-label="${t('th.kol')}"><b>${esc(e.name)}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
+    <td data-label="${t('th.proofs')}" style="text-align:right">${e.proofs}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
+    <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes)}</td>
+    <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments)}</td>
+    <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves)}</td>
+    <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares)}</td>
+  </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:22px;text-align:center">${t('dash.emptyKol')}</td></tr>`;
 
   const body = `<div class="wrap">
-  ${staffHead(staff, 'Dashboard')}
+  ${staffHead(staff, t('dash.title'), L)}
   <div class="stat-grid">
-    <div class="stat"><div class="n">${per.size}</div><div class="l">Total KOL</div></div>
-    <div class="stat"><div class="n">${proofs.length}</div><div class="l">Total bukti post</div></div>
-    <div class="stat"><div class="n">${tot.verified}</div><div class="l">Terverifikasi</div></div>
-    <div class="stat"><div class="n">${activeEvents}</div><div class="l">Event aktif</div></div>
+    <div class="stat"><div class="n">${per.size}</div><div class="l">${t('dash.totalKol')}</div></div>
+    <div class="stat"><div class="n">${proofs.length}</div><div class="l">${t('dash.totalProofs')}</div></div>
+    <div class="stat"><div class="n">${tot.verified}</div><div class="l">${t('dash.verified')}</div></div>
+    <div class="stat"><div class="n">${activeEvents}</div><div class="l">${t('dash.activeEvents')}</div></div>
   </div>
 
-  <div class="section-head"><h2 style="margin:0">Total engagement seluruh KOL</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('dash.totalEngagement')}</h2></div>
   <div class="stat-grid">
-    <div class="stat"><div class="n">${fmtNum(tot.views)}</div><div class="l">👁 Views</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.likes)}</div><div class="l">❤️ Likes</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.comments)}</div><div class="l">💬 Komentar</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.saves)}</div><div class="l">🔖 Saves</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.shares)}</div><div class="l">📤 Shares</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.views)}</div><div class="l">👁 ${t('stats.views')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.likes)}</div><div class="l">❤️ ${t('stats.likes')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.comments)}</div><div class="l">💬 ${t('stats.comments')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.saves)}</div><div class="l">🔖 ${t('stats.saves')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.shares)}</div><div class="l">📤 ${t('stats.shares')}</div></div>
   </div>
 
-  <div class="section-head"><h2 style="margin:0">Statistik per KOL</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('dash.perKol')}</h2></div>
   <div class="card" style="margin-top:14px">
     <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>KOL</th><th style="text-align:right">Bukti</th><th style="text-align:right">Views</th><th style="text-align:right">Likes</th><th style="text-align:right">Komentar</th><th style="text-align:right">Saves</th><th style="text-align:right">Shares</th></tr></thead>
+      <thead><tr><th>${t('th.rank')}</th><th>${t('th.kol')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('stats.likes')}</th><th style="text-align:right">${t('stats.comments')}</th><th style="text-align:right">${t('stats.saves')}</th><th style="text-align:right">${t('stats.shares')}</th></tr></thead>
       <tbody>${boardRows}</tbody>
     </table></div>
   </div>
 </div>`;
-  return appLayout({ title: 'Dashboard — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name });
+  return appLayout({ title: t('dash.title') + ' — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
 }
 
 // Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
-function adminProofs({ staff, proofs }) {
+function adminProofs({ staff, proofs, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const isSuper = staff && staff.role === 'super_admin';
   const body = `<div class="wrap">
-  ${staffHead(staff, 'Bukti Post')}
-  <div class="section-head"><h2 style="margin:0">Semua bukti post KOL${isSuper ? '' : ' (lihat-saja)'}</h2></div>
-  ${proofTable(proofs, isSuper)}
+  ${staffHead(staff, t('proofs.pageTitle'), L)}
+  <div class="section-head"><h2 style="margin:0">${t('proofs.all')}${isSuper ? '' : ' ' + t('proofs.readonly')}</h2></div>
+  ${proofTable(proofs, isSuper, L)}
 </div>`;
-  return appLayout({ title: 'Bukti Post — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name });
+  return appLayout({ title: t('proofs.pageTitle') + ' — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name, lang: L });
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
-function adminManage({ staff, events, assignments, talents, eos }) {
+function adminManage({ staff, events, assignments, talents, eos, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || [];
   const eventNameById = new Map(events.map((e) => [e.id, e.name]));
-  const talentNameById = new Map(talents.map((t) => [t.id, t.name]));
+  const talentNameById = new Map(talents.map((tt) => [tt.id, tt.name]));
 
   const eventRows = events.map((e) => `<tr>
-    <td data-label="Event"><b>${esc(e.name)}</b></td>
-    <td data-label="Butuh">${(e.needs || []).map((n) => `${TALENT_LABEL[n.talent_type] || n.talent_type}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
-    <td data-label="Status"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
-    <td style="text-align:right"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button></form></td>
+    <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+    <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
+    <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span></td>
+    <td style="text-align:right"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form></td>
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-  const talentOpts = talents.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${TALENT_LABEL[t.talent_type] || t.talent_type})</option>`).join('');
+  const talentOpts = talents.map((tt) => `<option value="${esc(tt.id)}">${esc(tt.name)} (${talentLabel(L, tt.talent_type)})</option>`).join('');
   const assignRows = assignments.map((a) => `<tr>
-    <td data-label="Talent"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${TALENT_LABEL[a.talent_type] || a.talent_type})</span></td>
-    <td data-label="Event">${esc(eventNameById.get(a.event_id) || '—')}</td>
-    <td data-label="Waktu" class="muted">${fmtDate(a.assigned_at)}</td>
+    <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${talentLabel(L, a.talent_type)})</span></td>
+    <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
+    <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at)}</td>
   </tr>`).join('');
 
   const body = `<div class="wrap">
-  ${staffHead(staff, 'Kelola')}
+  ${staffHead(staff, t('manage.title'), L)}
 
-  <div class="section-head"><h2 style="margin:0">Event / Campaign</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('manage.events')}</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px">
-      <input type="text" name="name" placeholder="Nama event" required maxlength="140" style="flex:2;min-width:180px">
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> KOL</label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> Main Power</label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> Fotografer</label>
-      <button class="btn btn-sm">Buat Event</button>
+      <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
+      <button class="btn btn-sm">${t('btn.createEvent')}</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Event</th><th>Butuh</th><th>Status</th><th></th></tr></thead>
-      <tbody>${eventRows || '<tr><td colspan="4" class="muted">Belum ada event.</td></tr>'}</tbody>
+      <thead><tr><th>${t('th.event')}</th><th>${t('th.needs')}</th><th>${t('th.status')}</th><th></th></tr></thead>
+      <tbody>${eventRows || `<tr><td colspan="4" class="muted">${t('manage.emptyEvents')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
-  <div class="section-head"><h2 style="margin:0">Assignment Talent</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('manage.assignments')}</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/assignments" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-      <select name="talent_id" required style="flex:1;min-width:180px"><option value="" disabled selected>— Pilih talent —</option>${talentOpts}</select>
-      <select name="event_id" required style="flex:1;min-width:180px"><option value="" disabled selected>— Pilih event —</option>${eventOpts}</select>
-      <button class="btn btn-sm">Assign</button>
+      <select name="talent_id" required style="flex:1;min-width:180px"><option value="" disabled selected>${t('pick.talent')}</option>${talentOpts}</select>
+      <select name="event_id" required style="flex:1;min-width:180px"><option value="" disabled selected>${t('pick.event')}</option>${eventOpts}</select>
+      <button class="btn btn-sm">${t('btn.assign')}</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Talent</th><th>Event</th><th>Waktu</th></tr></thead>
-      <tbody>${assignRows || '<tr><td colspan="3" class="muted">Belum ada assignment.</td></tr>'}</tbody>
+      <thead><tr><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.time')}</th></tr></thead>
+      <tbody>${assignRows || `<tr><td colspan="3" class="muted">${t('manage.emptyAssign')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
-  <div class="section-head"><h2 style="margin:0">Event Organizer</h2></div>
+  <div class="section-head"><h2 style="margin:0">${t('manage.eos')}</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/eos" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-      <input type="text" name="name" placeholder="Nama EO" required maxlength="120" style="flex:1;min-width:150px">
-      <input type="text" name="login" placeholder="Email login" required style="flex:1;min-width:170px">
-      <input type="text" name="password" placeholder="Password (min 6)" required minlength="6" style="flex:1;min-width:150px">
-      <button class="btn btn-sm">Buat EO</button>
+      <input type="text" name="name" placeholder="${t('ph.eoName')}" required maxlength="120" style="flex:1;min-width:150px">
+      <input type="text" name="login" placeholder="${t('ph.eoEmail')}" required style="flex:1;min-width:170px">
+      <input type="text" name="password" placeholder="${t('ph.eoPass')}" required minlength="6" style="flex:1;min-width:150px">
+      <button class="btn btn-sm">${t('btn.createEo')}</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Nama</th><th>Email</th><th>Dibuat</th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
+      <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th></tr></thead>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><b>${esc(e.name)}</b></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : `<tr><td colspan="3" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 </div>`;
-  return appLayout({ title: 'Kelola — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name });
+  return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
 function performancePage(board, totalSubs) {
@@ -848,13 +879,14 @@ function performancePage(board, totalSubs) {
 }
 
 /** Shown when required env config is missing. */
-function configError(missing) {
+function configError(missing, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const body = `<div class="wrap narrow"><div class="card">
-    <h1>Konfigurasi belum lengkap</h1>
-    <div class="banner banner-warn">Environment variable belum di-set: <b>${esc(missing)}</b>.<br>
-    Set variabel ini di Railway dashboard (Variables) lalu redeploy.</div>
+    <h1>${t('cfg.title')}</h1>
+    <div class="banner banner-warn">${t('cfg.body', { missing: esc(missing) })}</div>
   </div></div>`;
-  return layout({ title: 'Konfigurasi — 20FIT KOL', body });
+  return layout({ title: t('cfg.title') + ' — 20FIT', body, lang: L });
 }
 
 function adminNoService() {
