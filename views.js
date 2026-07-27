@@ -498,27 +498,23 @@ function jsConfirm(msg) {
   return `onsubmit="return confirm('${s}')"`;
 }
 
-/** Human duration from hours: "5j" or "2h 3j" (units are localized). */
-function fmtDuration(hours, lang) {
-  const h = Math.max(0, Math.round(hours));
-  if (h < 24) return h + tr(lang, 'unit.hour');
-  const d = Math.floor(h / 24); const rem = h % 24;
-  return d + tr(lang, 'unit.day') + (rem ? ' ' + rem + tr(lang, 'unit.hour') : '');
-}
-
 /**
- * Colored timeliness indicator from the gap between posting on social media
- * (postedAt) and submitting the proof (submittedAt), vs. the SLA thresholds.
- * green = on time, yellow = near limit, red = late, gray = no posting time.
+ * Colored reasonableness indicator: is the views count plausible for how long
+ * the post has been live? Rate = views ÷ days(posted → submitted), compared to
+ * the configurable views-per-day thresholds.
+ * green = reasonable, yellow = check needed, red = unreasonable (non-organic?),
+ * gray = can't assess (no posting time or no views yet).
  */
-function timelinessBadge(postedAt, submittedAt, settings, lang) {
-  if (!postedAt) return `<span class="sla sla-gray" title="${esc(tr(lang, 'time.unknown'))}">● <span class="muted">—</span></span>`;
-  const diffH = (new Date(submittedAt).getTime() - new Date(postedAt).getTime()) / 3600000;
-  const g = Number(settings && settings.sla_green_hours) || 24;
-  const y = Number(settings && settings.sla_yellow_hours) || 48;
-  const cls = diffH <= g ? 'green' : (diffH <= Math.max(g, y) ? 'yellow' : 'red');
+function plausibilityBadge(postedAt, submittedAt, views, settings, lang) {
+  const v = Number(views);
+  if (!postedAt || !isFinite(v) || v <= 0) return `<span class="sla sla-gray" title="${esc(tr(lang, 'time.unknown'))}">● <span class="muted">—</span></span>`;
+  const days = Math.max(1, (new Date(submittedAt).getTime() - new Date(postedAt).getTime()) / 86400000);
+  const perDay = v / days;
+  const g = Number(settings && settings.vpd_green) || 3000;
+  const y = Number(settings && settings.vpd_yellow) || 10000;
+  const cls = perDay <= g ? 'green' : (perDay <= Math.max(g, y) ? 'yellow' : 'red');
   const label = cls === 'green' ? 'time.onTime' : cls === 'yellow' ? 'time.near' : 'time.late';
-  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtDuration(diffH, lang)})</span></span>`;
+  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtNum(Math.round(perDay))}${tr(lang, 'unit.perDay')})</span></span>`;
 }
 
 function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
@@ -671,7 +667,7 @@ function kolProofPage({ talent, events, proofs, errors, lang, settings }) {
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
         <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L)}</div>
         <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
-        <div style="margin-top:6px">${timelinessBadge(p.posted_at, p.created_at, settings, L)}</div>
+        <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, (p.extracted || {}).views, settings, L)}</div>
       </div>
     </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
 
@@ -727,7 +723,7 @@ function proofTable(proofs, isSuper, lang, settings) {
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${timelinessBadge(p.posted_at, p.created_at, settings, L)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${plausibilityBadge(p.posted_at, p.created_at, (p.extracted || {}).views, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -863,36 +859,6 @@ function adminAnalysis({ staff, proofs, lang }) {
 
   const engTd = (e) => fmtNum(e.likes + e.comments + e.saves + e.shares);
 
-  // engagement + posts grouped by day (for the trend chart)
-  const byDay = new Map();
-  proofs.forEach((p) => {
-    const d = p.created_at ? String(p.created_at).slice(0, 10) : null;
-    if (!d) return;
-    const e = byDay.get(d) || { day: d, posts: 0, eng: 0 };
-    e.posts += 1;
-    const x = p.extracted || {};
-    e.eng += (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.saves) || 0) + (Number(x.shares) || 0);
-    byDay.set(d, e);
-  });
-  const trend = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1)).slice(-30);
-  const lineChart = (rows, key) => {
-    if (!rows.length) return `<p class="muted">${t('an.noData')}</p>`;
-    const W = 640, H = 150, pad = 26;
-    const max = Math.max(1, ...rows.map((r) => r[key]));
-    const n = rows.length;
-    const X = (i) => pad + (n === 1 ? (W - 2 * pad) / 2 : (i / (n - 1)) * (W - 2 * pad));
-    const Y = (v) => H - pad - (v / max) * (H - 2 * pad);
-    const pts = rows.map((r, i) => `${X(i).toFixed(1)},${Y(r[key]).toFixed(1)}`).join(' ');
-    const dots = rows.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(r[key]).toFixed(1)}" r="3" fill="var(--red)"/>`).join('');
-    const step = Math.max(1, Math.ceil(n / 8));
-    const labels = rows.map((r, i) => (i % step === 0 || i === n - 1) ? `<text x="${X(i).toFixed(1)}" y="${H - 7}" font-size="10" fill="var(--muted)" text-anchor="middle">${esc(r.day.slice(5))}</text>` : '').join('');
-    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
-      <polygon points="${pad},${H - pad} ${pts} ${X(n - 1).toFixed(1)},${H - pad}" fill="rgba(228,18,31,.14)"/>
-      <polyline points="${pts}" fill="none" stroke="var(--red)" stroke-width="2"/>
-      ${dots}${labels}
-    </svg>`;
-  };
-
   const body = `<div class="wrap">
   ${staffHead(staff, t('an.title'))}
 
@@ -903,14 +869,6 @@ function adminAnalysis({ staff, proofs, lang }) {
       <tbody>${metricRows}</tbody>
     </table></div>
     <p class="muted" style="margin-top:16px;font-size:13px">${t('an.engRate')}: <b style="color:var(--ink);font-size:15px">${engRate === null ? '–' : engRate.toFixed(1) + '%'}</b> <span style="font-size:12px">(${t('an.engRateHint')})</span></p>
-  </div>
-
-  <div class="section-head"><h2 style="margin:0">${t('an.trend')}</h2></div>
-  <div class="card" style="margin-top:14px">
-    <div class="muted" style="font-size:13px;margin-bottom:8px">${t('an.trendEng')}</div>
-    ${lineChart(trend, 'eng')}
-    <div class="muted" style="font-size:13px;margin:20px 0 8px">${t('an.trendPosts')}</div>
-    ${lineChart(trend, 'posts')}
   </div>
 
   <div class="section-head"><h2 style="margin:0">${t('an.byViews')}</h2></div>
@@ -968,7 +926,7 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || [];
-  settings = settings || { sla_green_hours: 24, sla_yellow_hours: 48 };
+  settings = settings || { vpd_green: 3000, vpd_yellow: 10000 };
   const eventNameById = new Map(events.map((e) => [e.id, e.name]));
   const talentNameById = new Map(talents.map((tt) => [tt.id, tt.name]));
 
@@ -1035,8 +993,8 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
   <div class="section-head"><h2 style="margin:0">${t('manage.settings')}</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/settings" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
-      <div><label for="green">🟢 ${t('set.greenLabel')}</label><input type="number" id="green" name="green" min="1" max="8760" value="${esc(settings.sla_green_hours)}" style="width:140px"></div>
-      <div><label for="yellow">🟡 ${t('set.yellowLabel')}</label><input type="number" id="yellow" name="yellow" min="1" max="8760" value="${esc(settings.sla_yellow_hours)}" style="width:140px"></div>
+      <div><label for="green">🟢 ${t('set.greenLabel')}</label><input type="number" id="green" name="green" min="0" step="100" value="${esc(settings.vpd_green)}" style="width:160px"></div>
+      <div><label for="yellow">🟡 ${t('set.yellowLabel')}</label><input type="number" id="yellow" name="yellow" min="0" step="100" value="${esc(settings.vpd_yellow)}" style="width:160px"></div>
       <button class="btn btn-sm">${t('btn.saveSettings')}</button>
     </form>
     <p class="muted" style="font-size:13px;margin-top:14px">${t('set.hint')}</p>
