@@ -60,7 +60,10 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
-input[type=text],input[type=url],input[type=password],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
+input[type=text],input[type=url],input[type=password],input[type=datetime-local],input[type=number],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
+input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:invert(.7)}
+.sla{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;white-space:nowrap}
+.sla-green{color:#3ad29f}.sla-yellow{color:#f0b23a}.sla-red{color:#ff5b66}.sla-gray{color:var(--muted)}
 input::placeholder{color:var(--muted)}
 input[type=file]{width:100%;font-size:14px;color:var(--muted)}
 input:focus,select:focus{outline:2px solid var(--red);border-color:var(--red)}
@@ -489,6 +492,35 @@ function langToggle(lang) {
   return `<div style="display:inline-flex;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px">${item('id', 'ID')}${item('en', 'EN')}</div>`;
 }
 
+/** onsubmit="confirm(...)" attribute for delete forms (JS-string safe). */
+function jsConfirm(msg) {
+  const s = String(msg).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\s+/g, ' ');
+  return `onsubmit="return confirm('${s}')"`;
+}
+
+/** Human duration from hours: "5j" or "2h 3j" (units are localized). */
+function fmtDuration(hours, lang) {
+  const h = Math.max(0, Math.round(hours));
+  if (h < 24) return h + tr(lang, 'unit.hour');
+  const d = Math.floor(h / 24); const rem = h % 24;
+  return d + tr(lang, 'unit.day') + (rem ? ' ' + rem + tr(lang, 'unit.hour') : '');
+}
+
+/**
+ * Colored timeliness indicator from the gap between posting on social media
+ * (postedAt) and submitting the proof (submittedAt), vs. the SLA thresholds.
+ * green = on time, yellow = near limit, red = late, gray = no posting time.
+ */
+function timelinessBadge(postedAt, submittedAt, settings, lang) {
+  if (!postedAt) return `<span class="sla sla-gray" title="${esc(tr(lang, 'time.unknown'))}">● <span class="muted">—</span></span>`;
+  const diffH = (new Date(submittedAt).getTime() - new Date(postedAt).getTime()) / 3600000;
+  const g = Number(settings && settings.sla_green_hours) || 24;
+  const y = Number(settings && settings.sla_yellow_hours) || 48;
+  const cls = diffH <= g ? 'green' : (diffH <= Math.max(g, y) ? 'yellow' : 'red');
+  const label = cls === 'green' ? 'time.onTime' : cls === 'yellow' ? 'time.near' : 'time.late';
+  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtDuration(diffH, lang)})</span></span>`;
+}
+
 function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -625,7 +657,7 @@ function statsLine(x, lang) {
 }
 
 /** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
-function kolProofPage({ talent, events, proofs, errors, lang }) {
+function kolProofPage({ talent, events, proofs, errors, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const errorBanner = (errors && errors.length)
@@ -639,6 +671,7 @@ function kolProofPage({ talent, events, proofs, errors, lang }) {
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
         <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L)}</div>
         <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
+        <div style="margin-top:6px">${timelinessBadge(p.posted_at, p.created_at, settings, L)}</div>
       </div>
     </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
 
@@ -669,6 +702,10 @@ function kolProofPage({ talent, events, proofs, errors, lang }) {
       <label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label>
       <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…">
     </div>
+    <div class="field">
+      <label for="posted_at">${t('kol.postedLabel')} <span class="hint">${t('kol.postedHint')}</span></label>
+      <input type="datetime-local" id="posted_at" name="posted_at">
+    </div>
     <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>${t('kol.uploadBtn')}</button>
   </form>
 
@@ -685,12 +722,12 @@ function staffHead(staff, title) {
 }
 
 // Shared proof table. Super admin gets an actions column (verify/reject/re-extract).
-function proofTable(proofs, isSuper, lang) {
+function proofTable(proofs, isSuper, lang, settings) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${timelinessBadge(p.posted_at, p.created_at, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -698,7 +735,8 @@ function proofTable(proofs, isSuper, lang) {
     ${isSuper ? `<td style="text-align:right;white-space:nowrap">
       ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="${t('title.reextract')}">↻</button></form> ` : ''}
       ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="${t('title.verify')}">✓</button></form> ` : ''}
-      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="${t('title.reject')}">✕</button></form>` : ''}
+      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="${t('title.reject')}">✕</button></form> ` : ''}
+      <form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/delete" ${jsConfirm(t('confirm.deleteProof'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form>
     </td>` : ''}
   </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
   return `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
@@ -825,6 +863,36 @@ function adminAnalysis({ staff, proofs, lang }) {
 
   const engTd = (e) => fmtNum(e.likes + e.comments + e.saves + e.shares);
 
+  // engagement + posts grouped by day (for the trend chart)
+  const byDay = new Map();
+  proofs.forEach((p) => {
+    const d = p.created_at ? String(p.created_at).slice(0, 10) : null;
+    if (!d) return;
+    const e = byDay.get(d) || { day: d, posts: 0, eng: 0 };
+    e.posts += 1;
+    const x = p.extracted || {};
+    e.eng += (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.saves) || 0) + (Number(x.shares) || 0);
+    byDay.set(d, e);
+  });
+  const trend = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1)).slice(-30);
+  const lineChart = (rows, key) => {
+    if (!rows.length) return `<p class="muted">${t('an.noData')}</p>`;
+    const W = 640, H = 150, pad = 26;
+    const max = Math.max(1, ...rows.map((r) => r[key]));
+    const n = rows.length;
+    const X = (i) => pad + (n === 1 ? (W - 2 * pad) / 2 : (i / (n - 1)) * (W - 2 * pad));
+    const Y = (v) => H - pad - (v / max) * (H - 2 * pad);
+    const pts = rows.map((r, i) => `${X(i).toFixed(1)},${Y(r[key]).toFixed(1)}`).join(' ');
+    const dots = rows.map((r, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(r[key]).toFixed(1)}" r="3" fill="var(--red)"/>`).join('');
+    const step = Math.max(1, Math.ceil(n / 8));
+    const labels = rows.map((r, i) => (i % step === 0 || i === n - 1) ? `<text x="${X(i).toFixed(1)}" y="${H - 7}" font-size="10" fill="var(--muted)" text-anchor="middle">${esc(r.day.slice(5))}</text>` : '').join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+      <polygon points="${pad},${H - pad} ${pts} ${X(n - 1).toFixed(1)},${H - pad}" fill="rgba(228,18,31,.14)"/>
+      <polyline points="${pts}" fill="none" stroke="var(--red)" stroke-width="2"/>
+      ${dots}${labels}
+    </svg>`;
+  };
+
   const body = `<div class="wrap">
   ${staffHead(staff, t('an.title'))}
 
@@ -835,6 +903,14 @@ function adminAnalysis({ staff, proofs, lang }) {
       <tbody>${metricRows}</tbody>
     </table></div>
     <p class="muted" style="margin-top:16px;font-size:13px">${t('an.engRate')}: <b style="color:var(--ink);font-size:15px">${engRate === null ? '–' : engRate.toFixed(1) + '%'}</b> <span style="font-size:12px">(${t('an.engRateHint')})</span></p>
+  </div>
+
+  <div class="section-head"><h2 style="margin:0">${t('an.trend')}</h2></div>
+  <div class="card" style="margin-top:14px">
+    <div class="muted" style="font-size:13px;margin-bottom:8px">${t('an.trendEng')}</div>
+    ${lineChart(trend, 'eng')}
+    <div class="muted" style="font-size:13px;margin:20px 0 8px">${t('an.trendPosts')}</div>
+    ${lineChart(trend, 'posts')}
   </div>
 
   <div class="section-head"><h2 style="margin:0">${t('an.byViews')}</h2></div>
@@ -876,22 +952,23 @@ function adminAnalysis({ staff, proofs, lang }) {
 }
 
 // Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
-function adminProofs({ staff, proofs, lang }) {
+function adminProofs({ staff, proofs, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isSuper = staff && staff.role === 'super_admin';
   const body = `<div class="wrap">
   ${staffHead(staff, t('proofs.pageTitle'))}
-  ${proofTable(proofs, isSuper, L)}
+  ${proofTable(proofs, isSuper, L, settings)}
 </div>`;
   return appLayout({ title: t('proofs.pageTitle') + ' — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name, lang: L });
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
-function adminManage({ staff, events, assignments, talents, eos, lang }) {
+function adminManage({ staff, events, assignments, talents, eos, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || [];
+  settings = settings || { sla_green_hours: 24, sla_yellow_hours: 48 };
   const eventNameById = new Map(events.map((e) => [e.id, e.name]));
   const talentNameById = new Map(talents.map((tt) => [tt.id, tt.name]));
 
@@ -899,7 +976,7 @@ function adminManage({ staff, events, assignments, talents, eos, lang }) {
     <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span></td>
-    <td style="text-align:right"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form></td>
+    <td style="text-align:right;white-space:nowrap"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
@@ -950,9 +1027,19 @@ function adminManage({ staff, events, assignments, talents, eos, lang }) {
       <button class="btn btn-sm">${t('btn.createEo')}</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><b>${esc(e.name)}</b></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : `<tr><td colspan="3" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><b>${esc(e.name)}</b></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right"><form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
+  </div>
+
+  <div class="section-head"><h2 style="margin:0">${t('manage.settings')}</h2></div>
+  <div class="card" style="margin-top:14px">
+    <form method="post" action="/admin/settings" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+      <div><label for="green">🟢 ${t('set.greenLabel')}</label><input type="number" id="green" name="green" min="1" max="8760" value="${esc(settings.sla_green_hours)}" style="width:140px"></div>
+      <div><label for="yellow">🟡 ${t('set.yellowLabel')}</label><input type="number" id="yellow" name="yellow" min="1" max="8760" value="${esc(settings.sla_yellow_hours)}" style="width:140px"></div>
+      <button class="btn btn-sm">${t('btn.saveSettings')}</button>
+    </form>
+    <p class="muted" style="font-size:13px;margin-top:14px">${t('set.hint')}</p>
   </div>
 </div>`;
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });

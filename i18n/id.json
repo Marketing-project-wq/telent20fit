@@ -104,6 +104,31 @@
   "an.platform": "Platform",
   "an.engTotal": "Total engagement",
   "an.noData": "Belum ada data.",
+  "an.trend": "Tren dari waktu ke waktu",
+  "an.trendEng": "Engagement per hari",
+  "an.trendPosts": "Jumlah post per hari",
+
+  "title.delete": "Hapus",
+  "confirm.deleteProof": "Hapus bukti post ini? Tindakan ini tidak bisa dibatalkan.",
+  "confirm.deleteEvent": "Hapus event ini beserta assignment-nya?",
+  "confirm.deleteEo": "Hapus akun EO ini?",
+
+  "time.title": "Ketepatan",
+  "time.onTime": "Tepat waktu",
+  "time.near": "Mendekati batas",
+  "time.late": "Terlambat",
+  "time.unknown": "Waktu posting belum diisi",
+  "unit.hour": "j",
+  "unit.day": "h",
+
+  "kol.postedLabel": "Waktu posting di sosial media",
+  "kol.postedHint": "(untuk menghitung ketepatan submit)",
+
+  "manage.settings": "Pengaturan Ketepatan (SLA)",
+  "set.greenLabel": "Batas \"tepat waktu\" (jam)",
+  "set.yellowLabel": "Batas \"mendekati\" (jam)",
+  "set.hint": "Submit dalam ≤ batas hijau = Tepat waktu · ≤ batas kuning = Mendekati · lebih = Terlambat.",
+  "btn.saveSettings": "Simpan",
 
   "manage.title": "Kelola",
   "manage.events": "Event / Campaign",

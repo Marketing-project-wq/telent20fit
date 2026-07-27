@@ -104,6 +104,31 @@
   "an.platform": "Platform",
   "an.engTotal": "Total engagement",
   "an.noData": "No data yet.",
+  "an.trend": "Trend over time",
+  "an.trendEng": "Engagement per day",
+  "an.trendPosts": "Posts per day",
+
+  "title.delete": "Delete",
+  "confirm.deleteProof": "Delete this post proof? This cannot be undone.",
+  "confirm.deleteEvent": "Delete this event and its assignments?",
+  "confirm.deleteEo": "Delete this EO account?",
+
+  "time.title": "Timeliness",
+  "time.onTime": "On time",
+  "time.near": "Near limit",
+  "time.late": "Late",
+  "time.unknown": "Posting time not set",
+  "unit.hour": "h",
+  "unit.day": "d",
+
+  "kol.postedLabel": "Time posted on social media",
+  "kol.postedHint": "(to measure submission timeliness)",
+
+  "manage.settings": "Timeliness settings (SLA)",
+  "set.greenLabel": "\"On time\" limit (hours)",
+  "set.yellowLabel": "\"Near limit\" limit (hours)",
+  "set.hint": "Submit within ≤ green limit = On time · ≤ yellow limit = Near · beyond = Late.",
+  "btn.saveSettings": "Save",
 
   "manage.title": "Manage",
   "manage.events": "Event / Campaign",
