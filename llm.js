@@ -8,14 +8,18 @@
  */
 
 const MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite';
-// OpenRouter key. OPENROUTER_API_KEY is the canonical name; the fallbacks
-// match variable names already configured in the deployment for this feature.
-const API_KEY = process.env.OPENROUTER_API_KEY
-  || process.env.API_KEY_VIEW_LIKE_KOMEN
-  || process.env.API_KEY_OCR;
+// OpenRouter key(s). OPENROUTER_API_KEY is the canonical name; the others
+// match variable names already configured in this deployment. Collect all of
+// them (trimmed, in priority order) and try each until one authenticates, so a
+// stray/blank value in one variable doesn't block a valid key in another.
+const API_KEYS = [
+  process.env.OPENROUTER_API_KEY,
+  process.env.API_KEY_VIEW_LIKE_KOMEN,
+  process.env.API_KEY_OCR,
+].map((k) => (k || '').trim()).filter(Boolean);
 const BASE = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
-function configured() { return !!API_KEY || process.env.LLM_MOCK === '1'; }
+function configured() { return API_KEYS.length > 0 || process.env.LLM_MOCK === '1'; }
 
 /** Normalize "1.2K", "15rb", "1,5jt", "15.000", 1200 -> integer, or null. */
 function normalizeCount(v) {
@@ -96,46 +100,58 @@ async function extractFromImage(buffer, mimeType) {
       ocr_text: '1.2K suka · 45 komentar · 89 disimpan · 30 dibagikan · 15K dilihat (mock)',
     };
   }
-  if (!API_KEY) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }
+  if (!API_KEYS.length) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }
 
   const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${buffer.toString('base64')}`;
-  const res = await fetch(BASE + '/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + API_KEY,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://telent.20fit.id',
-      'X-Title': '20FIT Talent',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0,
-      response_format: { type: 'json_object' },
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: PROMPT },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ],
-      }],
-    }),
+  const body = JSON.stringify({
+    model: MODEL,
+    temperature: 0,
+    response_format: { type: 'json_object' },
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: PROMPT },
+        { type: 'image_url', image_url: { url: dataUrl } },
+      ],
+    }],
   });
 
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error('OpenRouter ' + res.status + ': ' + t.slice(0, 300));
+  let authErr = null;
+  for (const key of API_KEYS) {
+    const res = await fetch(BASE + '/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + key,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://telent.20fit.id',
+        'X-Title': '20FIT Talent',
+      },
+      body,
+    });
+
+    // An auth failure means this particular key/variable is wrong; try the
+    // next configured key rather than failing the whole extraction.
+    if (res.status === 401 || res.status === 403) {
+      authErr = new Error('OpenRouter ' + res.status + ': ' + (await res.text().catch(() => '')).slice(0, 200));
+      continue;
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error('OpenRouter ' + res.status + ': ' + t.slice(0, 300));
+    }
+    const json = await res.json();
+    const content = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+    let parsed;
+    try { parsed = parseJsonLoose(content); } catch (_) {
+      throw new Error('LLM tidak mengembalikan JSON valid: ' + String(content).slice(0, 200));
+    }
+    return {
+      model: MODEL,
+      extracted: normalizeExtracted(parsed),
+      ocr_text: parsed.raw_text || parsed.transcript || null,
+    };
   }
-  const json = await res.json();
-  const content = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
-  let parsed;
-  try { parsed = parseJsonLoose(content); } catch (_) {
-    throw new Error('LLM tidak mengembalikan JSON valid: ' + String(content).slice(0, 200));
-  }
-  return {
-    model: MODEL,
-    extracted: normalizeExtracted(parsed),
-    ocr_text: parsed.raw_text || parsed.transcript || null,
-  };
+  throw authErr || new Error('OpenRouter: semua API key ditolak');
 }
 
 module.exports = { configured, extractFromImage, normalizeCount, normalizeExtracted, MODEL };
