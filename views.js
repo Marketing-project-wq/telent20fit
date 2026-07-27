@@ -592,7 +592,7 @@ function adminPage({ staff, events, assignments, talents, proofs, eos }) {
     <td data-label="Hasil">${statsLine(p.extracted)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">post</a></div>` : ''}</td>
     <td data-label="Status">${statusBadge(p.status)}</td>
     ${isSuper ? `<td style="text-align:right;white-space:nowrap">
-      ${(p.status === 'failed' || p.status === 'pending') ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="Ekstrak ulang">↻</button></form> ` : ''}
+      ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="Baca ulang (ekstrak)">↻</button></form> ` : ''}
       ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="Verifikasi">✓</button></form> ` : ''}
       ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="Tolak">✕</button></form>` : ''}
     </td>` : ''}

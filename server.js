@@ -162,12 +162,15 @@ async function enrichProofs(st, proofs, ctx) {
 }
 
 // Extract stats from a proof screenshot via the LLM, in the background.
-async function runExtraction(st, proofId, buffer, mimeType) {
+async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
   try {
     await st.updateProof(proofId, { status: 'processing' });
     const { model, extracted, ocr_text } = await llm.extractFromImage(buffer, mimeType);
+    // Re-extracting a proof a human already decided on keeps that decision;
+    // a fresh upload (pending) lands on 'extracted'.
+    const keep = (priorStatus === 'verified' || priorStatus === 'rejected') ? priorStatus : 'extracted';
     await st.updateProof(proofId, {
-      status: 'extracted', platform: extracted.platform || null,
+      status: keep, platform: extracted.platform || null,
       extracted, ocr_text, extract_model: model, extract_error: null,
       processed_at: new Date().toISOString(),
     });
@@ -370,7 +373,9 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
     const p = await st.getProof(req.params.id);
     if (p && p.screenshot_path) {
       const buf = await st.downloadImage(p.screenshot_path);
-      if (buf) runExtraction(st, p.id, buf, 'image/jpeg');
+      const ext = String(p.screenshot_path).split('.').pop().toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      if (buf) runExtraction(st, p.id, buf, mime, p.status);
     }
     res.redirect('/admin');
   } catch (e) { next(e); }
