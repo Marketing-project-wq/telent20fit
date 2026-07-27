@@ -514,7 +514,7 @@ function plausibilityBadge(postedAt, submittedAt, views, settings, lang) {
   const y = Number(settings && settings.vpd_yellow) || 10000;
   const cls = perDay <= g ? 'green' : (perDay <= Math.max(g, y) ? 'yellow' : 'red');
   const label = cls === 'green' ? 'time.onTime' : cls === 'yellow' ? 'time.near' : 'time.late';
-  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtNum(Math.round(perDay))}${tr(lang, 'unit.perDay')})</span></span>`;
+  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtNum(Math.round(perDay))} ${tr(lang, 'unit.perDay')})</span></span>`;
 }
 
 function authShell(type, title, sub, formHtml, footHtml, errors, lang) {

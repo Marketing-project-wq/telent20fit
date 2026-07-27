@@ -118,7 +118,7 @@
   "time.near": "Perlu dicek",
   "time.late": "Tidak wajar",
   "time.unknown": "Data belum lengkap (waktu posting / views)",
-  "unit.perDay": "/hari",
+  "unit.perDay": "views/hari",
 
   "kol.postedLabel": "Tanggal & jam posting di sosial media",
   "kol.postedHint": "(untuk menilai kewajaran views/hari)",
