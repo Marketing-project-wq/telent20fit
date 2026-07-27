@@ -33,6 +33,7 @@ const V = require('./views');
 const { store, MODE } = require('./store');
 const auth = require('./auth');
 const llm = require('./llm');
+const i18n = require('./i18n');
 
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
@@ -44,6 +45,8 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Resolve the request language once (from ?lang= or the persisted `lang` cookie).
+app.use((req, res, next) => { req.lang = readLang(req, res); req.t = (k, v) => i18n.t(req.lang, k, v); next(); });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -51,7 +54,7 @@ const upload = multer({
 });
 
 const db = () => store();
-const needConfig = (res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY'));
+const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
 
 // Archived prototype (served at /prototype).
 let prototypeHtml = null;
@@ -73,9 +76,18 @@ function readLang(req, res) {
   return lang;
 }
 
-app.get('/', (req, res) => res.send(V.landingPage(readLang(req, res))));
-app.get('/register', (req, res) => res.send(V.talentPicker('register', readLang(req, res))));
-app.get('/login', (req, res) => res.send(V.talentPicker('login', readLang(req, res))));
+app.get('/', (req, res) => res.send(V.landingPage(req.lang)));
+app.get('/register', (req, res) => res.send(V.talentPicker('register', req.lang)));
+app.get('/login', (req, res) => res.send(V.talentPicker('login', req.lang)));
+
+// Change language anytime (from any page's switcher); persists via cookie.
+app.get('/lang/:code', (req, res) => {
+  const l = i18n.normLang(req.params.code);
+  res.cookie('lang', l, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
+  let dest = '/';
+  try { const u = new URL(req.get('referer')); dest = u.pathname + u.search; } catch (_) { /* no/invalid referer */ }
+  res.redirect(dest);
+});
 
 app.get('/prototype', (req, res) => {
   if (!prototypeHtml) return res.status(404).type('text').send('No prototype file found.');
@@ -87,22 +99,22 @@ app.get('/prototype', (req, res) => {
 app.get('/kol/register', (req, res) => {
   const t = auth.currentTalent(req);
   if (t && t.type === 'kol') return res.redirect('/kol');
-  res.send(V.talentRegister('kol'));
+  res.send(V.talentRegister('kol', { lang: req.lang }));
 });
 
 app.post('/kol/register', async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
 
     const errors = [];
-    if (!name) errors.push('Nama wajib diisi.');
-    if (!login) errors.push('Email / No. HP wajib diisi.');
-    if (password.length < 6) errors.push('Password minimal 6 karakter.');
-    if (errors.length) return res.status(400).send(V.talentRegister('kol', { errors, values: { name, login } }));
+    if (!name) errors.push(req.t('err.nameRequired'));
+    if (!login) errors.push(req.t('err.loginRequired'));
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    if (errors.length) return res.status(400).send(V.talentRegister('kol', { errors, values: { name, login }, lang: req.lang }));
 
     let account;
     try {
@@ -110,7 +122,7 @@ app.post('/kol/register', async (req, res, next) => {
     } catch (e) {
       if (e.code === 'DUP') {
         return res.status(400).send(V.talentRegister('kol', {
-          errors: ['Email / No. HP itu sudah terdaftar. Silakan masuk.'], values: { name, login },
+          errors: [req.t('err.dupAccount')], values: { name, login }, lang: req.lang,
         }));
       }
       throw e;
@@ -123,18 +135,18 @@ app.post('/kol/register', async (req, res, next) => {
 app.get('/kol/login', (req, res) => {
   const t = auth.currentTalent(req);
   if (t && t.type === 'kol') return res.redirect('/kol');
-  res.send(V.talentLogin('kol'));
+  res.send(V.talentLogin('kol', { lang: req.lang }));
 });
 
 app.post('/kol/login', async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
     const account = await st.findAccount('kol', login);
     if (!account || !auth.verifyPassword(password, account.password_hash)) {
-      return res.status(401).send(V.talentLogin('kol', { errors: ['Email/No. HP atau password salah.'], values: { login } }));
+      return res.status(401).send(V.talentLogin('kol', { errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, account);
     res.redirect('/kol');
@@ -188,31 +200,31 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
     const proofs = await enrichProofs(st, myProofs, { events });
-    res.send(V.kolProofPage({ talent: req.talent, events, proofs }));
+    res.send(V.kolProofPage({ talent: req.talent, events, proofs, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
 app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const eventId = String(req.body.event_id || '').trim();
     const postLink = String(req.body.post_link || '').trim();
     const file = req.file;
 
     const errors = [];
-    if (!eventId) errors.push('Event wajib dipilih.');
-    if (!file) errors.push('Screenshot wajib diupload.');
-    else if (!/^image\//i.test(file.mimetype || '')) errors.push('File harus berupa gambar.');
-    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push('Link postingan tidak valid.');
+    if (!eventId) errors.push(req.t('err.eventRequired'));
+    if (!file) errors.push(req.t('err.ssRequired'));
+    else if (!/^image\//i.test(file.mimetype || '')) errors.push(req.t('err.fileMustBeImage'));
+    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push(req.t('err.badLink'));
 
     if (errors.length) {
       const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
       const proofs = await enrichProofs(st, myProofs, { events });
-      return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors }));
+      return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors, lang: req.lang }));
     }
 
     const proofId = crypto.randomUUID();
@@ -234,18 +246,18 @@ app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), 
 app.get('/admin/login', (req, res) => {
   const t = auth.currentTalent(req);
   if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
-  res.send(V.staffLogin());
+  res.send(V.staffLogin({ lang: req.lang }));
 });
 
 app.post('/admin/login', async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
     const staff = await st.findStaff(login);
     if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
-      return res.status(401).send(V.staffLogin({ errors: ['Email atau password salah.'], values: { login } }));
+      return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, staff);
     res.redirect('/admin');
@@ -284,11 +296,11 @@ function staffCtx(req) { return { role: req.staff.type, name: req.staff.name }; 
 app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || null }));
-    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events }));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -296,11 +308,11 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
 app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = await enrichProofs(st, rawProofs.slice(0, 200), { events, talentNameById });
-    res.send(V.adminProofs({ staff: staffCtx(req), proofs }));
+    res.send(V.adminProofs({ staff: staffCtx(req), proofs, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -308,11 +320,11 @@ app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, r
 app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const [events, assignments, talents, eos] = await Promise.all([
       st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'),
     ]);
-    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos }));
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -320,7 +332,7 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
 app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
@@ -337,7 +349,7 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
 app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
     const needs = [];
     if (req.body.need_kol) needs.push({ talent_type: 'kol' });
@@ -351,7 +363,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
 app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     await st.toggleEvent(req.params.id);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
@@ -361,7 +373,7 @@ app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (
 app.post('/admin/assignments', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const talentId = String(req.body.talent_id || '').trim();
     const eventId = String(req.body.event_id || '').trim();
     if (talentId && eventId) {
@@ -377,15 +389,15 @@ async function setProofStatus(st, id, status, staffId) {
   await st.updateProof(id, { status, verified_by: staffId || null, verified_at: new Date().toISOString() });
 }
 app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
 app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
 app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const p = await st.getProof(req.params.id);
     if (p && p.screenshot_path) {
       const buf = await st.downloadImage(p.screenshot_path);
@@ -400,7 +412,7 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
 app.get('/performance', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
-    if (!st) return needConfig(res);
+    if (!st) return needConfig(req, res);
     const subs = await st.listSubmissions();
 
     const map = new Map();
