@@ -8,7 +8,11 @@
  */
 
 const MODEL = process.env.OPENROUTER_MODEL || 'google/gemini-2.5-flash-lite';
-const API_KEY = process.env.OPENROUTER_API_KEY;
+// OpenRouter key. OPENROUTER_API_KEY is the canonical name; the fallbacks
+// match variable names already configured in the deployment for this feature.
+const API_KEY = process.env.OPENROUTER_API_KEY
+  || process.env.API_KEY_VIEW_LIKE_KOMEN
+  || process.env.API_KEY_OCR;
 const BASE = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 
 function configured() { return !!API_KEY || process.env.LLM_MOCK === '1'; }
