@@ -678,13 +678,8 @@ function kolProofPage({ talent, events, proofs, errors, lang }) {
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
 // Shared header for every staff page: title + who's logged in + logout.
-function staffHead(staff, title, lang) {
-  const L = normLang(lang);
-  const roleLabel = tr(L, 'role.' + ((staff && staff.role) || 'eo'));
-  return `<div>
-    <h1>${esc(title)}</h1>
-    <p class="sub">${tr(L, 'staff.signedInAs', { name: esc(staff ? staff.name : ''), role: roleLabel })}</p>
-  </div>`;
+function staffHead(staff, title) {
+  return `<h1>${esc(title)}</h1>`;
 }
 
 // Shared proof table. Super admin gets an actions column (verify/reject/re-extract).
@@ -777,8 +772,7 @@ function adminProofs({ staff, proofs, lang }) {
   const t = (k, v) => tr(L, k, v);
   const isSuper = staff && staff.role === 'super_admin';
   const body = `<div class="wrap">
-  ${staffHead(staff, t('proofs.pageTitle'), L)}
-  <div class="section-head"><h2 style="margin:0">${t('proofs.all')}${isSuper ? '' : ' ' + t('proofs.readonly')}</h2></div>
+  ${staffHead(staff, t('proofs.pageTitle'))}
   ${proofTable(proofs, isSuper, L)}
 </div>`;
   return appLayout({ title: t('proofs.pageTitle') + ' — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name, lang: L });
