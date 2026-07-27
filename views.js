@@ -108,12 +108,13 @@ tr:last-child td{border-bottom:none}
 }
 `;
 
-function layout({ title, body, admin, brand, home }) {
+function layout({ title, body, admin, isSuper, brand, home }) {
   const label = brand || 'KOL';
   const homeHref = home || (admin ? '/admin' : '/kol');
   const nav = admin
-    ? `<a href="/admin"${admin === 'admin' ? ' class="active"' : ''}>Admin</a>
-       <a href="/performance"${admin === 'perf' ? ' class="active"' : ''}>Performance</a>`
+    ? `<a href="/admin"${admin === 'dashboard' ? ' class="active"' : ''}>Dashboard</a>
+       <a href="/admin/proofs"${admin === 'proofs' ? ' class="active"' : ''}>Bukti Post</a>
+       ${isSuper ? `<a href="/admin/manage"${admin === 'manage' ? ' class="active"' : ''}>Kelola</a>` : ''}`
     : '';
   return `<!doctype html><html lang="id"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -576,16 +577,23 @@ function kolProofPage({ talent, events, proofs, errors }) {
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
-function adminPage({ staff, events, assignments, talents, proofs, eos }) {
+// Shared header for every staff page: title + who's logged in + logout.
+function staffHead(staff, title) {
   const isSuper = staff && staff.role === 'super_admin';
   const roleLabel = isSuper ? 'Super Admin' : 'Event Organizer';
-  events = events || []; assignments = assignments || []; talents = talents || []; proofs = proofs || []; eos = eos || [];
-  const activeEvents = events.filter((e) => e.is_active).length;
-  const uniqueTalents = new Set(proofs.map((p) => p.talent_name).filter(Boolean)).size;
-  const eventNameById = new Map(events.map((e) => [e.id, e.name]));
-  const talentNameById = new Map(talents.map((t) => [t.id, t.name]));
+  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1>${esc(title)}</h1>
+      <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
+    </div>
+    <form method="post" action="/admin/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+  </div>`;
+}
 
-  const proofRows = proofs.length ? proofs.map((p) => `<tr>
+// Shared proof table. Super admin gets an actions column (verify/reject/re-extract).
+function proofTable(proofs, isSuper) {
+  proofs = proofs || [];
+  const rows = proofs.length ? proofs.map((p) => `<tr>
     <td data-label="Talent"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(TALENT_LABEL[p.talent_type] || p.talent_type || '')} · ${fmtDate(p.created_at)}</div></td>
     <td data-label="Event">${esc(p.event_name || '—')}</td>
     <td data-label="SS">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
@@ -597,21 +605,88 @@ function adminPage({ staff, events, assignments, talents, proofs, eos }) {
       ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="Tolak">✕</button></form>` : ''}
     </td>` : ''}
   </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">Belum ada bukti post.</td></tr>`;
+  return `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>Talent</th><th>Event</th><th>SS</th><th>Hasil ekstraksi</th><th>Status</th>${isSuper ? '<th></th>' : ''}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div></div>`;
+}
 
-  const eoSection = isSuper ? `
-  <div class="section-head"><h2 style="margin:0">Event Organizer</h2></div>
+// Tab 1 — Dashboard: aggregate statistics across all KOL (all talents).
+function adminDashboard({ staff, proofs, events }) {
+  const isSuper = staff && staff.role === 'super_admin';
+  proofs = proofs || []; events = events || [];
+  const activeEvents = events.filter((e) => e.is_active).length;
+
+  const per = new Map();
+  const tot = { likes: 0, comments: 0, saves: 0, shares: 0, views: 0, verified: 0 };
+  proofs.forEach((p) => {
+    const key = p.talent_name || '—';
+    const e = per.get(key) || { name: key, type: p.talent_type, proofs: 0, likes: 0, comments: 0, saves: 0, shares: 0, views: 0 };
+    e.proofs += 1;
+    if (p.status === 'verified') tot.verified += 1;
+    const x = p.extracted || {};
+    ['likes', 'comments', 'saves', 'shares', 'views'].forEach((k) => { const v = Number(x[k]) || 0; e[k] += v; tot[k] += v; });
+    per.set(key, e);
+  });
+  const board = [...per.values()].sort((a, b) =>
+    (b.likes + b.comments + b.saves + b.shares) - (a.likes + a.comments + a.saves + a.shares) || b.proofs - a.proofs);
+
+  const boardRows = board.length ? board.map((e, i) => `<tr>
+    <td data-label="#">${i + 1}</td>
+    <td data-label="KOL"><b>${esc(e.name)}</b><div class="muted" style="font-size:12px">${esc(TALENT_LABEL[e.type] || e.type || '')}</div></td>
+    <td data-label="Bukti" style="text-align:right">${e.proofs}</td>
+    <td data-label="Views" style="text-align:right">${fmtNum(e.views)}</td>
+    <td data-label="Likes" style="text-align:right">${fmtNum(e.likes)}</td>
+    <td data-label="Komentar" style="text-align:right">${fmtNum(e.comments)}</td>
+    <td data-label="Saves" style="text-align:right">${fmtNum(e.saves)}</td>
+    <td data-label="Shares" style="text-align:right">${fmtNum(e.shares)}</td>
+  </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:22px;text-align:center">Belum ada data KOL.</td></tr>`;
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, 'Dashboard')}
+  <div class="stat-grid">
+    <div class="stat"><div class="n">${per.size}</div><div class="l">Total KOL</div></div>
+    <div class="stat"><div class="n">${proofs.length}</div><div class="l">Total bukti post</div></div>
+    <div class="stat"><div class="n">${tot.verified}</div><div class="l">Terverifikasi</div></div>
+    <div class="stat"><div class="n">${activeEvents}</div><div class="l">Event aktif</div></div>
+  </div>
+
+  <div class="section-head"><h2 style="margin:0">Total engagement seluruh KOL</h2></div>
+  <div class="stat-grid">
+    <div class="stat"><div class="n">${fmtNum(tot.views)}</div><div class="l">👁 Views</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.likes)}</div><div class="l">❤️ Likes</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.comments)}</div><div class="l">💬 Komentar</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.saves)}</div><div class="l">🔖 Saves</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.shares)}</div><div class="l">📤 Shares</div></div>
+  </div>
+
+  <div class="section-head"><h2 style="margin:0">Statistik per KOL</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/eos" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-      <input type="text" name="name" placeholder="Nama EO" required maxlength="120" style="flex:1;min-width:150px">
-      <input type="text" name="login" placeholder="Email login" required style="flex:1;min-width:170px">
-      <input type="text" name="password" placeholder="Password (min 6)" required minlength="6" style="flex:1;min-width:150px">
-      <button class="btn btn-sm">Buat EO</button>
-    </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Nama</th><th>Email</th><th>Dibuat</th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
+      <thead><tr><th>#</th><th>KOL</th><th style="text-align:right">Bukti</th><th style="text-align:right">Views</th><th style="text-align:right">Likes</th><th style="text-align:right">Komentar</th><th style="text-align:right">Saves</th><th style="text-align:right">Shares</th></tr></thead>
+      <tbody>${boardRows}</tbody>
     </table></div>
-  </div>` : '';
+  </div>
+</div>`;
+  return layout({ title: 'Dashboard — 20FIT', body, admin: 'dashboard', isSuper });
+}
+
+// Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
+function adminProofs({ staff, proofs }) {
+  const isSuper = staff && staff.role === 'super_admin';
+  const body = `<div class="wrap">
+  ${staffHead(staff, 'Bukti Post')}
+  <div class="section-head"><h2 style="margin:0">Semua bukti post KOL${isSuper ? '' : ' (lihat-saja)'}</h2></div>
+  ${proofTable(proofs, isSuper)}
+</div>`;
+  return layout({ title: 'Bukti Post — 20FIT', body, admin: 'proofs', isSuper });
+}
+
+// Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
+function adminManage({ staff, events, assignments, talents, eos }) {
+  events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || [];
+  const eventNameById = new Map(events.map((e) => [e.id, e.name]));
+  const talentNameById = new Map(talents.map((t) => [t.id, t.name]));
 
   const eventRows = events.map((e) => `<tr>
     <td data-label="Event"><b>${esc(e.name)}</b></td>
@@ -619,7 +694,18 @@ function adminPage({ staff, events, assignments, talents, proofs, eos }) {
     <td data-label="Status"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
     <td style="text-align:right"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button></form></td>
   </tr>`).join('');
-  const eventsSection = isSuper ? `
+
+  const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+  const talentOpts = talents.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${TALENT_LABEL[t.talent_type] || t.talent_type})</option>`).join('');
+  const assignRows = assignments.map((a) => `<tr>
+    <td data-label="Talent"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${TALENT_LABEL[a.talent_type] || a.talent_type})</span></td>
+    <td data-label="Event">${esc(eventNameById.get(a.event_id) || '—')}</td>
+    <td data-label="Waktu" class="muted">${fmtDate(a.assigned_at)}</td>
+  </tr>`).join('');
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, 'Kelola')}
+
   <div class="section-head"><h2 style="margin:0">Event / Campaign</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px">
@@ -633,16 +719,8 @@ function adminPage({ staff, events, assignments, talents, proofs, eos }) {
       <thead><tr><th>Event</th><th>Butuh</th><th>Status</th><th></th></tr></thead>
       <tbody>${eventRows || '<tr><td colspan="4" class="muted">Belum ada event.</td></tr>'}</tbody>
     </table></div>
-  </div>` : '';
+  </div>
 
-  const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-  const talentOpts = talents.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} (${TALENT_LABEL[t.talent_type] || t.talent_type})</option>`).join('');
-  const assignRows = assignments.map((a) => `<tr>
-    <td data-label="Talent"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${TALENT_LABEL[a.talent_type] || a.talent_type})</span></td>
-    <td data-label="Event">${esc(eventNameById.get(a.event_id) || '—')}</td>
-    <td data-label="Waktu" class="muted">${fmtDate(a.assigned_at)}</td>
-  </tr>`).join('');
-  const assignSection = isSuper ? `
   <div class="section-head"><h2 style="margin:0">Assignment Talent</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/assignments" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
@@ -654,36 +732,23 @@ function adminPage({ staff, events, assignments, talents, proofs, eos }) {
       <thead><tr><th>Talent</th><th>Event</th><th>Waktu</th></tr></thead>
       <tbody>${assignRows || '<tr><td colspan="3" class="muted">Belum ada assignment.</td></tr>'}</tbody>
     </table></div>
-  </div>` : '';
-
-  const body = `<div class="wrap">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-    <div>
-      <h1>Dashboard ${isSuper ? 'Super Admin' : 'EO'}</h1>
-      <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
-    </div>
-    <form method="post" action="/admin/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
   </div>
 
-  <div class="stat-grid">
-    <div class="stat"><div class="n">${proofs.length}</div><div class="l">Total bukti post</div></div>
-    <div class="stat"><div class="n">${uniqueTalents}</div><div class="l">Talent unik</div></div>
-    <div class="stat"><div class="n">${activeEvents}</div><div class="l">Event aktif</div></div>
-    ${isSuper ? `<div class="stat"><div class="n">${eos.length}</div><div class="l">Event Organizer</div></div>` : ''}
-  </div>
-  ${eventsSection}
-  ${assignSection}
-  ${eoSection}
-
-  <div class="section-head"><h2 style="margin:0">Bukti Post${isSuper ? '' : ' (read-only)'}</h2></div>
+  <div class="section-head"><h2 style="margin:0">Event Organizer</h2></div>
   <div class="card" style="margin-top:14px">
+    <form method="post" action="/admin/eos" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+      <input type="text" name="name" placeholder="Nama EO" required maxlength="120" style="flex:1;min-width:150px">
+      <input type="text" name="login" placeholder="Email login" required style="flex:1;min-width:170px">
+      <input type="text" name="password" placeholder="Password (min 6)" required minlength="6" style="flex:1;min-width:150px">
+      <button class="btn btn-sm">Buat EO</button>
+    </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>Talent</th><th>Event</th><th>SS</th><th>Hasil ekstraksi</th><th>Status</th>${isSuper ? '<th></th>' : ''}</tr></thead>
-      <tbody>${proofRows}</tbody>
+      <thead><tr><th>Nama</th><th>Email</th><th>Dibuat</th></tr></thead>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="Nama"><b>${esc(e.name)}</b></td><td data-label="Email">${esc(e.login)}</td><td data-label="Dibuat" class="muted">${fmtDate(e.created_at)}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">Belum ada EO.</td></tr>'}</tbody>
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Dashboard — 20FIT', body, admin: 'admin' });
+  return layout({ title: 'Kelola — 20FIT', body, admin: 'manage', isSuper: true });
 }
 
 function performancePage(board, totalSubs) {
@@ -738,6 +803,7 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, adminPage, performancePage,
+  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
+  adminDashboard, adminProofs, adminManage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };
