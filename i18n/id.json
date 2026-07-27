@@ -123,10 +123,10 @@
   "kol.postedLabel": "Tanggal & jam posting di sosial media",
   "kol.postedHint": "(untuk menilai kewajaran views/hari)",
 
-  "manage.settings": "Pengaturan Kewajaran (views/hari)",
-  "set.greenLabel": "Batas \"wajar\" (views/hari)",
-  "set.yellowLabel": "Batas \"perlu dicek\" (views/hari)",
-  "set.hint": "Views dibagi jumlah hari (posting → submit). ≤ batas hijau = Wajar · ≤ batas kuning = Perlu dicek · lebih = Tidak wajar (kemungkinan tidak organik).",
+  "manage.settings": "Pengaturan Kewajaran (per metrik)",
+  "set.greenLabel": "Wajar (maks/hari)",
+  "set.yellowLabel": "Perlu dicek (maks/hari)",
+  "set.hint": "Untuk tiap metrik: nilai ÷ jumlah hari (posting → submit). ≤ batas hijau = Wajar · ≤ batas kuning = Perlu dicek · lebih = Tidak wajar. Angka yang mencurigakan ikut diwarnai di daftar bukti.",
   "btn.saveSettings": "Simpan",
 
   "manage.title": "Kelola",

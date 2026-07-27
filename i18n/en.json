@@ -123,10 +123,10 @@
   "kol.postedLabel": "Date & time posted on social media",
   "kol.postedHint": "(to assess views/day reasonableness)",
 
-  "manage.settings": "Reasonableness settings (views/day)",
-  "set.greenLabel": "\"Reasonable\" limit (views/day)",
-  "set.yellowLabel": "\"Check needed\" limit (views/day)",
-  "set.hint": "Views divided by number of days (posted → submitted). ≤ green = Reasonable · ≤ yellow = Check needed · beyond = Unreasonable (possibly non-organic).",
+  "manage.settings": "Reasonableness settings (per metric)",
+  "set.greenLabel": "Reasonable (max/day)",
+  "set.yellowLabel": "Check needed (max/day)",
+  "set.hint": "For each metric: value ÷ number of days (posted → submitted). ≤ green = Reasonable · ≤ yellow = Check needed · beyond = Unreasonable. Suspicious numbers are also colored in the proof list.",
   "btn.saveSettings": "Save",
 
   "manage.title": "Manage",

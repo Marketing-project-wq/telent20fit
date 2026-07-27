@@ -498,23 +498,51 @@ function jsConfirm(msg) {
   return `onsubmit="return confirm('${s}')"`;
 }
 
-/**
- * Colored reasonableness indicator: is the views count plausible for how long
- * the post has been live? Rate = views ÷ days(posted → submitted), compared to
- * the configurable views-per-day thresholds.
- * green = reasonable, yellow = check needed, red = unreasonable (non-organic?),
- * gray = can't assess (no posting time or no views yet).
- */
-function plausibilityBadge(postedAt, submittedAt, views, settings, lang) {
-  const v = Number(views);
-  if (!postedAt || !isFinite(v) || v <= 0) return `<span class="sla sla-gray" title="${esc(tr(lang, 'time.unknown'))}">● <span class="muted">—</span></span>`;
-  const days = Math.max(1, (new Date(submittedAt).getTime() - new Date(postedAt).getTime()) / 86400000);
+// Each metric -> its per-day threshold setting keys + safe defaults.
+const METRIC_TH = {
+  views: { g: 'vpd_green', y: 'vpd_yellow', dg: 3000, dy: 10000 },
+  likes: { g: 'lpd_green', y: 'lpd_yellow', dg: 300, dy: 1000 },
+  comments: { g: 'cpd_green', y: 'cpd_yellow', dg: 50, dy: 200 },
+  saves: { g: 'spd_green', y: 'spd_yellow', dg: 50, dy: 200 },
+  shares: { g: 'shpd_green', y: 'shpd_yellow', dg: 30, dy: 100 },
+};
+const CLS_RANK = { green: 0, yellow: 1, red: 2 };
+function slaColor(cls) { return cls === 'green' ? '#3ad29f' : cls === 'yellow' ? '#f0b23a' : cls === 'red' ? '#ff5b66' : ''; }
+
+/** Days a post was live (posted -> submitted), min 1; null if no posting time. */
+function daysLive(postedAt, submittedAt) {
+  if (!postedAt) return null;
+  return Math.max(1, (new Date(submittedAt).getTime() - new Date(postedAt).getTime()) / 86400000);
+}
+
+/** Reasonableness class for one metric value over `days`, vs its thresholds. */
+function metricClass(metric, value, days, settings) {
+  const th = METRIC_TH[metric];
+  const v = Number(value);
+  if (!th || !days || !isFinite(v) || v <= 0) return null;
   const perDay = v / days;
-  const g = Number(settings && settings.vpd_green) || 3000;
-  const y = Number(settings && settings.vpd_yellow) || 10000;
-  const cls = perDay <= g ? 'green' : (perDay <= Math.max(g, y) ? 'yellow' : 'red');
-  const label = cls === 'green' ? 'time.onTime' : cls === 'yellow' ? 'time.near' : 'time.late';
-  return `<span class="sla sla-${cls}">● ${tr(lang, label)} <span class="muted">(${fmtNum(Math.round(perDay))} ${tr(lang, 'unit.perDay')})</span></span>`;
+  const g = Number(settings && settings[th.g]); const y = Number(settings && settings[th.y]);
+  const green = isFinite(g) ? g : th.dg; const yellow = isFinite(y) ? y : th.dy;
+  return perDay <= green ? 'green' : (perDay <= Math.max(green, yellow) ? 'yellow' : 'red');
+}
+
+/**
+ * Overall reasonableness badge across ALL metrics: is the engagement plausible
+ * for how long the post has been live? The worst metric decides the color and
+ * is named in the badge. gray = can't assess (no posting time / no numbers).
+ */
+function plausibilityBadge(postedAt, submittedAt, extracted, settings, lang) {
+  const days = daysLive(postedAt, submittedAt);
+  const x = extracted || {};
+  let worst = null; let worstMetric = null;
+  for (const k of ['views', 'likes', 'comments', 'saves', 'shares']) {
+    const cls = metricClass(k, x[k], days, settings);
+    if (cls && (worst === null || CLS_RANK[cls] > CLS_RANK[worst])) { worst = cls; worstMetric = k; }
+  }
+  if (!worst) return `<span class="sla sla-gray" title="${esc(tr(lang, 'time.unknown'))}">● <span class="muted">—</span></span>`;
+  const label = worst === 'green' ? 'time.onTime' : worst === 'yellow' ? 'time.near' : 'time.late';
+  const suffix = worst === 'green' ? '' : ` <span class="muted">(${tr(lang, 'stats.' + worstMetric)})</span>`;
+  return `<span class="sla sla-${worst}">● ${tr(lang, label)}${suffix}</span>`;
 }
 
 function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
@@ -638,14 +666,17 @@ function statusBadge(status, lang) {
   const label = tr(lang, 'status.' + status, {}) !== 'status.' + status ? tr(lang, 'status.' + status) : (status || '—');
   return `<span class="pill ${cls}">${esc(label)}</span>`;
 }
-function statsLine(x, lang) {
+function statsLine(x, lang, days, settings) {
   if (!x) return '<span class="muted">—</span>';
   const metrics = [
     ['views', '👁'], ['likes', '❤️'], ['comments', '💬'], ['saves', '🔖'], ['shares', '📤'],
   ];
   const rows = metrics
     .filter(([k]) => x[k] !== null && x[k] !== undefined && x[k] !== '')
-    .map(([k, icon]) => `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(lang, 'stats.' + k)}</span><b>${fmtNum(x[k])}</b></div>`);
+    .map(([k, icon]) => {
+      const c = slaColor(metricClass(k, x[k], days, settings));
+      return `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(lang, 'stats.' + k)}</span><b${c ? ` style="color:${c}"` : ''}>${fmtNum(x[k])}</b></div>`;
+    });
   const plat = x.platform
     ? `<div style="text-transform:capitalize;font-weight:700;margin-bottom:2px">${esc(x.platform)}</div>` : '';
   if (!rows.length) return `${plat || ''}<span class="muted">—</span>`;
@@ -660,16 +691,19 @@ function kolProofPage({ talent, events, proofs, errors, lang, settings }) {
     ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const noEvents = !events || events.length === 0;
   const eventOpts = (events || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-  const proofCards = (proofs && proofs.length) ? proofs.map((p) => `
+  const proofCards = (proofs && proofs.length) ? proofs.map((p) => {
+    const days = daysLive(p.posted_at, p.created_at);
+    return `
     <div class="card" style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
       ${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0"></a>` : ''}
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
-        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L)}</div>
+        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L, days, settings)}</div>
         <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
-        <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, (p.extracted || {}).views, settings, L)}</div>
+        <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div>
       </div>
-    </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
+    </div>`;
+  }).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
@@ -722,11 +756,11 @@ function proofTable(proofs, isSuper, lang, settings) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
-  const rows = proofs.length ? proofs.map((p) => `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${plausibilityBadge(p.posted_at, p.created_at, (p.extracted || {}).views, settings, L)}</div></td>
+  const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
-    <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
+    <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
     <td data-label="${t('th.status')}">${statusBadge(p.status, L)}</td>
     ${isSuper ? `<td style="text-align:right;white-space:nowrap">
       ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="${t('title.reextract')}">↻</button></form> ` : ''}
@@ -734,7 +768,7 @@ function proofTable(proofs, isSuper, lang, settings) {
       ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="${t('title.reject')}">✕</button></form> ` : ''}
       <form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/delete" ${jsConfirm(t('confirm.deleteProof'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form>
     </td>` : ''}
-  </tr>`).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
+  </tr>`; }).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
   return `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.ss')}</th><th>${t('th.extraction')}</th><th>${t('th.status')}</th>${isSuper ? '<th></th>' : ''}</tr></thead>
     <tbody>${rows}</tbody>
@@ -992,10 +1026,16 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
 
   <div class="section-head"><h2 style="margin:0">${t('manage.settings')}</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/settings" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
-      <div><label for="green">🟢 ${t('set.greenLabel')}</label><input type="number" id="green" name="green" min="0" step="100" value="${esc(settings.vpd_green)}" style="width:160px"></div>
-      <div><label for="yellow">🟡 ${t('set.yellowLabel')}</label><input type="number" id="yellow" name="yellow" min="0" step="100" value="${esc(settings.vpd_yellow)}" style="width:160px"></div>
-      <button class="btn btn-sm">${t('btn.saveSettings')}</button>
+    <form method="post" action="/admin/settings">
+      <div class="table-wrap"><table>
+        <thead><tr><th>${t('an.metric')}</th><th style="text-align:right">🟢 ${t('set.greenLabel')}</th><th style="text-align:right">🟡 ${t('set.yellowLabel')}</th></tr></thead>
+        <tbody>${[['views', '👁', 'vpd'], ['likes', '❤️', 'lpd'], ['comments', '💬', 'cpd'], ['saves', '🔖', 'spd'], ['shares', '📤', 'shpd']].map(([k, icon, pre]) => `<tr>
+          <td data-label="${t('an.metric')}">${icon} ${t('stats.' + k)}</td>
+          <td data-label="🟢" style="text-align:right"><input type="number" name="g_${k}" min="0" value="${esc(settings[pre + '_green'])}" style="width:120px"></td>
+          <td data-label="🟡" style="text-align:right"><input type="number" name="y_${k}" min="0" value="${esc(settings[pre + '_yellow'])}" style="width:120px"></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <button class="btn btn-sm" style="margin-top:16px">${t('btn.saveSettings')}</button>
     </form>
     <p class="muted" style="font-size:13px;margin-top:14px">${t('set.hint')}</p>
   </div>

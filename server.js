@@ -441,12 +441,15 @@ app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res,
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const green = parseInt(req.body.green, 10);
-    const yellow = parseInt(req.body.yellow, 10);
-    await st.updateSettings({
-      vpd_green: Number.isFinite(green) ? Math.max(0, green) : undefined,
-      vpd_yellow: Number.isFinite(yellow) ? Math.max(0, yellow) : undefined,
-    });
+    const M = { views: 'vpd', likes: 'lpd', comments: 'cpd', saves: 'spd', shares: 'shpd' };
+    const patch = {};
+    for (const [metric, pre] of Object.entries(M)) {
+      const g = parseInt(req.body['g_' + metric], 10);
+      const y = parseInt(req.body['y_' + metric], 10);
+      if (Number.isFinite(g)) patch[pre + '_green'] = Math.max(0, g);
+      if (Number.isFinite(y)) patch[pre + '_yellow'] = Math.max(0, y);
+    }
+    await st.updateSettings(patch);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
