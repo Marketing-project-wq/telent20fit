@@ -181,6 +181,33 @@ function supabaseStore() {
       const { data } = await sb.from('talent_post_proofs').select('*').eq('id', id).maybeSingle();
       return data || null;
     },
+    async deleteProof(id) {
+      const { data } = await sb.from('talent_post_proofs').select('screenshot_path').eq('id', id).maybeSingle();
+      if (data && data.screenshot_path) { try { await sb.storage.from(BUCKET).remove([data.screenshot_path]); } catch (_) { /* best-effort */ } }
+      const { error } = await sb.from('talent_post_proofs').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async deleteEvent(id) {
+      await sb.from('talent_event_needs').delete().eq('event_id', id);
+      await sb.from('talent_event_assignments').delete().eq('event_id', id);
+      const { error } = await sb.from('talent_events').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async deleteStaff(id) {
+      const { error } = await sb.from('staff_accounts').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async getSettings() {
+      const { data } = await sb.from('talent_settings').select('sla_green_hours,sla_yellow_hours').eq('id', 1).maybeSingle();
+      return data || { sla_green_hours: 24, sla_yellow_hours: 48 };
+    },
+    async updateSettings({ sla_green_hours, sla_yellow_hours }) {
+      const patch = { updated_at: new Date().toISOString() };
+      if (Number.isFinite(sla_green_hours)) patch.sla_green_hours = sla_green_hours;
+      if (Number.isFinite(sla_yellow_hours)) patch.sla_yellow_hours = sla_yellow_hours;
+      const { error } = await sb.from('talent_settings').update(patch).eq('id', 1);
+      if (error) throw new Error(error.message);
+    },
   };
 }
 
@@ -207,6 +234,7 @@ function memoryStore() {
   ];
   const assignments = [];
   const proofs = [];
+  const settings = { sla_green_hours: 24, sla_yellow_hours: 48 };
   let seq = 0;
 
   return {
@@ -261,6 +289,18 @@ function memoryStore() {
     async listProofs() { return proofs.slice().reverse(); },
     async listProofsForTalent(talentId) { return proofs.filter((p) => p.talent_id === talentId).slice().reverse(); },
     async getProof(id) { return proofs.find((p) => p.id === id) || null; },
+    async deleteProof(id) { const i = proofs.findIndex((p) => p.id === id); if (i >= 0) proofs.splice(i, 1); },
+    async deleteEvent(id) {
+      const i = events.findIndex((e) => e.id === id); if (i >= 0) events.splice(i, 1);
+      for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
+      for (let j = assignments.length - 1; j >= 0; j--) if (assignments[j].event_id === id) assignments.splice(j, 1);
+    },
+    async deleteStaff(id) { const i = staff.findIndex((s) => s.id === id); if (i >= 0) staff.splice(i, 1); },
+    async getSettings() { return { ...settings }; },
+    async updateSettings({ sla_green_hours, sla_yellow_hours }) {
+      if (Number.isFinite(sla_green_hours)) settings.sla_green_hours = sla_green_hours;
+      if (Number.isFinite(sla_yellow_hours)) settings.sla_yellow_hours = sla_yellow_hours;
+    },
   };
 }
 

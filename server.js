@@ -201,9 +201,9 @@ app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
+    const [events, myProofs, settings] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id), st.getSettings()]);
     const proofs = await enrichProofs(st, myProofs, { events });
-    res.send(V.kolProofPage({ talent: req.talent, events, proofs, lang: req.lang }));
+    res.send(V.kolProofPage({ talent: req.talent, events, proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
@@ -227,13 +227,21 @@ app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), 
       return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors, lang: req.lang }));
     }
 
+    // Posting time from the datetime-local input, interpreted as WIB (UTC+7).
+    const postedRaw = String(req.body.posted_at || '').trim();
+    let postedAt = null;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(postedRaw)) {
+      const d = new Date((postedRaw.length === 16 ? postedRaw + ':00' : postedRaw) + '+07:00');
+      if (!isNaN(d.getTime())) postedAt = d.toISOString();
+    }
+
     const proofId = crypto.randomUUID();
     const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
     const key = `proofs/${proofId}${ext}`;
     await st.uploadImage(key, file.buffer, file.mimetype);
     await st.createProof({
       id: proofId, talent_id: req.talent.id, talent_type: 'kol',
-      event_id: eventId, screenshot_path: key, post_link: postLink || null, status: 'pending',
+      event_id: eventId, screenshot_path: key, post_link: postLink || null, posted_at: postedAt, status: 'pending',
     });
 
     runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
@@ -326,10 +334,10 @@ app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, r
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
+    const [rawProofs, events, talentsAll, settings] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents(), st.getSettings()]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = await enrichProofs(st, rawProofs.slice(0, 200), { events, talentNameById });
-    res.send(V.adminProofs({ staff: staffCtx(req), proofs, lang: req.lang }));
+    res.send(V.adminProofs({ staff: staffCtx(req), proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
@@ -338,10 +346,10 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, assignments, talents, eos] = await Promise.all([
-      st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'),
+    const [events, assignments, talents, eos, settings] = await Promise.all([
+      st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(),
     ]);
-    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, lang: req.lang }));
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
@@ -410,6 +418,37 @@ app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (
 });
 app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+});
+// Super admin: delete a proof (also removes its stored screenshot).
+app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(req, res); await st.deleteProof(req.params.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+});
+// Super admin: delete an event (with its needs & assignments) or an EO account.
+app.post('/admin/events/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(req, res); await st.deleteEvent(req.params.id); res.redirect('/admin/manage'); } catch (e) { next(e); }
+});
+app.post('/admin/eos/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const target = await st.getStaffById(req.params.id);
+    if (target && target.role === 'eo') await st.deleteStaff(req.params.id); // never delete a super admin
+    res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+// Super admin: update the timeliness (SLA) thresholds.
+app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const green = parseInt(req.body.green, 10);
+    const yellow = parseInt(req.body.yellow, 10);
+    await st.updateSettings({
+      sla_green_hours: Number.isFinite(green) ? Math.max(1, green) : undefined,
+      sla_yellow_hours: Number.isFinite(yellow) ? Math.max(1, yellow) : undefined,
+    });
+    res.redirect('/admin/manage');
+  } catch (e) { next(e); }
 });
 app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
