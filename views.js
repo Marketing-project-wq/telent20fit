@@ -511,7 +511,18 @@ function statusBadge(status) {
 function statsLine(x) {
   if (!x) return '<span class="muted">—</span>';
   const plat = x.platform ? `<b style="text-transform:capitalize">${esc(x.platform)}</b> · ` : '';
-  return `${plat}❤️ ${fmtNum(x.likes)} · 💬 ${fmtNum(x.comments)} · 👁 ${fmtNum(x.views)}`;
+  const metrics = [
+    ['likes', '❤️', 'suka'],
+    ['comments', '💬', 'komentar'],
+    ['saves', '🔖', 'disimpan'],
+    ['shares', '📤', 'dibagikan'],
+    ['views', '👁', 'dilihat'],
+  ];
+  const parts = metrics
+    .filter(([k]) => x[k] !== null && x[k] !== undefined && x[k] !== '')
+    .map(([k, icon, label]) => `<span style="white-space:nowrap">${icon} <b>${fmtNum(x[k])}</b> <span class="muted" style="font-size:12px">${label}</span></span>`);
+  if (!parts.length) return `${plat}<span class="muted">—</span>`;
+  return plat + parts.join(' · ');
 }
 
 /** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
