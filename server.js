@@ -277,26 +277,42 @@ app.get('/admin/health', async (req, res) => {
   res.type('application/json').send(JSON.stringify(out, null, 2));
 });
 
+function staffCtx(req) { return { role: req.staff.type, name: req.staff.name }; }
+
+// Tab 1 — Dashboard: aggregate KOL statistics. Attaches talent names to proofs
+// but skips thumbnail signing (not shown here).
 app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(res);
-    const isSuper = req.staff.type === 'super_admin';
-    const [rawProofs, events, assignments, talentsAll, eos] = await Promise.all([
-      st.listProofs(),
-      st.listEvents(),
-      isSuper ? st.listAssignments() : Promise.resolve([]),
-      st.listTalents(),
-      isSuper ? st.listStaff('eo') : Promise.resolve([]),
-    ]);
+    const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
-    const proofs = await enrichProofs(st, rawProofs.slice(0, 100), { events, talentNameById });
+    const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || null }));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events }));
+  } catch (e) { next(e); }
+});
 
-    res.send(V.adminPage({
-      staff: { role: req.staff.type, name: req.staff.name },
-      events, assignments, proofs, eos,
-      talents: isSuper ? talentsAll : [],
-    }));
+// Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
+app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
+    const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
+    const proofs = await enrichProofs(st, rawProofs.slice(0, 200), { events, talentNameById });
+    res.send(V.adminProofs({ staff: staffCtx(req), proofs }));
+  } catch (e) { next(e); }
+});
+
+// Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
+app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(res);
+    const [events, assignments, talents, eos] = await Promise.all([
+      st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'),
+    ]);
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos }));
   } catch (e) { next(e); }
 });
 
@@ -313,7 +329,7 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
         await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
       } catch (e) { if (e.code !== 'DUP') throw e; }
     }
-    res.redirect('/admin');
+    res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
 
@@ -328,7 +344,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power' });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
     if (name) await st.createEvent({ name, created_by: req.staff.id, needs });
-    res.redirect('/admin');
+    res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
 
@@ -337,7 +353,7 @@ app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (
     const st = db();
     if (!st) return needConfig(res);
     await st.toggleEvent(req.params.id);
-    res.redirect('/admin');
+    res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
 
@@ -352,7 +368,7 @@ app.post('/admin/assignments', auth.requireStaff(['super_admin']), async (req, r
       const t = (await st.listTalents()).find((x) => x.id === talentId);
       if (t) await st.createAssignment({ event_id: eventId, talent_id: talentId, talent_type: t.talent_type, assigned_by: req.staff.id });
     }
-    res.redirect('/admin');
+    res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
 
@@ -361,10 +377,10 @@ async function setProofStatus(st, id, status, staffId) {
   await st.updateProof(id, { status, verified_by: staffId || null, verified_at: new Date().toISOString() });
 }
 app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin'); } catch (e) { next(e); }
+  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
 app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin'); } catch (e) { next(e); }
+  try { const st = db(); if (!st) return needConfig(res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
 app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
@@ -377,7 +393,7 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
       const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
       if (buf) runExtraction(st, p.id, buf, mime, p.status);
     }
-    res.redirect('/admin');
+    res.redirect('/admin/proofs');
   } catch (e) { next(e); }
 });
 
