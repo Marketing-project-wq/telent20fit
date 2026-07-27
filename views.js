@@ -620,6 +620,10 @@ function kolProofPage({ talent, events, proofs, errors }) {
     </div>`).join('') : '<p class="muted" style="margin-top:12px">Belum ada bukti. Upload screenshot pertama kamu di atas.</p>';
 
   const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
+    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+  </div>
   <h1>Bukti Post KOL</h1>
   <p class="sub">Halo <b>${esc((talent && talent.name) || '')}</b> — upload screenshot performa post kamu (like / komentar / view). Sistem membaca angkanya otomatis.</p>
   ${errorBanner}
@@ -645,7 +649,7 @@ function kolProofPage({ talent, events, proofs, errors }) {
   <div class="section-head"><h2 style="margin:0">Bukti Saya</h2></div>
   ${proofCards}
 </div>`;
-  return appLayout({ title: 'Bukti Post KOL — 20FIT', body, role: 'kol', active: 'kol', user: (talent && talent.name) || '' });
+  return layout({ title: 'Bukti Post KOL — 20FIT', body, home: '/' });
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
