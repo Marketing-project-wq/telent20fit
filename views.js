@@ -510,19 +510,20 @@ function statusBadge(status) {
 }
 function statsLine(x) {
   if (!x) return '<span class="muted">—</span>';
-  const plat = x.platform ? `<b style="text-transform:capitalize">${esc(x.platform)}</b> · ` : '';
   const metrics = [
-    ['likes', '❤️', 'suka'],
-    ['comments', '💬', 'komentar'],
-    ['saves', '🔖', 'disimpan'],
-    ['shares', '📤', 'dibagikan'],
-    ['views', '👁', 'dilihat'],
+    ['views', '👁', 'Views'],
+    ['likes', '❤️', 'Likes'],
+    ['comments', '💬', 'Komentar'],
+    ['saves', '🔖', 'Saves'],
+    ['shares', '📤', 'Shares'],
   ];
-  const parts = metrics
+  const rows = metrics
     .filter(([k]) => x[k] !== null && x[k] !== undefined && x[k] !== '')
-    .map(([k, icon, label]) => `<span style="white-space:nowrap">${icon} <b>${fmtNum(x[k])}</b> <span class="muted" style="font-size:12px">${label}</span></span>`);
-  if (!parts.length) return `${plat}<span class="muted">—</span>`;
-  return plat + parts.join(' · ');
+    .map(([k, icon, label]) => `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${label}</span><b>${fmtNum(x[k])}</b></div>`);
+  const plat = x.platform
+    ? `<div style="text-transform:capitalize;font-weight:700;margin-bottom:2px">${esc(x.platform)}</div>` : '';
+  if (!rows.length) return `${plat || ''}<span class="muted">—</span>`;
+  return `<div style="min-width:160px;max-width:230px">${plat}${rows.join('')}</div>`;
 }
 
 /** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
