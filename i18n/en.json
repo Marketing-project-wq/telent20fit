@@ -118,7 +118,7 @@
   "time.near": "Check needed",
   "time.late": "Unreasonable",
   "time.unknown": "Incomplete data (posting time / views)",
-  "unit.perDay": "/day",
+  "unit.perDay": "views/day",
 
   "kol.postedLabel": "Date & time posted on social media",
   "kol.postedHint": "(to assess views/day reasonableness)",
