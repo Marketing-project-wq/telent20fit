@@ -14,6 +14,16 @@ const { createClient } = require('@supabase/supabase-js');
 const MODE = process.env.KOL_STORE_MODE || 'supabase';
 const BUCKET = 'kol-uploads';
 
+// Per-metric "reasonable per day" thresholds (green ceiling, yellow ceiling).
+const SETTING_KEYS = [
+  'vpd_green', 'vpd_yellow', 'lpd_green', 'lpd_yellow', 'cpd_green', 'cpd_yellow',
+  'spd_green', 'spd_yellow', 'shpd_green', 'shpd_yellow',
+];
+const DEFAULT_SETTINGS = {
+  vpd_green: 3000, vpd_yellow: 10000, lpd_green: 300, lpd_yellow: 1000,
+  cpd_green: 50, cpd_yellow: 200, spd_green: 50, spd_yellow: 200, shpd_green: 30, shpd_yellow: 100,
+};
+
 function supabaseStore() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -198,14 +208,13 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     async getSettings() {
-      const { data } = await sb.from('talent_settings').select('vpd_green,vpd_yellow').eq('id', 1).maybeSingle();
-      return data || { vpd_green: 3000, vpd_yellow: 10000 };
+      const { data } = await sb.from('talent_settings').select(SETTING_KEYS.join(',')).eq('id', 1).maybeSingle();
+      return { ...DEFAULT_SETTINGS, ...(data || {}) };
     },
-    async updateSettings({ vpd_green, vpd_yellow }) {
-      const patch = { updated_at: new Date().toISOString() };
-      if (Number.isFinite(vpd_green)) patch.vpd_green = vpd_green;
-      if (Number.isFinite(vpd_yellow)) patch.vpd_yellow = vpd_yellow;
-      const { error } = await sb.from('talent_settings').update(patch).eq('id', 1);
+    async updateSettings(patch) {
+      const upd = { updated_at: new Date().toISOString() };
+      for (const k of SETTING_KEYS) if (Number.isFinite(patch[k])) upd[k] = patch[k];
+      const { error } = await sb.from('talent_settings').update(upd).eq('id', 1);
       if (error) throw new Error(error.message);
     },
   };
@@ -234,7 +243,7 @@ function memoryStore() {
   ];
   const assignments = [];
   const proofs = [];
-  const settings = { vpd_green: 3000, vpd_yellow: 10000 };
+  const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
 
   return {
@@ -297,10 +306,7 @@ function memoryStore() {
     },
     async deleteStaff(id) { const i = staff.findIndex((s) => s.id === id); if (i >= 0) staff.splice(i, 1); },
     async getSettings() { return { ...settings }; },
-    async updateSettings({ vpd_green, vpd_yellow }) {
-      if (Number.isFinite(vpd_green)) settings.vpd_green = vpd_green;
-      if (Number.isFinite(vpd_yellow)) settings.vpd_yellow = vpd_yellow;
-    },
+    async updateSettings(patch) { for (const k of SETTING_KEYS) if (Number.isFinite(patch[k])) settings[k] = patch[k]; },
   };
 }
 
