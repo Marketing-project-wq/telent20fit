@@ -21,19 +21,35 @@ function fmtDate(iso) {
 }
 
 const STYLE = `
-:root{--red:#E4121F;--red-soft:rgba(228,18,31,.12);--ink:#101013;--ink2:#2a2a30;
-  --bg:#f6f6f4;--card:#fff;--line:#e7e7e3;--muted:#6b6b72;--ok:#12855a;--ok-soft:#e4f5ec;
-  --warn:#8a5a00;--warn-soft:#fbf0d8;--err:#b3160f;--err-soft:#fdecec;}
+:root{--red:#E4121F;--red-hover:#ff2a37;--red-soft:rgba(228,18,31,.16);
+  --bg:#0c0c0f;--panel:#141419;--card:#17171d;--card2:#20202a;--line:#2a2a33;
+  --ink:#f3f3f6;--muted:#8f8f9b;--ok:#3ad29f;--ok-soft:rgba(58,210,159,.15);
+  --warn:#f0b23a;--warn-soft:rgba(240,178,58,.15);--err:#ff5b66;--err-soft:rgba(228,18,31,.15);}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
 a{color:var(--red)}
-.topbar{background:var(--ink);color:#fff;position:sticky;top:0;z-index:100}
+/* Top logo bar (auth / non-app pages) */
+.topbar{background:var(--panel);color:#fff;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--line)}
 .topbar .in{max-width:1000px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;gap:18px}
 .logo{font-weight:800;font-size:19px;letter-spacing:.02em;text-decoration:none;color:#fff}
 .logo b{color:var(--red)}
-.topbar nav{display:flex;gap:4px;margin-left:auto}
-.topbar nav a{color:#cfcfd6;text-decoration:none;font-weight:600;font-size:14px;padding:7px 12px;border-radius:8px}
-.topbar nav a.active,.topbar nav a:hover{background:#26262c;color:#fff}
+/* Left sidebar app shell */
+.nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
+.side-logo{padding:22px 22px 16px;font:800 20px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.02em;color:#fff;text-decoration:none}
+.side-logo b{color:var(--red)}
+.side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
+.side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
+.side-nav a svg{width:20px;height:20px;flex-shrink:0}
+.side-nav a:hover{background:var(--card2);color:var(--ink)}
+.side-nav a.active{background:var(--red-soft);color:#fff;box-shadow:inset 3px 0 0 var(--red)}
+.side-nav a.active svg{color:var(--red)}
+.side-foot{border-top:1px solid var(--line);padding:14px 16px}
+.side-user{font-size:12.5px;color:var(--muted);margin-bottom:11px;line-height:1.35}
+.side-user b{color:var(--ink);font-size:14px;display:block}
+.nav-scrim{display:none}
+.app-main{margin-left:236px;min-height:100vh}
+.app-top{display:none}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 70px}
 .wrap.narrow{max-width:640px}
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
@@ -42,21 +58,22 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
-input[type=text],input[type=url],input[type=password],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:#fff;font-family:inherit;color:var(--ink)}
-input[type=file]{width:100%;font-size:14px}
+input[type=text],input[type=url],input[type=password],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
+input::placeholder{color:var(--muted)}
+input[type=file]{width:100%;font-size:14px;color:var(--muted)}
 input:focus,select:focus{outline:2px solid var(--red);border-color:var(--red)}
 .field{margin-bottom:22px}
 .repeat-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
 .repeat-row>*:first-child{flex:1}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 22px;border-radius:10px;border:none;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;text-decoration:none;color:#fff;background:var(--red)}
-.btn:hover{background:#c40f1b}
-.btn-ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
-.btn-ghost:hover{background:#f2f2ef}
+.btn:hover{background:var(--red-hover)}
+.btn-ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+.btn-ghost:hover{background:var(--card2);border-color:#3b3b46}
 .btn-block{width:100%}
 .btn-sm{padding:8px 13px;font-size:13px}
 .add-btn{background:var(--red-soft);color:var(--red);border:1px dashed rgba(228,18,31,.45)}
-.add-btn:hover{background:rgba(228,18,31,.18)}
-.rm{background:#fff;border:1px solid var(--line);color:var(--muted);border-radius:9px;width:40px;height:40px;flex-shrink:0;cursor:pointer;font-size:17px;line-height:1}
+.add-btn:hover{background:rgba(228,18,31,.22)}
+.rm{background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:9px;width:40px;height:40px;flex-shrink:0;cursor:pointer;font-size:17px;line-height:1}
 .rm:hover{border-color:var(--red);color:var(--red)}
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:20px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
@@ -70,9 +87,9 @@ tr:last-child td{border-bottom:none}
 .tag{display:inline-block;background:var(--red-soft);color:var(--red);font-size:12px;font-weight:600;padding:3px 9px;border-radius:100px}
 .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:100px}
 .pill-ok{background:var(--ok-soft);color:var(--ok)}
-.pill-off{background:#ececec;color:var(--muted)}
+.pill-off{background:#26262e;color:var(--muted)}
 .rank{font-weight:800;color:var(--muted);width:34px}
-.rank-1{color:#c99700}.rank-2{color:#8a8a8a}.rank-3{color:#b06a2c}
+.rank-1{color:#e0b53a}.rank-2{color:#b9b9c2}.rank-3{color:#c98a54}
 .thumbs{display:flex;gap:6px;flex-wrap:wrap}
 .thumbs img{width:44px;height:44px;object-fit:cover;border-radius:7px;border:1px solid var(--line)}
 .banner{padding:14px 16px;border-radius:12px;font-size:14px;margin-top:18px}
@@ -85,16 +102,27 @@ tr:last-child td{border-bottom:none}
 .muted{color:var(--muted)}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:24px}
 .cat-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px}
-.cat-card.soon{opacity:.72}
-.cat-card.cat-active{border-color:var(--red);box-shadow:0 6px 24px rgba(228,18,31,.09)}
+.cat-card.soon{opacity:.6}
+.cat-card.cat-active{border-color:var(--red);box-shadow:0 6px 24px rgba(228,18,31,.18)}
 .cat-tag{width:46px;height:46px;border-radius:12px;background:var(--red-soft);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
 .cat-name{font-size:20px;font-weight:800}
 .cat-desc{color:var(--muted);font-size:14px;flex:1;margin:0}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
+@media(max-width:899px){
+  /* Sidebar becomes an off-canvas drawer toggled by the hamburger */
+  .sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 44px rgba(0,0,0,.6);width:252px}
+  .nav-cb:checked ~ .sidebar{transform:none}
+  .nav-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
+  .nav-cb:checked ~ .nav-scrim{display:block}
+  .app-main{margin-left:0}
+  .app-top{display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
+  .hamburger{font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
+  .app-top-logo{font:800 17px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff;text-decoration:none}
+  .app-top-logo b{color:var(--red)}
+}
 @media(max-width:600px){
-  .topbar nav a{padding:7px 9px;font-size:13px}
   /* Reflow wide tables into stacked cards on phones */
   table{min-width:0 !important}
   thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);margin:-1px;border:0;padding:0}
@@ -108,23 +136,71 @@ tr:last-child td{border-bottom:none}
 }
 `;
 
-function layout({ title, body, admin, isSuper, brand, home }) {
+/** Plain shell (top logo bar, no sidebar) — landing/auth/picker/error pages. */
+function layout({ title, body, brand, home }) {
   const label = brand || 'KOL';
-  const homeHref = home || (admin ? '/admin' : '/kol');
-  const nav = admin
-    ? `<a href="/admin"${admin === 'dashboard' ? ' class="active"' : ''}>Dashboard</a>
-       <a href="/admin/proofs"${admin === 'proofs' ? ' class="active"' : ''}>Bukti Post</a>
-       ${isSuper ? `<a href="/admin/manage"${admin === 'manage' ? ' class="active"' : ''}>Kelola</a>` : ''}`
-    : '';
+  const homeHref = home || '/';
   return `<!doctype html><html lang="id"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style></head>
 <body>
 <div class="topbar"><div class="in">
   <a href="${homeHref}" class="logo">20FIT<b> ${esc(label)}</b></a>
-  <nav>${nav}</nav>
 </div></div>
 ${body}
+</body></html>`;
+}
+
+// Inline stroke icons for the sidebar (no external assets, CSP-safe).
+const NAV_ICON = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  proofs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L4.5 21"/></svg>',
+  manage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="15" cy="7" r="2.4" fill="var(--panel)"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="17" r="2.4" fill="var(--panel)"/></svg>',
+};
+
+function navLink(href, key, active, icon, label) {
+  return `<a href="${href}"${key === active ? ' class="active"' : ''}>${NAV_ICON[icon]}<span>${esc(label)}</span></a>`;
+}
+
+/**
+ * Sidebar app shell for authenticated pages. Menu adapts to role:
+ *   kol         -> Bukti Post
+ *   eo          -> Dashboard, Bukti Post
+ *   super_admin -> Dashboard, Bukti Post, Kelola
+ * Fixed sidebar on desktop; off-canvas drawer with a hamburger on mobile.
+ */
+function appLayout({ title, body, role, active, user }) {
+  const isStaff = role === 'super_admin' || role === 'eo';
+  const roleLabel = role === 'super_admin' ? 'Super Admin' : role === 'eo' ? 'Event Organizer' : 'KOL';
+  const homeHref = isStaff ? '/admin' : '/kol';
+  const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
+  const items = isStaff
+    ? navLink('/admin', 'dashboard', active, 'dashboard', 'Dashboard')
+      + navLink('/admin/proofs', 'proofs', active, 'proofs', 'Bukti Post')
+      + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', 'Kelola') : '')
+    : navLink('/kol', 'kol', active, 'proofs', 'Bukti Post');
+
+  return `<!doctype html><html lang="id"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title><style>${STYLE}</style></head>
+<body>
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Buka menu">
+<aside class="sidebar">
+  <a href="${homeHref}" class="side-logo">20FIT<b> TALENT</b></a>
+  <nav class="side-nav">${items}</nav>
+  <div class="side-foot">
+    <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
+    <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">Keluar</button></form>
+  </div>
+</aside>
+<label for="nav-cb" class="nav-scrim"></label>
+<div class="app-main">
+  <div class="app-top">
+    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
+    <a href="${homeHref}" class="app-top-logo">20FIT<b> TALENT</b></a>
+  </div>
+  ${body}
+</div>
 </body></html>`;
 }
 
@@ -544,10 +620,6 @@ function kolProofPage({ talent, events, proofs, errors }) {
     </div>`).join('') : '<p class="muted" style="margin-top:12px">Belum ada bukti. Upload screenshot pertama kamu di atas.</p>';
 
   const body = `<div class="wrap narrow">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
-    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
-  </div>
   <h1>Bukti Post KOL</h1>
   <p class="sub">Halo <b>${esc((talent && talent.name) || '')}</b> — upload screenshot performa post kamu (like / komentar / view). Sistem membaca angkanya otomatis.</p>
   ${errorBanner}
@@ -573,7 +645,7 @@ function kolProofPage({ talent, events, proofs, errors }) {
   <div class="section-head"><h2 style="margin:0">Bukti Saya</h2></div>
   ${proofCards}
 </div>`;
-  return layout({ title: 'Bukti Post KOL — 20FIT', body, home: '/' });
+  return appLayout({ title: 'Bukti Post KOL — 20FIT', body, role: 'kol', active: 'kol', user: (talent && talent.name) || '' });
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
@@ -581,12 +653,9 @@ function kolProofPage({ talent, events, proofs, errors }) {
 function staffHead(staff, title) {
   const isSuper = staff && staff.role === 'super_admin';
   const roleLabel = isSuper ? 'Super Admin' : 'Event Organizer';
-  return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-    <div>
-      <h1>${esc(title)}</h1>
-      <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
-    </div>
-    <form method="post" action="/admin/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+  return `<div>
+    <h1>${esc(title)}</h1>
+    <p class="sub">Login sebagai <b>${esc(staff ? staff.name : '')}</b> · ${roleLabel}</p>
   </div>`;
 }
 
@@ -668,7 +737,7 @@ function adminDashboard({ staff, proofs, events }) {
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Dashboard — 20FIT', body, admin: 'dashboard', isSuper });
+  return appLayout({ title: 'Dashboard — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name });
 }
 
 // Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
@@ -679,7 +748,7 @@ function adminProofs({ staff, proofs }) {
   <div class="section-head"><h2 style="margin:0">Semua bukti post KOL${isSuper ? '' : ' (lihat-saja)'}</h2></div>
   ${proofTable(proofs, isSuper)}
 </div>`;
-  return layout({ title: 'Bukti Post — 20FIT', body, admin: 'proofs', isSuper });
+  return appLayout({ title: 'Bukti Post — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name });
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
@@ -748,7 +817,7 @@ function adminManage({ staff, events, assignments, talents, eos }) {
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Kelola — 20FIT', body, admin: 'manage', isSuper: true });
+  return appLayout({ title: 'Kelola — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name });
 }
 
 function performancePage(board, totalSubs) {
