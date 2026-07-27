@@ -444,8 +444,8 @@ app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res,
     const green = parseInt(req.body.green, 10);
     const yellow = parseInt(req.body.yellow, 10);
     await st.updateSettings({
-      sla_green_hours: Number.isFinite(green) ? Math.max(1, green) : undefined,
-      sla_yellow_hours: Number.isFinite(yellow) ? Math.max(1, yellow) : undefined,
+      vpd_green: Number.isFinite(green) ? Math.max(0, green) : undefined,
+      vpd_yellow: Number.isFinite(yellow) ? Math.max(0, yellow) : undefined,
     });
     res.redirect('/admin/manage');
   } catch (e) { next(e); }

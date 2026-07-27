@@ -198,13 +198,13 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     async getSettings() {
-      const { data } = await sb.from('talent_settings').select('sla_green_hours,sla_yellow_hours').eq('id', 1).maybeSingle();
-      return data || { sla_green_hours: 24, sla_yellow_hours: 48 };
+      const { data } = await sb.from('talent_settings').select('vpd_green,vpd_yellow').eq('id', 1).maybeSingle();
+      return data || { vpd_green: 3000, vpd_yellow: 10000 };
     },
-    async updateSettings({ sla_green_hours, sla_yellow_hours }) {
+    async updateSettings({ vpd_green, vpd_yellow }) {
       const patch = { updated_at: new Date().toISOString() };
-      if (Number.isFinite(sla_green_hours)) patch.sla_green_hours = sla_green_hours;
-      if (Number.isFinite(sla_yellow_hours)) patch.sla_yellow_hours = sla_yellow_hours;
+      if (Number.isFinite(vpd_green)) patch.vpd_green = vpd_green;
+      if (Number.isFinite(vpd_yellow)) patch.vpd_yellow = vpd_yellow;
       const { error } = await sb.from('talent_settings').update(patch).eq('id', 1);
       if (error) throw new Error(error.message);
     },
@@ -234,7 +234,7 @@ function memoryStore() {
   ];
   const assignments = [];
   const proofs = [];
-  const settings = { sla_green_hours: 24, sla_yellow_hours: 48 };
+  const settings = { vpd_green: 3000, vpd_yellow: 10000 };
   let seq = 0;
 
   return {
@@ -297,9 +297,9 @@ function memoryStore() {
     },
     async deleteStaff(id) { const i = staff.findIndex((s) => s.id === id); if (i >= 0) staff.splice(i, 1); },
     async getSettings() { return { ...settings }; },
-    async updateSettings({ sla_green_hours, sla_yellow_hours }) {
-      if (Number.isFinite(sla_green_hours)) settings.sla_green_hours = sla_green_hours;
-      if (Number.isFinite(sla_yellow_hours)) settings.sla_yellow_hours = sla_yellow_hours;
+    async updateSettings({ vpd_green, vpd_yellow }) {
+      if (Number.isFinite(vpd_green)) settings.vpd_green = vpd_green;
+      if (Number.isFinite(vpd_yellow)) settings.vpd_yellow = vpd_yellow;
     },
   };
 }
