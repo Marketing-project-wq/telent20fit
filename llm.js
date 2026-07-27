@@ -47,6 +47,8 @@ function normalizeExtracted(raw) {
     platform: raw.platform ? String(raw.platform).toLowerCase().trim() : null,
     likes: normalizeCount(raw.likes),
     comments: normalizeCount(raw.comments),
+    saves: normalizeCount(raw.saves),
+    shares: normalizeCount(raw.shares),
     views: normalizeCount(raw.views),
   };
 }
@@ -57,13 +59,20 @@ Extract the engagement numbers. Return ONLY a JSON object with these keys:
   "platform": string|null,
   "likes": number|null,
   "comments": number|null,
+  "saves": number|null,
+  "shares": number|null,
   "views": number|null,
   "raw_text": string
 }
+Field meanings (match Indonesian & English labels):
+- "likes": suka / likes / disukai.
+- "comments": komentar / comments.
+- "saves": disimpan / simpan / saves / bookmarks (the bookmark/ribbon metric).
+- "shares": dibagikan / bagikan / kirim / shares / sends.
+- "views": content views / dilihat / ditonton / tayangan / plays / impressions / reach — whichever is shown for how many times the content was seen.
 Rules:
 - Convert abbreviated numbers to full integers (Indonesian & English: rb/ribu/K = thousand, jt/juta/M = million).
-- "views" may be plays/impressions/reach if that's what's shown.
-- If a metric is not visible or unreadable, use null (do not guess).
+- If a metric is not visible or unreadable, use null (do not guess). Public posts often show only likes & comments; insights screens show saves/shares/views too.
 - "raw_text" is the raw visible text you read (for audit).
 - Output valid JSON only. No markdown, no explanation.`;
 
@@ -79,8 +88,8 @@ async function extractFromImage(buffer, mimeType) {
   if (process.env.LLM_MOCK === '1') {
     return {
       model: 'mock',
-      extracted: { platform: 'instagram', likes: 1200, comments: 45, views: 15000 },
-      ocr_text: '1.2K suka · 45 komentar · 15K dilihat (mock)',
+      extracted: { platform: 'instagram', likes: 1200, comments: 45, saves: 89, shares: 30, views: 15000 },
+      ocr_text: '1.2K suka · 45 komentar · 89 disimpan · 30 dibagikan · 15K dilihat (mock)',
     };
   }
   if (!API_KEY) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }
