@@ -22,6 +22,12 @@ function fmtDate(iso) {
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** 20FIT ring wordmark: white "2", red-ring "0", white "FIT", with an optional muted tag. */
+function brandMark(label) {
+  const tag = label ? `<span class="b-tag">${esc(label)}</span>` : '';
+  return `<span class="mark">2<span class="o"></span>FIT</span>${tag}`;
+}
+
 const STYLE = `
 :root{--red:#E4121F;--red-hover:#ff2a37;--red-soft:rgba(228,18,31,.16);
   --bg:#0c0c0f;--panel:#141419;--card:#17171d;--card2:#20202a;--line:#2a2a33;
@@ -33,13 +39,16 @@ a{color:var(--red)}
 /* Top logo bar (auth / non-app pages) */
 .topbar{background:var(--panel);color:#fff;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--line)}
 .topbar .in{max-width:1000px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;gap:18px}
-.logo{font-weight:800;font-size:19px;letter-spacing:.02em;text-decoration:none;color:#fff}
-.logo b{color:var(--red)}
+.logo{font-size:21px;line-height:1;text-decoration:none}
 /* Left sidebar app shell */
 .nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
-.side-logo{padding:22px 22px 16px;font:800 20px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.02em;color:#fff;text-decoration:none}
-.side-logo b{color:var(--red)}
+.side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
+/* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
+.brand{display:inline-flex;align-items:center;gap:.36em;text-decoration:none;line-height:1;white-space:nowrap}
+.brand .mark{display:inline-flex;align-items:center;font-weight:900;letter-spacing:-.02em;color:#fff;line-height:1}
+.brand .mark .o{width:.7em;height:.7em;border-radius:50%;border:.2em solid var(--red);box-sizing:border-box;margin:0 .045em;flex:0 0 auto;position:relative;top:-.03em}
+.brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 .side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
 .side-nav a svg{width:20px;height:20px;flex-shrink:0}
@@ -124,8 +133,7 @@ tr:last-child td{border-bottom:none}
   .app-main{margin-left:0}
   .app-top{display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
   .hamburger{font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
-  .app-top-logo{font:800 17px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff;text-decoration:none}
-  .app-top-logo b{color:var(--red)}
+  .app-top-logo{font-size:20px;line-height:1;text-decoration:none}
 }
 @media(max-width:600px){
   /* Reflow wide tables into stacked cards on phones */
@@ -150,7 +158,7 @@ function layout({ title, body, brand, home, lang }) {
 <title>${esc(title)}</title><style>${STYLE}</style></head>
 <body>
 <div class="topbar"><div class="in">
-  <a href="${homeHref}" class="logo">20FIT<b> ${esc(label)}</b></a>
+  <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
 </div></div>
 ${body}
 </body></html>`;
@@ -195,7 +203,7 @@ function appLayout({ title, body, role, active, user, lang }) {
 <body>
 <input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
 <aside class="sidebar">
-  <a href="${homeHref}" class="side-logo">20FIT<b> TALENT</b></a>
+  <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
   <div class="side-foot">
     <div style="margin-bottom:12px">${langToggle(L)}</div>
@@ -207,7 +215,7 @@ function appLayout({ title, body, role, active, user, lang }) {
 <div class="app-main">
   <div class="app-top">
     <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
-    <a href="${homeHref}" class="app-top-logo">20FIT<b> TALENT</b></a>
+    <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   </div>
   ${body}
 </div>
@@ -294,9 +302,9 @@ a{text-decoration:none}
 <body>
 <div style="min-height:100vh">
   <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:11px">
-      <div style="width:40px;height:40px;background:var(--red);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 20px/1 'Barlow Condensed',sans-serif;transform:skewX(-7deg)">20</div>
-      <div style="font:800 22px/1 'Barlow Condensed',sans-serif;letter-spacing:.02em">20FIT<span style="color:var(--red)"> TALENT</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="display:inline-flex;align-items:center;font:900 30px/1 Barlow,-apple-system,'Segoe UI',sans-serif;letter-spacing:-.02em;color:#fff">2<span style="width:.7em;height:.7em;border-radius:50%;border:.2em solid var(--red);box-sizing:border-box;margin:0 .045em;position:relative;top:-.03em"></span>FIT</span>
+      <span style="font:800 12px/1 Barlow,-apple-system,'Segoe UI',sans-serif;letter-spacing:.2em;color:var(--red);text-transform:uppercase">Talent</span>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       ${toggle}
