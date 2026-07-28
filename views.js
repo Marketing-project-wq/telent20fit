@@ -31,10 +31,13 @@ function fmtDay(d) {
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
 
-/** 20FIT ring wordmark: white "2", red-ring "0", white "FIT", with an optional muted tag. */
+// Official 20FIT logo (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
+const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/07/logo-20fit-1.png';
+
+/** 20FIT brand logo image, with an optional muted role tag (e.g. TALENT). */
 function brandMark(label) {
   const tag = label ? `<span class="b-tag">${esc(label)}</span>` : '';
-  return `<span class="mark">2<span class="o"></span>FIT</span>${tag}`;
+  return `<img src="${LOGO_URL}" alt="20FIT" class="brand-img">${tag}`;
 }
 
 const STYLE = `
@@ -54,9 +57,8 @@ a{color:var(--red)}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
 .side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
-.brand{display:inline-flex;align-items:center;gap:.36em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .mark{display:inline-flex;align-items:center;font-weight:900;letter-spacing:-.02em;color:#fff;line-height:1}
-.brand .mark .o{width:.7em;height:.7em;border-radius:50%;border:.2em solid var(--red);box-sizing:border-box;margin:0 .045em;flex:0 0 auto;position:relative;top:-.03em}
+.brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
+.brand .brand-img{height:1.2em;width:auto;display:block;flex:0 0 auto}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 .side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
@@ -326,8 +328,8 @@ a{text-decoration:none}
 <body>
 <div style="min-height:100vh">
   <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span style="display:inline-flex;align-items:center;font:900 30px/1 Barlow,-apple-system,'Segoe UI',sans-serif;letter-spacing:-.02em;color:#fff">2<span style="width:.7em;height:.7em;border-radius:50%;border:.2em solid var(--red);box-sizing:border-box;margin:0 .045em;position:relative;top:-.03em"></span>FIT</span>
+    <div style="display:flex;align-items:center;gap:11px">
+      <img src="${LOGO_URL}" alt="20FIT" style="height:38px;width:auto;display:block">
       <span style="font:800 12px/1 Barlow,-apple-system,'Segoe UI',sans-serif;letter-spacing:.2em;color:var(--red);text-transform:uppercase">Talent</span>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
@@ -715,8 +717,45 @@ function statsLine(x, lang, days, settings) {
   return `<div style="min-width:160px;max-width:230px">${plat}${rows.join('')}</div>`;
 }
 
+/** Days from today (UTC) to a "YYYY-MM-DD" date; negative = past. null if unparseable. */
+function daysToDate(dateStr) {
+  if (!dateStr) return null;
+  const p = String(dateStr).slice(0, 10).split('-');
+  if (p.length !== 3) return null;
+  const target = Date.UTC(+p[0], +p[1] - 1, +p[2]);
+  if (isNaN(target)) return null;
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((target - today) / 86400000);
+}
+
+/** KOL's assigned campaigns as a notification-style list (deadline + upload status). */
+function assignmentCards(assignments, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  if (!assignments || !assignments.length) return '';
+  const neutral = 'background:var(--card2);color:var(--muted)';
+  const cards = assignments.map((a) => {
+    let badge;
+    if (a.hasProof) {
+      badge = `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">✓ ${t('kol.uploaded')}</span>`;
+    } else {
+      const diff = daysToDate(a.ends_at);
+      if (diff !== null && diff < 0) badge = `<span class="dl-when dl-late">${t('dash.overdueBy', { n: -diff })}</span>`;
+      else if (diff === 0) badge = `<span class="dl-when dl-near">${t('dash.dueToday')}</span>`;
+      else if (diff !== null && diff <= 3) badge = `<span class="dl-when dl-near">${t('dash.dueIn', { n: diff })}</span>`;
+      else badge = `<span class="dl-when" style="${neutral}">${t('kol.notUploaded')}</span>`;
+    }
+    const deadline = a.ends_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${t('kol.deadlineLabel', { date: fmtDay(a.ends_at) })}</div>` : '';
+    return `<div class="dl-item"><div><b>${esc(a.event_name)}</b>${deadline}</div>${badge}</div>`;
+  }).join('');
+  return `<div class="section-head" style="margin-top:22px"><h2 style="margin:0">📋 ${t('kol.myCampaigns')}</h2></div>
+  <p class="muted" style="font-size:13px;margin-top:6px">${t('kol.assignedNote')}</p>
+  <div class="card" style="margin-top:12px"><div class="dl-list" style="margin-top:0">${cards}</div></div>`;
+}
+
 /** KOL proof-upload page: upload a post screenshot to be auto-extracted, and list own proofs. */
-function kolProofPage({ talent, events, proofs, errors, lang, settings }) {
+function kolProofPage({ talent, events, proofs, assignments, errors, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const errorBanner = (errors && errors.length)
@@ -748,6 +787,7 @@ function kolProofPage({ talent, events, proofs, errors, lang, settings }) {
   <h1>${t('kol.title')}</h1>
   <p class="sub">${t('kol.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${errorBanner}
+  ${assignmentCards(assignments, L)}
   ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
   <form class="card" method="post" action="/kol/proofs" enctype="multipart/form-data">
     <div class="field">

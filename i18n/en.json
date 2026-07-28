@@ -47,6 +47,11 @@
   "kol.empty": "No proofs yet. Upload your first screenshot above.",
   "kol.noEvent": "No event",
   "kol.postLink": "post link",
+  "kol.myCampaigns": "Your Campaigns",
+  "kol.assignedNote": "You're assigned to these campaigns — upload your post proof before the deadline.",
+  "kol.uploaded": "Uploaded",
+  "kol.notUploaded": "Not uploaded",
+  "kol.deadlineLabel": "Deadline: {date}",
 
   "status.pending": "Pending",
   "status.processing": "Processing",

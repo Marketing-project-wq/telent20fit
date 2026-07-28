@@ -168,6 +168,11 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
+    async listAssignmentsForTalent(talentId) {
+      const { data, error } = await sb.from('talent_event_assignments').select('*').eq('talent_id', talentId).order('assigned_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
     async createProof(row) {
       const { data, error } = await sb.from('talent_post_proofs').insert(row).select('id').maybeSingle();
       if (error) throw new Error(error.message);
@@ -294,6 +299,7 @@ function memoryStore() {
       }
     },
     async listAssignments() { return assignments.slice().reverse(); },
+    async listAssignmentsForTalent(talentId) { return assignments.filter((a) => a.talent_id === talentId).slice().reverse(); },
     async createProof(row) { const p = { id: 'pf-' + (++seq), ...row, status: row.status || 'pending', created_at: now() }; proofs.push(p); return { id: p.id }; },
     async updateProof(id, patch) { const p = proofs.find((p) => p.id === id); if (p) Object.assign(p, patch); },
     async listProofs() { return proofs.slice().reverse(); },
