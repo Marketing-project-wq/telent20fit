@@ -44,6 +44,23 @@ const STYLE = `
   --bg:#0c0c0f;--panel:#141419;--card:#17171d;--card2:#20202a;--line:#2a2a33;
   --ink:#f3f3f6;--muted:#8f8f9b;--ok:#3ad29f;--ok-soft:rgba(58,210,159,.15);
   --warn:#f0b23a;--warn-soft:rgba(240,178,58,.15);--err:#ff5b66;--err-soft:rgba(228,18,31,.15);}
+/* Light theme (brand red stays; surfaces + inks flip) */
+:root[data-theme="light"]{
+  --red-soft:rgba(228,18,31,.10);
+  --bg:#f3f5f8;--panel:#ffffff;--card:#ffffff;--card2:#eef1f5;--line:#e2e6ec;
+  --ink:#17171d;--muted:#63676e;--ok:#178a54;--ok-soft:rgba(23,138,84,.12);
+  --warn:#a86a00;--warn-soft:rgba(168,106,0,.12);--err:#d32f2f;--err-soft:rgba(211,47,47,.10);}
+:root[data-theme="light"] .brand .brand-img{filter:none}
+:root[data-theme="light"] .sidebar{box-shadow:0 0 0 1px var(--line)}
+:root[data-theme="light"] .side-nav a.active{color:var(--red)}
+:root[data-theme="light"] .hamburger{color:var(--ink)}
+:root[data-theme="light"] .topbar{color:var(--ink)}
+:root[data-theme="light"] .pill-off{background:var(--card2)}
+:root[data-theme="light"] input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:none}
+/* Theme toggle pill */
+.theme-toggle{display:inline-flex;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px}
+.theme-toggle button{padding:5px 10px;border-radius:7px;font-weight:700;font-size:12px;border:0;cursor:pointer;background:transparent;color:var(--muted);line-height:1}
+.theme-toggle button.active{background:var(--red);color:#fff}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
 a{color:var(--red)}
@@ -186,13 +203,31 @@ tr:last-child td{border-bottom:none}
 }
 `;
 
+// Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
+const THEME_HEAD = `<script>
+(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
+function setTheme(m){var el=document.documentElement;if(m==='light')el.setAttribute('data-theme','light');else el.removeAttribute('data-theme');try{localStorage.setItem('theme',m);}catch(e){}syncThemeBtns();}
+function syncThemeBtns(){var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';var bs=document.querySelectorAll('[data-theme-set]');for(var i=0;i<bs.length;i++){bs[i].classList.toggle('active',bs[i].getAttribute('data-theme-set')===cur);}}
+if(document.readyState!=='loading')syncThemeBtns();else document.addEventListener('DOMContentLoaded',syncThemeBtns);
+</script>`;
+
+/** Theme toggle pill (light / dark), synced client-side. */
+function themeToggle() {
+  return `<div class="theme-toggle" role="group" aria-label="Theme"><button type="button" data-theme-set="light" onclick="setTheme('light')" title="Light">☀️</button><button type="button" data-theme-set="dark" onclick="setTheme('dark')" title="Dark">🌙</button></div>`;
+}
+
+/** Language + theme toggles grouped together. */
+function toggles(lang) {
+  return `<div style="display:inline-flex;gap:8px;flex-wrap:wrap;align-items:center">${langToggle(lang)}${themeToggle()}</div>`;
+}
+
 /** Plain shell (top logo bar, no sidebar) — landing/auth/picker/error pages. */
 function layout({ title, body, brand, home, lang }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
   return `<!doctype html><html lang="${normLang(lang)}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title><style>${STYLE}</style></head>
+<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body>
 <div class="topbar"><div class="in">
   <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
@@ -238,14 +273,14 @@ function appLayout({ title, body, role, active, user, lang }) {
 
   return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title><style>${STYLE}</style></head>
+<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body>
 <input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
   <div class="side-foot">
-    <div style="margin-bottom:12px">${langToggle(L)}</div>
+    <div style="margin-bottom:12px">${toggles(L)}</div>
     <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
     <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>
   </div>
@@ -661,7 +696,7 @@ function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
   const body = `<div class="wrap narrow" style="max-width:440px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    ${langToggle(L)}
+    ${toggles(L)}
   </div>
   <h1>${esc(title)}</h1>
   <p class="sub">${esc(sub)}</p>
@@ -752,7 +787,7 @@ function staffLogin(opts = {}) {
   const body = `<div class="wrap narrow" style="max-width:440px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    ${langToggle(L)}
+    ${toggles(L)}
   </div>
   <h1>${esc(title)}</h1>
   <p class="sub">${esc(sub)}</p>
@@ -863,7 +898,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     <div style="display:flex;gap:10px;align-items:center">
-      ${langToggle(L)}
+      ${toggles(L)}
       <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
     </div>
   </div>
@@ -929,7 +964,7 @@ function publicSubmitPage(opts = {}) {
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    ${langToggle(L)}
+    ${toggles(L)}
   </div>
   <h1>${t('pub.title')}</h1>
   <p class="sub">${t('pub.sub')}</p>
