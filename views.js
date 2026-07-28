@@ -127,6 +127,9 @@ input:focus,select:focus{outline:2px solid var(--red);border-color:var(--red)}
 .bar-fill{height:100%;background:var(--red);border-radius:0 6px 6px 0;min-width:3px;transition:width .35s ease}
 .bar-row:hover .bar-fill{background:var(--red-hover)}
 .bar-val{font-size:13px;font-weight:700;text-align:right;min-width:56px;font-variant-numeric:tabular-nums}
+th.sort-th{cursor:pointer;user-select:none;white-space:nowrap}
+th.sort-th:hover{color:var(--ink)}
+.sort-ind{color:var(--red);font-size:11px}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
 th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -1380,15 +1383,17 @@ function adminOverview({ staff, proofs, lang }) {
     ['stats.comments', 'comments'], ['stats.shares', 'shares'], ['stats.saves', 'saves'], ['stats.linkClicks', 'link_clicks'],
   ];
   const cell = (o, key) => key === '_eng' ? fmtNum(eng(o)) : key === '_er' ? pct(o) : fmtNum(o[key]);
+  const rawCell = (o, key) => key === '_eng' ? eng(o) : key === '_er' ? (erate(o) || 0) : (o[key] || 0);
   const kolTable = (ev) => {
     const list = [...ev.kols.values()].sort((a, b) => eng(b) - eng(a));
-    const head = `<th>${t('th.kol')}</th>` + cols.map(([lab]) => `<th style="text-align:right">${t(lab)}</th>`).join('');
-    const rows = list.map((k) => `<tr><td data-label="${t('th.kol')}"><b>${esc(k.name)}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" style="text-align:right">${cell(k, key)}</td>`).join('')}</tr>`).join('');
-    const totalRow = `<tr style="border-top:2px solid var(--line)"><td data-label="${t('th.kol')}"><b>${t('ov.totalAllKol')}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" style="text-align:right"><b>${cell(ev.totals, key)}</b></td>`).join('')}</tr>`;
-    return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}${totalRow}</tbody></table></div>`;
+    const head = `<th>${t('th.kol')}</th>` + cols.map(([lab]) => `<th class="sort-th" style="text-align:right">${t(lab)}<span class="sort-ind"></span></th>`).join('');
+    const rows = list.map((k) => `<tr><td data-label="${t('th.kol')}"><b>${esc(k.name)}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" data-v="${rawCell(k, key)}" style="text-align:right">${cell(k, key)}</td>`).join('')}</tr>`).join('');
+    const totalRow = `<tr data-total="1" style="border-top:2px solid var(--line)"><td data-label="${t('th.kol')}"><b>${t('ov.totalAllKol')}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" style="text-align:right"><b>${cell(ev.totals, key)}</b></td>`).join('')}</tr>`;
+    return `<div class="table-wrap"><table class="sortable"><thead><tr>${head}</tr></thead><tbody>${rows}${totalRow}</tbody></table></div>`;
   };
 
   const events = [...evMap.values()].sort((a, b) => b.totals.views - a.totals.views);
+  const submitters = new Set(proofs.map((p) => p.talent_id || p.talent_name || '—'));
   const sections = events.length ? events.map((ev) => {
     const kolList = [...ev.kols.values()];
     return `
@@ -1401,15 +1406,64 @@ function adminOverview({ staff, proofs, lang }) {
     </div>
   </div>
   <div class="card" style="margin-top:14px">
-    <div style="font-weight:700;margin-bottom:12px">${t('ov.perKol')} <span class="muted" style="font-weight:400;font-size:13px">· ${ev.totals.posts} ${t('th.proofs').toLowerCase()}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="font-weight:700">${t('ov.perKol')} <span class="muted" style="font-weight:400;font-size:13px">· ${ev.kols.size} KOL · ${ev.totals.posts} ${t('th.proofs').toLowerCase()}</span></div>
+      <span class="muted" style="font-size:12px">${t('ov.sortHint')}</span>
+    </div>
     ${kolTable(ev)}
   </div>`;
   }).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="text-align:center;padding:22px">${t('ov.empty')}</p></div>`;
 
+  const summaryBar = events.length ? `<div class="stat-grid" style="margin-top:16px">
+    <div class="stat"><div class="n">${submitters.size}</div><div class="l">👥 ${t('ov.kolSubmitted')}</div></div>
+    <div class="stat"><div class="n">${proofs.length}</div><div class="l">📄 ${t('th.proofs')}</div></div>
+    <div class="stat"><div class="n">${events.length}</div><div class="l">📈 Campaign</div></div>
+  </div>` : '';
+
+  const insightCard = events.length ? `<div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="font-weight:700">🧠 ${t('ins.title')}</div>
+      <button id="ins-btn" class="btn btn-sm">${t('ins.btn')}</button>
+    </div>
+    <div id="ins-out" class="muted" style="margin-top:12px;font-size:14px;line-height:1.65;white-space:pre-wrap">${t('ins.hint')}</div>
+  </div>` : '';
+
+  const scripts = events.length ? `<script>
+(function(){
+  function num(td){ return parseFloat((td && td.getAttribute('data-v')) || '0') || 0; }
+  document.querySelectorAll('table.sortable').forEach(function(table){
+    table.querySelectorAll('th.sort-th').forEach(function(th){
+      th.addEventListener('click', function(){
+        var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+        var tb = table.tBodies[0];
+        var rows = Array.prototype.slice.call(tb.querySelectorAll('tr:not([data-total])'));
+        var total = tb.querySelector('tr[data-total]');
+        var asc = th.getAttribute('data-dir') === 'asc';
+        rows.sort(function(a, b){ return asc ? num(a.children[idx]) - num(b.children[idx]) : num(b.children[idx]) - num(a.children[idx]); });
+        table.querySelectorAll('th.sort-th').forEach(function(o){ o.removeAttribute('data-dir'); var s = o.querySelector('.sort-ind'); if (s) s.textContent = ''; });
+        th.setAttribute('data-dir', asc ? 'desc' : 'asc');
+        var ind = th.querySelector('.sort-ind'); if (ind) ind.textContent = asc ? ' ▲' : ' ▼';
+        rows.forEach(function(r){ tb.appendChild(r); }); if (total) tb.appendChild(total);
+      });
+    });
+  });
+  var btn = document.getElementById('ins-btn'), out = document.getElementById('ins-out');
+  if (btn) { btn.addEventListener('click', function(){
+    btn.disabled = true; out.textContent = ${JSON.stringify(t('ins.loading'))};
+    fetch('/admin/overview/insight').then(function(r){ return r.json(); }).then(function(d){
+      out.textContent = (d && d.insight) || (d && d.error) || ${JSON.stringify(t('ins.err'))};
+    }).catch(function(){ out.textContent = ${JSON.stringify(t('ins.err'))}; }).finally(function(){ btn.disabled = false; });
+  }); }
+})();
+</script>` : '';
+
   const body = `<div class="wrap">
   ${staffHead(staff, t('ov.title'))}
   <p class="muted" style="font-size:13px;margin-top:-6px">${t('ov.hint')}</p>
+  ${summaryBar}
+  ${insightCard}
   ${sections}
+  ${scripts}
 </div>`;
   return appLayout({ title: t('ov.title') + ' — 20FIT', body, role: staff && staff.role, active: 'overview', user: staff && staff.name, lang: L });
 }
