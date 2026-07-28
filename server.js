@@ -331,12 +331,26 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll, assignments] = await Promise.all([
-      st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(),
+    const [rawProofs, events, talentsAll, assignments, settings] = await Promise.all([
+      st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(), st.getSettings(),
     ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || null }));
-    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, lang: req.lang }));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Per-KOL eligibility detail (both staff roles).
+app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [talent, rawProofs, events, settings] = await Promise.all([
+      st.getAccountById(req.params.id), st.listProofsForTalent(req.params.id), st.listEvents(), st.getSettings(),
+    ]);
+    const eventNameById = new Map(events.map((e) => [e.id, e.name]));
+    const proofs = rawProofs.map((p) => ({ ...p, event_name: eventNameById.get(p.event_id) || null }));
+    res.send(V.adminKolDetail({ staff: staffCtx(req), talent, proofs, settings, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -391,10 +405,10 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, assignments, talents, eos, settings] = await Promise.all([
-      st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(),
+    const [events, assignments, talents, eos, settings, proofs] = await Promise.all([
+      st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(), st.listProofs(),
     ]);
-    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, lang: req.lang, settings }));
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
@@ -495,6 +509,11 @@ app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res,
       const y = parseInt(req.body['y_' + metric], 10);
       if (Number.isFinite(g)) patch[pre + '_green'] = Math.max(0, g);
       if (Number.isFinite(y)) patch[pre + '_yellow'] = Math.max(0, y);
+    }
+    // KOL eligibility scoring thresholds.
+    for (const key of ['score_target_views', 'score_target_eng', 'score_min_campaigns', 'score_eligible', 'score_consider']) {
+      const v = parseInt(req.body[key], 10);
+      if (Number.isFinite(v)) patch[key] = Math.max(0, v);
     }
     await st.updateSettings(patch);
     res.redirect('/admin/manage');

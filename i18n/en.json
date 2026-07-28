@@ -205,6 +205,26 @@
   "err.fileMustBeImage": "The file must be an image.",
   "err.badLink": "The post link is not valid.",
 
+  "score.col": "Eligibility",
+  "score.none": "No data yet",
+  "score.good": "Recommended",
+  "score.mid": "Consider",
+  "score.bad": "Not Recommended",
+  "score.performance": "Performance",
+  "score.quality": "Reasonableness",
+  "score.consistency": "Consistency",
+  "score.history": "Evaluation history per campaign",
+  "score.noHistory": "No campaign history yet.",
+  "score.outOf": "out of 100",
+  "score.formula": "Score = 50% performance (views & engagement vs target) + 30% reasonableness (the colour indicator) + 20% consistency (number of campaigns). Adjust the thresholds in Manage.",
+  "score.settings": "KOL Eligibility Scoring",
+  "score.settingsHint": "Set the targets and score cut-offs. A KOL at or above the 'Recommended' cut-off is flagged green; at or above 'Consider' is yellow; below that is red.",
+  "score.targetViews": "Target avg views / post",
+  "score.targetEng": "Target avg engagement / post",
+  "score.minCampaigns": "Campaigns for full consistency",
+  "score.eligibleAt": "'Recommended' from score",
+  "score.considerAt": "'Consider' from score",
+
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy."
 }
