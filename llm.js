@@ -58,6 +58,9 @@ function normalizeExtracted(raw) {
     saves: normalizeCount(raw.saves),
     shares: normalizeCount(raw.shares),
     views: normalizeCount(raw.views),
+    reach: normalizeCount(raw.reach),
+    impressions: normalizeCount(raw.impressions),
+    link_clicks: normalizeCount(raw.link_clicks),
   };
 }
 
@@ -70,6 +73,9 @@ Extract the engagement numbers. Return ONLY a JSON object with these keys:
   "saves": number|null,
   "shares": number|null,
   "views": number|null,
+  "reach": number|null,
+  "impressions": number|null,
+  "link_clicks": number|null,
   "raw_text": string
 }
 Field meanings (match Indonesian & English labels):
@@ -77,7 +83,10 @@ Field meanings (match Indonesian & English labels):
 - "comments": komentar / comments.
 - "saves": disimpan / simpan / saves / bookmarks (the bookmark/ribbon metric).
 - "shares": dibagikan / bagikan / kirim / shares / sends.
-- "views": content views / dilihat / ditonton / tayangan / plays / impressions / reach — whichever is shown for how many times the content was seen.
+- "views": ditonton / dilihat / tayangan / plays / views — how many times the video/content was played or seen.
+- "reach": jangkauan / akun dijangkau / reach / accounts reached — the number of unique accounts.
+- "impressions": impresi / impressions — total times the content was displayed.
+- "link_clicks": klik tautan / ketukan link / kunjungan / link clicks / link taps / website taps / profile visits from the post.
 Rules:
 - Convert abbreviated numbers to full integers (Indonesian & English: rb/ribu/K = thousand, jt/juta/M = million).
 - If a metric is not visible or unreadable, use null (do not guess). Public posts often show only likes & comments; insights screens show saves/shares/views too.
@@ -96,8 +105,8 @@ async function extractFromImage(buffer, mimeType) {
   if (process.env.LLM_MOCK === '1') {
     return {
       model: 'mock',
-      extracted: { platform: 'instagram', likes: 1200, comments: 45, saves: 89, shares: 30, views: 15000 },
-      ocr_text: '1.2K suka · 45 komentar · 89 disimpan · 30 dibagikan · 15K dilihat (mock)',
+      extracted: { platform: 'instagram', likes: 1200, comments: 45, saves: 89, shares: 30, views: 15000, reach: 12000, impressions: 18000, link_clicks: 230 },
+      ocr_text: '1.2K suka · 45 komentar · 89 disimpan · 30 dibagikan · 15K dilihat · 12K jangkauan · 230 klik (mock)',
     };
   }
   if (!API_KEYS.length) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }

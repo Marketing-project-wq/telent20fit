@@ -357,6 +357,23 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req
   } catch (e) { next(e); }
 });
 
+// Tab — Ringkasan Performa: per-event totals + per-KOL breakdown.
+app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
+    const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
+    const eventNameById = new Map(events.map((e) => [e.id, e.name]));
+    const proofs = rawProofs.map((p) => ({
+      ...p,
+      talent_name: talentNameById.get(p.talent_id) || null,
+      event_name: eventNameById.get(p.event_id) || null,
+    }));
+    res.send(V.adminOverview({ staff: staffCtx(req), proofs, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
 app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
