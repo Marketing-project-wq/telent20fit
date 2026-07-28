@@ -201,9 +201,17 @@ app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, myProofs, settings] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id), st.getSettings()]);
-    const proofs = await enrichProofs(st, myProofs, { events });
-    res.send(V.kolProofPage({ talent: req.talent, events, proofs, lang: req.lang, settings }));
+    const [events, allEvents, myProofs, myAssignments, settings] = await Promise.all([
+      st.listActiveEvents(), st.listEvents(), st.listProofsForTalent(req.talent.id), st.listAssignmentsForTalent(req.talent.id), st.getSettings(),
+    ]);
+    const eventById = new Map(allEvents.map((e) => [e.id, e]));
+    const assignments = myAssignments.map((a) => {
+      const ev = eventById.get(a.event_id);
+      if (!ev) return null;
+      return { event_name: ev.name, ends_at: ev.ends_at, is_active: ev.is_active, hasProof: myProofs.some((p) => p.event_id === a.event_id && p.status !== 'rejected') };
+    }).filter(Boolean);
+    const proofs = await enrichProofs(st, myProofs, { events: allEvents });
+    res.send(V.kolProofPage({ talent: req.talent, events, proofs, assignments, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 

@@ -47,6 +47,11 @@
   "kol.empty": "Belum ada bukti. Upload screenshot pertama kamu di atas.",
   "kol.noEvent": "Tanpa event",
   "kol.postLink": "link post",
+  "kol.myCampaigns": "Campaign Kamu",
+  "kol.assignedNote": "Kamu ditugaskan ke campaign berikut — upload bukti post sebelum deadline.",
+  "kol.uploaded": "Sudah upload",
+  "kol.notUploaded": "Belum upload",
+  "kol.deadlineLabel": "Deadline: {date}",
 
   "status.pending": "Menunggu",
   "status.processing": "Diproses",
