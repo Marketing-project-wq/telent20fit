@@ -579,6 +579,67 @@ function plausibilityBadge(postedAt, submittedAt, extracted, settings, lang) {
   return `<span class="sla sla-${worst}">● ${tr(lang, label)}${suffix}</span>`;
 }
 
+/** Total engagement of one extracted object: likes + comments + shares + saves. */
+function engagementOf(x) {
+  x = x || {};
+  return (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.shares) || 0) + (Number(x.saves) || 0);
+}
+
+/** Worst reasonableness class of a single proof (green/yellow/red) or null if unassessable. */
+function proofQualityClass(p, settings) {
+  const days = daysLive(p.posted_at, p.created_at);
+  const x = p.extracted || {};
+  let worst = null;
+  for (const k of ['views', 'likes', 'comments', 'saves', 'shares']) {
+    const cls = metricClass(k, x[k], days, settings);
+    if (cls && (worst === null || CLS_RANK[cls] > CLS_RANK[worst])) worst = cls;
+  }
+  return worst;
+}
+
+/**
+ * KOL eligibility score (0-100) from their proofs, using configurable settings.
+ * Blends performance (views & engagement vs target), quality (the reasonableness
+ * colour), and consistency (number of campaigns). score=null when no usable data.
+ */
+function kolScore(proofs, settings) {
+  proofs = (proofs || []).filter((p) => p && p.extracted && (p.status === 'extracted' || p.status === 'verified'));
+  const s = settings || {};
+  const tViews = Number(s.score_target_views) > 0 ? Number(s.score_target_views) : 5000;
+  const tEng = Number(s.score_target_eng) > 0 ? Number(s.score_target_eng) : 500;
+  const minCamp = Number(s.score_min_campaigns) > 0 ? Number(s.score_min_campaigns) : 3;
+  const elig = Number.isFinite(Number(s.score_eligible)) ? Number(s.score_eligible) : 70;
+  const cons = Number.isFinite(Number(s.score_consider)) ? Number(s.score_consider) : 45;
+  if (!proofs.length) return { score: null, label: 'score.none', cls: 'gray', posts: 0, campaigns: 0, performance: 0, quality: 0, consistency: 0 };
+
+  let sumViews = 0; let sumEng = 0; let qSum = 0; let qN = 0;
+  const events = new Set();
+  proofs.forEach((p) => {
+    const x = p.extracted || {};
+    sumViews += Number(x.views) || 0;
+    sumEng += engagementOf(x);
+    events.add(p.event_id || ('p' + p.id));
+    const cls = proofQualityClass(p, settings);
+    if (cls) { qSum += cls === 'green' ? 1 : cls === 'yellow' ? 0.6 : 0.2; qN += 1; }
+  });
+  const n = proofs.length;
+  const perf = (Math.min(1, (sumViews / n) / tViews) + Math.min(1, (sumEng / n) / tEng)) / 2 * 100;
+  const quality = qN ? (qSum / qN * 100) : 60;
+  const campaigns = events.size;
+  const consistency = Math.min(1, campaigns / minCamp) * 100;
+  const score = Math.round(0.5 * perf + 0.3 * quality + 0.2 * consistency);
+  const label = score >= elig ? 'score.good' : score >= cons ? 'score.mid' : 'score.bad';
+  const cls = score >= elig ? 'green' : score >= cons ? 'yellow' : 'red';
+  return { score, label, cls, posts: n, campaigns, performance: Math.round(perf), quality: Math.round(quality), consistency: Math.round(consistency) };
+}
+
+/** Colored eligibility badge (score + label). */
+function scoreBadge(sc, lang) {
+  const L = normLang(lang);
+  if (!sc || sc.score === null) return `<span class="sla sla-gray" title="${esc(tr(L, 'score.none'))}">● <span class="muted">—</span></span>`;
+  return `<span class="sla sla-${sc.cls}">● ${sc.score} · ${esc(tr(L, sc.label))}</span>`;
+}
+
 function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -857,7 +918,7 @@ function proofTable(proofs, isSuper, lang, settings) {
 }
 
 // Tab 1 — Dashboard: role-aware activity summary + engagement overview.
-function adminDashboard({ staff, proofs, events, talents, assignments, lang }) {
+function adminDashboard({ staff, proofs, events, talents, assignments, settings, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || []; events = events || []; talents = talents || []; assignments = assignments || [];
@@ -903,27 +964,29 @@ function adminDashboard({ staff, proofs, events, talents, assignments, lang }) {
   const per = new Map();
   const tot = { likes: 0, comments: 0, saves: 0, shares: 0, views: 0, verified: 0 };
   proofs.forEach((p) => {
-    const key = p.talent_name || '—';
-    const e = per.get(key) || { name: key, type: p.talent_type, proofs: 0, likes: 0, comments: 0, saves: 0, shares: 0, views: 0 };
-    e.proofs += 1;
+    const key = p.talent_id || p.talent_name || '—';
+    const e = per.get(key) || { id: p.talent_id, name: p.talent_name || '—', type: p.talent_type, proofs: 0, likes: 0, comments: 0, saves: 0, shares: 0, views: 0, list: [] };
+    e.proofs += 1; e.list.push(p);
     if (p.status === 'verified') tot.verified += 1;
     const x = p.extracted || {};
     ['likes', 'comments', 'saves', 'shares', 'views'].forEach((k) => { const v = Number(x[k]) || 0; e[k] += v; tot[k] += v; });
     per.set(key, e);
   });
-  const board = [...per.values()].sort((a, b) =>
-    (b.likes + b.comments + b.saves + b.shares) - (a.likes + a.comments + a.saves + a.shares) || b.proofs - a.proofs);
+  const board = [...per.values()].map((e) => Object.assign(e, { sc: kolScore(e.list, settings) }));
+  board.sort((a, b) => (b.sc.score == null ? -1 : b.sc.score) - (a.sc.score == null ? -1 : a.sc.score)
+    || (b.likes + b.comments + b.saves + b.shares) - (a.likes + a.comments + a.saves + a.shares));
 
   const boardRows = board.length ? board.map((e, i) => `<tr>
     <td data-label="${t('th.rank')}">${i + 1}</td>
-    <td data-label="${t('th.kol')}"><b>${esc(e.name)}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
+    <td data-label="${t('th.kol')}">${e.id ? `<a href="/admin/kol/${esc(e.id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(e.name)}</a>` : `<b>${esc(e.name)}</b>`}<div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
+    <td data-label="${t('score.col')}">${scoreBadge(e.sc, L)}</td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${e.proofs}</td>
     <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
     <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes)}</td>
     <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments)}</td>
     <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves)}</td>
     <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares)}</td>
-  </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:22px;text-align:center">${t('dash.emptyKol')}</td></tr>`;
+  </tr>`).join('') : `<tr><td colspan="9" class="muted" style="padding:22px;text-align:center">${t('dash.emptyKol')}</td></tr>`;
 
   const widget = (icon, label, num, sub, extra = '') => `<div class="wcard${extra ? ' wcard-muted' : ''}">
     <div class="wc-top"><span class="wc-icon">${icon}</span><span class="wc-label">${label}</span>${extra}</div>
@@ -967,12 +1030,75 @@ function adminDashboard({ staff, proofs, events, talents, assignments, lang }) {
   <div class="section-head"><h2 style="margin:0">${t('dash.perKol')}</h2></div>
   <div class="card" style="margin-top:14px">
     <div class="table-wrap"><table>
-      <thead><tr><th>${t('th.rank')}</th><th>${t('th.kol')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('stats.likes')}</th><th style="text-align:right">${t('stats.comments')}</th><th style="text-align:right">${t('stats.saves')}</th><th style="text-align:right">${t('stats.shares')}</th></tr></thead>
+      <thead><tr><th>${t('th.rank')}</th><th>${t('th.kol')}</th><th>${t('score.col')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('stats.likes')}</th><th style="text-align:right">${t('stats.comments')}</th><th style="text-align:right">${t('stats.saves')}</th><th style="text-align:right">${t('stats.shares')}</th></tr></thead>
       <tbody>${boardRows}</tbody>
     </table></div>
   </div>
 </div>`;
   return appLayout({ title: t('dash.title') + ' — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
+}
+
+// Per-KOL eligibility detail: overall score + factor breakdown + per-campaign history.
+function adminKolDetail({ staff, talent, proofs, settings, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  proofs = proofs || [];
+  const overall = kolScore(proofs, settings);
+
+  const evMap = new Map();
+  proofs.forEach((p) => {
+    const key = p.event_id || p.event_name || '—';
+    let e = evMap.get(key);
+    if (!e) { e = { name: p.event_name || t('kol.noEvent'), list: [], when: p.created_at }; evMap.set(key, e); }
+    e.list.push(p);
+    if (p.created_at && (!e.when || new Date(p.created_at) < new Date(e.when))) e.when = p.created_at;
+  });
+  const history = [...evMap.values()].map((e) => Object.assign(e, {
+    sc: kolScore(e.list, settings),
+    views: e.list.reduce((a, p) => a + (Number((p.extracted || {}).views) || 0), 0),
+    eng: e.list.reduce((a, p) => a + engagementOf(p.extracted), 0),
+  })).sort((a, b) => new Date(b.when || 0) - new Date(a.when || 0));
+
+  const factorBar = (label, val) => `<div style="margin-bottom:11px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span class="muted">${label}</span><b>${val}</b></div>
+    <div style="background:var(--card2);border-radius:6px;height:9px;overflow:hidden"><div style="background:var(--red);height:100%;width:${Math.max(2, val)}%"></div></div>
+  </div>`;
+
+  const histRows = history.length ? history.map((h) => `<tr>
+    <td data-label="${t('th.event')}"><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${fmtDate(h.when)}</div></td>
+    <td data-label="${t('th.proofs')}" style="text-align:right">${h.list.length}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(h.views)}</td>
+    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(h.eng)}</td>
+    <td data-label="${t('score.col')}">${scoreBadge(h.sc, L)}</td>
+  </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${t('score.noHistory')}</td></tr>`;
+
+  const body = `<div class="wrap">
+  <a href="/admin?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <h1 style="margin-bottom:2px">${esc(talent ? talent.name : '—')}</h1>
+  <p class="sub">${esc(talentLabel(L, talent && talent.talent_type))}</p>
+
+  <div class="card" style="margin-top:14px;display:flex;gap:28px;flex-wrap:wrap;align-items:center">
+    <div style="text-align:center;min-width:130px">
+      <div style="font-size:48px;font-weight:800;line-height:1;color:${slaColor(overall.cls) || 'var(--ink)'}">${overall.score == null ? '–' : overall.score}</div>
+      <div class="muted" style="font-size:12px;margin:4px 0 8px">${t('score.outOf')}</div>
+      <div>${scoreBadge(overall, L)}</div>
+    </div>
+    <div style="flex:1;min-width:230px">
+      ${factorBar('📊 ' + t('score.performance'), overall.performance)}
+      ${factorBar('✅ ' + t('score.quality'), overall.quality)}
+      ${factorBar('🔁 ' + t('score.consistency'), overall.consistency)}
+      <div class="muted" style="font-size:12px;margin-top:8px">${overall.posts} ${t('th.proofs').toLowerCase()} · ${overall.campaigns} campaign</div>
+    </div>
+  </div>
+
+  <div class="section-head"><h2 style="margin:0">${t('score.history')}</h2></div>
+  <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('th.event')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th><th>${t('score.col')}</th></tr></thead>
+    <tbody>${histRows}</tbody>
+  </table></div></div>
+  <p class="muted" style="font-size:13px;margin-top:14px">${t('score.formula')}</p>
+</div>`;
+  return appLayout({ title: (talent ? talent.name : 'KOL') + ' — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
 }
 
 // Tab — Analisis: deeper breakdown of the engagement metrics.
@@ -1172,13 +1298,17 @@ function adminProofs({ staff, proofs, lang, settings }) {
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
-function adminManage({ staff, events, assignments, talents, eos, lang, settings }) {
+function adminManage({ staff, events, assignments, talents, eos, proofs, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || [];
+  events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || []; proofs = proofs || [];
   settings = settings || { vpd_green: 3000, vpd_yellow: 10000 };
   const eventNameById = new Map(events.map((e) => [e.id, e.name]));
   const talentNameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  // Eligibility score per talent -> assignment dropdown is sorted best-first and labelled.
+  const proofsByTalent = new Map();
+  proofs.forEach((p) => { const a = proofsByTalent.get(p.talent_id) || []; a.push(p); proofsByTalent.set(p.talent_id, a); });
+  const scoreByTalent = new Map(talents.map((tt) => [tt.id, kolScore(proofsByTalent.get(tt.id) || [], settings)]));
 
   const eventRows = events.map((e) => `<tr>
     <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
@@ -1189,7 +1319,9 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-  const talentOpts = talents.map((tt) => `<option value="${esc(tt.id)}">${esc(tt.name)} (${talentLabel(L, tt.talent_type)})</option>`).join('');
+  const talentOpts = talents.slice()
+    .sort((a, b) => { const sa = scoreByTalent.get(a.id).score; const sb = scoreByTalent.get(b.id).score; return (sb == null ? -1 : sb) - (sa == null ? -1 : sa); })
+    .map((tt) => { const sc = scoreByTalent.get(tt.id); const tag = sc.score == null ? '' : ` · ${sc.score} ${tr(L, sc.label)}`; return `<option value="${esc(tt.id)}">${esc(tt.name)} (${talentLabel(L, tt.talent_type)})${tag}</option>`; }).join('');
   const assignRows = assignments.map((a) => `<tr>
     <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${talentLabel(L, a.talent_type)})</span></td>
     <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
@@ -1258,6 +1390,15 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
     </form>
     <p class="muted" style="font-size:13px;margin-top:14px">${t('set.hint')}</p>
   </div>
+
+  <div class="section-head"><h2 style="margin:0">${t('score.settings')}</h2></div>
+  <div class="card" style="margin-top:14px">
+    <form method="post" action="/admin/settings" style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px;max-width:640px">
+      ${[['score_target_views', 'score.targetViews'], ['score_target_eng', 'score.targetEng'], ['score_min_campaigns', 'score.minCampaigns'], ['score_eligible', 'score.eligibleAt'], ['score_consider', 'score.considerAt']].map(([key, lab]) => `<label style="display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">${t(lab)}<input type="number" name="${key}" min="0" value="${esc(settings[key])}" style="width:100%"></label>`).join('')}
+      <div style="grid-column:1/-1"><button class="btn btn-sm">${t('btn.saveSettings')}</button></div>
+    </form>
+    <p class="muted" style="font-size:13px;margin-top:14px">${t('score.settingsHint')}</p>
+  </div>
 </div>`;
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
@@ -1316,6 +1457,6 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
-  adminDashboard, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };

@@ -18,10 +18,13 @@ const BUCKET = 'kol-uploads';
 const SETTING_KEYS = [
   'vpd_green', 'vpd_yellow', 'lpd_green', 'lpd_yellow', 'cpd_green', 'cpd_yellow',
   'spd_green', 'spd_yellow', 'shpd_green', 'shpd_yellow',
+  // KOL eligibility scoring
+  'score_target_views', 'score_target_eng', 'score_min_campaigns', 'score_eligible', 'score_consider',
 ];
 const DEFAULT_SETTINGS = {
   vpd_green: 3000, vpd_yellow: 10000, lpd_green: 300, lpd_yellow: 1000,
   cpd_green: 50, cpd_yellow: 200, spd_green: 50, spd_yellow: 200, shpd_green: 30, shpd_yellow: 100,
+  score_target_views: 5000, score_target_eng: 500, score_min_campaigns: 3, score_eligible: 70, score_consider: 45,
 };
 
 function supabaseStore() {

@@ -205,6 +205,26 @@
   "err.fileMustBeImage": "File harus berupa gambar.",
   "err.badLink": "Link postingan tidak valid.",
 
+  "score.col": "Kelayakan",
+  "score.none": "Belum ada data",
+  "score.good": "Layak Direkomendasikan",
+  "score.mid": "Perlu Dipertimbangkan",
+  "score.bad": "Tidak Direkomendasikan",
+  "score.performance": "Performa",
+  "score.quality": "Kewajaran",
+  "score.consistency": "Konsistensi",
+  "score.history": "Riwayat penilaian per campaign",
+  "score.noHistory": "Belum ada riwayat campaign.",
+  "score.outOf": "dari 100",
+  "score.formula": "Skor = 50% performa (views & engagement dibanding target) + 30% kewajaran (indikator warna) + 20% konsistensi (jumlah campaign). Atur threshold-nya di menu Kelola.",
+  "score.settings": "Penilaian Kelayakan KOL",
+  "score.settingsHint": "Atur target dan batas skor. KOL dengan skor ≥ batas 'Layak' ditandai hijau; ≥ 'Perlu Dipertimbangkan' kuning; di bawahnya merah.",
+  "score.targetViews": "Target rata-rata views / post",
+  "score.targetEng": "Target rata-rata engagement / post",
+  "score.minCampaigns": "Jumlah campaign untuk konsistensi penuh",
+  "score.eligibleAt": "'Layak' mulai skor",
+  "score.considerAt": "'Perlu Dipertimbangkan' mulai skor",
+
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."
 }
