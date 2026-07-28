@@ -32,7 +32,7 @@ function fmtDay(d) {
 }
 
 // Official 20FIT logo (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
-const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/07/logo-20fit-1.png';
+const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fit.png';
 
 /** 20FIT brand logo image, with an optional muted role tag (e.g. TALENT). */
 function brandMark(label) {
