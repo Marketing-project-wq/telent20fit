@@ -66,7 +66,7 @@ body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSys
 a{color:var(--red)}
 /* Top logo bar (auth / non-app pages) */
 .topbar{background:var(--panel);color:#fff;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--line)}
-.topbar .in{max-width:1000px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;gap:18px}
+.topbar .in{max-width:1000px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;justify-content:center;gap:18px}
 .logo{font-size:21px;line-height:1;text-decoration:none}
 /* Left sidebar app shell */
 .nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
@@ -76,6 +76,8 @@ a{color:var(--red)}
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
 .brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto;filter:brightness(0) invert(1)}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
+/* Center the brand logo in the sidebar */
+.side-logo{display:flex;justify-content:center}
 .side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
 .side-nav a svg{width:20px;height:20px;flex-shrink:0}
@@ -185,8 +187,8 @@ tr:last-child td{border-bottom:none}
   .nav-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
   .nav-cb:checked ~ .nav-scrim{display:block}
   .app-main{margin-left:0}
-  .app-top{display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
-  .hamburger{font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
+  .app-top{display:flex;align-items:center;justify-content:center;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
+  .hamburger{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
   .app-top-logo{font-size:20px;line-height:1;text-decoration:none}
 }
 @media(max-width:600px){
@@ -375,11 +377,9 @@ a{text-decoration:none}
 </style></head>
 <body>
 <div style="min-height:100vh">
-  <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:11px">
-      <img src="${LOGO_URL}" alt="20FIT" style="height:62px;width:auto;display:block;filter:brightness(0) invert(1)">
-    </div>
-    <div style="display:flex;gap:10px;align-items:center">
+  <header style="max-width:1180px;margin:0 auto;padding:26px 28px 14px;display:flex;flex-direction:column;align-items:center;gap:18px">
+    <img src="${LOGO_URL}" alt="20FIT" style="height:92px;width:auto;display:block;filter:brightness(0) invert(1)">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center">
       ${toggle}
       <a href="/submit${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.submit)}</a>
       <a href="/login${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.login)}</a>
