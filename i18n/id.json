@@ -126,6 +126,8 @@
   "ov.perKol": "Per KOL",
   "ov.engagement": "Engagement",
   "ov.engRate": "Engagement Rate",
+  "ov.chartEng": "Engagement per KOL",
+  "ov.chartViews": "Views per KOL",
   "ov.result": "Hasil",
   "ov.empty": "Belum ada data performa.",
   "ov.hint": "Reach, Impressions & Link Click dibaca dari screenshot insight saat KOL upload.",

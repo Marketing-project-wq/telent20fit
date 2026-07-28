@@ -118,6 +118,15 @@ input:focus,select:focus{outline:2px solid var(--red);border-color:var(--red)}
 .dl-when{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0}
 .dl-late{background:var(--err-soft);color:var(--err)}
 .dl-near{background:var(--warn-soft);color:var(--warn)}
+/* Horizontal bar charts (magnitude comparison) */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px 30px}
+.chart-title{font-weight:700;font-size:14px;margin-bottom:16px}
+.bar-row{display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:12px;margin-bottom:12px}
+.bar-label{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-track{background:var(--card2);border-radius:6px;height:14px;overflow:hidden}
+.bar-fill{height:100%;background:var(--red);border-radius:0 6px 6px 0;min-width:3px;transition:width .35s ease}
+.bar-row:hover .bar-fill{background:var(--red-hover)}
+.bar-val{font-size:13px;font-weight:700;text-align:right;min-width:56px;font-variant-numeric:tabular-nums}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
 th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -957,6 +966,19 @@ function publicSubmitSuccess(opts = {}) {
   return layout({ title: t('pub.thanksTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+/** Horizontal bar chart, single hue (length = magnitude, label = identity). items: [{name, value}]. */
+function hBar(title, items, lang) {
+  const L = normLang(lang);
+  const rows = (items || []).filter((x) => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 12);
+  const max = rows.length ? rows[0].value : 0;
+  const inner = rows.length ? rows.map((x) => `<div class="bar-row" title="${esc(x.name)}: ${fmtNum(x.value)}">
+      <div class="bar-label">${esc(x.name)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(3, Math.round(x.value / max * 100))}%"></div></div>
+      <div class="bar-val">${fmtNum(x.value)}</div>
+    </div>`).join('') : `<p class="muted" style="font-size:13px">${tr(L, 'an.noData')}</p>`;
+  return `<div class="chart"><div class="chart-title">${esc(title)}</div>${inner}</div>`;
+}
+
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
 // Shared header for every staff page: title + who's logged in + logout.
 function staffHead(staff, title) {
@@ -1119,6 +1141,12 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
   </div>
 
   <div class="section-head"><h2 style="margin:0">${t('dash.perEvent')}</h2></div>
+  <div class="card" style="margin-top:14px">
+    <div class="chart-grid">
+      ${hBar(t('stats.views'), evList.map((e) => ({ name: e.name, value: e.views })), L)}
+      ${hBar(t('ov.engagement'), evList.map((e) => ({ name: e.name, value: e.eng })), L)}
+    </div>
+  </div>
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('th.event')}</th><th style="text-align:right">${t('dash.kolCount')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th></tr></thead>
     <tbody>${evRows}</tbody>
@@ -1330,22 +1358,20 @@ function adminOverview({ staff, proofs, lang }) {
     FIELDS.forEach((f) => { const v = Number(x[f]) || 0; k[f] += v; ev.totals[f] += v; });
   });
 
-  // Vertical "Total Semua KOL" table — matches the requested Metric | Hasil layout.
-  const totalTable = (o) => {
-    const rows = [
-      ['👁 ' + t('stats.views'), fmtNum(o.views)],
-      ['📡 ' + t('stats.reach'), fmtNum(o.reach)],
-      ['📊 ' + t('stats.impressions'), fmtNum(o.impressions)],
-      ['🔥 ' + t('ov.engagement'), fmtNum(eng(o))],
-      ['📈 ' + t('ov.engRate'), pct(o)],
-      ['❤️ ' + t('stats.likes'), fmtNum(o.likes)],
-      ['💬 ' + t('stats.comments'), fmtNum(o.comments)],
-      ['📤 ' + t('stats.shares'), fmtNum(o.shares)],
-      ['🔖 ' + t('stats.saves'), fmtNum(o.saves)],
-      ['🔗 ' + t('stats.linkClicks'), fmtNum(o.link_clicks)],
+  // KPI stat tiles for the event headline totals.
+  const kpiTiles = (o) => {
+    const tiles = [
+      ['👁', t('stats.views'), fmtNum(o.views)],
+      ['📡', t('stats.reach'), fmtNum(o.reach)],
+      ['📊', t('stats.impressions'), fmtNum(o.impressions)],
+      ['🔥', t('ov.engagement'), fmtNum(eng(o))],
+      ['📈', t('ov.engRate'), pct(o)],
+      ['🔗', t('stats.linkClicks'), fmtNum(o.link_clicks)],
     ];
-    return `<div style="max-width:420px">${rows.map(([lab, val], i) => `<div style="display:flex;justify-content:space-between;gap:18px;padding:11px 2px;${i ? 'border-top:1px solid var(--line)' : ''}"><span class="muted">${lab}</span><b style="font-size:15px">${val}</b></div>`).join('')}</div>`;
+    return `<div class="stat-grid" style="margin-top:14px">${tiles.map(([ic, lab, val]) => `<div class="stat"><div class="n">${val}</div><div class="l">${ic} ${lab}</div></div>`).join('')}</div>`;
   };
+
+  const barChart = (title, items) => hBar(title, items, L);
 
   // Horizontal per-KOL table.
   const cols = [
@@ -1363,16 +1389,22 @@ function adminOverview({ staff, proofs, lang }) {
   };
 
   const events = [...evMap.values()].sort((a, b) => b.totals.views - a.totals.views);
-  const sections = events.length ? events.map((ev) => `
+  const sections = events.length ? events.map((ev) => {
+    const kolList = [...ev.kols.values()];
+    return `
   <div class="section-head"><h2 style="margin:0">📈 ${esc(ev.name)}</h2></div>
+  ${kpiTiles(ev.totals)}
   <div class="card" style="margin-top:14px">
-    <div style="font-weight:700;margin-bottom:12px">${t('ov.totalAllKol')} <span class="muted" style="font-weight:400;font-size:13px">· ${ev.totals.posts} ${t('th.proofs').toLowerCase()}</span></div>
-    ${totalTable(ev.totals)}
+    <div class="chart-grid">
+      ${barChart(t('ov.chartEng'), kolList.map((k) => ({ name: k.name, value: eng(k) })))}
+      ${barChart(t('ov.chartViews'), kolList.map((k) => ({ name: k.name, value: k.views })))}
+    </div>
   </div>
   <div class="card" style="margin-top:14px">
-    <div style="font-weight:700;margin-bottom:12px">${t('ov.perKol')}</div>
+    <div style="font-weight:700;margin-bottom:12px">${t('ov.perKol')} <span class="muted" style="font-weight:400;font-size:13px">· ${ev.totals.posts} ${t('th.proofs').toLowerCase()}</span></div>
     ${kolTable(ev)}
-  </div>`).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="text-align:center;padding:22px">${t('ov.empty')}</p></div>`;
+  </div>`;
+  }).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="text-align:center;padding:22px">${t('ov.empty')}</p></div>`;
 
   const body = `<div class="wrap">
   ${staffHead(staff, t('ov.title'))}
