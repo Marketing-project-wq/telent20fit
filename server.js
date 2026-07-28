@@ -457,6 +457,38 @@ app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req,
   } catch (e) { next(e); }
 });
 
+// AI insight over the aggregated performance data (JSON; fetched by the overview page).
+app.get('/admin/overview/insight', auth.requireStaff(['super_admin', 'eo']), async (req, res) => {
+  try {
+    const st = db();
+    if (!st) return res.status(503).json({ error: 'not configured' });
+    const [rawProofs, talentsAll] = await Promise.all([st.listProofs(), st.listTalents()]);
+    const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
+    const useful = rawProofs.filter((p) => p.extracted && (p.status === 'extracted' || p.status === 'verified'));
+    if (!useful.length) return res.json({ insight: req.t('ins.noData') });
+    const engOf = (x) => (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.shares) || 0) + (Number(x.saves) || 0);
+    const byType = {}; const byKol = {};
+    useful.forEach((p) => {
+      const x = p.extracted || {};
+      const ct = p.content_type || 'feed';
+      const kol = talentNameById.get(p.talent_id) || p.submitter_name || '—';
+      const bt = byType[ct] || (byType[ct] = { type: ct, posts: 0, views: 0, engagement: 0 });
+      bt.posts += 1; bt.views += Number(x.views) || 0; bt.engagement += engOf(x);
+      const bk = byKol[kol] || (byKol[kol] = { kol, posts: 0, views: 0, engagement: 0 });
+      bk.posts += 1; bk.views += Number(x.views) || 0; bk.engagement += engOf(x);
+    });
+    const round = (o) => ({ ...o, avgEngagement: Math.round(o.engagement / o.posts), avgViews: Math.round(o.views / o.posts) });
+    const summary = {
+      perContentType: Object.values(byType).map(round),
+      perKol: Object.values(byKol).map(round).sort((a, b) => b.engagement - a.engagement).slice(0, 10),
+    };
+    const insight = await llm.generateInsight(summary, req.lang);
+    res.json({ insight });
+  } catch (e) {
+    res.status(200).json({ error: (e && e.code === 'NO_KEY') ? 'OPENROUTER_API_KEY belum di-set di Railway.' : (req.t ? req.t('ins.err') : 'error') });
+  }
+});
+
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
 app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {

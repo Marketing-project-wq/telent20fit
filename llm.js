@@ -163,4 +163,40 @@ async function extractFromImage(buffer, mimeType) {
   throw authErr || new Error('OpenRouter: semua API key ditolak');
 }
 
-module.exports = { configured, extractFromImage, normalizeCount, normalizeExtracted, MODEL };
+/**
+ * Generate a short, plain-language performance insight from aggregated campaign
+ * data (per content-type and per-KOL). Text-only LLM call. Returns a string.
+ */
+async function generateInsight(summary, lang) {
+  const id = lang !== 'en';
+  if (process.env.LLM_MOCK === '1') {
+    return id
+      ? 'Reels adalah tipe konten yang paling perform — rata-rata engagement-nya paling tinggi, kemungkinan karena video pendek mendapat reach lebih besar di Instagram dan mendorong komentar. Untuk perbandingan KOL, Maira memimpin baik di views maupun engagement, sedangkan thefirstdaughters tertinggal di engagement meski views-nya lumayan — worth dicek format & jam postingnya. Saran: perbanyak porsi Reels untuk campaign berikutnya.'
+      : 'Reels is the best-performing content type — it has the highest average engagement, likely because short video gets more reach on Instagram and drives comments. Comparing KOLs, Maira leads on both views and engagement, while thefirstdaughters lags on engagement despite decent views — worth reviewing format and posting time. Suggestion: allocate more Reels for the next campaign.';
+  }
+  if (!API_KEYS.length) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }
+  const langName = id ? 'Indonesian' : 'English';
+  const prompt = `You are a social-media performance analyst for an influencer (KOL) campaign. Using ONLY the aggregated data below, write a concise, practical insight in ${langName} (3-5 sentences, plain text, no markdown headings or bullet symbols):
+1) which content type (feed / reels / story) performs best and a plausible reason why,
+2) a short comparison between the KOLs — who leads, who lags, and on which metric,
+3) one actionable suggestion.
+Cite the actual numbers where useful. Data (JSON):
+${JSON.stringify(summary).slice(0, 4000)}`;
+  const body = JSON.stringify({ model: MODEL, temperature: 0.4, messages: [{ role: 'user', content: prompt }] });
+  let authErr = null;
+  for (const key of API_KEYS) {
+    const res = await fetch(BASE + '/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://telent.20fit.id', 'X-Title': '20FIT Talent' },
+      body,
+    });
+    if (res.status === 401 || res.status === 403) { authErr = new Error('OpenRouter ' + res.status); continue; }
+    if (!res.ok) throw new Error('OpenRouter ' + res.status + ': ' + (await res.text().catch(() => '')).slice(0, 200));
+    const json = await res.json();
+    const content = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+    return String(content || '').trim();
+  }
+  throw authErr || new Error('OpenRouter: semua API key ditolak');
+}
+
+module.exports = { configured, extractFromImage, generateInsight, normalizeCount, normalizeExtracted, MODEL };
