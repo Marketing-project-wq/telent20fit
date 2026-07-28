@@ -21,6 +21,12 @@
 
   "staffLogin.title": "Login Admin",
   "staffLogin.sub": "Masuk sebagai Super Admin atau Event Organizer.",
+  "staffLogin.titleAdmin": "Login Super Admin",
+  "staffLogin.subAdmin": "Masuk ke panel Super Admin.",
+  "staffLogin.titleEo": "Login Event Organizer",
+  "staffLogin.subEo": "Masuk ke panel Event Organizer.",
+  "staffLogin.toEo": "Login Event Organizer →",
+  "staffLogin.toAdmin": "Login Super Admin →",
   "btn.signin": "Masuk",
 
   "auth.login.title": "Masuk {role}",

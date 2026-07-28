@@ -374,7 +374,7 @@ a{text-decoration:none}
     <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t.finalCta)}</h2>
     <p style="color:#8a8990;font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
     <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/admin/login" style="color:#8a8990">Login Admin / EO</a></div>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/admin/login" style="color:#8a8990">Login Admin</a> · <a href="/eo/login" style="color:#8a8990">Login EO</a></div>
   </section>
 </div>
 </body></html>`;
@@ -659,10 +659,18 @@ function kolSuccess(name, campaign) {
 }
 
 /** Staff (Super Admin / EO) login page. */
+// Staff login. Two separate entry points (variant 'admin' -> /admin/login,
+// 'eo' -> /eo/login) that authenticate against the same staff_accounts.
 function staffLogin(opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
   const v = opts.values || {};
+  const isEo = opts.variant === 'eo';
+  const action = isEo ? '/eo/login' : '/admin/login';
+  const title = isEo ? t('staffLogin.titleEo') : t('staffLogin.titleAdmin');
+  const sub = isEo ? t('staffLogin.subEo') : t('staffLogin.subAdmin');
+  const otherHref = (isEo ? '/admin/login' : '/eo/login') + '?lang=' + L;
+  const otherText = isEo ? t('staffLogin.toAdmin') : t('staffLogin.toEo');
   const errorBanner = (opts.errors && opts.errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
@@ -670,18 +678,19 @@ function staffLogin(opts = {}) {
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     ${langToggle(L)}
   </div>
-  <h1>${t('staffLogin.title')}</h1>
-  <p class="sub">${t('staffLogin.sub')}</p>
+  <h1>${esc(title)}</h1>
+  <p class="sub">${esc(sub)}</p>
   ${errorBanner}
   <div class="card">
-    <form method="post" action="/admin/login">
+    <form method="post" action="${action}">
       <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
   </div>
+  <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
 </div>`;
-  return layout({ title: t('staffLogin.title') + ' — 20FIT', body, brand: 'ADMIN', home: '/?lang=' + L, lang: L });
+  return layout({ title: title + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
 /**
