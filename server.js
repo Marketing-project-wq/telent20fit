@@ -52,6 +52,12 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_IMAGES },
 });
+// Public submission: multiple feed screenshots + separate Reels/Story uploads.
+const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 20 } }).fields([
+  { name: 'feed_images', maxCount: 10 },
+  { name: 'reels_images', maxCount: 5 },
+  { name: 'story_images', maxCount: 5 },
+]);
 
 const db = () => store();
 const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
@@ -79,6 +85,69 @@ function readLang(req, res) {
 app.get('/', (req, res) => res.send(V.landingPage(req.lang)));
 app.get('/register', (req, res) => res.send(V.talentPicker('register', req.lang)));
 app.get('/login', (req, res) => res.send(V.talentPicker('login', req.lang)));
+
+// PUBLIC (no login) post-proof submission: name + social username + event, with
+// multiple feed screenshots and separate Reels / Story uploads. Every image is extracted.
+app.get('/submit', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const events = await st.listActiveEvents();
+    res.send(V.publicSubmitPage({ events, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/submit', uploadPublic, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const name = String(req.body.name || '').trim();
+    const username = String(req.body.username || '').trim().replace(/^@/, '');
+    const eventId = String(req.body.event_id || '').trim();
+    const postLink = String(req.body.post_link || '').trim();
+    const files = req.files || {};
+    const groups = [['feed', files.feed_images || []], ['reels', files.reels_images || []], ['story', files.story_images || []]];
+    const totalFiles = groups.reduce((a, [, arr]) => a + arr.length, 0);
+
+    const errors = [];
+    if (!name) errors.push(req.t('err.nameRequired'));
+    if (!username) errors.push(req.t('pub.errUsername'));
+    if (!eventId) errors.push(req.t('err.eventRequired'));
+    if (totalFiles === 0) errors.push(req.t('pub.errNoImage'));
+    for (const [, arr] of groups) for (const f of arr) if (!/^image\//i.test(f.mimetype || '')) { errors.push(req.t('err.fileMustBeImage')); break; }
+    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push(req.t('err.badLink'));
+
+    if (errors.length) {
+      const events = await st.listActiveEvents();
+      return res.status(400).send(V.publicSubmitPage({ events, errors: [...new Set(errors)], values: { name, username, event_id: eventId, post_link: postLink }, lang: req.lang }));
+    }
+
+    const postedRaw = String(req.body.posted_at || '').trim();
+    let postedAt = null;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(postedRaw)) {
+      const d = new Date((postedRaw.length === 16 ? postedRaw + ':00' : postedRaw) + '+07:00');
+      if (!isNaN(d.getTime())) postedAt = d.toISOString();
+    }
+
+    let count = 0;
+    for (const [ctype, arr] of groups) {
+      for (const file of arr) {
+        const proofId = crypto.randomUUID();
+        const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+        const key = `proofs/${proofId}${ext}`;
+        await st.uploadImage(key, file.buffer, file.mimetype);
+        await st.createProof({
+          id: proofId, talent_id: null, talent_type: 'kol', event_id: eventId, screenshot_path: key,
+          post_link: postLink || null, posted_at: postedAt, status: 'pending',
+          submitter_name: name, submitter_username: username, content_type: ctype,
+        });
+        runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
+        count += 1;
+      }
+    }
+    res.send(V.publicSubmitSuccess({ name, count, lang: req.lang }));
+  } catch (e) { next(e); }
+});
 
 // Change language anytime (from any page's switcher); persists via cookie.
 app.get('/lang/:code', (req, res) => {
@@ -168,7 +237,7 @@ async function enrichProofs(st, proofs, ctx) {
   return proofs.map((p) => ({
     ...p,
     event_name: eventName.get(p.event_id) || null,
-    talent_name: ctx.talentNameById ? (ctx.talentNameById.get(p.talent_id) || null) : null,
+    talent_name: (ctx.talentNameById && ctx.talentNameById.get(p.talent_id)) || p.submitter_name || null,
     thumb: p.screenshot_path ? urlByPath.get(p.screenshot_path) : null,
   }));
 }
@@ -335,7 +404,7 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
       st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(), st.getSettings(),
     ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
-    const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || null }));
+    const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null }));
     res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -364,7 +433,7 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req
     const eventNameById = new Map(events.map((e) => [e.id, e.name]));
     const proofs = rawProofs.map((p) => ({
       ...p,
-      talent_name: talentNameById.get(p.talent_id) || null,
+      talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null,
       event_name: eventNameById.get(p.event_id) || null,
     }));
     res.send(V.adminAnalysis({ staff: staffCtx(req), proofs, lang: req.lang }));
@@ -381,7 +450,7 @@ app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req,
     const eventNameById = new Map(events.map((e) => [e.id, e.name]));
     const proofs = rawProofs.map((p) => ({
       ...p,
-      talent_name: talentNameById.get(p.talent_id) || null,
+      talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null,
       event_name: eventNameById.get(p.event_id) || null,
     }));
     res.send(V.adminOverview({ staff: staffCtx(req), proofs, lang: req.lang }));

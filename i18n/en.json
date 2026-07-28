@@ -225,6 +225,27 @@
   "score.eligibleAt": "'Recommended' from score",
   "score.considerAt": "'Consider' from score",
 
+  "pub.title": "Submit Post Proof",
+  "pub.sub": "Fill in your details and upload your post insight screenshots — no login needed.",
+  "pub.name": "Name",
+  "pub.username": "Instagram / social media username",
+  "pub.usernameHint": "(e.g. @yourname)",
+  "pub.feed": "Feed post screenshots",
+  "pub.feedHint": "(you can select more than one)",
+  "pub.reels": "Reels",
+  "pub.reelsHint": "(reels insight, optional)",
+  "pub.story": "Story",
+  "pub.storyHint": "(story insight, optional)",
+  "pub.submit": "Submit Proof",
+  "pub.foot": "The system automatically reads the numbers from every image.",
+  "pub.errUsername": "Username is required.",
+  "pub.errNoImage": "Upload at least one image (feed, reels, or story).",
+  "pub.thanksTitle": "Proof Submitted!",
+  "pub.thanksBody": "Thanks <b>{name}</b> — {count} image(s) received and being read by the system.",
+  "pub.again": "Submit again",
+  "dash.perEvent": "Analysis per Event",
+  "dash.kolCount": "KOL",
+
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy."
 }
