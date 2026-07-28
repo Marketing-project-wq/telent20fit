@@ -343,19 +343,19 @@ function landingPage(lang) {
 
   const statHtml = t.stats.map(([n, l]) => `<div>
       <div style="font:800 30px/1 'Barlow Condensed',sans-serif;color:var(--red)">${esc(n)}</div>
-      <div style="font-size:13px;color:#8a8990;margin-top:4px">${esc(l)}</div>
+      <div style="font-size:13px;color:var(--lp-tx3);margin-top:4px">${esc(l)}</div>
     </div>`).join('');
-  const featHtml = t.feats.map(([i, ti, d]) => `<div style="background:#141419;border:1px solid #26262d;border-radius:14px;padding:24px">
+  const featHtml = t.feats.map(([i, ti, d]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
       <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(i)}</div>
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(ti)}</div>
-      <p style="color:#8a8990;font-size:14px;line-height:1.5;margin:0">${d}</p>
+      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${d}</p>
     </div>`).join('');
 
   const langBtn = (code, label) => {
     const on = code === L;
-    return `<a href="/?lang=${code}" style="padding:6px 11px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;color:${on ? '#fff' : '#8a8990'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
+    return `<a href="/?lang=${code}" style="padding:6px 11px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
   };
-  const toggle = `<div style="display:flex;background:#1c1c22;border:1px solid #2c2c34;border-radius:8px;padding:3px;gap:2px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:8px;padding:3px;gap:2px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
 
   return `<!doctype html><html lang="${L}"><head>
@@ -365,66 +365,76 @@ function landingPage(lang) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--red:#E4121F;--ink:#101013;--ok:#178A54}
+:root{--red:#E4121F;--ink:#101013;--ok:#178A54;
+  --lp-bg:#101013;--lp-bg2:#0b0b0e;--lp-card:#141419;--lp-chip:#1c1c22;
+  --lp-line:#2c2c34;--lp-line2:#33333c;
+  --lp-tx:#ffffff;--lp-tx2:#b9b8bf;--lp-tx3:#8a8990;--lp-tx4:#66666d;--lp-accent:#ff5b66}
+:root[data-theme="light"]{
+  --lp-bg:#f4f6f9;--lp-bg2:#e9edf2;--lp-card:#ffffff;--lp-chip:#eef1f5;
+  --lp-line:#e3e7ed;--lp-line2:#d7dbe2;
+  --lp-tx:#17171d;--lp-tx2:#41454d;--lp-tx3:#63676e;--lp-tx4:#8b8f97;--lp-accent:#d10c17}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--ink);color:#fff;line-height:1.5}
+body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
+.lp-logo{filter:brightness(0) invert(1)}
+:root[data-theme="light"] .lp-logo{filter:none}
+.theme-toggle{display:inline-flex;gap:3px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:8px;padding:3px}
+.theme-toggle button{padding:6px 10px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
+.theme-toggle button.active{background:var(--red);color:#fff}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
-</style></head>
+</style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
-  <header style="max-width:1180px;margin:0 auto;padding:26px 28px 14px;display:flex;flex-direction:column;align-items:center;gap:18px">
-    <img src="${LOGO_URL}" alt="20FIT" style="height:92px;width:auto;display:block;filter:brightness(0) invert(1)">
+  <header style="max-width:1180px;margin:0 auto;padding:30px 28px 8px;display:flex;flex-direction:column;align-items:center;gap:18px">
+    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo" style="height:92px;width:auto;display:block">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center">
       ${toggle}
-      <a href="/submit${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.submit)}</a>
-      <a href="/login${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.login)}</a>
-      <a href="/register${q}" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.join)}</a>
+      ${themeToggle()}
     </div>
   </header>
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:#ff5b66;padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">${esc(t.badge)}</div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:var(--lp-accent);padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">${esc(t.badge)}</div>
       <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(t.title)}<span style="color:var(--red)"> ${esc(t.accent)}</span></h1>
-      <p style="font-size:18px;line-height:1.55;color:#b9b8bf;max-width:520px;margin:0 0 30px">${t.sub}</p>
+      <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${t.sub}</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-        <a href="/login${q}" style="padding:16px 30px;background:#1c1c22;color:#fff;border:1px solid #33333c;border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
+        <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
       </div>
       <div style="display:flex;gap:30px;margin-top:42px">${statHtml}</div>
     </div>
     <div style="position:relative">
-      <div style="background:linear-gradient(150deg,#1d1d24,#141419);border:1px solid #2c2c34;border-radius:20px;padding:22px">
+      <div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
         <div class="stripe" style="height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;opacity:.5;margin-bottom:16px;filter:grayscale(1)">
-          <span style="font:600 12px/1 monospace;color:#555;background:#0e0e12;padding:6px 12px;border-radius:6px">event.jpg</span>
+          <span style="font:600 12px/1 monospace;color:var(--lp-tx3);background:var(--lp-card);padding:6px 12px;border-radius:6px">event.jpg</span>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Jakarta Run Series</div>
           <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t.slot)}</span>
         </div>
-        <div style="font-size:13px;color:#8a8990">12 Sep 2026 · Jakarta · Judges</div>
+        <div style="font-size:13px;color:var(--lp-tx3)">12 Sep 2026 · Jakarta · Judges</div>
       </div>
     </div>
   </section>
 
-  <section style="background:#0b0b0e;padding:56px 0">
+  <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
       <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">${esc(t.featTitle)}</h2>
-      <p style="color:#8a8990;margin:0 0 34px;font-size:15px">${esc(t.featSub)}</p>
+      <p style="color:var(--lp-tx3);margin:0 0 34px;font-size:15px">${esc(t.featSub)}</p>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
 
   <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
     <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t.finalCta)}</h2>
-    <p style="color:#8a8990;font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
     <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid #23232a;color:#66666d;font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/admin/login" style="color:#8a8990">Login Admin</a> · <a href="/eo/login" style="color:#8a8990">Login EO</a></div>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/submit${q}" style="color:var(--lp-tx3)">${esc(t.submit)}</a> · <a href="/admin/login" style="color:var(--lp-tx3)">Login Admin</a> · <a href="/eo/login" style="color:var(--lp-tx3)">Login EO</a></div>
   </section>
 </div>
 </body></html>`;
