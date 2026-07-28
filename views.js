@@ -34,10 +34,9 @@ function fmtDay(d) {
 // Official 20FIT logo (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
 const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fit.png';
 
-/** 20FIT brand logo image, with an optional muted role tag (e.g. TALENT). */
-function brandMark(label) {
-  const tag = label ? `<span class="b-tag">${esc(label)}</span>` : '';
-  return `<img src="${LOGO_URL}" alt="20FIT" class="brand-img">${tag}`;
+/** 20FIT brand logo image (the wordmark already reads "20FIT"; no extra label). */
+function brandMark() {
+  return `<img src="${LOGO_URL}" alt="20FIT" class="brand-img">`;
 }
 
 const STYLE = `
@@ -58,7 +57,7 @@ a{color:var(--red)}
 .side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:1.7em;width:auto;display:block;flex:0 0 auto;filter:brightness(0) invert(1)}
+.brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto;filter:brightness(0) invert(1)}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 .side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
@@ -329,8 +328,7 @@ a{text-decoration:none}
 <div style="min-height:100vh">
   <header style="max-width:1180px;margin:0 auto;padding:22px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:11px">
-      <img src="${LOGO_URL}" alt="20FIT" style="height:50px;width:auto;display:block;filter:brightness(0) invert(1)">
-      <span style="font:800 12px/1 Barlow,-apple-system,'Segoe UI',sans-serif;letter-spacing:.2em;color:var(--red);text-transform:uppercase">Talent</span>
+      <img src="${LOGO_URL}" alt="20FIT" style="height:62px;width:auto;display:block;filter:brightness(0) invert(1)">
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       ${toggle}
