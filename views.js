@@ -22,6 +22,15 @@ function fmtDate(iso) {
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Format a date-only value ("YYYY-MM-DD") as a short Indonesian date, no time. */
+function fmtDay(d) {
+  if (!d) return '-';
+  const p = String(d).slice(0, 10).split('-');
+  if (p.length !== 3) return String(d);
+  const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
+}
+
 /** 20FIT ring wordmark: white "2", red-ring "0", white "FIT", with an optional muted tag. */
 function brandMark(label) {
   const tag = label ? `<span class="b-tag">${esc(label)}</span>` : '';
@@ -93,6 +102,21 @@ input:focus,select:focus{outline:2px solid var(--red);border-color:var(--red)}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
 .stat .n{font-size:34px;font-weight:800;line-height:1}
 .stat .l{color:var(--muted);font-size:13px;margin-top:6px}
+/* Dashboard summary widgets */
+.wgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:20px}
+.wcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px;display:flex;flex-direction:column;gap:9px}
+.wcard-muted{opacity:.6}
+.wc-top{display:flex;align-items:center;gap:9px}
+.wc-icon{width:34px;height:34px;border-radius:9px;background:var(--red-soft);display:inline-flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.wc-label{font-size:12.5px;color:var(--muted);font-weight:600;line-height:1.25}
+.wc-badge{margin-left:auto;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--warn);background:var(--warn-soft);padding:3px 8px;border-radius:100px;white-space:nowrap}
+.wc-num{font-size:34px;font-weight:800;line-height:1}
+.wc-sub{font-size:12.5px;color:var(--muted);line-height:1.5}
+.dl-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.dl-item{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:10px 13px;border:1px solid var(--line);border-radius:11px}
+.dl-when{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0}
+.dl-late{background:var(--err-soft);color:var(--err)}
+.dl-near{background:var(--warn-soft);color:var(--warn)}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
 th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -783,12 +807,49 @@ function proofTable(proofs, isSuper, lang, settings) {
   </table></div></div>`;
 }
 
-// Tab 1 — Dashboard: aggregate statistics across all KOL (all talents).
-function adminDashboard({ staff, proofs, events, lang }) {
+// Tab 1 — Dashboard: role-aware activity summary + engagement overview.
+function adminDashboard({ staff, proofs, events, talents, assignments, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  proofs = proofs || []; events = events || [];
-  const activeEvents = events.filter((e) => e.is_active).length;
+  proofs = proofs || []; events = events || []; talents = talents || []; assignments = assignments || [];
+  const isSuper = staff && staff.role === 'super_admin';
+
+  // Date-only comparisons at UTC midnight (talent_events.starts_at/ends_at are DATE).
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dayMs = 86400000;
+  const dateMs = (d) => { if (!d) return null; const p = String(d).slice(0, 10).split('-'); if (p.length !== 3) return null; const v = Date.UTC(+p[0], +p[1] - 1, +p[2]); return isNaN(v) ? null : v; };
+
+  // Widget 1 — active talents by type (all registered talents; no deactivation exists yet).
+  const byType = {};
+  talents.forEach((tt) => { byType[tt.talent_type] = (byType[tt.talent_type] || 0) + 1; });
+  const talentSub = ['kol', 'main_power', 'fotografer'].map((k) => `${talentLabel(L, k)} ${byType[k] || 0}`).join(' · ');
+
+  // Widgets 2 & 3 — running vs upcoming campaigns.
+  const running = []; const upcoming = [];
+  events.forEach((e) => {
+    const s = dateMs(e.starts_at); const en = dateMs(e.ends_at);
+    if (s !== null && s > todayMs) { upcoming.push(e); return; }
+    if (e.is_active && (s === null || s <= todayMs) && (en === null || en >= todayMs)) running.push(e);
+  });
+  const listNames = (arr) => arr.slice(0, 3).map((e) => esc(e.name)).join(', ') + (arr.length > 3 ? ` +${arr.length - 3}` : '');
+
+  // Widget 6 — upload-deadline follow-ups: assigned talents with no proof yet, whose event
+  // ends within 3 days or is already overdue. Colour: overdue = red, approaching = yellow.
+  const submitted = new Set(proofs.filter((p) => p.status !== 'rejected').map((p) => `${p.talent_id}|${p.event_id}`));
+  const eventById = new Map(events.map((e) => [e.id, e]));
+  const talentNameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  const deadlines = [];
+  assignments.forEach((a) => {
+    const e = eventById.get(a.event_id); if (!e) return;
+    const en = dateMs(e.ends_at); if (en === null) return;
+    if (submitted.has(`${a.talent_id}|${a.event_id}`)) return;
+    const diff = Math.round((en - todayMs) / dayMs);
+    if (diff > 3) return;
+    deadlines.push({ talent: talentNameById.get(a.talent_id) || '—', type: a.talent_type, event: e.name, diff });
+  });
+  deadlines.sort((a, b) => a.diff - b.diff);
+  const dlText = (diff) => diff < 0 ? t('dash.overdueBy', { n: -diff }) : (diff === 0 ? t('dash.dueToday') : t('dash.dueIn', { n: diff }));
 
   const per = new Map();
   const tot = { likes: 0, comments: 0, saves: 0, shares: 0, views: 0, verified: 0 };
@@ -815,14 +876,35 @@ function adminDashboard({ staff, proofs, events, lang }) {
     <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares)}</td>
   </tr>`).join('') : `<tr><td colspan="8" class="muted" style="padding:22px;text-align:center">${t('dash.emptyKol')}</td></tr>`;
 
+  const widget = (icon, label, num, sub, extra = '') => `<div class="wcard${extra ? ' wcard-muted' : ''}">
+    <div class="wc-top"><span class="wc-icon">${icon}</span><span class="wc-label">${label}</span>${extra}</div>
+    <div class="wc-num${extra ? ' muted' : ''}">${num}</div>
+    <div class="wc-sub">${sub}</div>
+  </div>`;
+  const soonBadge = `<span class="wc-badge">${t('dash.soon')}</span>`;
+  const financeWidgets = isSuper
+    ? widget('💸', t('dash.wUnpaid'), '—', t('dash.financeOff'), soonBadge)
+      + widget('💰', t('dash.wRevenue'), '—', t('dash.financeOff'), soonBadge)
+    : '';
+
+  const deadlineBody = deadlines.length
+    ? `<div class="dl-list">${deadlines.map((d) => `<div class="dl-item">
+        <div><b>${esc(d.talent)}</b> <span class="muted" style="font-size:12px">(${talentLabel(L, d.type)})</span><div class="muted" style="font-size:12px">${esc(d.event)}</div></div>
+        <span class="dl-when ${d.diff < 0 ? 'dl-late' : 'dl-near'}">${dlText(d.diff)}</span>
+      </div>`).join('')}</div>`
+    : `<p class="muted" style="margin:2px 0">${t('dash.noDeadlines')}</p>`;
+
   const body = `<div class="wrap">
   ${staffHead(staff, t('dash.title'), L)}
-  <div class="stat-grid">
-    <div class="stat"><div class="n">${per.size}</div><div class="l">${t('dash.totalKol')}</div></div>
-    <div class="stat"><div class="n">${proofs.length}</div><div class="l">${t('dash.totalProofs')}</div></div>
-    <div class="stat"><div class="n">${tot.verified}</div><div class="l">${t('dash.verified')}</div></div>
-    <div class="stat"><div class="n">${activeEvents}</div><div class="l">${t('dash.activeEvents')}</div></div>
+  <div class="wgrid">
+    ${widget('👥', t('dash.wActiveTalent'), talents.length, talentSub)}
+    ${widget('🟢', t('dash.wRunning'), running.length, running.length ? listNames(running) : t('dash.none'))}
+    ${widget('📅', t('dash.wUpcoming'), upcoming.length, upcoming.length ? listNames(upcoming) : t('dash.none'))}
+    ${financeWidgets}
   </div>
+
+  <div class="section-head"><h2 style="margin:0">🔔 ${t('dash.wDeadline')}</h2></div>
+  <div class="card" style="margin-top:14px">${deadlineBody}</div>
 
   <div class="section-head"><h2 style="margin:0">${t('dash.totalEngagement')}</h2></div>
   <div class="stat-grid">
@@ -974,6 +1056,7 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
 
   const eventRows = events.map((e) => `<tr>
     <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+    <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span></td>
     <td style="text-align:right;white-space:nowrap"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
@@ -992,16 +1075,18 @@ function adminManage({ staff, events, assignments, talents, eos, lang, settings 
 
   <div class="section-head"><h2 style="margin:0">${t('manage.events')}</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px">
+    <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
       <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.startDate')}<input type="date" name="starts_at" style="min-width:150px"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
       <button class="btn btn-sm">${t('btn.createEvent')}</button>
     </form>
     <div class="table-wrap"><table>
-      <thead><tr><th>${t('th.event')}</th><th>${t('th.needs')}</th><th>${t('th.status')}</th><th></th></tr></thead>
-      <tbody>${eventRows || `<tr><td colspan="4" class="muted">${t('manage.emptyEvents')}</td></tr>`}</tbody>
+      <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.needs')}</th><th>${t('th.status')}</th><th></th></tr></thead>
+      <tbody>${eventRows || `<tr><td colspan="5" class="muted">${t('manage.emptyEvents')}</td></tr>`}</tbody>
     </table></div>
   </div>
 

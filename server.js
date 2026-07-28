@@ -305,10 +305,12 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents()]);
+    const [rawProofs, events, talentsAll, assignments] = await Promise.all([
+      st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(),
+    ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || null }));
-    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, lang: req.lang }));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -376,11 +378,13 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     const st = db();
     if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
+    const starts_at = String(req.body.starts_at || '').trim() || null;
+    const ends_at = String(req.body.ends_at || '').trim() || null;
     const needs = [];
     if (req.body.need_kol) needs.push({ talent_type: 'kol' });
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power' });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
-    if (name) await st.createEvent({ name, created_by: req.staff.id, needs });
+    if (name) await st.createEvent({ name, starts_at, ends_at, created_by: req.staff.id, needs });
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });

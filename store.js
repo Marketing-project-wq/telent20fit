@@ -233,9 +233,10 @@ function memoryStore() {
     id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
     password_hash: require('./auth').hashPassword('Admin_12345'), created_at: now(),
   }];
+  const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
-    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, starts_at: null, ends_at: null, is_active: true, created_by: null, created_at: now() },
-    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, starts_at: null, ends_at: null, is_active: true, created_by: null, created_at: now() },
+    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now() },
+    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now() },
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
