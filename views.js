@@ -259,7 +259,7 @@ function landingPage(lang) {
     id: {
       badge: 'Talent Management · Multi-Tenant', title: 'Rekrut talent event', accent: 'tanpa ribet.',
       sub: 'Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.',
-      join: 'Gabung Sekarang', login: 'Masuk',
+      join: 'Gabung Sekarang', login: 'Masuk', submit: 'Kirim Bukti Post',
       featTitle: 'Kenapa 20FIT Talent', featSub: 'Dibangun untuk skala — dari 1 event ke ratusan.',
       finalCta: 'Siap jadi bagian dari event berikutnya?', finalCtaSub: 'Daftar gratis, verifikasi otomatis, langsung apply.',
       slot: '4 slot tersisa', foot: 'Digunakan 20FIT &amp; Event Organizer lain',
@@ -276,7 +276,7 @@ function landingPage(lang) {
     en: {
       badge: 'Talent Management · Multi-Tenant', title: 'Recruit event talent', accent: 'the easy way.',
       sub: 'A recruitment &amp; talent management platform for sports events. ID verification, 3-angle AI photo checks, and clear per-role SOWs — all in one system.',
-      join: 'Join Now', login: 'Log in',
+      join: 'Join Now', login: 'Log in', submit: 'Submit Post Proof',
       featTitle: 'Why 20FIT Talent', featSub: 'Built to scale — from 1 event to hundreds.',
       finalCta: 'Ready to be part of the next event?', finalCtaSub: 'Free sign-up, automatic verification, apply instantly.',
       slot: '4 slots left', foot: 'Used by 20FIT &amp; other Event Organizers',
@@ -334,6 +334,7 @@ a{text-decoration:none}
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       ${toggle}
+      <a href="/submit${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.submit)}</a>
       <a href="/login${q}" style="padding:10px 18px;background:transparent;color:#fff;border:1px solid #3a3a42;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.login)}</a>
       <a href="/register${q}" style="padding:10px 20px;background:var(--red);color:#fff;border-radius:8px;font:600 14px/1 Barlow,sans-serif">${esc(t.join)}</a>
     </div>
@@ -887,6 +888,75 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   return layout({ title: t('kol.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+/** Small badge for a proof's content type (feed / reels / story). */
+function contentBadge(ctype) {
+  const label = ctype === 'reels' ? 'Reels' : ctype === 'story' ? 'Story' : ctype === 'feed' ? 'Feed' : null;
+  if (!label) return '';
+  const icon = ctype === 'reels' ? '🎬' : ctype === 'story' ? '📖' : '📷';
+  return `<span class="pill pill-off" style="font-size:11px">${icon} ${label}</span>`;
+}
+
+/**
+ * PUBLIC (no login) submission page: name + social username + event, with
+ * multiple feed screenshots plus separate Reels and Story uploads. Every image
+ * is analysed by the LLM.
+ */
+function publicSubmitPage(opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
+  const events = opts.events || [];
+  const v = opts.values || {};
+  const errors = opts.errors || [];
+  const noEvents = events.length === 0;
+  const eventOpts = events.map((e) => `<option value="${esc(e.id)}"${v.event_id === e.id ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+  const errorBanner = errors.length ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const fileField = (name, icon, label, hint) => `<div class="field">
+    <label>${icon} ${label} <span class="hint">${hint}</span></label>
+    <input type="file" name="${name}" accept="image/*" multiple>
+  </div>`;
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    ${langToggle(L)}
+  </div>
+  <h1>${t('pub.title')}</h1>
+  <p class="sub">${t('pub.sub')}</p>
+  ${errorBanner}
+  ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
+  <form class="card" method="post" action="/submit" enctype="multipart/form-data">
+    <div class="field"><label for="name">${t('pub.name')}</label><input type="text" id="name" name="name" required maxlength="120" value="${esc(v.name || '')}"></div>
+    <div class="field"><label for="username">${t('pub.username')} <span class="hint">${t('pub.usernameHint')}</span></label><input type="text" id="username" name="username" required maxlength="120" placeholder="@username" value="${esc(v.username || '')}"></div>
+    <div class="field">
+      <label for="event_id">${t('kol.eventLabel')}</label>
+      <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}><option value="" disabled ${v.event_id ? '' : 'selected'}>${t('kol.pickEvent')}</option>${eventOpts}</select>
+    </div>
+    ${fileField('feed_images', '📷', t('pub.feed'), t('pub.feedHint'))}
+    ${fileField('reels_images', '🎬', t('pub.reels'), t('pub.reelsHint'))}
+    ${fileField('story_images', '📖', t('pub.story'), t('pub.storyHint'))}
+    <div class="field"><label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label><input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…" value="${esc(v.post_link || '')}"></div>
+    <div class="field"><label for="posted_at">${t('kol.postedLabel')} <span class="hint">${t('kol.postedHint')}</span></label><input type="datetime-local" id="posted_at" name="posted_at"></div>
+    <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>${t('pub.submit')}</button>
+  </form>
+  <p class="muted" style="text-align:center;font-size:13px;margin-top:16px">${t('pub.foot')}</p>
+</div>`;
+  return layout({ title: t('pub.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function publicSubmitSuccess(opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success" style="text-align:center">
+    <div class="check">✓</div>
+    <h1>${t('pub.thanksTitle')}</h1>
+    <p class="sub" style="margin:10px 0 24px">${t('pub.thanksBody', { name: esc(opts.name || ''), count: opts.count || 0 })}</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="/submit?lang=${L}" class="btn btn-ghost">${t('pub.again')}</a>
+      <a href="/?lang=${L}" class="btn btn-ghost">${t('common.back')}</a>
+    </div>
+  </div></div>`;
+  return layout({ title: t('pub.thanksTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
 // Shared header for every staff page: title + who's logged in + logout.
 function staffHead(staff, title) {
@@ -899,7 +969,7 @@ function proofTable(proofs, isSuper, lang, settings) {
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b><div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -976,6 +1046,27 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
   board.sort((a, b) => (b.sc.score == null ? -1 : b.sc.score) - (a.sc.score == null ? -1 : a.sc.score)
     || (b.likes + b.comments + b.saves + b.shares) - (a.likes + a.comments + a.saves + a.shares));
 
+  // Per-event AI-analysis summary (engagement rolled up per campaign).
+  const eventNameById = new Map(events.map((e) => [e.id, e.name]));
+  const evAgg = new Map();
+  proofs.forEach((p) => {
+    const key = eventNameById.get(p.event_id) || t('kol.noEvent');
+    const e = evAgg.get(key) || { name: key, posts: 0, kols: new Set(), views: 0, eng: 0 };
+    e.posts += 1; e.kols.add(p.talent_id || p.talent_name || '—');
+    const x = p.extracted || {};
+    e.views += Number(x.views) || 0;
+    e.eng += (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.shares) || 0) + (Number(x.saves) || 0);
+    evAgg.set(key, e);
+  });
+  const evList = [...evAgg.values()].sort((a, b) => b.eng - a.eng);
+  const evRows = evList.length ? evList.map((e) => `<tr>
+    <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+    <td data-label="${t('dash.kolCount')}" style="text-align:right">${e.kols.size}</td>
+    <td data-label="${t('th.proofs')}" style="text-align:right">${e.posts}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
+    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(e.eng)}</td>
+  </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${t('an.noData')}</td></tr>`;
+
   const boardRows = board.length ? board.map((e, i) => `<tr>
     <td data-label="${t('th.rank')}">${i + 1}</td>
     <td data-label="${t('th.kol')}">${e.id ? `<a href="/admin/kol/${esc(e.id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(e.name)}</a>` : `<b>${esc(e.name)}</b>`}<div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
@@ -1026,6 +1117,12 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
     <div class="stat"><div class="n">${fmtNum(tot.saves)}</div><div class="l">🔖 ${t('stats.saves')}</div></div>
     <div class="stat"><div class="n">${fmtNum(tot.shares)}</div><div class="l">📤 ${t('stats.shares')}</div></div>
   </div>
+
+  <div class="section-head"><h2 style="margin:0">${t('dash.perEvent')}</h2></div>
+  <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('th.event')}</th><th style="text-align:right">${t('dash.kolCount')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th></tr></thead>
+    <tbody>${evRows}</tbody>
+  </table></div></div>
 
   <div class="section-head"><h2 style="margin:0">${t('dash.perKol')}</h2></div>
   <div class="card" style="margin-top:14px">
@@ -1457,6 +1554,7 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
+  publicSubmitPage, publicSubmitSuccess,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };

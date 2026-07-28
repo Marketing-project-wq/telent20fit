@@ -225,6 +225,27 @@
   "score.eligibleAt": "'Layak' mulai skor",
   "score.considerAt": "'Perlu Dipertimbangkan' mulai skor",
 
+  "pub.title": "Kirim Bukti Post",
+  "pub.sub": "Isi data kamu dan upload screenshot insight postingan — tanpa perlu login.",
+  "pub.name": "Nama",
+  "pub.username": "Username Instagram / sosial media",
+  "pub.usernameHint": "(mis. @namakamu)",
+  "pub.feed": "Screenshot post feed",
+  "pub.feedHint": "(bisa pilih lebih dari satu)",
+  "pub.reels": "Reels",
+  "pub.reelsHint": "(insight reels, opsional)",
+  "pub.story": "Story",
+  "pub.storyHint": "(insight story, opsional)",
+  "pub.submit": "Kirim Bukti",
+  "pub.foot": "Sistem otomatis membaca angka dari tiap gambar.",
+  "pub.errUsername": "Username wajib diisi.",
+  "pub.errNoImage": "Upload minimal satu gambar (feed, reels, atau story).",
+  "pub.thanksTitle": "Bukti Terkirim!",
+  "pub.thanksBody": "Terima kasih <b>{name}</b> — {count} gambar diterima dan sedang dibaca sistem.",
+  "pub.again": "Kirim lagi",
+  "dash.perEvent": "Analisa per Event",
+  "dash.kolCount": "KOL",
+
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."
 }
