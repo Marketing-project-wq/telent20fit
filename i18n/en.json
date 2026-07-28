@@ -21,6 +21,12 @@
 
   "staffLogin.title": "Admin Login",
   "staffLogin.sub": "Sign in as Super Admin or Event Organizer.",
+  "staffLogin.titleAdmin": "Super Admin Login",
+  "staffLogin.subAdmin": "Sign in to the Super Admin panel.",
+  "staffLogin.titleEo": "Event Organizer Login",
+  "staffLogin.subEo": "Sign in to the Event Organizer panel.",
+  "staffLogin.toEo": "Event Organizer login →",
+  "staffLogin.toAdmin": "Super Admin login →",
   "btn.signin": "Sign in",
 
   "auth.login.title": "Sign in {role}",

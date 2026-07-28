@@ -262,25 +262,43 @@ app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), 
 app.get('/admin/login', (req, res) => {
   const t = auth.currentTalent(req);
   if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
-  res.send(V.staffLogin({ lang: req.lang }));
+  res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
-app.post('/admin/login', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const login = String(req.body.login || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-    const staff = await st.findStaff(login);
-    if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
-      return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang }));
-    }
-    auth.setSession(res, staff);
-    res.redirect('/admin');
-  } catch (e) { next(e); }
+app.get('/eo/login', (req, res) => {
+  const t = auth.currentTalent(req);
+  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
 
-app.post('/admin/logout', (req, res) => { auth.clearSession(res); res.redirect('/admin/login'); });
+// Both staff login links authenticate against the same staff_accounts. The
+// account's role (not which URL was used) decides permissions, so either link
+// is safe for any staff member — they just land on the same role-aware dashboard.
+function staffLoginHandler(variant) {
+  return async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const login = String(req.body.login || '').trim().toLowerCase();
+      const password = String(req.body.password || '');
+      const staff = await st.findStaff(login);
+      if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
+        return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang, variant }));
+      }
+      auth.setSession(res, staff);
+      res.redirect('/admin');
+    } catch (e) { next(e); }
+  };
+}
+app.post('/admin/login', staffLoginHandler('admin'));
+app.post('/eo/login', staffLoginHandler('eo'));
+
+app.post('/admin/logout', (req, res) => {
+  const t = auth.currentTalent(req);
+  const dest = (t && t.type === 'eo') ? '/eo/login' : '/admin/login';
+  auth.clearSession(res);
+  res.redirect(dest);
+});
 
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
 app.get('/admin/health', async (req, res) => {
