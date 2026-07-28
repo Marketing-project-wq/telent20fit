@@ -71,6 +71,9 @@
   "stats.comments": "Comments",
   "stats.saves": "Saves",
   "stats.shares": "Shares",
+  "stats.reach": "Reach",
+  "stats.impressions": "Impressions",
+  "stats.linkClicks": "Link Clicks",
 
   "staff.signedInAs": "Signed in as <b>{name}</b> · {role}",
 
@@ -117,6 +120,15 @@
   "manage.endDate": "End (upload deadline)",
 
   "nav.analytics": "Analysis",
+  "nav.overview": "Performance",
+  "ov.title": "Performance Overview",
+  "ov.totalAllKol": "All KOL Total",
+  "ov.perKol": "Per KOL",
+  "ov.engagement": "Engagement",
+  "ov.engRate": "Engagement Rate",
+  "ov.result": "Result",
+  "ov.empty": "No performance data yet.",
+  "ov.hint": "Reach, Impressions and Link Clicks are read from insight screenshots as KOLs upload them.",
   "an.title": "Analysis",
   "an.perMetric": "Per-metric analysis",
   "an.metric": "Metric",

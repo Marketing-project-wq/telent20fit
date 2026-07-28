@@ -195,6 +195,7 @@ const NAV_ICON = {
   proofs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L4.5 21"/></svg>',
   manage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="15" cy="7" r="2.4" fill="var(--panel)"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="17" r="2.4" fill="var(--panel)"/></svg>',
   analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg>',
+  overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>',
 };
 
 function navLink(href, key, active, icon, label) {
@@ -217,6 +218,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
   const items = isStaff
     ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+      + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
       + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
       + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
       + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
@@ -1080,6 +1082,83 @@ function adminAnalysis({ staff, proofs, lang }) {
   return appLayout({ title: t('an.title') + ' — 20FIT', body, role: staff && staff.role, active: 'analytics', user: staff && staff.name, lang: L });
 }
 
+// Tab — Ringkasan Performa: per-event performance, with an all-KOL total and a per-KOL breakdown.
+function adminOverview({ staff, proofs, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  proofs = proofs || [];
+  const FIELDS = ['views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'link_clicks'];
+  const blank = () => { const o = { posts: 0 }; FIELDS.forEach((f) => { o[f] = 0; }); return o; };
+  const eng = (o) => o.likes + o.comments + o.shares + o.saves;
+  const erate = (o) => { const base = o.reach || o.views; return base > 0 ? (eng(o) / base * 100) : null; };
+  const pct = (o) => { const r = erate(o); return r === null ? '–' : r.toFixed(1).replace('.', ',') + '%'; };
+
+  // Group by event -> by KOL.
+  const evMap = new Map();
+  proofs.forEach((p) => {
+    const evName = p.event_name || t('kol.noEvent');
+    const kolName = p.talent_name || '—';
+    let ev = evMap.get(evName);
+    if (!ev) { ev = { name: evName, kols: new Map(), totals: blank() }; evMap.set(evName, ev); }
+    let k = ev.kols.get(kolName);
+    if (!k) { k = Object.assign({ name: kolName }, blank()); ev.kols.set(kolName, k); }
+    const x = p.extracted || {};
+    k.posts += 1; ev.totals.posts += 1;
+    FIELDS.forEach((f) => { const v = Number(x[f]) || 0; k[f] += v; ev.totals[f] += v; });
+  });
+
+  // Vertical "Total Semua KOL" table — matches the requested Metric | Hasil layout.
+  const totalTable = (o) => {
+    const rows = [
+      ['👁 ' + t('stats.views'), fmtNum(o.views)],
+      ['📡 ' + t('stats.reach'), fmtNum(o.reach)],
+      ['📊 ' + t('stats.impressions'), fmtNum(o.impressions)],
+      ['🔥 ' + t('ov.engagement'), fmtNum(eng(o))],
+      ['📈 ' + t('ov.engRate'), pct(o)],
+      ['❤️ ' + t('stats.likes'), fmtNum(o.likes)],
+      ['💬 ' + t('stats.comments'), fmtNum(o.comments)],
+      ['📤 ' + t('stats.shares'), fmtNum(o.shares)],
+      ['🔖 ' + t('stats.saves'), fmtNum(o.saves)],
+      ['🔗 ' + t('stats.linkClicks'), fmtNum(o.link_clicks)],
+    ];
+    return `<div style="max-width:420px">${rows.map(([lab, val], i) => `<div style="display:flex;justify-content:space-between;gap:18px;padding:11px 2px;${i ? 'border-top:1px solid var(--line)' : ''}"><span class="muted">${lab}</span><b style="font-size:15px">${val}</b></div>`).join('')}</div>`;
+  };
+
+  // Horizontal per-KOL table.
+  const cols = [
+    ['stats.views', 'views'], ['stats.reach', 'reach'], ['stats.impressions', 'impressions'],
+    ['ov.engagement', '_eng'], ['ov.engRate', '_er'], ['stats.likes', 'likes'],
+    ['stats.comments', 'comments'], ['stats.shares', 'shares'], ['stats.saves', 'saves'], ['stats.linkClicks', 'link_clicks'],
+  ];
+  const cell = (o, key) => key === '_eng' ? fmtNum(eng(o)) : key === '_er' ? pct(o) : fmtNum(o[key]);
+  const kolTable = (ev) => {
+    const list = [...ev.kols.values()].sort((a, b) => eng(b) - eng(a));
+    const head = `<th>${t('th.kol')}</th>` + cols.map(([lab]) => `<th style="text-align:right">${t(lab)}</th>`).join('');
+    const rows = list.map((k) => `<tr><td data-label="${t('th.kol')}"><b>${esc(k.name)}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" style="text-align:right">${cell(k, key)}</td>`).join('')}</tr>`).join('');
+    const totalRow = `<tr style="border-top:2px solid var(--line)"><td data-label="${t('th.kol')}"><b>${t('ov.totalAllKol')}</b></td>${cols.map(([lab, key]) => `<td data-label="${t(lab)}" style="text-align:right"><b>${cell(ev.totals, key)}</b></td>`).join('')}</tr>`;
+    return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}${totalRow}</tbody></table></div>`;
+  };
+
+  const events = [...evMap.values()].sort((a, b) => b.totals.views - a.totals.views);
+  const sections = events.length ? events.map((ev) => `
+  <div class="section-head"><h2 style="margin:0">📈 ${esc(ev.name)}</h2></div>
+  <div class="card" style="margin-top:14px">
+    <div style="font-weight:700;margin-bottom:12px">${t('ov.totalAllKol')} <span class="muted" style="font-weight:400;font-size:13px">· ${ev.totals.posts} ${t('th.proofs').toLowerCase()}</span></div>
+    ${totalTable(ev.totals)}
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div style="font-weight:700;margin-bottom:12px">${t('ov.perKol')}</div>
+    ${kolTable(ev)}
+  </div>`).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="text-align:center;padding:22px">${t('ov.empty')}</p></div>`;
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('ov.title'))}
+  <p class="muted" style="font-size:13px;margin-top:-6px">${t('ov.hint')}</p>
+  ${sections}
+</div>`;
+  return appLayout({ title: t('ov.title') + ' — 20FIT', body, role: staff && staff.role, active: 'overview', user: staff && staff.name, lang: L });
+}
+
 // Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
 function adminProofs({ staff, proofs, lang, settings }) {
   const L = normLang(lang);
@@ -1237,6 +1316,6 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
-  adminDashboard, adminAnalysis, adminProofs, adminManage, performancePage,
+  adminDashboard, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };
