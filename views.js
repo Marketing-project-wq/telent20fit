@@ -314,8 +314,6 @@ function landingPage(lang) {
   const L = (lang === 'en') ? 'en' : 'id';
   const t = {
     id: {
-      badge: 'Talent Management · Multi-Tenant', title: 'Rekrut talent event', accent: 'tanpa ribet.',
-      sub: 'Platform rekrutmen &amp; manajemen talent untuk event olahraga. Verifikasi identitas KTP, foto 3 sudut via AI, dan SOW jelas per peran — semua dalam satu sistem.',
       join: 'Gabung Sekarang', login: 'Masuk', submit: 'Kirim Bukti Post',
       featTitle: 'Kenapa 20FIT Talent', featSub: 'Dibangun untuk skala — dari 1 event ke ratusan.',
       finalCta: 'Siap jadi bagian dari event berikutnya?', finalCtaSub: 'Daftar gratis, verifikasi otomatis, langsung apply.',
@@ -331,8 +329,6 @@ function landingPage(lang) {
       ],
     },
     en: {
-      badge: 'Talent Management · Multi-Tenant', title: 'Recruit event talent', accent: 'the easy way.',
-      sub: 'A recruitment &amp; talent management platform for sports events. ID verification, 3-angle AI photo checks, and clear per-role SOWs — all in one system.',
       join: 'Join Now', login: 'Log in', submit: 'Submit Post Proof',
       featTitle: 'Why 20FIT Talent', featSub: 'Built to scale — from 1 event to hundreds.',
       finalCta: 'Ready to be part of the next event?', finalCtaSub: 'Free sign-up, automatic verification, apply instantly.',
@@ -417,8 +413,8 @@ a{text-decoration:none}
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(t.title)}<span style="color:var(--red)"> ${esc(t.accent)}</span></h1>
-      <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${t.sub}</p>
+      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span style="color:var(--red)"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
+      <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
         <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
