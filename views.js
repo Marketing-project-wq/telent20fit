@@ -823,6 +823,7 @@ function talentLogin(type, opts = {}) {
       <input type="password" id="password" name="password" required autocomplete="current-password">
     </div>
     <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
+    <div style="text-align:center;margin-top:14px"><a href="/${p}/forgot-password?lang=${L}" style="color:var(--muted);font-size:14px">${t('auth.forgot.link')}</a></div>
   </form>`;
   const foot = t('auth.foot.toRegister', { href: `/${p}/register?lang=${L}` });
   return authShell(type, t('auth.login.title', { role: talentLabel(L, type) }), t('auth.login.sub'), form, foot, opts.errors, L);
@@ -852,6 +853,89 @@ function talentRegister(type, opts = {}) {
   </form>`;
   const foot = t('auth.foot.toLogin', { href: `/${p}/login?lang=${L}` });
   return authShell(type, t('auth.register.title', { role: talentLabel(L, type) }), t('auth.register.sub'), form, foot, opts.errors, L);
+}
+
+/** Forgot-password request form (per talent type). */
+function forgotPassword(type, opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = talentPath(type);
+  const v = opts.values || {};
+  const form = `<form method="post" action="/${p}/forgot-password">
+    <div class="field">
+      <label for="login">${t('common.emailphone')}</label>
+      <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
+    </div>
+    <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
+  </form>`;
+  const foot = `<a href="/${p}/login?lang=${L}">${t('auth.forgot.backToLogin')}</a>`;
+  return authShell(type, t('auth.forgot.title'), t('auth.forgot.sub'), form, foot, opts.errors, L);
+}
+
+/** Neutral "we sent you an email" confirmation (no account enumeration). */
+function forgotPasswordSent({ type, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = talentPath(type || 'kol');
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
+    <h1>${t('auth.forgot.sentTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
+    <a href="/${p}/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+  </div></div>`;
+  return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+/** New-password form reached from the email link (token in a hidden field). */
+function resetPassword({ token, valid, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  if (!valid) {
+    const body = `<div class="wrap narrow"><div class="card success">
+      <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+      <h1>${t('auth.reset.invalidTitle')}</h1>
+      <p class="sub" style="margin:10px auto 24px;max-width:420px">${t('auth.reset.invalidBody')}</p>
+      <a href="/kol/forgot-password?lang=${L}" class="btn btn-ghost">${t('auth.reset.requestAgain')}</a>
+    </div></div>`;
+    return layout({ title: t('auth.reset.invalidTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+  }
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <h1 style="margin-top:22px">${t('auth.reset.title')}</h1>
+  <p class="sub">${t('auth.reset.sub')}</p>
+  ${errorBanner}
+  <div class="card">
+    <form method="post" action="/reset-password">
+      <input type="hidden" name="token" value="${esc(token)}">
+      <div class="field">
+        <label for="password">${t('auth.reset.newPassword')}</label>
+        <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
+        <div class="hint" style="margin-top:6px">${t('hint.min6')}</div>
+      </div>
+      <div class="field">
+        <label for="confirm">${t('auth.reset.confirm')}</label>
+        <input type="password" id="confirm" name="confirm" required minlength="6" autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-block">${t('auth.reset.btn')}</button>
+    </form>
+  </div>
+</div>`;
+  return layout({ title: t('auth.reset.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+/** Success after the password is changed. */
+function resetPasswordDone({ type, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = talentPath(type || 'kol');
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check">✓</div>
+    <h1>${t('auth.reset.doneTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
+    <a href="/${p}/login?lang=${L}" class="btn">${t('auth.reset.toLogin')} →</a>
+  </div></div>`;
+  return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
 function kolSuccess(name, campaign) {
@@ -2089,5 +2173,6 @@ module.exports = {
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
-  talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
+  talentLogin, talentRegister, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
+  staffLogin, configError, adminNoService, page500,
 };
