@@ -354,6 +354,15 @@
   "confirm.rejectApp": "Tolak aplikasi ini?",
   "manage.mpQuota": "Kuota MP",
   "manage.mpSow": "SOW singkat Main Power (opsional)",
+  "btn.edit": "Edit",
+  "btn.save": "Simpan Perubahan",
+  "common.cancel": "Batal",
+  "title.edit": "Edit event",
+  "manage.editEvent": "Edit Event",
+  "manage.editSub": "Ubah jadwal, kebutuhan talent (KOL / Main Power / Fotografer) & kuota, dan SOW event.",
+  "manage.needsLabel": "Kebutuhan Talent",
+  "manage.kolQuota": "Kuota KOL",
+  "manage.fgQuota": "Kuota Fotografer",
 
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."

@@ -1827,7 +1827,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span></td>
-    <td style="text-align:right;white-space:nowrap"><form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
+    <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
@@ -1915,6 +1915,57 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   </div>
 </div>`;
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
+/**
+ * Super Admin: edit an existing event — schedule, which talent types it needs
+ * (KOL / Main Power / Fotografer) with per-type quotas, and the Main Power SOW.
+ */
+function adminEventEdit({ staff, event, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const ev = event || {};
+  const needOf = (type) => (ev.needs || []).find((n) => n.talent_type === type);
+  const hc = (type) => { const n = needOf(type); return (n && n.headcount) || 1; };
+  const needRow = (type, quotaKey, quotaLabel) => `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:13px 0;border-bottom:1px solid var(--line)">
+      <label style="display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;min-width:150px;cursor:pointer">
+        <input type="checkbox" name="need_${type}" ${needOf(type) ? 'checked' : ''}> ${talentLabel(L, type)}</label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${quotaLabel}
+        <input type="number" name="${quotaKey}" min="1" value="${esc(hc(type))}" style="width:110px"></label>
+    </div>`;
+
+  const body = `<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    ${staffHead(staff, t('manage.editEvent'), L)}
+    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+  </div>
+  <p class="sub">${t('manage.editSub')}</p>
+  <form method="post" action="/admin/events/${esc(ev.id)}/edit" class="card" style="margin-top:16px">
+    <div class="field">
+      <label for="name">${t('ph.eventName')}</label>
+      <input type="text" id="name" name="name" required maxlength="140" value="${esc(ev.name || '')}">
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:150px">${t('manage.startDate')}<input type="date" name="starts_at" value="${esc(ev.starts_at || '')}"></label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:150px">${t('manage.endDate')}<input type="date" name="ends_at" value="${esc(ev.ends_at || '')}"></label>
+    </div>
+    <div class="field" style="margin-top:18px">
+      <label>${t('manage.needsLabel')}</label>
+      ${needRow('kol', 'kol_headcount', t('manage.kolQuota'))}
+      ${needRow('main_power', 'mp_headcount', t('manage.mpQuota'))}
+      ${needRow('fotografer', 'fg_headcount', t('manage.fgQuota'))}
+    </div>
+    <div class="field" style="margin-top:18px">
+      <label for="mp_sow">${t('manage.mpSow')}</label>
+      <textarea id="mp_sow" name="mp_sow" rows="3" maxlength="2000">${esc(ev.mp_sow || '')}</textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <a href="/admin/manage?lang=${L}" class="btn btn-ghost">${t('common.cancel')}</a>
+      <button type="submit" class="btn" style="flex:1">${t('btn.save')}</button>
+    </div>
+  </form>
+</div>`;
+  return appLayout({ title: t('manage.editEvent') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
 /**
@@ -2033,6 +2084,6 @@ module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminApplications, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };

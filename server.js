@@ -722,6 +722,38 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
   } catch (e) { next(e); }
 });
 
+// Super admin: edit an event — schedule, talent needs + quotas, MP SOW.
+app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const events = await st.listEvents();
+    const event = events.find((e) => e.id === req.params.id);
+    if (!event) return res.redirect('/admin/manage');
+    res.send(V.adminEventEdit({ staff: staffCtx(req), event, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const name = String(req.body.name || '').trim();
+    const starts_at = String(req.body.starts_at || '').trim() || null;
+    const ends_at = String(req.body.ends_at || '').trim() || null;
+    const hc = (key) => Math.max(1, parseInt(req.body[key], 10) || 1);
+    const needs = [];
+    if (req.body.need_kol) needs.push({ talent_type: 'kol', headcount: hc('kol_headcount') });
+    if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: hc('mp_headcount') });
+    if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer', headcount: hc('fg_headcount') });
+    const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
+    const patch = { starts_at, ends_at, mp_sow, needs };
+    if (name) patch.name = name;
+    await st.updateEvent(req.params.id, patch);
+    res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+
 app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
