@@ -331,9 +331,13 @@ function landingPage(lang) {
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
       <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
     </div>`).join('');
-  const ecoHtml = BRANDS.map(([base, div]) => `<div class="eco-card">${esc(base)}${div ? `<b>${esc(div)}</b>` : ''}</div>`).join('');
-  // Footer: the 20FIT wordmark links straight to Instagram, plus social icons.
   const IG_URL = 'https://www.instagram.com/20fit.id/';
+  // Brand cards; the flagship "20FIT" card shows the logo and links to Instagram.
+  const ecoHtml = BRANDS.map(([base, div]) => div
+    ? `<div class="eco-card">${esc(base)}<b>${esc(div)}</b></div>`
+    : `<a href="${IG_URL}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="20FIT · Instagram" title="20FIT · Instagram"><img src="${LOGO_FOOTER}" alt="20FIT" class="eco-logo eco-logo-dark"><img src="${LOGO_LIGHT}" alt="20FIT" class="eco-logo eco-logo-light"></a>`
+  ).join('');
+  // Footer: social icons row.
   const SVG_LI = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3.2 9h3.6v11.5H3.2zM9.3 9h3.45v1.57h.05c.48-.9 1.66-1.85 3.42-1.85 3.66 0 4.33 2.4 4.33 5.53v6.25h-3.6v-5.54c0-1.32-.02-3.02-1.84-3.02-1.84 0-2.12 1.44-2.12 2.92v5.64H9.3z"/></svg>';
   const SVG_IG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.5"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg>';
   const SVG_YT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23 12s0-3.2-.41-4.73a2.5 2.5 0 0 0-1.76-1.77C19.3 5.1 12 5.1 12 5.1s-7.3 0-8.83.4A2.5 2.5 0 0 0 1.4 7.28C1 8.8 1 12 1 12s0 3.2.41 4.73a2.5 2.5 0 0 0 1.76 1.77c1.53.4 8.83.4 8.83.4s7.3 0 8.83-.4a2.5 2.5 0 0 0 1.76-1.77C23 15.2 23 12 23 12z"/><path d="M9.75 15.5l6.25-3.5-6.25-3.5z" fill="var(--lp-bg)"/></svg>';
@@ -411,19 +415,20 @@ a{text-decoration:none}
 .eco-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:30px 16px;font:800 22px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.02em;color:var(--lp-tx);display:flex;align-items:center;justify-content:center;min-height:96px}
 .eco-card b{color:var(--red);margin-left:.32em}
-.foot-main{max-width:1180px;margin:0 auto;padding:56px 28px 0;display:flex;justify-content:space-between;align-items:center;gap:26px;flex-wrap:wrap}
-.foot-logo{display:inline-flex;align-items:center}
-.foot-logo-img{height:52px;width:auto;display:block}
-.foot-logo-light{display:none}
-:root[data-theme="light"] .foot-logo-dark{display:none}
-:root[data-theme="light"] .foot-logo-light{display:block}
-.foot-social{display:flex;flex-direction:row;gap:20px}
+.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s}
+.eco-card-logo:hover{border-color:var(--red)}
+.eco-logo{height:36px;width:auto;display:block}
+.eco-logo-light{display:none}
+:root[data-theme="light"] .eco-logo-dark{display:none}
+:root[data-theme="light"] .eco-logo-light{display:block}
+.foot-main{max-width:1180px;margin:0 auto;padding:52px 28px 0;display:flex;justify-content:center;align-items:center;gap:26px;flex-wrap:wrap}
+.foot-social{display:flex;flex-direction:row;gap:22px}
 .foot-social a{color:var(--lp-tx3);display:inline-flex}
 .foot-social a:hover{color:var(--red)}
 .foot-social svg{width:24px;height:24px;display:block}
 .foot-bottom{max-width:1180px;margin:44px auto 0;padding:22px 28px 44px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
 .foot-bottom a{color:var(--lp-tx3)}
-@media(max-width:760px){.foot-main{flex-direction:column;gap:22px;padding-top:44px;align-items:flex-start}}
+@media(max-width:760px){.foot-main{padding-top:40px}}
 @media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
@@ -480,10 +485,6 @@ a{text-decoration:none}
 
   <footer>
     <div class="foot-main">
-      <a href="${IG_URL}" target="_blank" rel="noopener" class="foot-logo" aria-label="20FIT · Instagram" title="20FIT · Instagram">
-        <img src="${LOGO_FOOTER}" alt="20FIT" class="foot-logo-img foot-logo-dark">
-        <img src="${LOGO_LIGHT}" alt="20FIT" class="foot-logo-img foot-logo-light">
-      </a>
       <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
     </div>
     <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/admin/login">Login Admin</a> · <a href="/eo/login">Login EO</a></div>
