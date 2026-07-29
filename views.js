@@ -383,7 +383,7 @@ function landingPage(lang) {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
-.lp-logo{display:block;height:120px;width:auto}
+.lp-logo{display:block;height:96px;width:auto}
 .lp-logo-light{display:none}
 :root[data-theme="light"] .lp-logo-dark{display:none}
 :root[data-theme="light"] .lp-logo-light{display:block}
@@ -394,7 +394,7 @@ a{text-decoration:none}
 .theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
-@media(max-width:760px){.lp-head{gap:14px}.lp-logo{height:86px}.lp-toggles{width:100%;justify-content:flex-start}}
+@media(max-width:760px){.lp-head{gap:14px}.lp-logo{height:76px}.lp-toggles{width:100%;justify-content:flex-start}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -415,7 +415,6 @@ a{text-decoration:none}
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.35);color:var(--lp-accent);padding:7px 14px;border-radius:100px;font:600 12px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:22px">${esc(t.badge)}</div>
       <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(t.title)}<span style="color:var(--red)"> ${esc(t.accent)}</span></h1>
       <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${t.sub}</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
