@@ -258,7 +258,7 @@
 
   "hero.headlineLead": "SUKA DUNIA EVENT?",
   "hero.headlineAccent": "YUK GABUNG DI 20FIT.",
-  "hero.subheadline": "Jadi KOL, fotografer, atau main power buat berbagai event olahraga — daftar sekali, kerjaan langsung ada.",
+  "hero.subheadline": "Daftar sekarang dan bergabung sebagai KOL, Photographer, atau Main Power di berbagai event olahraga.",
 
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."

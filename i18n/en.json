@@ -258,7 +258,7 @@
 
   "hero.headlineLead": "LOVE THE EVENT WORLD?",
   "hero.headlineAccent": "JOIN 20FIT.",
-  "hero.subheadline": "Become a KOL, photographer, or main power for sports events — sign up once, and the gigs come to you.",
+  "hero.subheadline": "Sign up now and join as a KOL, Photographer, or Main Power at various sports events.",
 
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy."
