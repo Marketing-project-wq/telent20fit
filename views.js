@@ -234,16 +234,17 @@ function toggles(lang) {
 }
 
 /** Plain shell (top logo bar, no sidebar) — landing/auth/picker/error pages. */
-function layout({ title, body, brand, home, lang }) {
+function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
+  const topbar = hideBrand ? '' : `<div class="topbar"><div class="in">
+  <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
+</div></div>`;
   return `<!doctype html><html lang="${normLang(lang)}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body>
-<div class="topbar"><div class="in">
-  <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
-</div></div>
+${topbar}
 ${body}
 </body></html>`;
 }
@@ -542,7 +543,7 @@ function talentPicker(mode, lang) {
     <div class="muted" style="font-size:13px;margin-top:8px">${esc(T.adminNote)}</div>
   </div>
 </div>`;
-  return layout({ title: `${title} — 20FIT Talent`, body, brand: 'TALENT', home: '/' + q });
+  return layout({ title: `${title} — 20FIT Talent`, body, brand: 'TALENT', home: '/' + q, hideBrand: true });
 }
 
 /** Public KOL submission form. `opts.errors` and `opts.values` re-render on validation failure. */
