@@ -318,7 +318,6 @@ function landingPage(lang) {
       featTitle: 'Kenapa 20FIT Talent', featSub: 'Dibangun untuk skala — dari 1 event ke ratusan.',
       finalCta: 'Siap jadi bagian dari event berikutnya?', finalCtaSub: 'Daftar gratis, verifikasi otomatis, langsung apply.',
       slot: '4 slot tersisa', foot: 'Digunakan 20FIT &amp; Event Organizer lain',
-      stats: [['8', 'Kota'], ['3', 'Kategori Talent'], ['AI', 'Verifikasi Foto']],
       feats: [
         ['ID', 'Validasi KTP', '1 nomor KTP = 1 akun. Sistem blok otomatis registrasi ganda.'],
         ['AI', 'Verifikasi Foto 3 Sudut', 'Full face, full body, samping — divalidasi AI dalam hitungan detik.'],
@@ -333,7 +332,6 @@ function landingPage(lang) {
       featTitle: 'Why 20FIT Talent', featSub: 'Built to scale — from 1 event to hundreds.',
       finalCta: 'Ready to be part of the next event?', finalCtaSub: 'Free sign-up, automatic verification, apply instantly.',
       slot: '4 slots left', foot: 'Used by 20FIT &amp; other Event Organizers',
-      stats: [['8', 'Cities'], ['3', 'Talent Types'], ['AI', 'Photo Check']],
       feats: [
         ['ID', 'ID Validation', '1 ID number = 1 account. Duplicate sign-ups blocked automatically.'],
         ['AI', '3-Angle Photo Check', 'Full face, full body, side — validated by AI in seconds.'],
@@ -345,10 +343,6 @@ function landingPage(lang) {
     },
   }[L];
 
-  const statHtml = t.stats.map(([n, l]) => `<div>
-      <div style="font:800 30px/1 'Barlow Condensed',sans-serif;color:var(--red)">${esc(n)}</div>
-      <div style="font-size:13px;color:var(--lp-tx3);margin-top:4px">${esc(l)}</div>
-    </div>`).join('');
   const featHtml = t.feats.map(([i, ti, d]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
       <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(i)}</div>
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(ti)}</div>
@@ -422,7 +416,6 @@ a{text-decoration:none}
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
         <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
       </div>
-      <div style="display:flex;gap:30px;margin-top:42px">${statHtml}</div>
     </div>
     <div style="position:relative">
       <div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
