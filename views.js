@@ -81,6 +81,7 @@ a{color:var(--red)}
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
 .brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto}
+.brand .brand-dark{height:1.56em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 /* Center the brand logo in the sidebar */
@@ -384,6 +385,7 @@ function landingPage(lang) {
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
 .lp-logo{display:block;height:96px;width:auto}
+.lp-logo-dark{height:72px}
 .lp-logo-light{display:none}
 :root[data-theme="light"] .lp-logo-dark{display:none}
 :root[data-theme="light"] .lp-logo-light{display:block}
@@ -394,7 +396,7 @@ a{text-decoration:none}
 .theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
-@media(max-width:760px){.lp-head{gap:14px}.lp-logo{height:76px}.lp-toggles{width:100%;justify-content:flex-start}}
+@media(max-width:760px){.lp-head{gap:14px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
