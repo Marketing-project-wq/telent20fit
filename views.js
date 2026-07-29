@@ -312,41 +312,20 @@ function appLayout({ title, body, role, active, user, lang }) {
  */
 function landingPage(lang) {
   const L = (lang === 'en') ? 'en' : 'id';
-  const t = {
-    id: {
-      join: 'Gabung Sekarang', login: 'Masuk', submit: 'Kirim Bukti Post',
-      featTitle: 'Kenapa 20FIT Talent', featSub: 'Dibangun untuk skala — dari 1 event ke ratusan.',
-      finalCta: 'Siap jadi bagian dari event berikutnya?', finalCtaSub: 'Daftar gratis, verifikasi otomatis, langsung apply.',
-      slot: '4 slot tersisa', foot: 'Digunakan 20FIT &amp; Event Organizer lain',
-      feats: [
-        ['ID', 'Validasi KTP', '1 nomor KTP = 1 akun. Sistem blok otomatis registrasi ganda.'],
-        ['AI', 'Verifikasi Foto 3 Sudut', 'Full face, full body, samping — divalidasi AI dalam hitungan detik.'],
-        ['SOW', 'SOW Per Peran', 'Ekspektasi tugas, durasi, dan kompensasi jelas sebelum apply.'],
-        ['★', '3 Kategori Talent', 'Main Power, KOL, dan Fotografer — masing-masing alur berbeda.'],
-        ['@', 'Notifikasi Otomatis', 'Email station Judges &amp; link grup WA terkirim otomatis saat approved.'],
-        ['⬢', 'Multi-Tenant', 'Dipakai 20FIT maupun event organizer lain dalam satu platform.'],
-      ],
-    },
-    en: {
-      join: 'Join Now', login: 'Log in', submit: 'Submit Post Proof',
-      featTitle: 'Why 20FIT Talent', featSub: 'Built to scale — from 1 event to hundreds.',
-      finalCta: 'Ready to be part of the next event?', finalCtaSub: 'Free sign-up, automatic verification, apply instantly.',
-      slot: '4 slots left', foot: 'Used by 20FIT &amp; other Event Organizers',
-      feats: [
-        ['ID', 'ID Validation', '1 ID number = 1 account. Duplicate sign-ups blocked automatically.'],
-        ['AI', '3-Angle Photo Check', 'Full face, full body, side — validated by AI in seconds.'],
-        ['SOW', 'Per-Role SOW', 'Clear task, duration, and compensation before you apply.'],
-        ['★', '3 Talent Types', 'Main Power, KOL, and Photographer — each with its own flow.'],
-        ['@', 'Auto Notifications', 'Judges station email &amp; WA group link sent automatically on approval.'],
-        ['⬢', 'Multi-Tenant', 'Used by 20FIT and other event organizers on one platform.'],
-      ],
-    },
-  }[L];
+  const t = (k, v) => tr(L, k, v);
+  // Feature cards: [icon badge, i18n key base] — title/desc resolved from the dictionary.
+  const FEATS = [
+    ['ID', 'feat.identity'],
+    ['AI', 'feat.face'],
+    ['SOW', 'feat.job'],
+    ['3', 'feat.roles'],
+    ['★', 'feat.cert'],
+  ];
 
-  const featHtml = t.feats.map(([i, ti, d]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
-      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(i)}</div>
-      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(ti)}</div>
-      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${d}</p>
+  const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
+      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(icon)}</div>
+      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
+      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
     </div>`).join('');
 
   const langBtn = (code, label) => {
@@ -402,7 +381,7 @@ a{text-decoration:none}
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </span>
     <div class="lp-toggles">
-      <a href="/submit${q}" class="lp-submit">${esc(t.submit)}</a>
+      <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
       ${toggle}
       ${themeToggle()}
     </div>
@@ -413,8 +392,8 @@ a{text-decoration:none}
       <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span style="color:var(--red)"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-        <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t.login)}</a>
+        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
+        <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t('land.login'))}</a>
       </div>
     </div>
     <div style="position:relative">
@@ -424,7 +403,7 @@ a{text-decoration:none}
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Jakarta Run Series</div>
-          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t.slot)}</span>
+          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t('land.slot'))}</span>
         </div>
         <div style="font-size:13px;color:var(--lp-tx3)">12 Sep 2026 · Jakarta · Judges</div>
       </div>
@@ -433,17 +412,17 @@ a{text-decoration:none}
 
   <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">${esc(t.featTitle)}</h2>
-      <p style="color:var(--lp-tx3);margin:0 0 34px;font-size:15px">${esc(t.featSub)}</p>
+      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">${esc(t('land.featTitle'))}</h2>
+      <p style="color:var(--lp-tx3);margin:0 0 34px;font-size:15px">${esc(t('land.featSub'))}</p>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
 
   <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
-    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t.finalCta)}</h2>
-    <p style="color:var(--lp-tx3);font-size:16px;margin:0 0 26px">${esc(t.finalCtaSub)}</p>
-    <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t.join)} →</a>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${t.foot} · <a href="/submit${q}" style="color:var(--lp-tx3)">${esc(t.submit)}</a> · <a href="/admin/login" style="color:var(--lp-tx3)">Login Admin</a> · <a href="/eo/login" style="color:var(--lp-tx3)">Login EO</a></div>
+    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t('land.finalCta'))}</h2>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 0 26px">${esc(t('land.finalCtaSub'))}</p>
+    <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
+    <div style="margin-top:60px;padding-top:22px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}" style="color:var(--lp-tx3)">${esc(t('land.submit'))}</a> · <a href="/admin/login" style="color:var(--lp-tx3)">Login Admin</a> · <a href="/eo/login" style="color:var(--lp-tx3)">Login EO</a></div>
   </section>
 </div>
 </body></html>`;

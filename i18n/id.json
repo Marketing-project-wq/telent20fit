@@ -260,6 +260,26 @@
   "hero.headlineAccent": "YUK GABUNG DI 20FIT.",
   "hero.subheadline": "Daftar sekarang dan bergabung sebagai KOL, Photographer, atau Main Power di berbagai event olahraga.",
 
+  "land.join": "Gabung Sekarang",
+  "land.login": "Masuk",
+  "land.submit": "Kirim Bukti Post",
+  "land.featTitle": "Kenapa 20FIT Talent",
+  "land.featSub": "Dibangun untuk skala — dari 1 event ke ratusan.",
+  "land.finalCta": "Siap jadi bagian dari event berikutnya?",
+  "land.finalCtaSub": "Daftar gratis, verifikasi otomatis, langsung apply.",
+  "land.slot": "4 slot tersisa",
+  "land.foot": "Digunakan 20FIT & Event Organizer lain",
+  "feat.identity.title": "Identitas Terverifikasi",
+  "feat.identity.desc": "Setiap talent diverifikasi lewat KTP — satu identitas, satu akun. Bebas akun palsu atau ganda.",
+  "feat.face.title": "Verifikasi Wajah AI",
+  "feat.face.desc": "Foto wajah dicek otomatis oleh AI untuk memastikan orangnya asli dan sesuai identitas.",
+  "feat.job.title": "Info Kerjaan Jelas dari Awal",
+  "feat.job.desc": "Tugas, durasi, dan kompensasi jelas sejak awal — kamu tahu persis sebelum apply.",
+  "feat.roles.title": "3 Pilihan Peran",
+  "feat.roles.desc": "Pilih peran sesuai keahlianmu: KOL, Photographer, atau Main Power — masing-masing punya alur sendiri.",
+  "feat.cert.title": "Sertifikat Digital",
+  "feat.cert.desc": "Selesai event, kamu dapat sertifikat digital sebagai bukti pengalaman untuk portofoliomu.",
+
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."
 }
