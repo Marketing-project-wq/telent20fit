@@ -132,9 +132,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, starts_at, ends_at, created_by, needs }) {
+    async createEvent({ name, description, starts_at, ends_at, created_by, needs, mp_sow }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null })
+        .insert({ name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -176,6 +176,35 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
+    // ---- Main Power event applications ----
+    async createApplication({ event_id, talent_id, talent_type, role, answers }) {
+      const { data, error } = await sb.from('talent_applications')
+        .insert({ event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null })
+        .select('id').maybeSingle();
+      if (error) {
+        if (/duplicate|unique/i.test(error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+        throw new Error(error.message);
+      }
+      return data;
+    },
+    async listApplications() {
+      const { data, error } = await sb.from('talent_applications').select('*').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listApplicationsForTalent(talentId) {
+      const { data, error } = await sb.from('talent_applications').select('*').eq('talent_id', talentId).order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async getApplication(id) {
+      const { data } = await sb.from('talent_applications').select('*').eq('id', id).maybeSingle();
+      return data || null;
+    },
+    async updateApplication(id, patch) {
+      const { error } = await sb.from('talent_applications').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createProof(row) {
       const { data, error } = await sb.from('talent_post_proofs').insert(row).select('id').maybeSingle();
       if (error) throw new Error(error.message);
@@ -208,6 +237,7 @@ function supabaseStore() {
     async deleteEvent(id) {
       await sb.from('talent_event_needs').delete().eq('event_id', id);
       await sb.from('talent_event_assignments').delete().eq('event_id', id);
+      await sb.from('talent_applications').delete().eq('event_id', id);
       const { error } = await sb.from('talent_events').delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
@@ -235,22 +265,30 @@ function memoryStore() {
     { id: 'camp-bali', name: 'Bali Trail Marathon 2026', is_active: true, created_at: now() },
   ];
   const submissions = [];
-  const accounts = [];
+  const hashPassword = require('./auth').hashPassword;
+  const accounts = [
+    { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now() },
+  ];
   const images = new Map();
   const staff = [{
     id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
-    password_hash: require('./auth').hashPassword('Admin_12345'), created_at: now(),
+    password_hash: hashPassword('Admin_12345'), created_at: now(),
   }];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
-    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now() },
-    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now() },
+    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
+    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now(), mp_sow: null },
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
+    { event_id: 'ev-jakarta', talent_type: 'main_power', headcount: 12 },
     { event_id: 'ev-bali', talent_type: 'kol', headcount: 1 },
+    { event_id: 'ev-bali', talent_type: 'main_power', headcount: 8 },
   ];
   const assignments = [];
+  const applications = [
+    { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
+  ];
   const proofs = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
@@ -287,8 +325,8 @@ function memoryStore() {
     async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
     async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map((a) => ({ id: a.id, talent_type: a.talent_type, name: a.name, login: a.login })); },
-    async createEvent({ name, description, starts_at, ends_at, created_by, needs }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now() };
+    async createEvent({ name, description, starts_at, ends_at, created_by, needs, mp_sow }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -303,6 +341,16 @@ function memoryStore() {
     },
     async listAssignments() { return assignments.slice().reverse(); },
     async listAssignmentsForTalent(talentId) { return assignments.filter((a) => a.talent_id === talentId).slice().reverse(); },
+    async createApplication({ event_id, talent_id, talent_type, role, answers }) {
+      if (applications.find((a) => a.event_id === event_id && a.talent_id === talent_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() };
+      applications.push(rec);
+      return { id: rec.id };
+    },
+    async listApplications() { return applications.slice().reverse(); },
+    async listApplicationsForTalent(talentId) { return applications.filter((a) => a.talent_id === talentId).slice().reverse(); },
+    async getApplication(id) { return applications.find((a) => a.id === id) || null; },
+    async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
     async createProof(row) { const p = { id: 'pf-' + (++seq), ...row, status: row.status || 'pending', created_at: now() }; proofs.push(p); return { id: p.id }; },
     async updateProof(id, patch) { const p = proofs.find((p) => p.id === id); if (p) Object.assign(p, patch); },
     async listProofs() { return proofs.slice().reverse(); },
@@ -313,6 +361,7 @@ function memoryStore() {
       const i = events.findIndex((e) => e.id === id); if (i >= 0) events.splice(i, 1);
       for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
       for (let j = assignments.length - 1; j >= 0; j--) if (assignments[j].event_id === id) assignments.splice(j, 1);
+      for (let j = applications.length - 1; j >= 0; j--) if (applications[j].event_id === id) applications.splice(j, 1);
     },
     async deleteStaff(id) { const i = staff.findIndex((s) => s.id === id); if (i >= 0) staff.splice(i, 1); },
     async getSettings() { return { ...settings }; },
