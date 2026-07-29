@@ -324,7 +324,7 @@ function landingPage(lang) {
     ['★', 'feat.cert'],
   ];
   // 20FIT brand family (proper nouns — identical in both languages).
-  const BRANDS = [['20FIT', 'Gym'], ['20FIT', 'Arena'], ['20FIT', ''], ['20FIT', 'Sport Clinic']];
+  const BRANDS = [['20FIT', ''], ['20FIT', 'Gym'], ['20FIT', 'Arena'], ['20FIT', 'Sport Clinic']];
 
   const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
       <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(icon)}</div>
@@ -417,7 +417,7 @@ a{text-decoration:none}
 .eco-card b{color:var(--red);margin-left:.32em}
 .eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s}
 .eco-card-logo:hover{border-color:var(--red)}
-.eco-logo{height:36px;width:auto;display:block}
+.eco-logo{height:50px;width:auto;display:block}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
 :root[data-theme="light"] .eco-logo-light{display:block}
