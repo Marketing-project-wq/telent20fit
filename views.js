@@ -328,16 +328,27 @@ function landingPage(lang) {
   ];
   // 20FIT brand family (proper nouns — identical in both languages).
   const IG_URL = 'https://www.instagram.com/20fit.id/';
+  // Theme-swapped brand logos: *_DARK shows in dark mode (white artwork), *_LIGHT in light mode (black artwork).
   const GYM_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/02-20FIT-GYM-WHITE-scaled.png';
   const GYM_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/01-20FIT-GYM-BLACK-scaled.png';
-  // Ecosystem brand cards. logoD/logoL = theme-swapped logo images (optional href makes it a link); otherwise name + accent text.
+  const SHOP_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/08-20FIT-SHOP-WHITE-1-scaled.png';
+  const SHOP_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/07-20FIT-SHOP-BLACK-1-scaled.png';
+  const ARENA_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/Logo-20FIT-Arena-white-1.png';
+  const ARENA_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/Logo-20FIT-Arena-black-3.png';
+  const CAFE_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/20fit-cafe-redwhite-1-scaled.png';
+  const CAFE_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/20fit-cafe-2-scaled.png';
+  // 20FIT Group ecosystem brands. To add a brand later, drop in one entry:
+  //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
+  //   text only -> { name, accent }              (placeholder until its logo is ready)
   const BRANDS = [
     { logoD: LOGO_FOOTER, logoL: LOGO_LIGHT, href: IG_URL, name: '20FIT' },
     { logoD: GYM_DARK, logoL: GYM_LIGHT, name: '20FIT Gym' },
-    { name: '20FIT', accent: 'Arena' },
+    { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
+    { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena' },
+    { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe' },
     { name: '20FIT', accent: 'Event' },
+    { name: '20FIT', accent: 'Photo' },
     { name: '20FIT', accent: 'Sport Clinic' },
-    { name: '20FIT', accent: 'Group' },
   ];
 
   const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
@@ -347,7 +358,7 @@ function landingPage(lang) {
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
-      const imgs = `<img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light">`;
+      const imgs = `<img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async">`;
       return b.href
         ? `<a href="${b.href}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
         : `<div class="eco-card eco-card-logo">${imgs}</div>`;
@@ -406,26 +417,28 @@ a{text-decoration:none}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 .hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-.hero-bg i{position:absolute;display:block;border-radius:45% 55% 58% 42%;filter:blur(70px);opacity:.5;will-change:transform}
-.hero-bg .b1{width:66vw;height:52vw;left:-16%;top:-30%;background:radial-gradient(closest-side,#E4121F,transparent);animation:flow1 34s ease-in-out infinite}
-.hero-bg .b2{width:56vw;height:50vw;right:-12%;top:-6%;background:radial-gradient(closest-side,#8f0d15,transparent);animation:flow2 42s ease-in-out infinite}
-.hero-bg .b3{width:60vw;height:44vw;left:24%;bottom:-34%;background:radial-gradient(closest-side,#c20e18,transparent);animation:flow3 50s ease-in-out infinite}
-.hero-bg .b4{width:22vw;height:22vw;left:52%;top:14%;opacity:.14;background:radial-gradient(closest-side,#fff,transparent);animation:flow2 38s ease-in-out infinite reverse}
+.hero-bg i{position:absolute;display:block;border-radius:45% 55% 58% 42%;filter:blur(90px);opacity:.5;will-change:transform}
+.hero-bg .b1{width:70vw;height:56vw;left:-18%;top:-32%;background:radial-gradient(closest-side,#E4121F,transparent);animation:flow1 48s ease-in-out infinite}
+.hero-bg .b2{width:60vw;height:54vw;right:-14%;top:-8%;background:radial-gradient(closest-side,#8f0d15,transparent);animation:flow2 58s ease-in-out infinite}
+.hero-bg .b3{width:64vw;height:48vw;left:22%;bottom:-36%;background:radial-gradient(closest-side,#c20e18,transparent);animation:flow3 66s ease-in-out infinite}
+.hero-bg .b4{width:24vw;height:24vw;left:52%;top:12%;opacity:.13;background:radial-gradient(closest-side,#fff,transparent);animation:flow2 52s ease-in-out infinite reverse}
 .hero-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 28% 42%,transparent 34%,rgba(9,9,12,.55) 100%)}
 :root[data-theme="light"] .hero-bg i{opacity:.18}
 :root[data-theme="light"] .hero-bg .b4{opacity:0}
 :root[data-theme="light"] .hero-bg::after{background:radial-gradient(130% 100% at 28% 42%,transparent 42%,rgba(244,246,249,.6) 100%)}
-@keyframes flow1{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(7%,9%) scale(1.09)}50%{transform:translate(13%,3%) scale(1.16)}75%{transform:translate(5%,11%) scale(1.07)}}
-@keyframes flow2{0%,100%{transform:translate(0,0) scale(1.04)}25%{transform:translate(-9%,7%) scale(1.13)}50%{transform:translate(-5%,15%) scale(1.2)}75%{transform:translate(-11%,5%) scale(1.1)}}
-@keyframes flow3{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(7%,-7%) scale(1.07)}50%{transform:translate(11%,-3%) scale(1.13)}75%{transform:translate(3%,-9%) scale(1.05)}}
-@keyframes riseIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
-.hero-in{opacity:0;animation:riseIn .85s cubic-bezier(.2,.65,.2,1) both}
-.hero-in.d1{animation-delay:.12s}
-.hero-in.d2{animation-delay:.3s}
-.hero-in.d3{animation-delay:.48s}
-.accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 4.5s linear infinite}
+@keyframes flow1{0%,100%{transform:translate(0,0) scale(1)}20%{transform:translate(5%,7%) scale(1.06)}40%{transform:translate(11%,4%) scale(1.12)}60%{transform:translate(8%,10%) scale(1.15)}80%{transform:translate(4%,8%) scale(1.06)}}
+@keyframes flow2{0%,100%{transform:translate(0,0) scale(1.04)}20%{transform:translate(-6%,5%) scale(1.1)}40%{transform:translate(-10%,11%) scale(1.16)}60%{transform:translate(-7%,16%) scale(1.2)}80%{transform:translate(-9%,7%) scale(1.1)}}
+@keyframes flow3{0%,100%{transform:translate(0,0) scale(1)}20%{transform:translate(5%,-5%) scale(1.05)}40%{transform:translate(10%,-3%) scale(1.11)}60%{transform:translate(8%,-8%) scale(1.14)}80%{transform:translate(3%,-6%) scale(1.05)}}
+@keyframes riseIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.hero-in{opacity:0;animation:riseIn 1.1s cubic-bezier(.16,.7,.3,1) both}
+.hero-in.d1{animation-delay:.1s}
+.hero-in.d2{animation-delay:.32s}
+.hero-in.d3{animation-delay:.54s}
+.accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
 @keyframes shimmer{to{background-position:-220% 0}}
-@media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
+.lp-float{animation:floaty 7s ease-in-out infinite;will-change:transform}
+@media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}.lp-float{animation:none}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -433,9 +446,11 @@ a{text-decoration:none}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:26px 10px;font:800 18px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);text-align:center;display:flex;align-items:center;justify-content:center;min-height:92px}
 .eco-card b{color:var(--red);margin-left:.32em}
 .eco-card-logo{padding:14px 10px}
-a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s}
-a.eco-card-logo:hover{border-color:var(--red)}
-.eco-logo{height:66px;width:auto;display:block;max-width:100%;object-fit:contain}
+a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+a.eco-card-logo:hover{border-color:var(--red);transform:translateY(-4px) scale(1.035);box-shadow:0 12px 28px rgba(228,18,31,.18)}
+a.eco-card-logo:active{transform:translateY(-1px) scale(1.01)}
+.eco-logo{height:66px;width:auto;display:block;max-width:100%;object-fit:contain;transition:opacity .2s ease}
+a.eco-card-logo:hover .eco-logo{opacity:.88}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
 :root[data-theme="light"] .eco-logo-light{display:block}
@@ -476,7 +491,7 @@ a.eco-card-logo:hover{border-color:var(--red)}
       </div>
     </div>
     <div style="position:relative">
-      <div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
+      <div class="lp-float" style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
         <img src="https://media.20fit.id/wp-content/uploads/2026/07/Background-BRI-WELNESS-EXPERIENCE.jpeg" alt="Platarox Jakarta Hybrid Race" style="width:100%;height:auto;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
           <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Platarox Jakarta Hybrid Race</div>
