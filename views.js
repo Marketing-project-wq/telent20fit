@@ -358,7 +358,7 @@ function landingPage(lang) {
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
-      const imgs = `<img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async">`;
+      const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"></span>`;
       return b.href
         ? `<a href="${b.href}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
         : `<div class="eco-card eco-card-logo">${imgs}</div>`;
@@ -449,7 +449,8 @@ a{text-decoration:none}
 a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
 a.eco-card-logo:hover{border-color:var(--red);transform:translateY(-4px) scale(1.035);box-shadow:0 12px 28px rgba(228,18,31,.18)}
 a.eco-card-logo:active{transform:translateY(-1px) scale(1.01)}
-.eco-logo{height:66px;width:auto;display:block;max-width:100%;object-fit:contain;transition:opacity .2s ease}
+.eco-logo-wrap{display:flex;align-items:center;justify-content:center;height:52px;width:100%}
+.eco-logo{max-height:100%;max-width:86%;width:auto;height:auto;display:block;object-fit:contain;transition:opacity .2s ease}
 a.eco-card-logo:hover .eco-logo{opacity:.88}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
