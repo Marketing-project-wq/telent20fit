@@ -412,8 +412,7 @@ a{text-decoration:none}
 
   <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 6px">${esc(t('land.featTitle'))}</h2>
-      <p style="color:var(--lp-tx3);margin:0 0 34px;font-size:15px">${esc(t('land.featSub'))}</p>
+      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('land.featTitle'))}</h2>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
