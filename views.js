@@ -330,6 +330,19 @@ function landingPage(lang) {
       <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
     </div>`).join('');
   const ecoHtml = BRANDS.map(([base, div]) => `<div class="eco-card">${esc(base)}${div ? `<b>${esc(div)}</b>` : ''}</div>`).join('');
+  // Footer link columns -> 20FIT corporate site; and official social accounts.
+  const CORP = 'https://20fit.co.id';
+  const footLinks = (items) => items.map((k) => `<a href="${CORP}" target="_blank" rel="noopener">${esc(t(k))}</a>`).join('');
+  const footCol1 = footLinks(['foot.about', 'foot.business', 'foot.sustainability', 'foot.newsroom', 'foot.investor']);
+  const footCol2 = footLinks(['foot.contact', 'foot.careers', 'foot.faq', 'foot.privacy']);
+  const SVG_LI = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3.2 9h3.6v11.5H3.2zM9.3 9h3.45v1.57h.05c.48-.9 1.66-1.85 3.42-1.85 3.66 0 4.33 2.4 4.33 5.53v6.25h-3.6v-5.54c0-1.32-.02-3.02-1.84-3.02-1.84 0-2.12 1.44-2.12 2.92v5.64H9.3z"/></svg>';
+  const SVG_IG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.5"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg>';
+  const SVG_YT = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23 12s0-3.2-.41-4.73a2.5 2.5 0 0 0-1.76-1.77C19.3 5.1 12 5.1 12 5.1s-7.3 0-8.83.4A2.5 2.5 0 0 0 1.4 7.28C1 8.8 1 12 1 12s0 3.2.41 4.73a2.5 2.5 0 0 0 1.76 1.77c1.53.4 8.83.4 8.83.4s7.3 0 8.83-.4a2.5 2.5 0 0 0 1.76-1.77C23 15.2 23 12 23 12z"/><path d="M9.75 15.5l6.25-3.5-6.25-3.5z" fill="var(--lp-bg)"/></svg>';
+  const socialHtml = [
+    ['https://www.linkedin.com/company/20fitgroup', SVG_LI, 'LinkedIn'],
+    ['https://www.instagram.com/20fit.id/', SVG_IG, 'Instagram'],
+    ['https://www.youtube.com/@20fit.indonesia', SVG_YT, 'YouTube'],
+  ].map(([href, svg, name]) => `<a href="${href}" target="_blank" rel="noopener" aria-label="${name}" title="${name}">${svg}</a>`).join('');
 
   const langBtn = (code, label) => {
     const on = code === L;
@@ -376,6 +389,18 @@ a{text-decoration:none}
 .eco-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:30px 16px;font:800 22px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.02em;color:var(--lp-tx);display:flex;align-items:center;justify-content:center;min-height:96px}
 .eco-card b{color:var(--red);margin-left:.32em}
+.foot-main{max-width:1180px;margin:0 auto;padding:64px 28px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:32px;flex-wrap:wrap}
+.foot-col{display:flex;flex-direction:column;gap:13px}
+.foot-col a{color:var(--lp-tx2);font:500 16px/1.1 Barlow,sans-serif;text-decoration:none}
+.foot-col a:hover{color:var(--red)}
+.foot-col-r{align-items:flex-end;text-align:right}
+.foot-social{display:flex;flex-direction:column;gap:18px}
+.foot-social a{color:var(--lp-tx3);display:inline-flex}
+.foot-social a:hover{color:var(--red)}
+.foot-social svg{width:24px;height:24px;display:block}
+.foot-bottom{max-width:1180px;margin:44px auto 0;padding:22px 28px 44px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
+.foot-bottom a{color:var(--lp-tx3)}
+@media(max-width:760px){.foot-main{flex-direction:column;gap:26px;padding-top:48px}.foot-col-r{align-items:flex-start;text-align:left}.foot-social{flex-direction:row}}
 @media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
@@ -427,8 +452,16 @@ a{text-decoration:none}
     <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px">${esc(t('land.ecoTitle'))}</h2>
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px">${esc(t('land.ecoSub'))}</p>
     <div class="eco-grid">${ecoHtml}</div>
-    <div style="margin-top:60px;padding-top:22px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}" style="color:var(--lp-tx3)">${esc(t('land.submit'))}</a> · <a href="/admin/login" style="color:var(--lp-tx3)">Login Admin</a> · <a href="/eo/login" style="color:var(--lp-tx3)">Login EO</a></div>
   </section>
+
+  <footer>
+    <div class="foot-main">
+      <nav class="foot-col">${footCol1}</nav>
+      <nav class="foot-col foot-col-r">${footCol2}</nav>
+      <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
+    </div>
+    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/admin/login">Login Admin</a> · <a href="/eo/login">Login EO</a></div>
+  </footer>
 </div>
 </body></html>`;
 }

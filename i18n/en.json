@@ -279,6 +279,16 @@
   "feat.cert.title": "Digital Certificate",
   "feat.cert.desc": "After each event, you get a digital certificate as proof of experience for your portfolio.",
 
+  "foot.about": "About Us",
+  "foot.business": "Business",
+  "foot.sustainability": "Sustainability",
+  "foot.newsroom": "Newsroom",
+  "foot.investor": "Investor",
+  "foot.contact": "Contact Us",
+  "foot.careers": "Careers",
+  "foot.faq": "FAQ",
+  "foot.privacy": "Privacy Policy",
+
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy."
 }
