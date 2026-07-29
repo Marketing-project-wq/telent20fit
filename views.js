@@ -324,19 +324,33 @@ function landingPage(lang) {
     ['★', 'feat.cert'],
   ];
   // 20FIT brand family (proper nouns — identical in both languages).
-  const BRANDS = [['20FIT', ''], ['20FIT', 'Gym'], ['20FIT', 'Arena'], ['20FIT', 'Event'], ['20FIT', 'Sport Clinic']];
+  const IG_URL = 'https://www.instagram.com/20fit.id/';
+  const GYM_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/02-20FIT-GYM-WHITE-scaled.png';
+  const GYM_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/01-20FIT-GYM-BLACK-scaled.png';
+  // Ecosystem brand cards. logoD/logoL = theme-swapped logo images (optional href makes it a link); otherwise name + accent text.
+  const BRANDS = [
+    { logoD: LOGO_FOOTER, logoL: LOGO_LIGHT, href: IG_URL, name: '20FIT' },
+    { logoD: GYM_DARK, logoL: GYM_LIGHT, name: '20FIT Gym' },
+    { name: '20FIT', accent: 'Arena' },
+    { name: '20FIT', accent: 'Event' },
+    { name: '20FIT', accent: 'Sport Clinic' },
+    { name: '20FIT', accent: 'Group' },
+  ];
 
   const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
       <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(icon)}</div>
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
       <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
     </div>`).join('');
-  const IG_URL = 'https://www.instagram.com/20fit.id/';
-  // Brand cards; the flagship "20FIT" card shows the logo and links to Instagram.
-  const ecoHtml = BRANDS.map(([base, div]) => div
-    ? `<div class="eco-card">${esc(base)}<b>${esc(div)}</b></div>`
-    : `<a href="${IG_URL}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="20FIT · Instagram" title="20FIT · Instagram"><img src="${LOGO_FOOTER}" alt="20FIT" class="eco-logo eco-logo-dark"><img src="${LOGO_LIGHT}" alt="20FIT" class="eco-logo eco-logo-light"></a>`
-  ).join('');
+  const ecoHtml = BRANDS.map((b) => {
+    if (b.logoD) {
+      const imgs = `<img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light">`;
+      return b.href
+        ? `<a href="${b.href}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
+        : `<div class="eco-card eco-card-logo">${imgs}</div>`;
+    }
+    return `<div class="eco-card">${esc(b.name)}<b>${esc(b.accent)}</b></div>`;
+  }).join('');
   // Footer: social icons row.
   const SVG_LI = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3.2 9h3.6v11.5H3.2zM9.3 9h3.45v1.57h.05c.48-.9 1.66-1.85 3.42-1.85 3.66 0 4.33 2.4 4.33 5.53v6.25h-3.6v-5.54c0-1.32-.02-3.02-1.84-3.02-1.84 0-2.12 1.44-2.12 2.92v5.64H9.3z"/></svg>';
   const SVG_IG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.5"/><circle cx="12" cy="12" r="4.1"/><circle cx="17.6" cy="6.4" r="1.15" fill="currentColor" stroke="none"/></svg>';
@@ -412,12 +426,13 @@ a{text-decoration:none}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.eco-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+.eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:26px 10px;font:800 18px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);text-align:center;display:flex;align-items:center;justify-content:center;min-height:92px}
 .eco-card b{color:var(--red);margin-left:.32em}
-.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s;padding:16px}
-.eco-card-logo:hover{border-color:var(--red)}
-.eco-logo{height:66px;width:auto;display:block}
+.eco-card-logo{padding:14px 10px}
+a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s}
+a.eco-card-logo:hover{border-color:var(--red)}
+.eco-logo{height:66px;width:auto;display:block;max-width:100%;object-fit:contain}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
 :root[data-theme="light"] .eco-logo-light{display:block}
@@ -459,7 +474,7 @@ a{text-decoration:none}
     </div>
     <div style="position:relative">
       <div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
-        <img src="https://media.20fit.id/wp-content/uploads/2026/07/Background-BRI-WELNESS-EXPERIENCE.jpeg" alt="Platarox Jakarta Hybrid Race" style="width:100%;height:200px;object-fit:cover;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
+        <img src="https://media.20fit.id/wp-content/uploads/2026/07/Background-BRI-WELNESS-EXPERIENCE.jpeg" alt="Platarox Jakarta Hybrid Race" style="width:100%;height:auto;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
           <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Platarox Jakarta Hybrid Race</div>
           <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t('land.slot'))}</span>
