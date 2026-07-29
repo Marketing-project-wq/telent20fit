@@ -415,9 +415,9 @@ a{text-decoration:none}
 .eco-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:30px 16px;font:800 22px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.02em;color:var(--lp-tx);display:flex;align-items:center;justify-content:center;min-height:96px}
 .eco-card b{color:var(--red);margin-left:.32em}
-.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s}
+.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .15s;padding:16px}
 .eco-card-logo:hover{border-color:var(--red)}
-.eco-logo{height:50px;width:auto;display:block}
+.eco-logo{height:66px;width:auto;display:block}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
 :root[data-theme="light"] .eco-logo-light{display:block}
