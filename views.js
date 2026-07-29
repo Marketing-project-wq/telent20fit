@@ -321,12 +321,15 @@ function landingPage(lang) {
     ['3', 'feat.roles'],
     ['★', 'feat.cert'],
   ];
+  // 20FIT brand family (proper nouns — identical in both languages).
+  const BRANDS = [['20FIT', 'Gym'], ['20FIT', 'Arena'], ['20FIT', ''], ['20FIT', 'Sport Clinic']];
 
   const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
       <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(icon)}</div>
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
       <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
     </div>`).join('');
+  const ecoHtml = BRANDS.map(([base, div]) => `<div class="eco-card">${esc(base)}${div ? `<b>${esc(div)}</b>` : ''}</div>`).join('');
 
   const langBtn = (code, label) => {
     const on = code === L;
@@ -370,7 +373,10 @@ a{text-decoration:none}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}}
+.eco-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:30px 16px;font:800 22px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.02em;color:var(--lp-tx);display:flex;align-items:center;justify-content:center;min-height:96px}
+.eco-card b{color:var(--red);margin-left:.32em}
+@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
 <body>
@@ -417,10 +423,10 @@ a{text-decoration:none}
     </div>
   </section>
 
-  <section style="max-width:900px;margin:0 auto;padding:64px 28px;text-align:center">
-    <h2 style="font:800 clamp(30px,4.5vw,48px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 16px">${esc(t('land.finalCta'))}</h2>
-    <p style="color:var(--lp-tx3);font-size:16px;margin:0 0 26px">${esc(t('land.finalCtaSub'))}</p>
-    <a href="/register${q}" style="display:inline-block;padding:16px 36px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
+  <section style="max-width:1180px;margin:0 auto;padding:64px 28px;text-align:center">
+    <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px">${esc(t('land.ecoTitle'))}</h2>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px">${esc(t('land.ecoSub'))}</p>
+    <div class="eco-grid">${ecoHtml}</div>
     <div style="margin-top:60px;padding-top:22px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}" style="color:var(--lp-tx3)">${esc(t('land.submit'))}</a> · <a href="/admin/login" style="color:var(--lp-tx3)">Login Admin</a> · <a href="/eo/login" style="color:var(--lp-tx3)">Login EO</a></div>
   </section>
 </div>
