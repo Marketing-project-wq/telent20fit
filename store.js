@@ -142,6 +142,20 @@ function supabaseStore() {
       if (list.length) { const r = await sb.from('talent_event_needs').insert(list); if (r.error) throw new Error(r.error.message); }
       return data;
     },
+    async updateEvent(id, patch) {
+      patch = patch || {};
+      const row = {};
+      if (patch.name !== undefined) row.name = patch.name;
+      if (patch.starts_at !== undefined) row.starts_at = patch.starts_at || null;
+      if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
+      if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
+      if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
+      if (patch.needs) {
+        await sb.from('talent_event_needs').delete().eq('event_id', id);
+        const list = patch.needs.filter((n) => n && n.talent_type).map((n) => ({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
+        if (list.length) { const r = await sb.from('talent_event_needs').insert(list); if (r.error) throw new Error(r.error.message); }
+      }
+    },
     async listEvents() {
       const [ev, nd] = await Promise.all([
         sb.from('talent_events').select('*').order('created_at', { ascending: false }),
@@ -330,6 +344,19 @@ function memoryStore() {
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
+    },
+    async updateEvent(id, patch) {
+      patch = patch || {};
+      const ev = events.find((e) => e.id === id);
+      if (!ev) return;
+      if (patch.name !== undefined) ev.name = patch.name;
+      if (patch.starts_at !== undefined) ev.starts_at = patch.starts_at || null;
+      if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;
+      if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;
+      if (patch.needs) {
+        for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
+        patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
+      }
     },
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },
     async listActiveEvents() { return events.filter((e) => e.is_active).map((e) => ({ id: e.id, name: e.name })); },
