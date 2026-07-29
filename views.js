@@ -376,14 +376,15 @@ function landingPage(lang) {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
-.lp-logo{filter:brightness(0) invert(1)}
-:root[data-theme="light"] .lp-logo{filter:none}
-.lp-head{position:relative;max-width:1180px;margin:0 auto;padding:28px 28px 8px;display:flex;justify-content:center;align-items:center;min-height:124px}
-.lp-toggles{position:absolute;top:24px;right:28px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lp-logo{display:block;height:120px;width:auto}
+.lp-head{max-width:1180px;margin:0 auto;padding:22px 28px 8px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+.lp-toggles{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lp-submit{padding:11px 18px;background:transparent;color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 14px/1 Barlow,sans-serif;white-space:nowrap}
+.lp-submit:hover{background:var(--lp-chip)}
 .theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
-@media(max-width:760px){.lp-head{flex-direction:column;gap:16px;min-height:0}.lp-toggles{position:static;justify-content:center}}
+@media(max-width:760px){.lp-head{gap:14px}.lp-logo{height:86px}.lp-toggles{width:100%;justify-content:flex-start}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -393,8 +394,9 @@ a{text-decoration:none}
 <body>
 <div style="min-height:100vh">
   <header class="lp-head">
-    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo" style="height:96px;width:auto;display:block">
+    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo">
     <div class="lp-toggles">
+      <a href="/submit${q}" class="lp-submit">${esc(t.submit)}</a>
       ${toggle}
       ${themeToggle()}
     </div>
