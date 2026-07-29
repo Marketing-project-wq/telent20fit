@@ -649,6 +649,44 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   } catch (e) { next(e); }
 });
 
+// Aplikasi MP (super admin only): review Main Power event applications.
+app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
+    const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const applications = apps.map((a) => {
+      const tt = talentById.get(a.talent_id) || {};
+      return { ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null };
+    });
+    res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Super admin: approve (optionally assign station) or reject an application.
+app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const action = String(req.body.action || '');
+    if (action !== 'approve' && action !== 'reject') return res.redirect('/admin/applications');
+    const patch = { reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() };
+    const note = String(req.body.note || '').trim().slice(0, 300);
+    patch.note = note || null;
+    if (action === 'approve') {
+      patch.status = 'approved';
+      patch.station = String(req.body.station || '').trim().slice(0, 120) || null;
+      patch.station_loc = String(req.body.station_loc || '').trim().slice(0, 120) || null;
+    } else {
+      patch.status = 'rejected';
+    }
+    await st.updateApplication(req.params.id, patch);
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
 // Super admin only: create an Event Organizer account.
 app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
@@ -676,9 +714,10 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     const ends_at = String(req.body.ends_at || '').trim() || null;
     const needs = [];
     if (req.body.need_kol) needs.push({ talent_type: 'kol' });
-    if (req.body.need_main_power) needs.push({ talent_type: 'main_power' });
+    if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: Math.max(1, parseInt(req.body.mp_headcount, 10) || 1) });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
-    if (name) await st.createEvent({ name, starts_at, ends_at, created_by: req.staff.id, needs });
+    const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
+    if (name) await st.createEvent({ name, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
