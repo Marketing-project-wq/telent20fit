@@ -340,13 +340,14 @@ function landingPage(lang) {
   // 20FIT Group ecosystem brands. To add a brand later, drop in one entry:
   //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
   //   text only -> { name, accent }              (placeholder until its logo is ready)
-  // Optional `mw` caps that one logo's width (for tightly-cropped artwork that
-  // renders larger than the rest); omit to use the default size.
+  // Per-logo size tweaks for artwork whose built-in padding makes it render
+  // off from the rest: `mw` caps width (shrink a tightly-cropped logo),
+  // `scale` enlarges a heavily-padded one. Both optional.
   const BRANDS = [
     { logoD: LOGO_FOOTER, logoL: LOGO_LIGHT, href: IG_URL, name: '20FIT' },
     { logoD: GYM_DARK, logoL: GYM_LIGHT, name: '20FIT Gym' },
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
-    { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena' },
+    { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena', scale: 1.5 },
     { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe', mw: '56%' },
     { name: '20FIT', accent: 'Event' },
     { name: '20FIT', accent: 'Photo' },
@@ -360,7 +361,7 @@ function landingPage(lang) {
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
-      const st = b.mw ? ` style="max-width:${b.mw}"` : '';
+      const st = (b.mw || b.scale) ? ` style="${b.mw ? `max-width:${b.mw};` : ''}${b.scale ? `transform:scale(${b.scale});` : ''}"` : '';
       const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"${st}><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"${st}></span>`;
       return b.href
         ? `<a href="${b.href}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
