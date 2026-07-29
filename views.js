@@ -256,6 +256,7 @@ const NAV_ICON = {
   manage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="15" cy="7" r="2.4" fill="var(--panel)"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="17" r="2.4" fill="var(--panel)"/></svg>',
   analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg>',
   overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>',
+  applications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
 };
 
 function navLink(href, key, active, icon, label) {
@@ -281,6 +282,7 @@ function appLayout({ title, body, role, active, user, lang }) {
       + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
       + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
       + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
+      + (role === 'super_admin' ? navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications')) : '')
       + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
     : navLink('/kol', 'kol', active, 'proofs', t('nav.proofs'));
 
@@ -1026,6 +1028,13 @@ function mpStatusBadge(status, lang) {
     : status === 'rejected' ? 'background:var(--err-soft);color:var(--err)'
       : 'background:var(--warn-soft);color:var(--warn)';
   return `<span class="pill" style="${style}">${esc(tr(L, 'mp.status.' + (status || 'pending')))}</span>`;
+}
+
+/** Render a stored answer value (yes/no/partly/depends) as a localized label. */
+function mpAnswerLabel(val, lang) {
+  const L = normLang(lang);
+  const map = { yes: 'mp.opt.yes', no: 'mp.opt.no', partly: 'mp.opt.partly', depends: 'mp.opt.depends' };
+  return map[val] ? tr(L, map[val]) : (val || '—');
 }
 
 /**
@@ -1826,7 +1835,9 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.mpQuota')}<input type="number" name="mp_headcount" min="1" value="1" style="width:90px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
+      <textarea name="mp_sow" rows="2" maxlength="2000" placeholder="${t('manage.mpSow')}" style="flex-basis:100%;width:100%"></textarea>
       <button class="btn btn-sm">${t('btn.createEvent')}</button>
     </form>
     <div class="table-wrap"><table>
@@ -1890,6 +1901,66 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
+/**
+ * Super Admin review of Main Power applications: applicant + jobdesk + answers,
+ * with approve (optionally assigning a station) / reject actions. Approved
+ * applications keep a small form to set or update their station later.
+ */
+function adminApplications({ staff, applications, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  applications = applications || [];
+  const QKEYS = ['q1', 'q2', 'q3', 'q4'];
+
+  const cards = applications.map((a) => {
+    const ans = a.answers || {};
+    const answerRows = QKEYS.map((q) => {
+      const raw = ans[q];
+      if (raw === undefined || raw === null || raw === '') return '';
+      const val = q === 'q3' ? esc(String(raw)) : esc(mpAnswerLabel(String(raw), L));
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="font-size:12.5px;color:var(--muted)">${t('mp.apply.' + q)}</div>
+        <div style="font-size:14px;margin-top:2px">${val}</div></div>`;
+    }).join('');
+
+    const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<input type="text" name="station" maxlength="120" value="${esc(a.station || '')}"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
+        <input type="hidden" name="note" value="${esc(a.note || '')}">
+        <button class="btn btn-sm" name="action" value="approve">${a.status === 'approved' ? t('mpr.updateStation') : t('mpr.approve')}</button>
+        ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
+      </form>`;
+
+    const stationLine = (a.status === 'approved')
+      ? `<div style="margin-top:8px;font-size:13px">📍 <b>${a.station ? esc(a.station) + (a.station_loc ? ' · ' + esc(a.station_loc) : '') : `<span class="muted" style="font-weight:400">${t('mpr.noStation')}</span>`}</b></div>` : '';
+
+    return `<div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:0">
+          <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
+          <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')} <span class="muted">·</span> <span class="tag">${esc(a.role || '—')}</span></div>
+        </div>
+        ${mpStatusBadge(a.status, L)}
+      </div>
+      ${stationLine}
+      <div style="margin-top:12px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
+        ${answerRows || `<div class="muted" style="font-size:13px;margin-top:6px">—</div>`}
+      </div>
+      ${stationForm}
+    </div>`;
+  }).join('');
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('mpr.title'), L)}
+  <p class="sub">${t('mpr.sub')}</p>
+  <p class="muted" style="font-size:13px;margin-top:6px">${t('mpr.count', { n: applications.length })}</p>
+  ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
+</div>`;
+  return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+}
+
 function performancePage(board, totalSubs) {
   const rows = board.length ? board.map((e, i) => `<tr>
     <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
@@ -1946,6 +2017,6 @@ module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminApplications, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };

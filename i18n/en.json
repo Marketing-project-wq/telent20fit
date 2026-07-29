@@ -335,6 +335,26 @@
   "mp.err.roleRequired": "Please choose a jobdesk first.",
   "mp.err.sowRequired": "You must agree to the SOW to continue.",
 
+  "nav.applications": "MP Applications",
+  "mpr.title": "Main Power Applications",
+  "mpr.sub": "Review Main Power applications, approve or reject, then assign a station.",
+  "mpr.empty": "No Main Power applications yet.",
+  "mpr.count": "{n} applications",
+  "mpr.appliedOn": "Applied {date}",
+  "mpr.answersTitle": "Application answers",
+  "mpr.contact": "Contact",
+  "mpr.stationName": "Station Name",
+  "mpr.stationLoc": "Location / Zone",
+  "mpr.noteLabel": "Note to applicant (optional)",
+  "mpr.approve": "Approve",
+  "mpr.reject": "Reject",
+  "mpr.updateStation": "Save Station",
+  "mpr.reviewedBy": "Reviewed",
+  "mpr.noStation": "No station yet",
+  "confirm.rejectApp": "Reject this application?",
+  "manage.mpQuota": "MP Quota",
+  "manage.mpSow": "Short Main Power SOW (optional)",
+
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy."
 }
