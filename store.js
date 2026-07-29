@@ -101,6 +101,22 @@ function supabaseStore() {
       const { data } = await sb.from('talent_accounts').select('id,talent_type,name,login').eq('id', id).maybeSingle();
       return data || null;
     },
+    async setTalentPassword(talentId, passwordHash) {
+      const { error } = await sb.from('talent_accounts').update({ password_hash: passwordHash }).eq('id', talentId);
+      if (error) throw new Error(error.message);
+    },
+    async createPasswordReset({ talent_id, token_hash, expires_at }) {
+      const { error } = await sb.from('talent_password_resets').insert({ talent_id, token_hash, expires_at });
+      if (error) throw new Error(error.message);
+    },
+    async getPasswordReset(tokenHash) {
+      const { data } = await sb.from('talent_password_resets').select('id,talent_id,expires_at,used_at').eq('token_hash', tokenHash).maybeSingle();
+      return data || null;
+    },
+    async markPasswordResetUsed(id) {
+      const { error } = await sb.from('talent_password_resets').update({ used_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createStaff(acc) {
       const { data, error } = await sb.from('staff_accounts').insert(acc).select('id,role,name,login').maybeSingle();
       if (error) {
@@ -303,6 +319,7 @@ function memoryStore() {
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
+  const passwordResets = [];
   const proofs = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
@@ -329,6 +346,10 @@ function memoryStore() {
     },
     async findAccount(talentType, login) { return accounts.find((a) => a.talent_type === talentType && a.login === login) || null; },
     async getAccountById(id) { const a = accounts.find((a) => a.id === id); return a ? { id: a.id, talent_type: a.talent_type, name: a.name, login: a.login } : null; },
+    async setTalentPassword(talentId, passwordHash) { const a = accounts.find((a) => a.id === talentId); if (a) a.password_hash = passwordHash; },
+    async createPasswordReset({ talent_id, token_hash, expires_at }) { passwordResets.push({ id: 'pr-' + (++seq), talent_id, token_hash, expires_at, used_at: null, created_at: now() }); },
+    async getPasswordReset(tokenHash) { const r = passwordResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, talent_id: r.talent_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
+    async markPasswordResetUsed(id) { const r = passwordResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async createStaff(acc) {
       if (staff.find((s) => s.login === acc.login)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
       const rec = { id: 'staff-' + (++seq), ...acc, created_at: now() };

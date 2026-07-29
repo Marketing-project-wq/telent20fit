@@ -33,6 +33,7 @@ const V = require('./views');
 const { store, MODE } = require('./store');
 const auth = require('./auth');
 const llm = require('./llm');
+const mailer = require('./mailer');
 const i18n = require('./i18n');
 
 const PORT = process.env.PORT || 3000;
@@ -459,6 +460,81 @@ app.post('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (
       throw e;
     }
     res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// -------------------------------------------------------- password reset ----
+// Self-service "forgot password": request a reset link (per talent type), then
+// set a new password via a one-time, 1-hour token delivered by email. The
+// request response is always the same (no account enumeration).
+
+function forgotGet(type) {
+  return (req, res) => res.send(V.forgotPassword(type, { lang: req.lang }));
+}
+function forgotPost(type) {
+  return async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const login = String(req.body.login || '').trim().toLowerCase();
+      if (login) {
+        const account = await st.findAccount(type, login);
+        if (account) {
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+          await st.createPasswordReset({ talent_id: account.id, token_hash: tokenHash, expires_at: expiresAt });
+          const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+          const link = base + '/reset-password?token=' + token;
+          try { await mailer.sendResetEmail({ to: account.login, name: account.name, link, lang: req.lang }); }
+          catch (e) { console.error('[reset-mail]', (e && e.message) || e); }
+        }
+      }
+      res.send(V.forgotPasswordSent({ type, lang: req.lang }));
+    } catch (e) { next(e); }
+  };
+}
+app.get('/kol/forgot-password', forgotGet('kol'));
+app.post('/kol/forgot-password', forgotPost('kol'));
+app.get('/main-power/forgot-password', forgotGet('main_power'));
+app.post('/main-power/forgot-password', forgotPost('main_power'));
+
+async function validResetToken(st, token) {
+  if (!token || token.length < 32) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const r = await st.getPasswordReset(tokenHash);
+  if (!r || r.used_at) return null;
+  if (new Date(r.expires_at).getTime() < Date.now()) return null;
+  return r;
+}
+
+app.get('/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.query.token || '');
+    const reset = await validResetToken(st, token);
+    res.send(V.resetPassword({ token, valid: !!reset, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.body.token || '');
+    const reset = await validResetToken(st, token);
+    if (!reset) return res.status(400).send(V.resetPassword({ token, valid: false, lang: req.lang }));
+    const password = String(req.body.password || '');
+    const confirm = String(req.body.confirm || '');
+    const errors = [];
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    if (password !== confirm) errors.push(req.t('err.passwordMismatch'));
+    if (errors.length) return res.status(400).send(V.resetPassword({ token, valid: true, errors, lang: req.lang }));
+    await st.setTalentPassword(reset.talent_id, auth.hashPassword(password));
+    await st.markPasswordResetUsed(reset.id);
+    const account = await st.getAccountById(reset.talent_id);
+    res.send(V.resetPasswordDone({ type: account ? account.talent_type : 'kol', lang: req.lang }));
   } catch (e) { next(e); }
 });
 
