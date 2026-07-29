@@ -256,6 +256,10 @@
   "dash.perEvent": "Analisa per Event",
   "dash.kolCount": "KOL",
 
+  "hero.headlineLead": "SUKA DUNIA EVENT?",
+  "hero.headlineAccent": "YUK GABUNG DI 20FIT.",
+  "hero.subheadline": "Jadi KOL, fotografer, atau manpower buat berbagai event olahraga — daftar sekali, kerjaan langsung ada.",
+
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."
 }
