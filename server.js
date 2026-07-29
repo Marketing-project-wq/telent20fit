@@ -326,6 +326,142 @@ app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), 
   } catch (e) { next(e); }
 });
 
+// ------------------------------------------------------------ Main Power ----
+// Main Power talents self-apply to events that open MP slots. An application
+// (jobdesk + SOW agreement + answers) is reviewed by the Super Admin.
+
+// Active events opening MP slots, each with remaining slots (quota − approved).
+function mpOpenEvents(events, allApps) {
+  const approvedByEvent = new Map();
+  (allApps || []).forEach((a) => {
+    if (a.talent_type === 'main_power' && a.status === 'approved') {
+      approvedByEvent.set(a.event_id, (approvedByEvent.get(a.event_id) || 0) + 1);
+    }
+  });
+  return (events || [])
+    .filter((e) => e.is_active && (e.needs || []).some((n) => n.talent_type === 'main_power'))
+    .map((e) => {
+      const need = (e.needs || []).find((n) => n.talent_type === 'main_power');
+      const headcount = (need && need.headcount) || 0;
+      return { id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, mp_sow: e.mp_sow, headcount, slotsLeft: Math.max(0, headcount - (approvedByEvent.get(e.id) || 0)) };
+    });
+}
+
+app.get('/main-power/register', (req, res) => {
+  const t = auth.currentTalent(req);
+  if (t && t.type === 'main_power') return res.redirect('/main-power');
+  res.send(V.talentRegister('main_power', { lang: req.lang }));
+});
+
+app.post('/main-power/register', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const name = String(req.body.name || '').trim();
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+
+    const errors = [];
+    if (!name) errors.push(req.t('err.nameRequired'));
+    if (!login) errors.push(req.t('err.loginRequired'));
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    if (errors.length) return res.status(400).send(V.talentRegister('main_power', { errors, values: { name, login }, lang: req.lang }));
+
+    let account;
+    try {
+      account = await st.createAccount({ talent_type: 'main_power', name, login, password_hash: auth.hashPassword(password) });
+    } catch (e) {
+      if (e.code === 'DUP') return res.status(400).send(V.talentRegister('main_power', { errors: [req.t('err.dupAccount')], values: { name, login }, lang: req.lang }));
+      throw e;
+    }
+    auth.setSession(res, account);
+    res.redirect('/main-power');
+  } catch (e) { next(e); }
+});
+
+app.get('/main-power/login', (req, res) => {
+  const t = auth.currentTalent(req);
+  if (t && t.type === 'main_power') return res.redirect('/main-power');
+  res.send(V.talentLogin('main_power', { lang: req.lang }));
+});
+
+app.post('/main-power/login', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const account = await st.findAccount('main_power', login);
+    if (!account || !auth.verifyPassword(password, account.password_hash)) {
+      return res.status(401).send(V.talentLogin('main_power', { errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+    }
+    auth.setSession(res, account);
+    res.redirect('/main-power');
+  } catch (e) { next(e); }
+});
+
+app.post('/main-power/logout', (req, res) => { auth.clearSession(res); res.redirect('/main-power/login'); });
+
+app.get('/main-power', auth.requireTalent('main_power'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [events, allApps, myApps] = await Promise.all([
+      st.listEvents(), st.listApplications(), st.listApplicationsForTalent(req.talent.id),
+    ]);
+    const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const appliedEventIds = new Set(myApps.map((a) => a.event_id));
+    const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
+    const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
+    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+  } catch (e) { next(e); }
+});
+
+app.get('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [events, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
+    const ev = events.find((e) => e.id === req.params.eventId);
+    const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
+    if (!isOpen || myApps.some((a) => a.event_id === req.params.eventId)) return res.redirect('/main-power?lang=' + req.lang);
+    res.send(V.mainPowerApply({ talent: req.talent, event: ev, customSow: ev.mp_sow, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const events = await st.listEvents();
+    const ev = events.find((e) => e.id === req.params.eventId);
+    const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
+    if (!isOpen) return res.redirect('/main-power?lang=' + req.lang);
+
+    const role = String(req.body.role || '').trim();
+    const agree = req.body.agree === '1' || req.body.agree === 'on';
+    const answers = {
+      q1: String(req.body.q1 || '').slice(0, 24),
+      q2: String(req.body.q2 || '').slice(0, 24),
+      q3: String(req.body.q3 || '').trim().slice(0, 1000),
+      q4: String(req.body.q4 || '').slice(0, 24),
+    };
+    const errors = [];
+    if (!V.MP_JOBDESKS.includes(role)) errors.push(req.t('mp.err.roleRequired'));
+    if (!agree) errors.push(req.t('mp.err.sowRequired'));
+    if (errors.length) {
+      return res.status(400).send(V.mainPowerApply({ talent: req.talent, event: ev, customSow: ev.mp_sow, lang: req.lang, errors, values: { role, agree, ...answers } }));
+    }
+    try {
+      await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
+    } catch (e) {
+      if (e.code === 'DUP') return res.redirect('/main-power?lang=' + req.lang); // already applied
+      throw e;
+    }
+    res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 // ----------------------------------------------------------------- admin ----
 
 app.get('/admin/login', (req, res) => {

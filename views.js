@@ -518,7 +518,7 @@ function talentPicker(mode, lang) {
   }[L];
   const cats = [
     { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
-    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: false },
+    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: true },
     { type: 'fotografer', tag: 'FG', name: 'Fotografer', id: 'Dokumentasi & portofolio foto.', en: 'Documentation & photo portfolio.', active: false },
   ];
   const q = `?lang=${L}`;
@@ -1012,6 +1012,196 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   ${proofCards}
 </div>`;
   return layout({ title: t('kol.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// ------------------------------------------------------------ Main Power ----
+
+// The four on-ground jobdesks a Main Power talent can apply for.
+const MP_JOBDESKS = ['Judges', 'Marshal', 'Drop Bag', 'Registrasi'];
+
+/** Application status badge: pending (warn) / approved (ok) / rejected (err). */
+function mpStatusBadge(status, lang) {
+  const L = normLang(lang);
+  const style = status === 'approved' ? 'background:var(--ok-soft);color:var(--ok)'
+    : status === 'rejected' ? 'background:var(--err-soft);color:var(--err)'
+      : 'background:var(--warn-soft);color:var(--warn)';
+  return `<span class="pill" style="${style}">${esc(tr(L, 'mp.status.' + (status || 'pending')))}</span>`;
+}
+
+/**
+ * Main Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
+ * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
+ */
+function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const openCards = (openEvents && openEvents.length) ? openEvents.map((e) => {
+    const full = e.slotsLeft <= 0;
+    const slot = full
+      ? `<span class="dl-when dl-late">${t('mp.slotFull')}</span>`
+      : `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${t('mp.slotLeft', { n: e.slotsLeft })}</span>`;
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    return `<div class="dl-item" style="align-items:flex-start">
+      <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}<div style="margin-top:8px">${slot}</div></div>
+      ${full ? '' : `<a href="/main-power/apply/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
+    </div>`;
+  }).join('') : `<p class="muted" style="margin-top:12px">${t('mp.noOpenEvents')}</p>`;
+
+  const appCards = (myApps && myApps.length) ? myApps.map((a) => {
+    const station = (a.status === 'approved' && a.station)
+      ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${t('mp.station')}: <b style="color:var(--ink)">${esc(a.station)}${a.station_loc ? ' · ' + esc(a.station_loc) : ''}</b></div>` : '';
+    const note = (a.status === 'rejected' && a.note) ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(a.note)}</div>` : '';
+    return `<div class="dl-item" style="align-items:flex-start">
+      <div style="min-width:0"><b>${esc(a.event_name || '—')}</b>
+        <div class="muted" style="font-size:12.5px;margin-top:3px">${t('mp.role')}: ${esc(a.role || '—')}</div>${station}${note}</div>
+      ${mpStatusBadge(a.status, L)}
+    </div>`;
+  }).join('') : `<p class="muted" style="margin-top:12px">${t('mp.noApps')}</p>`;
+
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <div style="display:flex;gap:10px;align-items:center">
+      ${toggles(L)}
+      <form method="post" action="/main-power/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
+    </div>
+  </div>
+  <h1>${t('mp.dash.title')}</h1>
+  <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
+  ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
+  <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
+
+  <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
+  <p class="muted" style="font-size:13px;margin:6px 0 0">${t('mp.newEventsSub')}</p>
+  <div class="dl-list">${openCards}</div>
+
+  <div class="section-head"><h2 style="margin:0">${t('mp.myApps')}</h2></div>
+  <div class="dl-list">${appCards}</div>
+</div>`;
+  return layout({ title: t('mp.dash.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+/**
+ * Main Power apply page: a 2-step form (SOW + jobdesk + agree, then the four
+ * application questions). A small script reveals step 2; with JS off both steps
+ * are visible and still submit. Step 3 ("Selesai") is the server-rendered
+ * confirmation after POST.
+ */
+function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, values }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const v = values || {};
+  jobdesks = jobdesks || MP_JOBDESKS;
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+
+  const stepDot = (n, label, active, id) => `<div style="display:flex;align-items:center;gap:8px">
+      <span ${id ? `id="${id}c"` : ''} style="width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;background:${active ? 'var(--red)' : 'var(--card2)'};color:${active ? '#fff' : 'var(--muted)'}">${n}</span>
+      <span ${id ? `id="${id}l"` : ''} style="font-size:13px;font-weight:700;color:${active ? 'var(--ink)' : 'var(--muted)'}">${esc(label)}</span></div>`;
+  const stepBar = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 20px">
+      ${stepDot(1, t('mp.apply.step1'), true)}<span style="color:var(--line)">—</span>
+      ${stepDot(2, t('mp.apply.step2'), false, 'mpDot2')}<span style="color:var(--line)">—</span>
+      ${stepDot(3, t('mp.apply.step3'), false)}</div>`;
+
+  const sowRows = [
+    { k: t('mp.sow.taskK'), v: t('mp.sow.taskV') },
+    { k: t('mp.sow.durK'), v: t('mp.sow.durV') },
+    { k: t('mp.sow.benK'), v: t('mp.sow.benV') },
+    { k: t('mp.sow.locK'), v: t('mp.sow.locV') },
+    { k: t('mp.sow.dressK'), v: t('mp.sow.dressV') },
+  ];
+  const sowHtml = sowRows.map((r) => `<div style="padding:11px 0;border-bottom:1px solid var(--line)">
+      <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(r.k)}</div>
+      <div style="margin-top:4px;font-size:14px">${esc(r.v)}</div></div>`).join('');
+  const customSowHtml = customSow
+    ? `<div class="banner banner-warn" style="margin:0 0 14px"><b>${t('mp.apply.customSowTitle')}</b><div style="margin-top:6px;white-space:pre-wrap">${esc(customSow)}</div></div>`
+    : '';
+  const roleOpts = `<option value="" disabled ${v.role ? '' : 'selected'}>${t('mp.apply.rolePick')}</option>`
+    + jobdesks.map((j) => `<option value="${esc(j)}"${v.role === j ? ' selected' : ''}>${esc(j)}</option>`).join('');
+
+  const OPT = {
+    yn: [['yes', 'mp.opt.yes'], ['no', 'mp.opt.no']],
+    yns: [['yes', 'mp.opt.yes'], ['no', 'mp.opt.no'], ['partly', 'mp.opt.partly']],
+    ynd: [['yes', 'mp.opt.yes'], ['no', 'mp.opt.no'], ['depends', 'mp.opt.depends']],
+  };
+  const radios = (name, pairs) => `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">`
+    + pairs.map(([val, key], i) => `<label style="flex:1;min-width:110px;display:flex;align-items:center;gap:8px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;cursor:pointer;font-size:14px">
+      <input type="radio" name="${name}" value="${val}" ${v[name] === val || (!v[name] && i === 0) ? 'checked' : ''} style="width:auto"> ${esc(t(key))}</label>`).join('')
+    + `</div>`;
+
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/main-power?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    ${toggles(L)}
+  </div>
+  <h1>${esc(event.name)}</h1>
+  ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
+  ${stepBar}
+  ${errorBanner}
+  <form method="post" action="/main-power/apply/${esc(event.id)}" id="mpForm">
+    <div class="card" id="mpStep1">
+      <div class="field">
+        <label for="role">${t('mp.apply.roleLabel')}</label>
+        <select id="role" name="role" required>${roleOpts}</select>
+      </div>
+      <h2 style="font-size:17px;margin:10px 0 6px">${t('mp.apply.sowTitle')}</h2>
+      ${customSowHtml}
+      <div>${sowHtml}</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:16px;cursor:pointer;font-size:14px">
+        <input type="checkbox" name="agree" id="mpAgree" value="1" ${v.agree ? 'checked' : ''} style="width:auto;margin-top:3px">
+        <span>${t('mp.apply.sowAgree')}</span>
+      </label>
+      <button type="button" class="btn btn-block" id="mpNext" style="margin-top:18px">${t('mp.apply.continue')} →</button>
+    </div>
+
+    <div class="card" id="mpStep2" style="display:none;margin-top:14px">
+      <h2 style="font-size:17px;margin:0 0 6px">${t('mp.apply.questions')}</h2>
+      <div class="field"><label>${t('mp.apply.q1')}</label>${radios('q1', OPT.yn)}</div>
+      <div class="field"><label>${t('mp.apply.q2')}</label>${radios('q2', OPT.yns)}</div>
+      <div class="field"><label for="q3">${t('mp.apply.q3')}</label><textarea id="q3" name="q3" rows="3" placeholder="${esc(t('mp.apply.q3ph'))}">${esc(v.q3 || '')}</textarea></div>
+      <div class="field"><label>${t('mp.apply.q4')}</label>${radios('q4', OPT.ynd)}</div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button type="button" class="btn btn-ghost" id="mpBack">← ${t('mp.apply.back')}</button>
+        <button type="submit" class="btn" style="flex:1">${t('mp.apply.submit')}</button>
+      </div>
+    </div>
+  </form>
+</div>
+<script>
+(function(){
+  var s1=document.getElementById('mpStep1'), s2=document.getElementById('mpStep2');
+  var next=document.getElementById('mpNext'), back=document.getElementById('mpBack');
+  var role=document.getElementById('role'), agree=document.getElementById('mpAgree');
+  if(!next||!s1||!s2) return;
+  function dot2(on){ var c=document.getElementById('mpDot2c'), l=document.getElementById('mpDot2l');
+    if(c){c.style.background=on?'var(--red)':'var(--card2)';c.style.color=on?'#fff':'var(--muted)';}
+    if(l){l.style.color=on?'var(--ink)':'var(--muted)';} }
+  next.onclick=function(){
+    if(!role.value){ role.focus(); alert(${JSON.stringify(t('mp.err.roleRequired'))}); return; }
+    if(!agree.checked){ alert(${JSON.stringify(t('mp.err.sowRequired'))}); return; }
+    s1.style.display='none'; s2.style.display=''; dot2(true); window.scrollTo(0,0);
+  };
+  if(back) back.onclick=function(){ s2.style.display='none'; s1.style.display=''; dot2(false); window.scrollTo(0,0); };
+})();
+</script>`;
+  return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
+}
+
+/** Confirmation after a Main Power application is submitted. */
+function mainPowerApplyDone({ event, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check">✓</div>
+    <h1>${t('mp.apply.doneTitle')}</h1>
+    <p class="sub" style="margin:10px 0 24px">${t('mp.apply.doneSub')}</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="/main-power?lang=${L}" class="btn">${t('mp.dash.title')} →</a>
+    </div>
+  </div></div>`;
+  return layout({ title: t('mp.apply.doneTitle') + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
 }
 
 /** Small badge for a proof's content type (feed / reels / story). */
@@ -1755,6 +1945,7 @@ function page500(msg) {
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
   publicSubmitPage, publicSubmitSuccess,
+  mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, performancePage,
   talentLogin, talentRegister, staffLogin, configError, adminNoService, page500,
 };
