@@ -279,16 +279,6 @@
   "feat.cert.title": "Sertifikat Digital",
   "feat.cert.desc": "Selesai event, kamu dapat sertifikat digital sebagai bukti pengalaman untuk portofoliomu.",
 
-  "foot.about": "Tentang Kami",
-  "foot.business": "Bisnis",
-  "foot.sustainability": "Keberlanjutan",
-  "foot.newsroom": "Ruang Berita",
-  "foot.investor": "Investor",
-  "foot.contact": "Hubungi Kami",
-  "foot.careers": "Karir",
-  "foot.faq": "FAQ",
-  "foot.privacy": "Kebijakan Privasi",
-
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy."
 }
