@@ -383,6 +383,29 @@ a{text-decoration:none}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
 @media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
+.hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
+.hero-stage>header,.hero-stage>section{position:relative;z-index:2}
+.hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.hero-bg i{position:absolute;display:block;border-radius:45% 55% 58% 42%;filter:blur(70px);opacity:.5;will-change:transform}
+.hero-bg .b1{width:66vw;height:52vw;left:-16%;top:-30%;background:radial-gradient(closest-side,#E4121F,transparent);animation:flow1 22s ease-in-out infinite}
+.hero-bg .b2{width:56vw;height:50vw;right:-12%;top:-6%;background:radial-gradient(closest-side,#8f0d15,transparent);animation:flow2 27s ease-in-out infinite}
+.hero-bg .b3{width:60vw;height:44vw;left:24%;bottom:-34%;background:radial-gradient(closest-side,#c20e18,transparent);animation:flow3 31s ease-in-out infinite}
+.hero-bg .b4{width:22vw;height:22vw;left:52%;top:14%;opacity:.14;background:radial-gradient(closest-side,#fff,transparent);animation:flow2 25s ease-in-out infinite reverse}
+.hero-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 28% 42%,transparent 34%,rgba(9,9,12,.55) 100%)}
+:root[data-theme="light"] .hero-bg i{opacity:.18}
+:root[data-theme="light"] .hero-bg .b4{opacity:0}
+:root[data-theme="light"] .hero-bg::after{background:radial-gradient(130% 100% at 28% 42%,transparent 42%,rgba(244,246,249,.6) 100%)}
+@keyframes flow1{0%,100%{transform:translate(0,0) scale(1) rotate(0)}50%{transform:translate(12%,12%) scale(1.18) rotate(8deg)}}
+@keyframes flow2{0%,100%{transform:translate(0,0) scale(1) rotate(0)}50%{transform:translate(-12%,14%) scale(1.22) rotate(-10deg)}}
+@keyframes flow3{0%,100%{transform:translate(0,0) scale(1) rotate(0)}50%{transform:translate(10%,-12%) scale(1.12) rotate(6deg)}}
+@keyframes riseIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+.hero-in{opacity:0;animation:riseIn .85s cubic-bezier(.2,.65,.2,1) both}
+.hero-in.d1{animation-delay:.12s}
+.hero-in.d2{animation-delay:.3s}
+.hero-in.d3{animation-delay:.48s}
+.accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 4.5s linear infinite}
+@keyframes shimmer{to{background-position:-220% 0}}
+@media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -406,6 +429,8 @@ a{text-decoration:none}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
+  <div class="hero-stage">
+  <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   <header class="lp-head">
     <span class="lp-logo-box">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
@@ -420,9 +445,9 @@ a{text-decoration:none}
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <h1 style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span style="color:var(--red)"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
-      <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
-      <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <h1 class="hero-in d1" style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
+      <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
+      <div class="hero-in d3" style="display:flex;gap:12px;flex-wrap:wrap">
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
         <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t('land.login'))}</a>
       </div>
@@ -440,6 +465,7 @@ a{text-decoration:none}
       </div>
     </div>
   </section>
+  </div>
 
   <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
