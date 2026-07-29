@@ -518,7 +518,7 @@ function talentPicker(mode, lang) {
   }[L];
   const cats = [
     { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
-    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Talent utama event — brand ambassador, aktivasi.', en: 'Core event talent — brand ambassador, activation.', active: false },
+    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: false },
     { type: 'fotografer', tag: 'FG', name: 'Fotografer', id: 'Dokumentasi & portofolio foto.', en: 'Documentation & photo portfolio.', active: false },
   ];
   const q = `?lang=${L}`;
