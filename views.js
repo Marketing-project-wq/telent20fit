@@ -31,12 +31,17 @@ function fmtDay(d) {
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
 
-// Official 20FIT logo (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
-const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fit.png';
+// Official 20FIT logos (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
+// One variant per theme so the mark is always readable with its red ring intact:
+//   dark theme  -> light wordmark made for dark backgrounds
+//   light theme -> standard wordmark made for light backgrounds
+const LOGO_DARK = 'https://media.20fit.id/wp-content/uploads/2026/04/new-logo-20fit.png';
+const LOGO_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fit.png';
 
-/** 20FIT brand logo image (the wordmark already reads "20FIT"; no extra label). */
+/** 20FIT brand logo image (the wordmark already reads "20FIT"; no extra label).
+ *  Both variants are emitted; CSS shows the one matching the active theme. */
 function brandMark() {
-  return `<img src="${LOGO_URL}" alt="20FIT" class="brand-img">`;
+  return `<img src="${LOGO_DARK}" alt="20FIT" class="brand-img brand-dark"><img src="${LOGO_LIGHT}" alt="20FIT" class="brand-img brand-light">`;
 }
 
 const STYLE = `
@@ -50,7 +55,8 @@ const STYLE = `
   --bg:#f3f5f8;--panel:#ffffff;--card:#ffffff;--card2:#eef1f5;--line:#e2e6ec;
   --ink:#17171d;--muted:#63676e;--ok:#178a54;--ok-soft:rgba(23,138,84,.12);
   --warn:#a86a00;--warn-soft:rgba(168,106,0,.12);--err:#d32f2f;--err-soft:rgba(211,47,47,.10);}
-:root[data-theme="light"] .brand .brand-img{filter:none}
+:root[data-theme="light"] .brand .brand-dark{display:none}
+:root[data-theme="light"] .brand .brand-light{display:block}
 :root[data-theme="light"] .sidebar{box-shadow:0 0 0 1px var(--line)}
 :root[data-theme="light"] .side-nav a.active{color:var(--red)}
 :root[data-theme="light"] .hamburger{color:var(--ink)}
@@ -74,7 +80,8 @@ a{color:var(--red)}
 .side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto;filter:brightness(0) invert(1)}
+.brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto}
+.brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 /* Center the brand logo in the sidebar */
 .side-logo{display:flex;justify-content:center}
@@ -377,6 +384,9 @@ function landingPage(lang) {
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
 .lp-logo{display:block;height:120px;width:auto}
+.lp-logo-light{display:none}
+:root[data-theme="light"] .lp-logo-dark{display:none}
+:root[data-theme="light"] .lp-logo-light{display:block}
 .lp-head{max-width:1180px;margin:0 auto;padding:22px 28px 8px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
 .lp-toggles{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .lp-submit{padding:11px 18px;background:transparent;color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 14px/1 Barlow,sans-serif;white-space:nowrap}
@@ -394,7 +404,8 @@ a{text-decoration:none}
 <body>
 <div style="min-height:100vh">
   <header class="lp-head">
-    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo">
+    <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
+    <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     <div class="lp-toggles">
       <a href="/submit${q}" class="lp-submit">${esc(t.submit)}</a>
       ${toggle}
