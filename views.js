@@ -454,11 +454,9 @@ a{text-decoration:none}
     </div>
     <div style="position:relative">
       <div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
-        <div class="stripe" style="height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;opacity:.5;margin-bottom:16px;filter:grayscale(1)">
-          <span style="font:600 12px/1 monospace;color:var(--lp-tx3);background:var(--lp-card);padding:6px 12px;border-radius:6px">event.jpg</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Jakarta Run Series</div>
+        <img src="https://media.20fit.id/wp-content/uploads/2026/07/Background-BRI-WELNESS-EXPERIENCE.jpeg" alt="Platarox Jakarta Hybrid Race" style="width:100%;height:200px;object-fit:cover;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Platarox Jakarta Hybrid Race</div>
           <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t('land.slot'))}</span>
         </div>
         <div style="font-size:13px;color:var(--lp-tx3)">12 Sep 2026 · Jakarta · Judges</div>
