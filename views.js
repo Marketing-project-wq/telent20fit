@@ -353,9 +353,9 @@ function landingPage(lang) {
 
   const langBtn = (code, label) => {
     const on = code === L;
-    return `<a href="/?lang=${code}" style="padding:6px 11px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
+    return `<a href="/?lang=${code}" style="padding:9px 16px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
   };
-  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:8px;padding:3px;gap:2px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
 
   return `<!doctype html><html lang="${L}"><head>
@@ -378,9 +378,12 @@ body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-
 a{text-decoration:none}
 .lp-logo{filter:brightness(0) invert(1)}
 :root[data-theme="light"] .lp-logo{filter:none}
-.theme-toggle{display:inline-flex;gap:3px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:8px;padding:3px}
-.theme-toggle button{padding:6px 10px;border-radius:6px;font:700 12px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
+.lp-head{position:relative;max-width:1180px;margin:0 auto;padding:28px 28px 8px;display:flex;justify-content:center;align-items:center;min-height:124px}
+.lp-toggles{position:absolute;top:24px;right:28px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
+.theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
+@media(max-width:760px){.lp-head{flex-direction:column;gap:16px;min-height:0}.lp-toggles{position:static;justify-content:center}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
 .resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -389,9 +392,9 @@ a{text-decoration:none}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
-  <header style="max-width:1180px;margin:0 auto;padding:30px 28px 8px;display:flex;flex-direction:column;align-items:center;gap:18px">
-    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo" style="height:92px;width:auto;display:block">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center">
+  <header class="lp-head">
+    <img src="${LOGO_URL}" alt="20FIT" class="lp-logo" style="height:96px;width:auto;display:block">
+    <div class="lp-toggles">
       ${toggle}
       ${themeToggle()}
     </div>
