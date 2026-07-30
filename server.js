@@ -63,6 +63,121 @@ const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 const db = () => store();
 const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
 
+// -------------------------------------------------- talent profile ("Data Diri")
+// A newly-registered talent's account is not "active" until they complete their
+// personal data. requireTalentReady gates the dashboards/apply flow on it and
+// bounces incomplete profiles to /{type}/data-diri.
+
+// Active events split for the data-diri teaser: ongoing first, then coming soon
+// (past events dropped). Uses date-only comparison in the server's timezone.
+function teaserEvents(events) {
+  const today = new Date().toISOString().slice(0, 10);
+  const rank = { ongoing: 0, upcoming: 1 };
+  return (events || [])
+    .filter((e) => e.is_active)
+    .map((e) => {
+      const starts = e.starts_at ? String(e.starts_at).slice(0, 10) : null;
+      const ends = e.ends_at ? String(e.ends_at).slice(0, 10) : null;
+      let status;
+      if (ends && ends < today) status = 'past';
+      else if (starts && starts > today) status = 'upcoming';
+      else status = 'ongoing';
+      return { id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, status };
+    })
+    .filter((e) => e.status !== 'past')
+    .sort((a, b) => (rank[a.status] - rank[b.status]) || (String(a.starts_at || '') < String(b.starts_at || '') ? -1 : 1));
+}
+
+// Gate: logged-in talent of `type` AND profile complete. Attaches req.account.
+function requireTalentReady(type) {
+  const p = type.replace(/_/g, '-');
+  return [auth.requireTalent(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(req.talent.id);
+      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
+      req.account = acc;
+      next();
+    } catch (e) { next(e); }
+  }];
+}
+
+// GET /{type}/data-diri — profile form (+ available-events teaser). Skips to the
+// dashboard if already complete, unless ?edit=1 (re-open to update).
+function dataDiriGet(type) {
+  const p = type.replace(/_/g, '-');
+  return [auth.requireTalent(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(req.talent.id);
+      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
+      const events = teaserEvents(await st.listEvents());
+      res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
+    } catch (e) { next(e); }
+  }];
+}
+
+// POST /{type}/data-diri — validate + save profile, activating the account.
+function dataDiriPost(type) {
+  const p = type.replace(/_/g, '-');
+  return [auth.requireTalent(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(req.talent.id);
+      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      const values = {
+        phone: String(req.body.phone || '').trim(),
+        city: String(req.body.city || '').trim().slice(0, 80),
+        birthdate: String(req.body.birthdate || '').trim(),
+        gender: String(req.body.gender || '').trim(),
+        instagram: String(req.body.instagram || '').trim().replace(/^@+/, '').slice(0, 60),
+        instagram_followers: String(req.body.instagram_followers || '').trim(),
+        experience: String(req.body.experience || '').trim().slice(0, 1000),
+      };
+      const errors = [];
+      if (!values.phone) errors.push(req.t('dd.err.phone'));
+      else if (!/^[0-9+()\-\s]{8,20}$/.test(values.phone)) errors.push(req.t('dd.err.phoneBad'));
+      if (!values.city) errors.push(req.t('dd.err.city'));
+      let bdOk = /^\d{4}-\d{2}-\d{2}$/.test(values.birthdate);
+      if (bdOk) {
+        const d = new Date(values.birthdate + 'T00:00:00Z');
+        const nowY = new Date().getUTCFullYear();
+        const y = d.getUTCFullYear();
+        if (isNaN(d.getTime()) || d.getTime() > Date.now() || y < nowY - 100 || y > nowY - 10) bdOk = false;
+      }
+      if (!bdOk) errors.push(req.t('dd.err.birthdate'));
+      if (values.gender !== 'male' && values.gender !== 'female') errors.push(req.t('dd.err.gender'));
+      if (type === 'kol' && !values.instagram) errors.push(req.t('dd.err.instagram'));
+      let followers = null;
+      if (values.instagram_followers) {
+        const n = parseInt(values.instagram_followers.replace(/[.,\s]/g, ''), 10);
+        if (Number.isNaN(n) || n < 0 || n > 1e9) errors.push(req.t('dd.err.followers'));
+        else followers = n;
+      }
+      if (errors.length) {
+        const events = teaserEvents(await st.listEvents());
+        return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang }));
+      }
+      await st.updateAccountProfile(acc.id, {
+        phone: values.phone,
+        city: values.city,
+        birthdate: values.birthdate,
+        gender: values.gender,
+        instagram: values.instagram || null,
+        instagram_followers: followers,
+        experience: values.experience || null,
+        profile_completed_at: acc.profile_completed_at || new Date().toISOString(),
+      });
+      res.redirect('/' + p + '?lang=' + req.lang);
+    } catch (e) { next(e); }
+  }];
+}
+
 // Archived prototype (served at /prototype).
 let prototypeHtml = null;
 try {
@@ -198,7 +313,7 @@ app.post('/kol/register', async (req, res, next) => {
       throw e;
     }
     auth.setSession(res, account);
-    res.redirect('/kol');
+    res.redirect('/kol/data-diri?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 
@@ -224,6 +339,9 @@ app.post('/kol/login', async (req, res, next) => {
 });
 
 app.post('/kol/logout', (req, res) => { auth.clearSession(res); res.redirect('/kol/login'); });
+
+app.get('/kol/data-diri', dataDiriGet('kol'));
+app.post('/kol/data-diri', dataDiriPost('kol'));
 
 // ------------------------------------------------------------- KOL form ------
 
@@ -267,7 +385,7 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
   }
 }
 
-app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
+app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -285,7 +403,7 @@ app.get('/kol', auth.requireTalent('kol'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/kol/proofs', auth.requireTalent('kol'), upload.single('screenshot'), async (req, res, next) => {
+app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -376,7 +494,7 @@ app.post('/main-power/register', async (req, res, next) => {
       throw e;
     }
     auth.setSession(res, account);
-    res.redirect('/main-power');
+    res.redirect('/main-power/data-diri?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 
@@ -403,7 +521,10 @@ app.post('/main-power/login', async (req, res, next) => {
 
 app.post('/main-power/logout', (req, res) => { auth.clearSession(res); res.redirect('/main-power/login'); });
 
-app.get('/main-power', auth.requireTalent('main_power'), async (req, res, next) => {
+app.get('/main-power/data-diri', dataDiriGet('main_power'));
+app.post('/main-power/data-diri', dataDiriPost('main_power'));
+
+app.get('/main-power', requireTalentReady('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -418,7 +539,7 @@ app.get('/main-power', auth.requireTalent('main_power'), async (req, res, next) 
   } catch (e) { next(e); }
 });
 
-app.get('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (req, res, next) => {
+app.get('/main-power/apply/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -430,7 +551,7 @@ app.get('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (r
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/apply/:eventId', auth.requireTalent('main_power'), async (req, res, next) => {
+app.post('/main-power/apply/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -735,7 +856,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
     const applications = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
-      return { ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null };
+      return { ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt };
     });
     res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang }));
   } catch (e) { next(e); }

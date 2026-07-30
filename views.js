@@ -883,6 +883,131 @@ function forgotPasswordSent({ type, lang }) {
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+/** Small status badge for an event teaser: ongoing (ok) / coming soon (warn). */
+function eventStatusBadge(status, lang) {
+  const L = normLang(lang);
+  if (status === 'ongoing') return `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${tr(L, 'ev.status.ongoing')}</span>`;
+  return `<span class="dl-when" style="background:var(--red-soft);color:var(--red)">${tr(L, 'ev.status.upcoming')}</span>`;
+}
+
+/**
+ * Compact read-only view of a talent's "Data Diri" for staff (applications
+ * review + KOL detail). WhatsApp and Instagram become click-through links.
+ * Returns a short "not completed yet" note if the profile is still empty.
+ */
+function talentProfileBlock(profile, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  if (!profile || !profile.profile_completed_at) {
+    return `<div class="muted" style="font-size:13px">${t('adm.profile.incomplete')}</div>`;
+  }
+  const genderLabel = profile.gender === 'male' ? t('dd.gender.male') : profile.gender === 'female' ? t('dd.gender.female') : '—';
+  const waDigits = String(profile.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '62');
+  const wa = profile.phone ? `<a href="https://wa.me/${esc(waDigits)}" target="_blank" rel="noopener">${esc(profile.phone)}</a>` : '—';
+  const ig = profile.instagram ? `<a href="https://instagram.com/${encodeURIComponent(profile.instagram)}" target="_blank" rel="noopener">@${esc(profile.instagram)}</a>` : '—';
+  const rows = [
+    [t('adm.profile.phone'), wa],
+    [t('adm.profile.city'), esc(profile.city || '—')],
+    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
+    [t('adm.profile.gender'), esc(genderLabel)],
+    [t('adm.profile.instagram'), ig],
+    [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
+  ];
+  const grid = rows.map(([k, v]) => `<div style="min-width:110px">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(k)}</div>
+    <div style="font-size:14px;margin-top:2px">${v}</div></div>`).join('');
+  const exp = profile.experience
+    ? `<div style="margin-top:11px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.experience')}</div><div style="font-size:14px;margin-top:2px;white-space:pre-wrap">${esc(profile.experience)}</div></div>`
+    : '';
+  return `<div style="display:flex;flex-wrap:wrap;gap:14px 22px">${grid}</div>${exp}`;
+}
+
+/**
+ * "Data Diri" (profile) form shown right after registering — the account is not
+ * active until it is submitted. Also lists available events (ongoing / coming
+ * soon) so a new talent can see what they can join once their profile is done.
+ * `type` is 'kol' or 'main_power'; Instagram is required for KOL only.
+ */
+function talentDataDiri(type, opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = talentPath(type);
+  const v = opts.values || {};
+  const account = opts.account || {};
+  const editing = !!(account.profile_completed_at);
+  const igRequired = type === 'kol';
+  const errorBanner = (opts.errors && opts.errors.length)
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+
+  const req = ' <span style="color:var(--red)">*</span>';
+  const opt = ` <span class="hint">${t('dd.optional')}</span>`;
+  const genderOpts = [['', t('dd.gender.pick')], ['male', t('dd.gender.male')], ['female', t('dd.gender.female')]]
+    .map(([val, label]) => `<option value="${val}"${v.gender === val ? ' selected' : ''}${val === '' ? ' disabled' : ''}>${esc(label)}</option>`).join('');
+
+  const events = opts.events || [];
+  const eventList = events.length
+    ? `<div class="dl-list">${events.map((e) => {
+        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+        return `<div class="dl-item" style="align-items:flex-start">
+          <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>
+          ${eventStatusBadge(e.status, L)}
+        </div>`;
+      }).join('')}</div>`
+    : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
+
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <div style="display:flex;gap:10px;align-items:center">
+      ${toggles(L)}
+      <form method="post" action="/${p}/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
+    </div>
+  </div>
+  <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
+  <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
+  ${editing ? '' : `<div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('dd.notice')}</span></div>`}
+  ${errorBanner}
+  <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
+    <div class="field">
+      <label for="phone">${t('dd.phone')}${req}</label>
+      <input type="tel" id="phone" name="phone" required maxlength="20" placeholder="08xxxxxxxxxx" value="${esc(v.phone || '')}">
+      <div class="hint" style="margin-top:6px">${t('dd.phoneHint')}</div>
+    </div>
+    <div class="field">
+      <label for="city">${t('dd.city')}${req}</label>
+      <input type="text" id="city" name="city" required maxlength="80" placeholder="${esc(t('dd.cityPh'))}" value="${esc(v.city || '')}">
+    </div>
+    <div class="field">
+      <label for="birthdate">${t('dd.birthdate')}${req}</label>
+      <input type="date" id="birthdate" name="birthdate" required value="${esc(v.birthdate || '')}">
+    </div>
+    <div class="field">
+      <label for="gender">${t('dd.gender')}${req}</label>
+      <select id="gender" name="gender" required>${genderOpts}</select>
+    </div>
+    <div class="field">
+      <label for="instagram">${t('dd.instagram')}${igRequired ? req : opt}</label>
+      <input type="text" id="instagram" name="instagram" maxlength="60" ${igRequired ? 'required' : ''} placeholder="username" value="${esc(v.instagram || '')}">
+      <div class="hint" style="margin-top:6px">${t('dd.instagramHint')}</div>
+    </div>
+    <div class="field">
+      <label for="instagram_followers">${t('dd.followers')}${opt}</label>
+      <input type="number" id="instagram_followers" name="instagram_followers" min="0" step="1" inputmode="numeric" placeholder="0" value="${esc(v.instagram_followers || '')}">
+    </div>
+    <div class="field">
+      <label for="experience">${t('dd.experience')}${opt}</label>
+      <textarea id="experience" name="experience" rows="3" maxlength="1000" placeholder="${esc(t('dd.experiencePh'))}">${esc(v.experience || '')}</textarea>
+    </div>
+    <button type="submit" class="btn btn-block">${editing ? t('dd.save') : t('dd.submit')}</button>
+  </form>
+
+  <div class="section-head"><h2 style="margin:0">${t('dd.eventsTitle')}</h2></div>
+  <p class="muted" style="font-size:13px;margin:6px 0 0">${t('dd.eventsSub')}</p>
+  ${eventList}
+</div>`;
+  return layout({ title: (editing ? t('dd.editTitle') : t('dd.title')) + ' — 20FIT ' + (talentLabel(L, type) || ''), body, home: '/?lang=' + L, lang: L });
+}
+
 /** New-password form reached from the email link (token in a hidden field). */
 function resetPassword({ token, valid, errors, lang }) {
   const L = normLang(lang);
@@ -1633,6 +1758,9 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
     </div>
   </div>
 
+  <div class="section-head"><h2 style="margin:0">${t('adm.profile.title')}</h2></div>
+  <div class="card" style="margin-top:14px">${talentProfileBlock(talent, L)}</div>
+
   <div class="section-head"><h2 style="margin:0">${t('score.history')}</h2></div>
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('th.event')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th><th>${t('score.col')}</th></tr></thead>
@@ -2097,6 +2225,10 @@ function adminApplications({ staff, applications, lang }) {
       </div>
       ${stationLine}
       <div style="margin-top:12px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
+        <div style="margin-top:8px">${talentProfileBlock(a.profile, L)}</div>
+      </div>
+      <div style="margin-top:12px">
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
         ${answerRows || `<div class="muted" style="font-size:13px;margin-top:6px">—</div>`}
       </div>
@@ -2170,6 +2302,6 @@ module.exports = {
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
-  talentLogin, talentRegister, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
+  talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
 };
