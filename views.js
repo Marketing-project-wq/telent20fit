@@ -329,8 +329,6 @@ function landingPage(lang) {
   // 20FIT brand family (proper nouns — identical in both languages).
   const IG_URL = 'https://www.instagram.com/20fit.id/';
   // Theme-swapped brand logos: *_DARK shows in dark mode (white artwork), *_LIGHT in light mode (black artwork).
-  const GYM_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/02-20FIT-GYM-WHITE-scaled.png';
-  const GYM_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/01-20FIT-GYM-BLACK-scaled.png';
   const SHOP_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/08-20FIT-SHOP-WHITE-1-scaled.png';
   const SHOP_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/07-20FIT-SHOP-BLACK-1-scaled.png';
   const ARENA_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/Logo-20FIT-Arena-white-1.png';
@@ -345,7 +343,6 @@ function landingPage(lang) {
   // `scale` enlarges a heavily-padded one. Both optional.
   const BRANDS = [
     { logoD: LOGO_FOOTER, logoL: LOGO_LIGHT, href: IG_URL, name: '20FIT' },
-    { logoD: GYM_DARK, logoL: GYM_LIGHT, name: '20FIT Gym' },
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
     { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena', scale: 1.5 },
     { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe', mw: '56%' },
