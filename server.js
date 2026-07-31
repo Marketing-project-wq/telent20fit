@@ -195,8 +195,36 @@ function readLang(req, res) {
 }
 
 app.get('/', (req, res) => res.send(V.landingPage(req.lang)));
-app.get('/register', (req, res) => res.send(V.talentPicker('register', req.lang)));
-app.get('/login', (req, res) => res.send(V.talentPicker('login', req.lang)));
+
+// Public sign-up / sign-in: a single account form, no talent-type picker.
+// New accounts default to KOL; login resolves the account by email across all
+// talent types and lands each on the dashboard for their type. Admin & EO still
+// sign in via /admin/login and /eo/login (linked from the login page + footer).
+app.get('/register', (req, res) => {
+  const tk = auth.currentTalent(req);
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect('/' + tk.type.replace(/_/g, '-'));
+  res.send(V.talentRegister('kol', { unified: true, lang: req.lang }));
+});
+app.post('/register', talentRegisterPost('kol', { unified: true }));
+app.get('/login', (req, res) => {
+  const tk = auth.currentTalent(req);
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect('/' + tk.type.replace(/_/g, '-'));
+  res.send(V.talentLogin('kol', { unified: true, lang: req.lang }));
+});
+app.post('/login', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const account = await st.findAccountByLogin(login);
+    if (!account || !auth.verifyPassword(password, account.password_hash)) {
+      return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+    }
+    auth.setSession(res, account);
+    res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
+  } catch (e) { next(e); }
+});
 
 // PUBLIC (no login) post-proof submission: name + social username + event, with
 // multiple feed screenshots and separate Reels / Story uploads. Every image is extracted.
@@ -286,7 +314,8 @@ app.get('/kol/register', (req, res) => {
 // Registration collects Full Name, Email, WhatsApp, Password + confirmation.
 // The account is created inactive; the talent completes Data Diri next. Shared
 // by both talent types (KOL + Main Power).
-function talentRegisterPost(type) {
+function talentRegisterPost(type, opts = {}) {
+  const unified = !!opts.unified;
   const p = type.replace(/_/g, '-');
   return async (req, res, next) => {
     try {
@@ -307,13 +336,18 @@ function talentRegisterPost(type) {
       else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
       if (password.length < 6) errors.push(req.t('err.passwordMin6'));
       else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
-      if (errors.length) return res.status(400).send(V.talentRegister(type, { errors, values, lang: req.lang }));
+      if (errors.length) return res.status(400).send(V.talentRegister(type, { unified, errors, values, lang: req.lang }));
+
+      // Email must be unique across all talent types (login resolves by email).
+      if (await st.findAccountByLogin(login)) {
+        return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+      }
 
       let account;
       try {
         account = await st.createAccount({ talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) });
       } catch (e) {
-        if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+        if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
         throw e;
       }
       auth.setSession(res, account);

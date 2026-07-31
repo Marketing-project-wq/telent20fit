@@ -782,7 +782,7 @@ function scoreBadge(sc, lang) {
   return `<span class="sla sla-${sc.cls}">● ${sc.score} · ${esc(tr(L, sc.label))}</span>`;
 }
 
-function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
+function authShell(type, title, sub, formHtml, footHtml, errors, lang, brandOverride) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const errorBanner = (errors && errors.length)
@@ -798,36 +798,48 @@ function authShell(type, title, sub, formHtml, footHtml, errors, lang) {
   <div class="card">${formHtml}</div>
   <p style="text-align:center;color:var(--muted);font-size:14px;margin-top:18px">${footHtml}</p>
 </div>`;
-  return layout({ title: `${title} — 20FIT ${talentLabel(L, type)}`, body, brand: talentLabel(L, type) || 'Talent', home: '/?lang=' + L, lang: L });
+  const brand = brandOverride || talentLabel(L, type) || 'Talent';
+  const titleSuffix = brandOverride ? '20FIT' : `20FIT ${talentLabel(L, type)}`;
+  return layout({ title: `${title} — ${titleSuffix}`, body, brand, home: '/?lang=' + L, lang: L });
 }
 
 function talentLogin(type, opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
+  const unified = !!opts.unified;
   const p = talentPath(type);
   const v = opts.values || {};
-  const form = `<form method="post" action="/${p}/login">
+  const action = unified ? '/login' : `/${p}/login`;
+  const forgotHref = unified ? `/kol/forgot-password?lang=${L}` : `/${p}/forgot-password?lang=${L}`;
+  const registerHref = unified ? `/register?lang=${L}` : `/${p}/register?lang=${L}`;
+  const form = `<form method="post" action="${action}">
     <div class="field">
-      <label for="login">${t('common.emailphone')}</label>
-      <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
+      <label for="login">${unified ? t('common.email') : t('common.emailphone')}</label>
+      <input type="${unified ? 'email' : 'text'}" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
     </div>
     <div class="field">
       <label for="password">${t('common.password')}</label>
       <input type="password" id="password" name="password" required autocomplete="current-password">
     </div>
     <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
-    <div style="text-align:center;margin-top:14px"><a href="/${p}/forgot-password?lang=${L}" style="color:var(--muted);font-size:14px">${t('auth.forgot.link')}</a></div>
+    <div style="text-align:center;margin-top:14px"><a href="${forgotHref}" style="color:var(--muted);font-size:14px">${t('auth.forgot.link')}</a></div>
   </form>`;
-  const foot = t('auth.foot.toRegister', { href: `/${p}/register?lang=${L}` });
-  return authShell(type, t('auth.login.title', { role: talentLabel(L, type) }), t('auth.login.sub'), form, foot, opts.errors, L);
+  const foot = unified
+    ? `${t('auth.foot.toRegister', { href: registerHref })}<br><a href="/admin/login" style="color:var(--muted);font-size:13px">🔑 ${t('auth.account.adminLink')}</a>`
+    : t('auth.foot.toRegister', { href: registerHref });
+  const title = unified ? t('auth.account.loginTitle') : t('auth.login.title', { role: talentLabel(L, type) });
+  const sub = unified ? t('auth.account.loginSub') : t('auth.login.sub');
+  return authShell(type, title, sub, form, foot, opts.errors, L, unified ? 'Talent' : undefined);
 }
 
 function talentRegister(type, opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
+  const unified = !!opts.unified;
   const p = talentPath(type);
   const v = opts.values || {};
-  const form = `<form method="post" action="/${p}/register">
+  const action = unified ? '/register' : `/${p}/register`;
+  const form = `<form method="post" action="${action}">
     <div class="field">
       <label for="name">${t('common.fullname')}</label>
       <input type="text" id="name" name="name" required maxlength="120" autocomplete="name" value="${esc(v.name || '')}">
@@ -853,8 +865,11 @@ function talentRegister(type, opts = {}) {
     </div>
     <button type="submit" class="btn btn-block">${t('btn.register')}</button>
   </form>`;
-  const foot = t('auth.foot.toLogin', { href: `/${p}/login?lang=${L}` });
-  return authShell(type, t('auth.register.title', { role: talentLabel(L, type) }), t('auth.register.sub'), form, foot, opts.errors, L);
+  const loginHref = unified ? `/login?lang=${L}` : `/${p}/login?lang=${L}`;
+  const foot = t('auth.foot.toLogin', { href: loginHref });
+  const title = unified ? t('auth.account.registerTitle') : t('auth.register.title', { role: talentLabel(L, type) });
+  const sub = unified ? t('auth.account.registerSub') : t('auth.register.sub');
+  return authShell(type, title, sub, form, foot, opts.errors, L, unified ? 'Talent' : undefined);
 }
 
 /** Forgot-password request form (per talent type). */

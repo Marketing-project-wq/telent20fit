@@ -97,6 +97,13 @@ function supabaseStore() {
         .eq('talent_type', talentType).eq('login', login).maybeSingle();
       return data || null;
     },
+    // Unified login: find a talent account by email across all talent types.
+    async findAccountByLogin(login) {
+      const { data } = await sb.from('talent_accounts')
+        .select('id,talent_type,name,login,password_hash')
+        .eq('login', login).order('created_at', { ascending: true }).limit(1);
+      return (data && data[0]) || null;
+    },
     async getAccountById(id) {
       const { data } = await sb.from('talent_accounts')
         .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,profile_completed_at')
@@ -361,6 +368,7 @@ function memoryStore() {
       return { id: rec.id, talent_type: rec.talent_type, name: rec.name, login: rec.login };
     },
     async findAccount(talentType, login) { return accounts.find((a) => a.talent_type === talentType && a.login === login) || null; },
+    async findAccountByLogin(login) { return accounts.find((a) => a.login === login) || null; },
     async getAccountById(id) { const a = accounts.find((a) => a.id === id); return a ? accountProfile(a) : null; },
     async updateAccountProfile(id, patch) { const a = accounts.find((a) => a.id === id); if (a) Object.assign(a, patch); },
     async setTalentPassword(talentId, passwordHash) { const a = accounts.find((a) => a.id === talentId); if (a) a.password_hash = passwordHash; },
