@@ -98,8 +98,14 @@ function supabaseStore() {
       return data || null;
     },
     async getAccountById(id) {
-      const { data } = await sb.from('talent_accounts').select('id,talent_type,name,login').eq('id', id).maybeSingle();
+      const { data } = await sb.from('talent_accounts')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,profile_completed_at')
+        .eq('id', id).maybeSingle();
       return data || null;
+    },
+    async updateAccountProfile(id, patch) {
+      const { error } = await sb.from('talent_accounts').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
     },
     async setTalentPassword(talentId, passwordHash) {
       const { error } = await sb.from('talent_accounts').update({ password_hash: passwordHash }).eq('id', talentId);
@@ -142,7 +148,9 @@ function supabaseStore() {
     },
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
-      let q = sb.from('talent_accounts').select('id,talent_type,name,login').order('name');
+      let q = sb.from('talent_accounts')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,profile_completed_at')
+        .order('name');
       if (talentType) q = q.eq('talent_type', talentType);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
@@ -290,6 +298,14 @@ function supabaseStore() {
 
 function memoryStore() {
   const now = () => new Date().toISOString();
+  // Project a stored account to the public shape (mirrors the Supabase select).
+  const accountProfile = (a) => ({
+    id: a.id, talent_type: a.talent_type, name: a.name, login: a.login,
+    phone: a.phone || null, city: a.city || null, birthdate: a.birthdate || null,
+    gender: a.gender || null, instagram: a.instagram || null,
+    instagram_followers: a.instagram_followers != null ? a.instagram_followers : null,
+    experience: a.experience || null, profile_completed_at: a.profile_completed_at || null,
+  });
   const campaigns = [
     { id: 'camp-jakarta', name: 'Jakarta Run Series 2026', is_active: true, created_at: now() },
     { id: 'camp-bali', name: 'Bali Trail Marathon 2026', is_active: true, created_at: now() },
@@ -297,7 +313,7 @@ function memoryStore() {
   const submissions = [];
   const hashPassword = require('./auth').hashPassword;
   const accounts = [
-    { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now() },
+    { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now(), phone: '081234567890', city: 'Jakarta', birthdate: '1996-05-20', gender: 'male', instagram: 'budi.santoso', instagram_followers: 3200, experience: 'Marshal Jakarta Marathon 2024, 2025.', profile_completed_at: now() },
   ];
   const images = new Map();
   const staff = [{
@@ -345,7 +361,8 @@ function memoryStore() {
       return { id: rec.id, talent_type: rec.talent_type, name: rec.name, login: rec.login };
     },
     async findAccount(talentType, login) { return accounts.find((a) => a.talent_type === talentType && a.login === login) || null; },
-    async getAccountById(id) { const a = accounts.find((a) => a.id === id); return a ? { id: a.id, talent_type: a.talent_type, name: a.name, login: a.login } : null; },
+    async getAccountById(id) { const a = accounts.find((a) => a.id === id); return a ? accountProfile(a) : null; },
+    async updateAccountProfile(id, patch) { const a = accounts.find((a) => a.id === id); if (a) Object.assign(a, patch); },
     async setTalentPassword(talentId, passwordHash) { const a = accounts.find((a) => a.id === talentId); if (a) a.password_hash = passwordHash; },
     async createPasswordReset({ talent_id, token_hash, expires_at }) { passwordResets.push({ id: 'pr-' + (++seq), talent_id, token_hash, expires_at, used_at: null, created_at: now() }); },
     async getPasswordReset(tokenHash) { const r = passwordResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, talent_id: r.talent_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
@@ -359,7 +376,7 @@ function memoryStore() {
     async findStaff(login) { return staff.find((s) => s.login === login) || null; },
     async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
     async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
-    async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map((a) => ({ id: a.id, talent_type: a.talent_type, name: a.name, login: a.login })); },
+    async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
     async createEvent({ name, description, starts_at, ends_at, created_by, needs, mp_sow }) {
       const ev = { id: 'ev-' + (++seq), name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
       events.unshift(ev);
