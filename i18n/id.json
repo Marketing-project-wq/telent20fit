@@ -16,6 +16,7 @@
 
   "common.email": "Email",
   "common.password": "Password",
+  "common.passwordConfirm": "Konfirmasi Password",
   "common.fullname": "Nama Lengkap",
   "common.emailphone": "Email / No. HP",
 
@@ -225,6 +226,8 @@
   "err.nameRequired": "Nama wajib diisi.",
   "err.loginRequired": "Email / No. HP wajib diisi.",
   "err.passwordMin6": "Password minimal 6 karakter.",
+  "err.emailRequired": "Email wajib diisi.",
+  "err.emailInvalid": "Format email tidak valid.",
   "err.passwordMismatch": "Konfirmasi password tidak sama.",
   "err.dupAccount": "Email / No. HP itu sudah terdaftar. Silakan masuk.",
   "err.badTalentCreds": "Email/No. HP atau password salah.",

@@ -131,7 +131,6 @@ function dataDiriPost(type) {
       const acc = await st.getAccountById(req.talent.id);
       if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
       const values = {
-        phone: String(req.body.phone || '').trim(),
         city: String(req.body.city || '').trim().slice(0, 80),
         birthdate: String(req.body.birthdate || '').trim(),
         gender: String(req.body.gender || '').trim(),
@@ -140,8 +139,6 @@ function dataDiriPost(type) {
         experience: String(req.body.experience || '').trim().slice(0, 1000),
       };
       const errors = [];
-      if (!values.phone) errors.push(req.t('dd.err.phone'));
-      else if (!/^[0-9+()\-\s]{8,20}$/.test(values.phone)) errors.push(req.t('dd.err.phoneBad'));
       if (!values.city) errors.push(req.t('dd.err.city'));
       let bdOk = /^\d{4}-\d{2}-\d{2}$/.test(values.birthdate);
       if (bdOk) {
@@ -164,7 +161,6 @@ function dataDiriPost(type) {
         return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang }));
       }
       await st.updateAccountProfile(acc.id, {
-        phone: values.phone,
         city: values.city,
         birthdate: values.birthdate,
         gender: values.gender,
@@ -287,35 +283,46 @@ app.get('/kol/register', (req, res) => {
   res.send(V.talentRegister('kol', { lang: req.lang }));
 });
 
-app.post('/kol/register', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const login = String(req.body.login || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-
-    const errors = [];
-    if (!name) errors.push(req.t('err.nameRequired'));
-    if (!login) errors.push(req.t('err.loginRequired'));
-    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
-    if (errors.length) return res.status(400).send(V.talentRegister('kol', { errors, values: { name, login }, lang: req.lang }));
-
-    let account;
+// Registration collects Full Name, Email, WhatsApp, Password + confirmation.
+// The account is created inactive; the talent completes Data Diri next. Shared
+// by both talent types (KOL + Main Power).
+function talentRegisterPost(type) {
+  const p = type.replace(/_/g, '-');
+  return async (req, res, next) => {
     try {
-      account = await st.createAccount({ talent_type: 'kol', name, login, password_hash: auth.hashPassword(password) });
-    } catch (e) {
-      if (e.code === 'DUP') {
-        return res.status(400).send(V.talentRegister('kol', {
-          errors: [req.t('err.dupAccount')], values: { name, login }, lang: req.lang,
-        }));
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const name = String(req.body.name || '').trim();
+      const login = String(req.body.login || '').trim().toLowerCase();
+      const phone = String(req.body.phone || '').trim();
+      const password = String(req.body.password || '');
+      const password2 = String(req.body.password2 || '');
+      const values = { name, login, phone };
+
+      const errors = [];
+      if (!name) errors.push(req.t('err.nameRequired'));
+      if (!login) errors.push(req.t('err.emailRequired'));
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
+      if (!phone) errors.push(req.t('dd.err.phone'));
+      else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
+      if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+      else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
+      if (errors.length) return res.status(400).send(V.talentRegister(type, { errors, values, lang: req.lang }));
+
+      let account;
+      try {
+        account = await st.createAccount({ talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) });
+      } catch (e) {
+        if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+        throw e;
       }
-      throw e;
-    }
-    auth.setSession(res, account);
-    res.redirect('/kol/data-diri?lang=' + req.lang);
-  } catch (e) { next(e); }
-});
+      auth.setSession(res, account);
+      res.redirect('/' + p + '/data-diri?lang=' + req.lang);
+    } catch (e) { next(e); }
+  };
+}
+
+app.post('/kol/register', talentRegisterPost('kol'));
 
 app.get('/kol/login', (req, res) => {
   const t = auth.currentTalent(req);
@@ -472,31 +479,7 @@ app.get('/main-power/register', (req, res) => {
   res.send(V.talentRegister('main_power', { lang: req.lang }));
 });
 
-app.post('/main-power/register', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const login = String(req.body.login || '').trim().toLowerCase();
-    const password = String(req.body.password || '');
-
-    const errors = [];
-    if (!name) errors.push(req.t('err.nameRequired'));
-    if (!login) errors.push(req.t('err.loginRequired'));
-    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
-    if (errors.length) return res.status(400).send(V.talentRegister('main_power', { errors, values: { name, login }, lang: req.lang }));
-
-    let account;
-    try {
-      account = await st.createAccount({ talent_type: 'main_power', name, login, password_hash: auth.hashPassword(password) });
-    } catch (e) {
-      if (e.code === 'DUP') return res.status(400).send(V.talentRegister('main_power', { errors: [req.t('err.dupAccount')], values: { name, login }, lang: req.lang }));
-      throw e;
-    }
-    auth.setSession(res, account);
-    res.redirect('/main-power/data-diri?lang=' + req.lang);
-  } catch (e) { next(e); }
-});
+app.post('/main-power/register', talentRegisterPost('main_power'));
 
 app.get('/main-power/login', (req, res) => {
   const t = auth.currentTalent(req);

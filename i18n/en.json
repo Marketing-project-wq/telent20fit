@@ -16,6 +16,7 @@
 
   "common.email": "Email",
   "common.password": "Password",
+  "common.passwordConfirm": "Confirm Password",
   "common.fullname": "Full Name",
   "common.emailphone": "Email / Phone",
 
@@ -225,6 +226,8 @@
   "err.nameRequired": "Name is required.",
   "err.loginRequired": "Email / phone is required.",
   "err.passwordMin6": "Password must be at least 6 characters.",
+  "err.emailRequired": "Email is required.",
+  "err.emailInvalid": "Invalid email format.",
   "err.passwordMismatch": "Password confirmation does not match.",
   "err.dupAccount": "That email / phone is already registered. Please sign in.",
   "err.badTalentCreds": "Wrong email/phone or password.",
