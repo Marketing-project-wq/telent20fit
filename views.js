@@ -830,17 +830,26 @@ function talentRegister(type, opts = {}) {
   const form = `<form method="post" action="/${p}/register">
     <div class="field">
       <label for="name">${t('common.fullname')}</label>
-      <input type="text" id="name" name="name" required maxlength="120" value="${esc(v.name || '')}">
+      <input type="text" id="name" name="name" required maxlength="120" autocomplete="name" value="${esc(v.name || '')}">
     </div>
     <div class="field">
-      <label for="login">${t('common.emailphone')}</label>
-      <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
+      <label for="login">${t('common.email')}</label>
+      <input type="email" id="login" name="login" required autocomplete="email" value="${esc(v.login || '')}">
       <div class="hint" style="margin-top:6px">${t('hint.usedForLogin')}</div>
+    </div>
+    <div class="field">
+      <label for="phone">${t('dd.phone')}</label>
+      <input type="tel" id="phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="08xxxxxxxxxx" value="${esc(v.phone || '')}">
+      <div class="hint" style="margin-top:6px">${t('dd.phoneHint')}</div>
     </div>
     <div class="field">
       <label for="password">${t('common.password')}</label>
       <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
       <div class="hint" style="margin-top:6px">${t('hint.min6')}</div>
+    </div>
+    <div class="field">
+      <label for="password2">${t('common.passwordConfirm')}</label>
+      <input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password">
     </div>
     <button type="submit" class="btn btn-block">${t('btn.register')}</button>
   </form>`;
@@ -964,11 +973,6 @@ function talentDataDiri(type, opts = {}) {
   ${editing ? '' : `<div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('dd.notice')}</span></div>`}
   ${errorBanner}
   <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
-    <div class="field">
-      <label for="phone">${t('dd.phone')}${req}</label>
-      <input type="tel" id="phone" name="phone" required maxlength="20" placeholder="08xxxxxxxxxx" value="${esc(v.phone || '')}">
-      <div class="hint" style="margin-top:6px">${t('dd.phoneHint')}</div>
-    </div>
     <div class="field">
       <label for="city">${t('dd.city')}${req}</label>
       <input type="text" id="city" name="city" required maxlength="80" placeholder="${esc(t('dd.cityPh'))}" value="${esc(v.city || '')}">
