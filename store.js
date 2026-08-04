@@ -163,9 +163,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, starts_at, ends_at, created_by, needs, mp_sow }) {
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null })
+        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -177,6 +177,7 @@ function supabaseStore() {
       patch = patch || {};
       const row = {};
       if (patch.name !== undefined) row.name = patch.name;
+      if (patch.location !== undefined) row.location = patch.location || null;
       if (patch.starts_at !== undefined) row.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
@@ -364,8 +365,8 @@ function memoryStore() {
   }];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
-    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
-    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now(), mp_sow: null },
+    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
+    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, location: 'Ubud, Bali', starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now(), mp_sow: null },
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
@@ -422,8 +423,8 @@ function memoryStore() {
     async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
     async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
-    async createEvent({ name, description, starts_at, ends_at, created_by, needs, mp_sow }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -433,6 +434,7 @@ function memoryStore() {
       const ev = events.find((e) => e.id === id);
       if (!ev) return;
       if (patch.name !== undefined) ev.name = patch.name;
+      if (patch.location !== undefined) ev.location = patch.location || null;
       if (patch.starts_at !== undefined) ev.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;

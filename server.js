@@ -533,8 +533,11 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
     const rank = { ongoing: 0, upcoming: 1 };
     const events = allEvents.filter((e) => e.is_active)
       .map((e) => ({
-        id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, status: eventStatusOf(e), cats: eventCats(e),
-        applied: appByEvent.has(e.id) ? { category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status } : null,
+        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, status: eventStatusOf(e), cats: eventCats(e),
+        applied: appByEvent.has(e.id) ? {
+          category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status,
+          station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
+        } : null,
       }))
       .filter((e) => e.status !== 'ended')
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
@@ -1186,6 +1189,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     const st = db();
     if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
+    const location = String(req.body.location || '').trim().slice(0, 200) || null;
     const starts_at = String(req.body.starts_at || '').trim() || null;
     const ends_at = String(req.body.ends_at || '').trim() || null;
     const needs = [];
@@ -1193,7 +1197,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: Math.max(1, parseInt(req.body.mp_headcount, 10) || 1) });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
     const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    if (name) await st.createEvent({ name, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
+    if (name) await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
@@ -1215,6 +1219,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     const st = db();
     if (!st) return needConfig(req, res);
     const name = String(req.body.name || '').trim();
+    const location = String(req.body.location || '').trim().slice(0, 200) || null;
     const starts_at = String(req.body.starts_at || '').trim() || null;
     const ends_at = String(req.body.ends_at || '').trim() || null;
     const hc = (key) => Math.max(1, parseInt(req.body[key], 10) || 1);
@@ -1223,7 +1228,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: hc('mp_headcount') });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer', headcount: hc('fg_headcount') });
     const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    const patch = { starts_at, ends_at, mp_sow, needs };
+    const patch = { location, starts_at, ends_at, mp_sow, needs };
     if (name) patch.name = name;
     await st.updateEvent(req.params.id, patch);
     res.redirect('/admin/manage');
