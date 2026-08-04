@@ -1,5 +1,7 @@
 {
   "nav.dashboard": "Dashboard",
+  "nav.profile": "Profile",
+  "nav.events": "Events",
   "nav.proofs": "Post Proofs",
   "nav.manage": "Manage",
   "nav.logout": "Log out",
@@ -39,6 +41,8 @@
   "auth.account.loginTitle": "Log In",
   "auth.account.loginSub": "Sign in to your account.",
   "auth.account.adminLink": "Log in as Admin / EO",
+  "prof.edit": "Edit",
+  "kol.eventsSub": "Ongoing & upcoming events.",
   "hint.usedForLogin": "Used to sign in.",
   "hint.min6": "Minimum 6 characters.",
   "btn.register": "Sign up",

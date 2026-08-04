@@ -255,6 +255,8 @@ const NAV_ICON = {
   analytics: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg>',
   overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/></svg>',
   applications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
+  event: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/></svg>',
 };
 
 function navLink(href, key, active, icon, label) {
@@ -282,7 +284,9 @@ function appLayout({ title, body, role, active, user, lang }) {
       + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
       + (role === 'super_admin' ? navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications')) : '')
       + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
-    : navLink('/kol', 'kol', active, 'proofs', t('nav.proofs'));
+    : navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
+      + navLink('/kol/event', 'event', active, 'event', t('nav.events'))
+      + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -293,7 +297,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
   <div class="side-foot">
-    <div style="margin-bottom:12px">${toggles(L)}</div>
+    ${isStaff ? `<div style="margin-bottom:12px">${toggles(L)}</div>` : ''}
     <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
     <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>
   </div>
@@ -1214,10 +1218,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   }).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
 
   const body = `<div class="wrap narrow">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-  </div>
-  <h1>${t('kol.title')}</h1>
+  <h1 style="margin-top:0">${t('kol.title')}</h1>
   <p class="sub">${t('kol.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${errorBanner}
   ${assignmentCards(assignments, L)}
@@ -1247,7 +1248,44 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   <div class="section-head"><h2 style="margin:0">${t('kol.myProofs')}</h2></div>
   ${proofCards}
 </div>`;
-  return layout({ title: t('kol.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+  return appLayout({ title: t('kol.title') + ' — 20FIT', body, role: 'kol', active: 'proofs', user: (talent && talent.name) || '', lang: L });
+}
+
+/** Talent's own profile (Data Diri) in the sidebar app shell — the /kol home. */
+function kolProfilePage({ account, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const acc = account || {};
+  const body = `<div class="wrap">
+  <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:0">
+    <h1 style="margin:0">${t('nav.profile')}</h1>
+    <a href="/kol/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('prof.edit')}</a>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div style="font-size:20px;font-weight:800">${esc(acc.name || '')}</div>
+    <div class="muted" style="font-size:13px;margin-top:2px">${esc(acc.login || '')}</div>
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">${talentProfileBlock(acc, L)}</div>
+  </div>
+</div>`;
+  return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
+}
+
+/** Available events (ongoing / coming soon) for the talent, in the app shell. */
+function kolEventsPage({ account, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const list = (events && events.length)
+    ? `<div class="dl-list">${events.map((e) => {
+        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+        return `<div class="dl-item" style="align-items:flex-start"><div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>${eventStatusBadge(e.status, L)}</div>`;
+      }).join('')}</div>`
+    : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
+  const body = `<div class="wrap">
+  <h1 style="margin-top:0">${t('nav.events')}</h1>
+  <p class="sub">${t('kol.eventsSub')}</p>
+  ${list}
+</div>`;
+  return appLayout({ title: t('nav.events') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
 // ------------------------------------------------------------ Main Power ----
@@ -2301,7 +2339,7 @@ function page500(msg) {
 }
 
 module.exports = {
-  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage,
+  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,

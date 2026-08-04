@@ -1,5 +1,7 @@
 {
   "nav.dashboard": "Dashboard",
+  "nav.profile": "Profil",
+  "nav.events": "Event",
   "nav.proofs": "Bukti Post",
   "nav.manage": "Kelola",
   "nav.logout": "Keluar",
@@ -39,6 +41,8 @@
   "auth.account.loginTitle": "Masuk",
   "auth.account.loginSub": "Masuk ke akun kamu.",
   "auth.account.adminLink": "Masuk sebagai Admin / EO",
+  "prof.edit": "Ubah",
+  "kol.eventsSub": "Event yang sedang berjalan & akan datang.",
   "hint.usedForLogin": "Dipakai untuk login.",
   "hint.min6": "Minimal 6 karakter.",
   "btn.register": "Daftar",
