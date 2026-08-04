@@ -106,7 +106,7 @@ function supabaseStore() {
     },
     async getAccountById(id) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,profile_completed_at')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at')
         .eq('id', id).maybeSingle();
       return data || null;
     },
@@ -156,7 +156,7 @@ function supabaseStore() {
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
       let q = sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,profile_completed_at')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at')
         .order('name');
       if (talentType) q = q.eq('talent_type', talentType);
       const { data, error } = await q;
@@ -346,7 +346,7 @@ function memoryStore() {
     phone: a.phone || null, city: a.city || null, birthdate: a.birthdate || null,
     gender: a.gender || null, instagram: a.instagram || null,
     instagram_followers: a.instagram_followers != null ? a.instagram_followers : null,
-    experience: a.experience || null, profile_completed_at: a.profile_completed_at || null,
+    experience: a.experience || null, ktp: a.ktp || null, profile_completed_at: a.profile_completed_at || null,
   });
   const campaigns = [
     { id: 'camp-jakarta', name: 'Jakarta Run Series 2026', is_active: true, created_at: now() },
