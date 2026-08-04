@@ -98,6 +98,7 @@ a{color:var(--red)}
 .nav-scrim{display:none}
 .app-main{margin-left:236px;min-height:100vh}
 .app-top{display:none}
+.tab-bar{display:none}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 70px}
 .wrap.narrow{max-width:640px}
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
@@ -198,6 +199,13 @@ tr:last-child td{border-bottom:none}
   .app-top{display:flex;align-items:center;justify-content:center;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
   .hamburger{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
   .app-top-logo{font-size:20px;line-height:1;text-decoration:none}
+  /* Talent app: bottom tab bar (mobile-app style) replaces the drawer nav */
+  .talent-app .tab-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
+  .talent-app .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px}
+  .talent-app .tab-bar a svg{width:22px;height:22px}
+  .talent-app .tab-bar a.active,.talent-app .tab-bar a.active svg{color:var(--red)}
+  .talent-app .hamburger{display:none}
+  .talent-app .app-main{padding-bottom:74px}
 }
 @media(max-width:600px){
   /* Reflow wide tables into stacked cards on phones */
@@ -291,7 +299,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
-<body>
+<body class="${isStaff ? '' : 'talent-app'}">
 <input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
@@ -310,6 +318,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   </div>
   ${body}
 </div>
+${isStaff ? '' : `<nav class="tab-bar">${items}</nav>`}
 </body></html>`;
 }
 
@@ -1266,6 +1275,7 @@ function kolProfilePage({ account, lang }) {
     <div class="muted" style="font-size:13px;margin-top:2px">${esc(acc.login || '')}</div>
     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">${talentProfileBlock(acc, L)}</div>
   </div>
+  <form method="post" action="/kol/logout" style="margin-top:18px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
 }
