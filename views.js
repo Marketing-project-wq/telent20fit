@@ -1270,22 +1270,136 @@ function kolProfilePage({ account, lang }) {
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
 }
 
-/** Available events (ongoing / coming soon) for the talent, in the app shell. */
+// Talent categories a person can apply as, per event (matches talent_event_needs).
+const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Manpower' };
+// Per-category application fields (beyond name + phone, which prefill from the
+// profile). label/ph/hint are i18n keys. type: text|number|url. req: required.
+const CAT_FIELDS = {
+  kol: [
+    { k: 'ig_username', label: 'apply.igUser', req: true, ph: 'apply.igUserPh' },
+    { k: 'ig_link', label: 'apply.igLink', req: true, type: 'url', ph: 'apply.igLinkPh' },
+    { k: 'followers', label: 'apply.followers', type: 'number' },
+    { k: 'tiktok', label: 'apply.tiktok', ph: 'apply.tiktokPh' },
+  ],
+  fotografer: [
+    { k: 'ig_username', label: 'apply.igUser', req: true, ph: 'apply.igUserPh' },
+    { k: 'ig_link', label: 'apply.igLink', req: true, type: 'url', ph: 'apply.igLinkPh' },
+    { k: 'portfolio_link', label: 'apply.portfolio', req: true, type: 'url', ph: 'apply.portfolioPh' },
+    { k: 'camera', label: 'apply.camera', ph: 'apply.cameraPh' },
+  ],
+  main_power: [
+    { k: 'bank_name', label: 'apply.bankName', req: true, ph: 'apply.bankNamePh' },
+    { k: 'bank_account', label: 'apply.bankAccount', req: true, ph: 'apply.bankAccountPh' },
+    { k: 'bank_holder', label: 'apply.bankHolder', req: true, ph: 'apply.bankHolderPh' },
+  ],
+};
+
+/** Talent Home: available events + which talent categories each one needs. */
 function kolEventsPage({ account, events, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const list = (events && events.length)
-    ? `<div class="dl-list">${events.map((e) => {
+    ? events.map((e) => {
         const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
-        return `<div class="dl-item" style="align-items:flex-start"><div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>${eventStatusBadge(e.status, L)}</div>`;
-      }).join('')}</div>`
+        const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
+        const applied = e.applied
+          ? `<div style="margin-top:10px">${mpStatusBadge(e.applied.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[e.applied.category] || e.applied.category) })}</span></div>` : '';
+        return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+            <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}</div>
+            ${eventStatusBadge(e.status, L)}
+          </div>
+          <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
+          ${applied}
+        </a>`;
+      }).join('')
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
   const body = `<div class="wrap">
   <h1 style="margin-top:0">${t('nav.events')}</h1>
-  <p class="sub">${t('kol.eventsSub')}</p>
+  <p class="sub">${t('apply.homeSub')}</p>
   ${list}
 </div>`;
   return appLayout({ title: t('nav.events') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+}
+
+/** Event detail: description + category the talent can register for (or their status). */
+function kolEventDetail({ account, event, cats, myApplication, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  let action;
+  if (myApplication) {
+    action = `<div class="card" style="margin-top:16px">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('apply.yourApp')}</div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge(myApplication.status, L)} <b>${esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type)}</b></div>
+      ${myApplication.status === 'rejected' && myApplication.note ? `<div class="muted" style="font-size:13px;margin-top:8px">${esc(myApplication.note)}</div>` : ''}
+    </div>`;
+  } else if (cats && cats.length) {
+    const btns = cats.map((c) => `<a href="/kol/event/${esc(event.id)}/apply?cat=${esc(c.type)}&lang=${L}" class="btn" style="margin:0 8px 8px 0">${t('apply.applyAs', { cat: esc(c.label) })}</a>`).join('');
+    action = `<div class="card" style="margin-top:16px"><div style="font-weight:700;margin-bottom:12px">${t('apply.pickCat')}</div>${btns}</div>`;
+  } else {
+    action = `<div class="banner banner-warn" style="margin-top:16px">${t('apply.noNeeds')}</div>`;
+  }
+  const body = `<div class="wrap narrow">
+  <a href="/kol/event?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <h1 style="margin-top:0">${esc(event.name)}</h1>
+  ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
+  <div>${eventStatusBadge(event.status, L)}</div>
+  ${event.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(event.description)}</p>` : ''}
+  ${action}
+</div>`;
+  return appLayout({ title: event.name + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+}
+
+/** Dynamic registration form for one category (fields vary by category). */
+function kolApplyForm({ account, event, cat, values, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const v = values || {};
+  const acc = account || {};
+  const fields = CAT_FIELDS[cat] || [];
+  const req = ' <span style="color:var(--red)">*</span>';
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const pf = (k, fallback) => esc(v[k] != null ? v[k] : (fallback || ''));
+  const catFieldsHtml = fields.map((f) => `<div class="field">
+      <label for="f_${f.k}">${t(f.label)}${f.req ? req : ` <span class="hint">${t('dd.optional')}</span>`}</label>
+      <input type="${f.type || 'text'}" id="f_${f.k}" name="${f.k}"${f.req ? ' required' : ''}${f.type === 'number' ? ' min="0" inputmode="numeric"' : ''} maxlength="200"${f.ph ? ` placeholder="${esc(t(f.ph))}"` : ''} value="${esc(v[f.k] || '')}">
+    </div>`).join('');
+  const body = `<div class="wrap narrow">
+  <a href="/kol/event/${esc(event.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <h1 style="margin-top:0">${t('apply.formTitle', { cat: esc(CAT_LABEL[cat] || cat) })}</h1>
+  <p class="sub">${esc(event.name)}</p>
+  ${errorBanner}
+  <form class="card" method="post" action="/kol/event/${esc(event.id)}/apply">
+    <input type="hidden" name="cat" value="${esc(cat)}">
+    <div class="field"><label for="f_name">${t('common.fullname')}${req}</label>
+      <input type="text" id="f_name" name="name" required maxlength="120" value="${pf('name', acc.name)}"></div>
+    <div class="field"><label for="f_phone">${t('dd.phone')}${req}</label>
+      <input type="tel" id="f_phone" name="phone" required maxlength="20" value="${pf('phone', acc.phone)}"></div>
+    ${cat === 'main_power' ? `<div class="field"><label for="f_city">${t('dd.city')}${req}</label>
+      <input type="text" id="f_city" name="city" required maxlength="80" value="${pf('city', acc.city)}"></div>` : ''}
+    ${catFieldsHtml}
+    <button type="submit" class="btn btn-block">${t('apply.submit')}</button>
+  </form>
+</div>`;
+  return appLayout({ title: t('apply.formTitle', { cat: CAT_LABEL[cat] || cat }) + ' — 20FIT', body, role: 'kol', active: 'event', user: acc.name, lang: L });
+}
+
+/** Confirmation after a talent submits an event registration. */
+function kolApplyDone({ account, event, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check">✓</div>
+    <h1>${t('apply.doneTitle')}</h1>
+    <p class="sub" style="margin:10px 0 24px">${t('apply.doneSub')}</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="/kol/event/${esc(event.id)}?lang=${L}" class="btn btn-ghost">${esc(event.name)}</a>
+      <a href="/kol/event?lang=${L}" class="btn">${t('nav.events')} →</a>
+    </div>
+  </div></div>`;
+  return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
 // ------------------------------------------------------------ Main Power ----
@@ -2231,18 +2345,27 @@ function adminApplications({ staff, applications, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
-  const QKEYS = ['q1', 'q2', 'q3', 'q4'];
+  // Labels for application answer keys (new category forms + legacy MP q1–q4).
+  const ANSWER_LABEL = {
+    name: 'common.fullname', phone: 'dd.phone', city: 'dd.city',
+    ig_username: 'apply.igUser', ig_link: 'apply.igLink', followers: 'apply.followers', tiktok: 'apply.tiktok',
+    portfolio_link: 'apply.portfolio', camera: 'apply.camera',
+    bank_name: 'apply.bankName', bank_account: 'apply.bankAccount', bank_holder: 'apply.bankHolder',
+  };
 
   const cards = applications.map((a) => {
     const ans = a.answers || {};
-    const answerRows = QKEYS.map((q) => {
-      const raw = ans[q];
-      if (raw === undefined || raw === null || raw === '') return '';
-      const val = q === 'q3' ? esc(String(raw)) : esc(mpAnswerLabel(String(raw), L));
-      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
-        <div style="font-size:12.5px;color:var(--muted)">${t('mp.apply.' + q)}</div>
-        <div style="font-size:14px;margin-top:2px">${val}</div></div>`;
-    }).join('');
+    const answerRows = Object.keys(ans)
+      .filter((k) => ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
+      .map((k) => {
+        const raw = String(ans[k]);
+        let label; let val;
+        if (/^q[1-4]$/.test(k)) { label = t('mp.apply.' + k); val = k === 'q3' ? esc(raw) : esc(mpAnswerLabel(raw, L)); }
+        else { label = ANSWER_LABEL[k] ? t(ANSWER_LABEL[k]) : k; val = /^https?:\/\//i.test(raw) ? `<a href="${esc(raw)}" target="_blank" rel="noopener">${esc(raw)}</a>` : esc(raw); }
+        return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="font-size:12.5px;color:var(--muted)">${esc(label)}</div>
+        <div style="font-size:14px;margin-top:2px;word-break:break-word">${val}</div></div>`;
+      }).join('');
 
     const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<input type="text" name="station" maxlength="120" value="${esc(a.station || '')}"></label>
@@ -2340,6 +2463,7 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
+  kolEventDetail, kolApplyForm, kolApplyDone, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,

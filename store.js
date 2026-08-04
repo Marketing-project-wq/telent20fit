@@ -334,6 +334,7 @@ function memoryStore() {
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
+    { event_id: 'ev-jakarta', talent_type: 'fotografer', headcount: 2 },
     { event_id: 'ev-jakarta', talent_type: 'main_power', headcount: 12 },
     { event_id: 'ev-bali', talent_type: 'kol', headcount: 1 },
     { event_id: 'ev-bali', talent_type: 'main_power', headcount: 8 },

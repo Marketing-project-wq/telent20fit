@@ -432,12 +432,99 @@ app.get('/kol', requireTalentReady('kol'), (req, res) => {
   res.send(V.kolProfilePage({ account: req.account, lang: req.lang }));
 });
 
+// ongoing (started, not ended) / upcoming / ended, from date-only comparison.
+function eventStatusOf(e) {
+  const today = new Date().toISOString().slice(0, 10);
+  const s = e.starts_at ? String(e.starts_at).slice(0, 10) : null;
+  const en = e.ends_at ? String(e.ends_at).slice(0, 10) : null;
+  if (en && en < today) return 'ended';
+  if (s && s > today) return 'upcoming';
+  return 'ongoing';
+}
+// Categories an event opens (from talent_event_needs), labelled for the UI.
+function eventCats(ev) {
+  return (ev.needs || []).filter((n) => V.CAT_LABEL[n.talent_type])
+    .map((n) => ({ type: n.talent_type, label: V.CAT_LABEL[n.talent_type], headcount: n.headcount }));
+}
+
+// Talent Home: active events (ongoing + upcoming) with their category needs.
 app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const events = teaserEvents(await st.listEvents());
+    const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
+    const appByEvent = new Map(myApps.map((a) => [a.event_id, a]));
+    const rank = { ongoing: 0, upcoming: 1 };
+    const events = allEvents.filter((e) => e.is_active)
+      .map((e) => ({
+        id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, status: eventStatusOf(e), cats: eventCats(e),
+        applied: appByEvent.has(e.id) ? { category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status } : null,
+      }))
+      .filter((e) => e.status !== 'ended')
+      .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
     res.send(V.kolEventsPage({ account: req.account, events, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Event detail: pick a category to register for (or see your registration).
+app.get('/kol/event/:id', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
+    const ev = allEvents.find((e) => e.id === req.params.id);
+    if (!ev || !ev.is_active) return res.redirect('/kol/event?lang=' + req.lang);
+    const myApplication = myApps.find((a) => a.event_id === ev.id) || null;
+    res.send(V.kolEventDetail({ account: req.account, event: { ...ev, status: eventStatusOf(ev) }, cats: eventCats(ev), myApplication, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Dynamic registration form for one category.
+app.get('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
+    const ev = allEvents.find((e) => e.id === req.params.id);
+    const cat = String(req.query.cat || '');
+    const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
+    if (!opensCat) return res.redirect('/kol/event/' + req.params.id + '?lang=' + req.lang);
+    if (myApps.some((a) => a.event_id === ev.id)) return res.redirect('/kol/event/' + ev.id + '?lang=' + req.lang);
+    res.send(V.kolApplyForm({ account: req.account, event: ev, cat, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const allEvents = await st.listEvents();
+    const ev = allEvents.find((e) => e.id === req.params.id);
+    const cat = String(req.body.cat || '');
+    const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
+    if (!opensCat) return res.redirect('/kol/event?lang=' + req.lang);
+
+    const values = { name: String(req.body.name || '').trim(), phone: String(req.body.phone || '').trim() };
+    if (cat === 'main_power') values.city = String(req.body.city || '').trim().slice(0, 80);
+    (V.CAT_FIELDS[cat] || []).forEach((f) => { values[f.k] = String(req.body[f.k] || '').trim().slice(0, 200); });
+
+    const errors = [];
+    if (!values.name) errors.push(req.t('err.nameRequired'));
+    if (!values.phone || !/^[0-9+()\-\s]{8,20}$/.test(values.phone)) errors.push(req.t('dd.err.phoneBad'));
+    if (cat === 'main_power' && !values.city) errors.push(req.t('dd.err.city'));
+    (V.CAT_FIELDS[cat] || []).forEach((f) => {
+      if (f.req && !values[f.k]) errors.push(req.t('apply.errRequired', { field: req.t(f.label) }));
+      else if (f.type === 'url' && values[f.k] && !/^https?:\/\/.+/i.test(values[f.k])) errors.push(req.t('apply.errUrl', { field: req.t(f.label) }));
+    });
+    if (errors.length) return res.status(400).send(V.kolApplyForm({ account: req.account, event: ev, cat, values, errors, lang: req.lang }));
+
+    try {
+      await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: cat, role: V.CAT_LABEL[cat], answers: values });
+    } catch (e) {
+      if (e.code === 'DUP') return res.redirect('/kol/event/' + ev.id + '?lang=' + req.lang);
+      throw e;
+    }
+    res.send(V.kolApplyDone({ account: req.account, event: ev, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
