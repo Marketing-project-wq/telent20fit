@@ -1073,6 +1073,11 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     if (!st) return needConfig(req, res);
     const action = String(req.body.action || '');
     if (action !== 'approve' && action !== 'reject') return res.redirect('/admin/applications');
+    const prior = await st.getApplication(req.params.id);
+    // Capture the prior status as a primitive *before* updating: the memory store
+    // returns a live row reference that updateApplication() mutates in place, so
+    // reading prior.status after the update would already show 'approved'.
+    const alreadyApproved = !!(prior && prior.status === 'approved');
     const patch = { reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() };
     const note = String(req.body.note || '').trim().slice(0, 300);
     patch.note = note || null;
@@ -1084,9 +1089,30 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
       patch.status = 'rejected';
     }
     await st.updateApplication(req.params.id, patch);
+    // On the first approval (transition into approved), email the talent their placement.
+    // Fire-and-forget: a mail hiccup must never block or fail the approval itself.
+    if (action === 'approve' && prior && !alreadyApproved) {
+      notifyAcceptance(st, prior, patch).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
+
+// Email an approved talent their placement (event, location, station). Best-effort.
+async function notifyAcceptance(st, app, patch) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) return; // no usable email on file
+  const ev = (await st.listEvents()).find((e) => e.id === app.event_id) || {};
+  await mailer.sendAcceptanceEmail({
+    to, name: account.name, lang: 'id',
+    eventName: ev.name || 'Event 20FIT',
+    eventDate: eventDateStr(ev),
+    location: ev.location || null,
+    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
+    station: patch.station, stationLoc: patch.station_loc,
+  });
+}
 
 // Super admin: mark a talent as attended (basis for the digital certificate).
 app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), async (req, res, next) => {
