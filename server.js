@@ -1003,6 +1003,27 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
   } catch (e) { next(e); }
 });
 
+// Super admin: mark a talent as attended (basis for the digital certificate).
+app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const attended = req.body.attended === '1';
+    await st.updateApplication(req.params.id, { attended, attended_at: attended ? new Date().toISOString() : null });
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// Super admin: mark an event finished (enables certificate issuance) or reopen it.
+app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    await st.completeEvent(req.params.id, req.body.completed === '1');
+    res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+
 // Super admin only: create an Event Organizer account.
 app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
