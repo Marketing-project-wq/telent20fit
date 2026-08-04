@@ -206,6 +206,11 @@ function supabaseStore() {
       const { data } = await sb.from('talent_events').select('is_active').eq('id', id).maybeSingle();
       if (data) await sb.from('talent_events').update({ is_active: !data.is_active }).eq('id', id);
     },
+    async completeEvent(id, completed) {
+      const patch = completed ? { completed_at: new Date().toISOString() } : { completed_at: null };
+      const { error } = await sb.from('talent_events').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createAssignment({ event_id, talent_id, talent_type, assigned_by }) {
       const { error } = await sb.from('talent_event_assignments')
         .insert({ event_id, talent_id, talent_type, assigned_by: assigned_by || null });
@@ -408,6 +413,7 @@ function memoryStore() {
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },
     async listActiveEvents() { return events.filter((e) => e.is_active).map((e) => ({ id: e.id, name: e.name })); },
     async toggleEvent(id) { const e = events.find((e) => e.id === id); if (e) e.is_active = !e.is_active; },
+    async completeEvent(id, completed) { const e = events.find((e) => e.id === id); if (e) e.completed_at = completed ? now() : null; },
     async createAssignment({ event_id, talent_id, talent_type, assigned_by }) {
       if (!assignments.find((a) => a.event_id === event_id && a.talent_id === talent_id)) {
         assignments.push({ id: 'as-' + (++seq), event_id, talent_id, talent_type, status: 'assigned', assigned_by: assigned_by || null, assigned_at: now() });
