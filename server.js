@@ -34,6 +34,7 @@ const { store, MODE } = require('./store');
 const auth = require('./auth');
 const llm = require('./llm');
 const mailer = require('./mailer');
+const cert = require('./cert');
 const i18n = require('./i18n');
 
 const PORT = process.env.PORT || 3000;
@@ -428,8 +429,42 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 
 // KOL dashboard (sidebar app shell): Profil (home) · Event · Kirim Bukti.
 // req.account (full profile) is attached by requireTalentReady.
-app.get('/kol', requireTalentReady('kol'), (req, res) => {
-  res.send(V.kolProfilePage({ account: req.account, lang: req.lang }));
+app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    // Lazily issue any certificates the talent has earned (attended + finished).
+    const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
+    const eventById = new Map(events.map((e) => [e.id, e]));
+    await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
+    const certs = await st.listCertificatesForTalent(req.talent.id);
+    res.send(V.kolProfilePage({ account: req.account, certs, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Talent downloads their own certificate PDF.
+app.get('/kol/sertifikat/:id', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = await st.getCertificate(req.params.id);
+    if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/kol?lang=' + req.lang);
+    const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    res.send(buf);
+  } catch (e) { next(e); }
+});
+
+// Public certificate verification page.
+app.get('/cert/:certNo', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = await st.getCertificateByNo(String(req.params.certNo));
+    res.send(V.certVerifyPage({ cert: (c && !c.revoked_at) ? c : null, certNo: String(req.params.certNo), lang: req.lang }));
+  } catch (e) { next(e); }
 });
 
 // ongoing (started, not ended) / upcoming / ended, from date-only comparison.
@@ -445,6 +480,44 @@ function eventStatusOf(e) {
 function eventCats(ev) {
   return (ev.needs || []).filter((n) => V.CAT_LABEL[n.talent_type])
     .map((n) => ({ type: n.talent_type, label: V.CAT_LABEL[n.talent_type], headcount: n.headcount }));
+}
+
+// Short ID date, e.g. "12 Sep 2026"; range if ends differs from starts.
+const CERT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+function fmtDayID(d) {
+  if (!d) return null;
+  const p = String(d).slice(0, 10).split('-');
+  if (p.length !== 3) return String(d);
+  return `${+p[2]} ${CERT_MONTHS[+p[1] - 1] || ''} ${p[0]}`;
+}
+function eventDateStr(ev) {
+  const s = fmtDayID(ev.starts_at);
+  if (!s) return null;
+  const e = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10) ? fmtDayID(ev.ends_at) : null;
+  return e ? `${s} – ${e}` : s;
+}
+
+// Issue certificates for eligible applications: attended + event finished +
+// cert_auto (not explicitly off). Idempotent via the unique (talent,event)
+// constraint, so it is safe to call repeatedly (auto-issue + lazy backfill).
+async function issueCertsForApps(st, apps, eventById, nameById) {
+  for (const a of apps || []) {
+    if (!a.attended) continue;
+    const ev = eventById.get(a.event_id);
+    if (!ev || !ev.completed_at || ev.cert_auto === false) continue;
+    try {
+      await st.createCertificate({
+        cert_no: cert.makeCertNo(),
+        talent_id: a.talent_id,
+        event_id: a.event_id,
+        role: a.role || V.CAT_LABEL[a.talent_type] || a.talent_type,
+        talent_name: (a.answers && a.answers.name) || (nameById && nameById.get(a.talent_id)) || '',
+        event_name: ev.name,
+        event_date: eventDateStr(ev),
+        issued_by: null,
+      });
+    } catch (e) { if (e.code !== 'DUP') throw e; }
+  }
 }
 
 // Talent Home: active events (ongoing + upcoming) with their category needs.
@@ -970,12 +1043,18 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
+    const [apps, events, talents, certs] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates()]);
     const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const eventById = new Map(events.map((e) => [e.id, e]));
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const certByKey = new Map(certs.map((c) => [c.talent_id + '|' + c.event_id, c]));
     const applications = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
-      return { ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt };
+      const ev = eventById.get(a.event_id) || {};
+      return {
+        ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
+        event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null,
+      };
     });
     res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang }));
   } catch (e) { next(e); }
@@ -1019,8 +1098,65 @@ app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    await st.completeEvent(req.params.id, req.body.completed === '1');
+    const completed = req.body.completed === '1';
+    await st.completeEvent(req.params.id, completed);
+    if (completed) {
+      const [events, apps, talents] = await Promise.all([st.listEvents(), st.listApplications(), st.listTalents()]);
+      const eventById = new Map(events.map((e) => [e.id, e]));
+      const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+      await issueCertsForApps(st, apps.filter((a) => a.event_id === req.params.id), eventById, nameById);
+    }
     res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+
+// Super admin: manually issue a certificate for an attended applicant.
+app.post('/admin/applications/:id/issue-cert', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const a = await st.getApplication(req.params.id);
+    if (a && a.attended) {
+      const [events, talents] = await Promise.all([st.listEvents(), st.listTalents()]);
+      const ev = events.find((e) => e.id === a.event_id);
+      const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+      if (ev) {
+        try {
+          await st.createCertificate({
+            cert_no: cert.makeCertNo(), talent_id: a.talent_id, event_id: a.event_id,
+            role: a.role || V.CAT_LABEL[a.talent_type] || a.talent_type,
+            talent_name: (a.answers && a.answers.name) || nameById.get(a.talent_id) || '',
+            event_name: ev.name, event_date: eventDateStr(ev), issued_by: req.staff.id,
+          });
+        } catch (e) { if (e.code !== 'DUP') throw e; }
+      }
+    }
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// Super admin: revoke / restore a certificate.
+app.post('/admin/certificates/:id/revoke', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    await st.revokeCertificate(req.params.id, req.body.revoke === '1');
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// Staff: download a certificate PDF.
+app.get('/admin/certificates/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = await st.getCertificate(req.params.id);
+    if (!c) return res.redirect('/admin/applications');
+    const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    res.send(buf);
   } catch (e) { next(e); }
 });
 
