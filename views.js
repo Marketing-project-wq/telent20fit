@@ -1353,12 +1353,18 @@ function kolEventsPage({ account, events, lang }) {
   const list = (events && events.length)
     ? events.map((e) => {
         const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+        const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
         const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
-        const applied = e.applied
-          ? `<div style="margin-top:10px">${mpStatusBadge(e.applied.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[e.applied.category] || e.applied.category) })}</span></div>` : '';
+        let applied = '';
+        if (e.applied) {
+          const ap = e.applied;
+          const stn = (ap.status === 'approved' && ap.station)
+            ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
+          applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
+        }
         return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
           <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
-            <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}</div>
+            <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
             ${eventStatusBadge(e.status, L)}
           </div>
           <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
@@ -1379,8 +1385,21 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  const locLine = event.location ? `<div class="muted" style="font-size:13.5px;margin-top:6px">📍 ${esc(event.location)}</div>` : '';
   let action;
-  if (myApplication) {
+  if (myApplication && myApplication.status === 'approved') {
+    const detailRow = (icon, label, value) => `<div style="margin-top:10px;font-size:14px">${icon} <span class="muted">${esc(label)}:</span> <b>${value}</b></div>`;
+    const locRow = event.location ? detailRow('📍', t('apply.eventLoc'), esc(event.location)) : '';
+    const stationRow = myApplication.station
+      ? detailRow('🎯', t('apply.station'), esc(myApplication.station) + (myApplication.station_loc ? ' · ' + esc(myApplication.station_loc) : ''))
+      : `<div class="muted" style="font-size:13px;margin-top:10px">🎯 ${t('apply.stationPending')}</div>`;
+    action = `<div class="card" style="margin-top:16px;border:1px solid var(--ok);background:var(--ok-soft)">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge('approved', L)} <b style="font-size:16px">${t('apply.acceptedTitle')}</b></div>
+      ${detailRow('🏷️', t('apply.category'), esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type))}
+      ${locRow}
+      ${stationRow}
+    </div>`;
+  } else if (myApplication) {
     action = `<div class="card" style="margin-top:16px">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('apply.yourApp')}</div>
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge(myApplication.status, L)} <b>${esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type)}</b></div>
@@ -1395,8 +1414,9 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   const body = `<div class="wrap narrow">
   <a href="/kol/event?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <h1 style="margin-top:0">${esc(event.name)}</h1>
-  ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
-  <div>${eventStatusBadge(event.status, L)}</div>
+  ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
+  ${locLine}
+  <div style="margin-top:10px">${eventStatusBadge(event.status, L)}</div>
   ${event.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(event.description)}</p>` : ''}
   ${action}
 </div>`;
@@ -2267,6 +2287,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
       <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
+      <input type="text" name="location" placeholder="${t('manage.locationPh')}" maxlength="200" style="flex:2;min-width:180px">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.startDate')}<input type="date" name="starts_at" style="min-width:150px"></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
@@ -2364,6 +2385,10 @@ function adminEventEdit({ staff, event, lang }) {
     <div class="field">
       <label for="name">${t('ph.eventName')}</label>
       <input type="text" id="name" name="name" required maxlength="140" value="${esc(ev.name || '')}">
+    </div>
+    <div class="field">
+      <label for="location">${t('manage.location')}</label>
+      <input type="text" id="location" name="location" maxlength="200" placeholder="${t('manage.locationPh')}" value="${esc(ev.location || '')}">
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:150px">${t('manage.startDate')}<input type="date" name="starts_at" value="${esc(ev.starts_at || '')}"></label>
