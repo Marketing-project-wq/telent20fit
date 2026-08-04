@@ -255,6 +255,36 @@ function supabaseStore() {
       const { error } = await sb.from('talent_applications').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
     },
+    async createCertificate(row) {
+      const { data, error } = await sb.from('talent_certificates').insert(row).select('id,cert_no').maybeSingle();
+      if (error) {
+        if (/duplicate|unique/i.test(error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+        throw new Error(error.message);
+      }
+      return data;
+    },
+    async getCertificate(id) {
+      const { data } = await sb.from('talent_certificates').select('*').eq('id', id).maybeSingle();
+      return data || null;
+    },
+    async getCertificateByNo(certNo) {
+      const { data } = await sb.from('talent_certificates').select('*').eq('cert_no', certNo).maybeSingle();
+      return data || null;
+    },
+    async listCertificatesForTalent(talentId) {
+      const { data, error } = await sb.from('talent_certificates').select('*').eq('talent_id', talentId).is('revoked_at', null).order('issued_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listCertificates() {
+      const { data, error } = await sb.from('talent_certificates').select('*').order('issued_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async revokeCertificate(id, revoked) {
+      const { error } = await sb.from('talent_certificates').update({ revoked_at: revoked ? new Date().toISOString() : null }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createProof(row) {
       const { data, error } = await sb.from('talent_post_proofs').insert(row).select('id').maybeSingle();
       if (error) throw new Error(error.message);
@@ -349,6 +379,7 @@ function memoryStore() {
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
   const passwordResets = [];
+  const certificates = [];
   const proofs = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
@@ -431,6 +462,17 @@ function memoryStore() {
     async listApplicationsForTalent(talentId) { return applications.filter((a) => a.talent_id === talentId).slice().reverse(); },
     async getApplication(id) { return applications.find((a) => a.id === id) || null; },
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
+    async createCertificate(row) {
+      if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+      const rec = { id: 'cert-' + (++seq), revoked_at: null, issued_at: now(), ...row };
+      certificates.push(rec);
+      return { id: rec.id, cert_no: rec.cert_no };
+    },
+    async getCertificate(id) { return certificates.find((c) => c.id === id) || null; },
+    async getCertificateByNo(certNo) { return certificates.find((c) => c.cert_no === certNo) || null; },
+    async listCertificatesForTalent(talentId) { return certificates.filter((c) => c.talent_id === talentId && !c.revoked_at).slice().reverse(); },
+    async listCertificates() { return certificates.slice().reverse(); },
+    async revokeCertificate(id, revoked) { const c = certificates.find((c) => c.id === id); if (c) c.revoked_at = revoked ? now() : null; },
     async createProof(row) { const p = { id: 'pf-' + (++seq), ...row, status: row.status || 'pending', created_at: now() }; proofs.push(p); return { id: p.id }; },
     async updateProof(id, patch) { const p = proofs.find((p) => p.id === id); if (p) Object.assign(p, patch); },
     async listProofs() { return proofs.slice().reverse(); },

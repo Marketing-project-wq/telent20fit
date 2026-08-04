@@ -1260,11 +1260,17 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   return appLayout({ title: t('kol.title') + ' — 20FIT', body, role: 'kol', active: 'proofs', user: (talent && talent.name) || '', lang: L });
 }
 
-/** Talent's own profile (Data Diri) in the sidebar app shell — the /kol home. */
-function kolProfilePage({ account, lang }) {
+/** Talent's own profile (Data Diri) + earned certificates, in the app shell. */
+function kolProfilePage({ account, certs, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
+  const certList = (certs && certs.length)
+    ? `<div class="dl-list">${certs.map((c) => `<div class="dl-item" style="align-items:center">
+        <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''}</div><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.cert_no)}</div></div>
+        <a href="/kol/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
+      </div>`).join('')}</div>`
+    : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
   const body = `<div class="wrap">
   <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:0">
     <h1 style="margin:0">${t('nav.profile')}</h1>
@@ -1275,9 +1281,39 @@ function kolProfilePage({ account, lang }) {
     <div class="muted" style="font-size:13px;margin-top:2px">${esc(acc.login || '')}</div>
     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">${talentProfileBlock(acc, L)}</div>
   </div>
-  <form method="post" action="/kol/logout" style="margin-top:18px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
+
+  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">🎖️ ${t('cert.myTitle')}</h2></div>
+  ${certList}
+
+  <form method="post" action="/kol/logout" style="margin-top:26px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
+}
+
+/** Public certificate verification page (reached from the cert's QR/number). */
+function certVerifyPage({ cert, certNo, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const inner = cert
+    ? `<div class="card success">
+        <div class="check">✓</div>
+        <h1>${t('cert.validTitle')}</h1>
+        <p class="sub" style="margin:8px 0 20px">${t('cert.validSub')}</p>
+        <div style="text-align:left;max-width:420px;margin:0 auto">
+          ${[[t('cert.fName'), esc(cert.talent_name)], [t('cert.fRole'), esc(cert.role || '—')], [t('cert.fEvent'), esc(cert.event_name)], [t('cert.fDate'), esc(cert.event_date || '—')], [t('cert.fNo'), esc(cert.cert_no)]]
+            .map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)"><span class="muted" style="font-size:13px">${k}</span><b style="font-size:14px;text-align:right">${v}</b></div>`).join('')}
+        </div>
+      </div>`
+    : `<div class="card success">
+        <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+        <h1>${t('cert.invalidTitle')}</h1>
+        <p class="sub" style="margin:8px auto 8px;max-width:420px">${t('cert.invalidSub', { no: esc(certNo || '') })}</p>
+      </div>`;
+  const body = `<div class="wrap narrow">
+    <div style="text-align:center;margin-bottom:18px"><span style="font:800 22px/1 Barlow,sans-serif;color:var(--red)">20FIT</span> <span class="muted" style="font-size:13px">${t('cert.verifyBrand')}</span></div>
+    ${inner}
+  </div>`;
+  return layout({ title: t('cert.verifyTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
 // Talent categories a person can apply as, per event (matches talent_event_needs).
@@ -2404,6 +2440,11 @@ function adminApplications({ staff, applications, lang }) {
           <input type="hidden" name="attended" value="${a.attended ? '0' : '1'}">
           <button class="btn btn-ghost btn-sm">${a.attended ? t('mpr.unattend') : t('mpr.attend')}</button>
         </form>
+        ${a.attended ? (a.certificate
+          ? `<span class="pill ${a.certificate.revoked_at ? 'pill-off' : 'pill-ok'}">🎖️ ${esc(a.certificate.cert_no)}${a.certificate.revoked_at ? ` · ${t('cert.revoked')}` : ''}</span>
+             ${a.certificate.revoked_at ? '' : `<a href="/admin/certificates/${esc(a.certificate.id)}" class="btn btn-ghost btn-sm">⬇ ${t('cert.download')}</a>`}
+             <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
+          : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
       </div>` : ''}
       <div style="margin-top:12px">
         <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
@@ -2480,7 +2521,7 @@ function page500(msg) {
 
 module.exports = {
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
-  kolEventDetail, kolApplyForm, kolApplyDone, CAT_LABEL, CAT_FIELDS,
+  kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
