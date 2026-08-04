@@ -49,7 +49,7 @@
   "auth.forgot.sub": "Masukkan email akunmu. Kami kirim link untuk membuat password baru.",
   "auth.forgot.btn": "Kirim Link Reset",
   "auth.forgot.sentTitle": "Cek Email Kamu",
-  "auth.forgot.sentBody": "Kalau email itu terdaftar, kami sudah kirim link untuk reset password. Link berlaku 1 jam. Cek folder spam juga ya.",
+  "auth.forgot.sentBody": "Jika email terdaftar, kami telah mengirimkan tautan untuk mengatur ulang kata sandi. Tautan berlaku 1 jam. Jangan lupa cek folder spam.",
   "auth.forgot.backToLogin": "← Kembali ke login",
   "auth.reset.title": "Buat Password Baru",
   "auth.reset.sub": "Masukkan password baru untuk akunmu.",
