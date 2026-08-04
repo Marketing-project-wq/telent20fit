@@ -979,10 +979,6 @@ function talentDataDiri(type, opts = {}) {
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    <div style="display:flex;gap:10px;align-items:center">
-      ${toggles(L)}
-      <form method="post" action="/${p}/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
-    </div>
   </div>
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
@@ -1220,10 +1216,6 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    <div style="display:flex;gap:10px;align-items:center">
-      ${toggles(L)}
-      <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
-    </div>
   </div>
   <h1>${t('kol.title')}</h1>
   <p class="sub">${t('kol.greeting', { name: esc((talent && talent.name) || '') })}</p>
@@ -1312,10 +1304,6 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    <div style="display:flex;gap:10px;align-items:center">
-      ${toggles(L)}
-      <form method="post" action="/main-power/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
-    </div>
   </div>
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
@@ -1385,7 +1373,6 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/main-power?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    ${toggles(L)}
   </div>
   <h1>${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
