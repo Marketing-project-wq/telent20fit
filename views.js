@@ -292,8 +292,8 @@ function appLayout({ title, body, role, active, user, lang }) {
       + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
       + (role === 'super_admin' ? navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications')) : '')
       + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
-    : navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
-      + navLink('/kol/event', 'event', active, 'event', t('nav.events'))
+    : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
+      + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
       + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}"><head>
