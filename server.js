@@ -426,7 +426,22 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
   }
 }
 
-app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
+// KOL dashboard (sidebar app shell): Profil (home) · Event · Kirim Bukti.
+// req.account (full profile) is attached by requireTalentReady.
+app.get('/kol', requireTalentReady('kol'), (req, res) => {
+  res.send(V.kolProfilePage({ account: req.account, lang: req.lang }));
+});
+
+app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const events = teaserEvents(await st.listEvents());
+    res.send(V.kolEventsPage({ account: req.account, events, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/kol/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -440,7 +455,7 @@ app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
       return { event_name: ev.name, ends_at: ev.ends_at, is_active: ev.is_active, hasProof: myProofs.some((p) => p.event_id === a.event_id && p.status !== 'rejected') };
     }).filter(Boolean);
     const proofs = await enrichProofs(st, myProofs, { events: allEvents });
-    res.send(V.kolProofPage({ talent: req.talent, events, proofs, assignments, lang: req.lang, settings }));
+    res.send(V.kolProofPage({ talent: req.account, events, proofs, assignments, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
@@ -482,7 +497,7 @@ app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), 
     });
 
     runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
-    res.redirect('/kol');
+    res.redirect('/kol/kirim-bukti');
   } catch (e) { next(e); }
 });
 
