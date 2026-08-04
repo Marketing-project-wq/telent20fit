@@ -474,6 +474,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     </span>
     <div class="lp-toggles">
       <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
+      <a href="/admin/login" class="lp-submit">🔑 ${esc(t('land.admin'))}</a>
       ${toggle}
       ${themeToggle()}
     </div>
