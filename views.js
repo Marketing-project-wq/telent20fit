@@ -942,6 +942,7 @@ function talentProfileBlock(profile, lang) {
   const rows = [
     [t('adm.profile.phone'), wa],
     [t('adm.profile.city'), esc(profile.city || '—')],
+    [t('adm.profile.ktp'), esc(profile.ktp || '—')],
     [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
     [t('adm.profile.gender'), esc(genderLabel)],
     [t('adm.profile.instagram'), ig],
@@ -991,7 +992,7 @@ function talentDataDiri(type, opts = {}) {
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <a href="/kol?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
   </div>
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
@@ -1009,6 +1010,11 @@ function talentDataDiri(type, opts = {}) {
     <div class="field">
       <label for="gender">${t('dd.gender')}${req}</label>
       <select id="gender" name="gender" required>${genderOpts}</select>
+    </div>
+    <div class="field">
+      <label for="ktp">${t('dd.ktp')}${req}</label>
+      <input type="text" id="ktp" name="ktp" required inputmode="numeric" maxlength="16" placeholder="${esc(t('dd.ktpPh'))}" value="${esc(v.ktp || '')}">
+      <div class="hint" style="margin-top:6px">${t('dd.ktpHint')}</div>
     </div>
     <div class="field">
       <label for="instagram">${t('dd.instagram')}${igRequired ? req : opt}</label>

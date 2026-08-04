@@ -133,6 +133,7 @@ function dataDiriPost(type) {
       if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
       const values = {
         city: String(req.body.city || '').trim().slice(0, 80),
+        ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 16),
         birthdate: String(req.body.birthdate || '').trim(),
         gender: String(req.body.gender || '').trim(),
         instagram: String(req.body.instagram || '').trim().replace(/^@+/, '').slice(0, 60),
@@ -150,6 +151,7 @@ function dataDiriPost(type) {
       }
       if (!bdOk) errors.push(req.t('dd.err.birthdate'));
       if (values.gender !== 'male' && values.gender !== 'female') errors.push(req.t('dd.err.gender'));
+      if (!/^\d{16}$/.test(values.ktp)) errors.push(req.t('dd.err.ktp'));
       if (type === 'kol' && !values.instagram) errors.push(req.t('dd.err.instagram'));
       let followers = null;
       if (values.instagram_followers) {
@@ -163,6 +165,7 @@ function dataDiriPost(type) {
       }
       await st.updateAccountProfile(acc.id, {
         city: values.city,
+        ktp: values.ktp,
         birthdate: values.birthdate,
         gender: values.gender,
         instagram: values.instagram || null,
