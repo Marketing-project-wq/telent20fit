@@ -558,7 +558,7 @@ function talentPicker(mode, lang) {
   }[L];
   const cats = [
     { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
-    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: true },
+    { type: 'main_power', tag: 'MP', name: 'Man Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: true },
     { type: 'fotografer', tag: 'FG', name: 'Fotografer', id: 'Dokumentasi & portofolio foto.', en: 'Documentation & photo portfolio.', active: false },
   ];
   const q = `?lang=${L}`;
@@ -682,7 +682,7 @@ function kolForm(campaigns, opts = {}) {
   return layout({ title: 'Submit Hasil KOL — 20FIT', body, home: '/' });
 }
 
-const TALENT_LABEL = { kol: 'KOL', main_power: 'Main Power', fotografer: 'Fotografer' };
+const TALENT_LABEL = { kol: 'KOL', main_power: 'Man Power', fotografer: 'Fotografer' };
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
 function talentPath(type) { return type.replace(/_/g, '-'); }
 
@@ -1367,7 +1367,7 @@ function certVerifyPage({ cert, certNo, lang }) {
 }
 
 // Talent categories a person can apply as, per event (matches talent_event_needs).
-const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Manpower' };
+const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Man Power' };
 // Per-category application fields (beyond name + phone, which prefill from the
 // profile). label/ph/hint are i18n keys. type: text|number|url. req: required.
 const CAT_FIELDS = {
@@ -1516,9 +1516,9 @@ function kolApplyDone({ account, event, lang }) {
   return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
-// ------------------------------------------------------------ Main Power ----
+// ------------------------------------------------------------ Man Power ----
 
-// The four on-ground jobdesks a Main Power talent can apply for.
+// The four on-ground jobdesks a Man Power talent can apply for.
 const MP_JOBDESKS = ['Judges', 'Marshal', 'Drop Bag', 'Registrasi'];
 
 /** Application status badge: pending (warn) / approved (ok) / rejected (err). */
@@ -1538,7 +1538,7 @@ function mpAnswerLabel(val, lang) {
 }
 
 /**
- * Main Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
+ * Man Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
  * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
  */
 function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
@@ -1587,7 +1587,7 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
 }
 
 /**
- * Main Power apply page: a 2-step form (SOW + jobdesk + agree, then the four
+ * Man Power apply page: a 2-step form (SOW + jobdesk + agree, then the four
  * application questions). A small script reveals step 2; with JS off both steps
  * are visible and still submit. Step 3 ("Selesai") is the server-rendered
  * confirmation after POST.
@@ -1693,7 +1693,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
   return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
 }
 
-/** Confirmation after a Main Power application is submitted. */
+/** Confirmation after a Man Power application is submitted. */
 function mainPowerApplyDone({ event, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -2402,7 +2402,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
 /**
  * Super Admin: edit an existing event — schedule, which talent types it needs
- * (KOL / Main Power / Fotografer) with per-type quotas, and the Main Power SOW.
+ * (KOL / Man Power / Fotografer) with per-type quotas, and the Man Power SOW.
  */
 function adminEventEdit({ staff, event, lang }) {
   const L = normLang(lang);
@@ -2456,7 +2456,7 @@ function adminEventEdit({ staff, event, lang }) {
 }
 
 /**
- * Super Admin review of Main Power applications: applicant + jobdesk + answers,
+ * Super Admin review of Man Power applications: applicant + jobdesk + answers,
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */

@@ -317,7 +317,7 @@ app.get('/kol/register', (req, res) => {
 
 // Registration collects Full Name, Email, WhatsApp, Password + confirmation.
 // The account is created inactive; the talent completes Data Diri next. Shared
-// by both talent types (KOL + Main Power).
+// by both talent types (KOL + Man Power).
 function talentRegisterPost(type, opts = {}) {
   const unified = !!opts.unified;
   const p = type.replace(/_/g, '-');
@@ -683,8 +683,8 @@ app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), 
   } catch (e) { next(e); }
 });
 
-// ------------------------------------------------------------ Main Power ----
-// Main Power talents self-apply to events that open MP slots. An application
+// ------------------------------------------------------------ Man Power ----
+// Man Power talents self-apply to events that open MP slots. An application
 // (jobdesk + SOW agreement + answers) is reviewed by the Super Admin.
 
 // Active events opening MP slots, each with remaining slots (quota − approved).
@@ -1060,7 +1060,7 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   } catch (e) { next(e); }
 });
 
-// Aplikasi MP (super admin only): review Main Power event applications.
+// Aplikasi MP (super admin only): review Man Power event applications.
 app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
