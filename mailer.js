@@ -100,31 +100,60 @@ function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, categ
     team: '20FIT Talent Team',
     foot: 'This is an automated email from 20FIT Talent. Please do not reply to this email.',
   };
+  t.hero = id ? 'Pendaftaran Disetujui' : 'Registration Approved';
+  t.heroSub = id ? 'Kamu sudah siap untuk event ini' : "You're all set for the event";
+  t.pre = id ? 'Kamu disetujui — ini detail penugasan kamu.' : "You're approved — here are your assignment details.";
+
+  // Light, premium layout. Off-white text tones (#fffffe / #feffff) and explicit
+  // color-scheme metas make the hero resist email-client dark-mode inversion,
+  // which was flipping the wordmark to dark-on-red in the old flat template.
   const stationVal = station ? esc(station) + (stationLoc ? ' · ' + esc(stationLoc) : '')
     : '<span style="color:#8b8f97">' + esc(t.stnPending) + '</span>';
-  const row = (label, value) => value
-    ? `<tr><td style="padding:7px 0;font-size:13px;color:#8b8f97;width:150px;vertical-align:top">${esc(label)}</td><td style="padding:7px 0;font-size:14px;color:#17171d;font-weight:600">${value}</td></tr>`
+  const row = (label, value, accent) => value
+    ? `<tr>
+        <td style="padding:13px 16px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8b8f97;vertical-align:top;border-top:1px solid #eceff3;${accent ? 'background:#fff2f3' : ''}">${esc(label)}</td>
+        <td style="padding:13px 16px;font-size:14px;font-weight:700;text-align:right;vertical-align:top;color:${accent ? '#E4121F' : '#17171d'};border-top:1px solid #eceff3;${accent ? 'background:#fff2f3' : ''}">${value}</td>
+      </tr>`
     : '';
-  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
-    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
-      <tr><td style="background:#E4121F;padding:20px 28px;color:#fff;font-size:20px;font-weight:800">20FIT Talent</td></tr>
-      <tr><td style="padding:28px">
-        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
-        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#41454d">${t.body}</p>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fa;border:1px solid #e8ebf0;border-radius:12px;padding:6px 18px">
-          ${row(t.ev, esc(eventName))}
-          ${row(t.date, eventDate ? esc(eventDate) : '')}
-          ${row(t.loc, location ? esc(location) : '')}
-          ${row(t.cat, esc(category))}
-          ${row(t.stn, stationVal)}
-        </table>
-        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.next)}</p>
-        <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.keep)}</p>
-        <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.thanks)}</p>
-        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#41454d">${esc(t.regards)}<br><b>${esc(t.team)}</b></p>
+  // Strip the top border from the first present row (the card edge frames it).
+  const rowsHtml = [
+    row(t.ev, esc(eventName)),
+    row(t.date, eventDate ? esc(eventDate) : ''),
+    row(t.loc, location ? esc(location) : ''),
+    row(t.cat, esc(category)),
+    row(t.stn, stationVal, true),
+  ].filter(Boolean).join('')
+    .replace('border-top:1px solid #eceff3', 'border-top:0').replace('border-top:1px solid #eceff3', 'border-top:0');
+  const para = (txt, color) => `<p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;color:${color || '#4a4e57'}">${txt}</p>`;
+  return `<!doctype html><html lang="${id ? 'id' : 'en'}"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(t.pre)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:34px 30px 30px;text-align:center">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#fffffe">20FIT Talent</div>
+        <div style="width:62px;height:62px;border-radius:50%;background:#fffffe;font-size:30px;font-weight:900;color:#E4121F;line-height:62px;margin:20px auto 0">&#10003;</div>
+        <div style="margin-top:16px;font-size:22px;font-weight:800;color:#fffffe">${esc(t.hero)}</div>
+        <div style="margin-top:6px;font-size:13.5px;color:#ffe3e5">${esc(t.heroSub)}</div>
       </td></tr>
-      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">${esc(t.hi)}</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#4a4e57">${t.body.replace('<b>', '<b style="color:#E4121F">')}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafbfc;border:1px solid #eceff3;border-radius:14px">
+          ${rowsHtml}
+        </table>
+      </td></tr>
+      <tr><td style="padding:22px 30px 4px">
+        ${para(esc(t.next))}
+        ${para(esc(t.keep))}
+        ${para(esc(t.thanks))}
+        <p style="margin:20px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">${esc(t.regards)}<br><b style="color:#17171d">${esc(t.team)}</b></p>
+      </td></tr>
+      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">${esc(t.foot)}</p></td></tr>
     </table>
   </td></tr></table>
 </body></html>`;
