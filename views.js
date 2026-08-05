@@ -1521,6 +1521,23 @@ function kolApplyDone({ account, event, lang }) {
 // The four on-ground jobdesks a Man Power talent can apply for.
 const MP_JOBDESKS = ['Judges', 'Marshal', 'Drop Bag', 'Registrasi'];
 
+// Stations an admin can assign an approved Man Power talent to.
+const MP_STATIONS = [
+  'Skierg', 'Rowing', 'Sled Push', 'Sled Pull', 'Wallball', 'Sandbag',
+  'Farmers Carry', 'Burpee Broad Jump', 'Marshal In Station', 'Marshal Out Station',
+  'Trafic Control', 'Time Keeper', 'Start Crew', 'Finish Crew', 'Bag Deposit',
+  'Registrasi', 'Refreshment Crew', 'Water Station', 'Runner Crew',
+];
+/** <option> list for the station picker; keeps a legacy/free-text value selectable. */
+function stationOptions(current, placeholder) {
+  const cur = current == null ? '' : String(current);
+  const inList = MP_STATIONS.some((s) => s === cur);
+  const opts = [`<option value=""${cur === '' ? ' selected' : ''}>${esc(placeholder)}</option>`];
+  if (cur !== '' && !inList) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)}</option>`);
+  for (const s of MP_STATIONS) opts.push(`<option value="${esc(s)}"${s === cur ? ' selected' : ''}>${esc(s)}</option>`);
+  return opts.join('');
+}
+
 /** Application status badge: pending (warn) / approved (ok) / rejected (err). */
 function mpStatusBadge(status, lang) {
   const L = normLang(lang);
@@ -2505,7 +2522,7 @@ function adminApplications({ staff, applications, lang, flash }) {
       ? `<button class="btn btn-ghost btn-sm station-save" name="action" value="approve" data-clean="${esc(t('mpr.stationSaved'))}" data-dirty="${esc(t('mpr.updateStation'))}">${esc(t('mpr.stationSaved'))}</button>`
       : `<button class="btn btn-sm" name="action" value="approve">${t('mpr.approve')}</button>`;
     const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" class="station-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<input type="text" name="station" maxlength="120" value="${esc(a.station || '')}"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<select name="station">${stationOptions(a.station, t('mpr.stationPick'))}</select></label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
         <input type="hidden" name="note" value="${esc(a.note || '')}">
         ${saveBtn}
@@ -2570,14 +2587,14 @@ function adminApplications({ staff, applications, lang, flash }) {
 (function(){
   document.querySelectorAll('.station-save').forEach(function(btn){
     var form = btn.closest('form'); if(!form) return;
-    var inputs = form.querySelectorAll('input[name="station"], input[name="station_loc"]');
+    var inputs = form.querySelectorAll('[name="station"], [name="station_loc"]');
     var initial = Array.prototype.map.call(inputs, function(i){ return i.value; });
     function sync(){
       var dirty = Array.prototype.some.call(inputs, function(i, idx){ return i.value !== initial[idx]; });
       if(dirty){ btn.classList.remove('btn-ghost'); btn.disabled = false; btn.textContent = btn.dataset.dirty; }
       else { btn.classList.add('btn-ghost'); btn.disabled = true; btn.textContent = btn.dataset.clean; }
     }
-    inputs.forEach(function(i){ i.addEventListener('input', sync); });
+    inputs.forEach(function(i){ i.addEventListener('input', sync); i.addEventListener('change', sync); });
     sync();
   });
 })();
