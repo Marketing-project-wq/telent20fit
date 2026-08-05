@@ -1078,7 +1078,16 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null,
       };
     });
-    res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang, flash: String(req.query.mail || '') }));
+    // Attendance links: one per event that has approved Man Power, for on-site PICs.
+    const mpCount = new Map();
+    for (const a of applications) {
+      if (a.status === 'approved' && a.talent_type === 'main_power') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
+    }
+    const attendanceLinks = [...mpCount.entries()].map(([eid, n]) => ({
+      name: eventName.get(eid) || '—', count: n,
+      path: '/absensi/' + encodeURIComponent(eid) + '?k=' + auth.attendanceToken(eid),
+    })).sort((a, b) => a.name.localeCompare(b.name));
+    res.send(V.adminApplications({ staff: staffCtx(req), applications, attendanceLinks, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1231,6 +1240,60 @@ app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), a
     const attended = req.body.attended === '1';
     await st.updateApplication(req.params.id, { attended, attended_at: attended ? new Date().toISOString() : null });
     res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// --- On-site attendance (tokened link, no login) --------------------------
+// A super admin shares /absensi/:eventId?k=<token> with an on-site PIC. The PIC
+// sees every approved Man Power for that event (sorted by name) and checks them
+// in as they arrive. The token is an HMAC of the event id (auth.attendanceToken),
+// so no account is needed and one link maps to exactly one event.
+
+// Build the sorted list of approved Man Power for an event (name, station, attended).
+async function attendanceRows(st, eventId) {
+  const [apps, talents] = await Promise.all([st.listApplications(), st.listTalents()]);
+  const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  return apps
+    .filter((a) => a.event_id === eventId && a.status === 'approved' && a.talent_type === 'main_power')
+    .map((a) => ({ id: a.id, name: nameById.get(a.talent_id) || '—', station: a.station, station_loc: a.station_loc, attended: !!a.attended }))
+    .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
+}
+
+app.get('/absensi/:eventId', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.query.k || '');
+    const eventId = req.params.eventId;
+    const ok = auth.verifyAttendanceToken(eventId, token);
+    const ev = (await st.listEvents()).find((e) => e.id === eventId) || null;
+    if (!ok || !ev) return res.status(ok ? 404 : 403).send(V.attendancePage({ invalid: true, lang: req.lang }));
+    const rows = await attendanceRows(st, eventId);
+    res.send(V.attendancePage({ event: ev, eventDate: eventDateStr(ev), rows, token, lang: req.lang, done: String(req.query.done || '') }));
+  } catch (e) { next(e); }
+});
+
+app.post('/absensi/:eventId/checkin', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.body.k || '');
+    const eventId = req.params.eventId;
+    if (!auth.verifyAttendanceToken(eventId, token)) return res.status(403).send(V.attendancePage({ invalid: true, lang: req.lang }));
+    const appId = String(req.body.app || '');
+    const attended = req.body.attended === '1';
+    const app0 = await st.getApplication(appId);
+    // Guard: the token is event-scoped, so only touch an approved MP row of THIS event.
+    let doneName = '';
+    if (app0 && app0.event_id === eventId && app0.status === 'approved' && app0.talent_type === 'main_power') {
+      await st.updateApplication(appId, { attended, attended_at: attended ? new Date().toISOString() : null });
+      if (attended) {
+        const tt = (await st.listTalents()).find((x) => x.id === app0.talent_id);
+        doneName = (tt && tt.name) || '';
+      }
+    }
+    const q = 'k=' + encodeURIComponent(token) + (doneName ? '&done=' + encodeURIComponent(doneName) : '');
+    res.redirect('/absensi/' + encodeURIComponent(eventId) + '?' + q);
   } catch (e) { next(e); }
 });
 
