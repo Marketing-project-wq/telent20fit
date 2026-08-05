@@ -1125,13 +1125,13 @@ function jakartaHour(d) { return parseInt((d || new Date()).toLocaleString('en-G
 // and who hasn't been reminded yet. Idempotent via reminder_sent_at, so it is
 // safe to call repeatedly. Returns the number of reminders sent.
 async function runDueReminders(st) {
-  if (!st) return 0;
+  if (!st) return { due: 0, sent: 0 };
   const target = addDaysYMD(jakartaDateStr(), 1); // events starting tomorrow (WIB)
   const events = await st.listEvents();
   const dueEvents = new Map(events
     .filter((e) => e.is_active && !e.completed_at && String(e.starts_at || '').slice(0, 10) === target)
     .map((e) => [e.id, e]));
-  if (!dueEvents.size) return 0;
+  if (!dueEvents.size) return { due: 0, sent: 0 };
   const apps = await st.listApplications();
   const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
   let sent = 0;
@@ -1141,18 +1141,20 @@ async function runDueReminders(st) {
       const to = account && account.login;
       if (!to || !/@/.test(to)) continue;
       const ev = dueEvents.get(a.event_id);
-      await mailer.sendReminderEmail({
+      const r = await mailer.sendReminderEmail({
         to, name: account.name, lang: 'id',
         eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
         location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
         station: a.station, stationLoc: a.station_loc,
       });
-      await st.updateApplication(a.id, { reminder_sent_at: new Date().toISOString() });
-      sent++;
+      // Only mark as reminded once the email is genuinely delivered — so if the
+      // mail service isn't configured yet, we retry on the next run instead of
+      // silently burning the reminder.
+      if (r && r.delivered) { await st.updateApplication(a.id, { reminder_sent_at: new Date().toISOString() }); sent++; }
     } catch (e) { console.error('[mail] reminder failed for app ' + a.id + ':', e && e.message); }
   }
   if (sent) console.log('[reminders] sent ' + sent + ' H-1 reminder(s) for events on ' + target);
-  return sent;
+  return { due: due.length, sent };
 }
 
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
@@ -1179,8 +1181,8 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
     if (!st) return needConfig(req, res);
     let flash = 'remerr';
     try {
-      const n = await runDueReminders(st);
-      flash = n === 0 ? 'rem0' : (mailer.configured() ? 'remsent' : 'remmock');
+      const { due, sent } = await runDueReminders(st);
+      flash = due === 0 ? 'rem0' : (sent > 0 ? 'remsent' : 'remmock');
     } catch (e) { console.error('[reminders] manual run failed:', e && e.message); flash = 'remerr'; }
     res.redirect('/admin/applications?mail=' + flash);
   } catch (e) { next(e); }
