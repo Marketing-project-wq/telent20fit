@@ -413,6 +413,7 @@
   "mpr.answersTitle": "Application answers",
   "mpr.contact": "Contact",
   "mpr.stationName": "Station Name",
+  "mpr.stationPick": "— Pick a station —",
   "mpr.stationLoc": "Location / Zone",
   "mpr.noteLabel": "Note to applicant (optional)",
   "mpr.approve": "Approve",
