@@ -1062,7 +1062,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null,
       };
     });
-    res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang }));
+    res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1113,6 +1113,25 @@ async function notifyAcceptance(st, app, patch) {
     station: patch.station, stationLoc: patch.station_loc,
   });
 }
+
+// Super admin: manually (re)send the acceptance email for an approved application.
+// Unlike the auto-send on approval, this always sends — used to re-notify a talent
+// who was approved before the auto-email existed, or whose placement changed.
+app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = await st.getApplication(req.params.id);
+    let flash = 'error';
+    if (app && app.status === 'approved') {
+      try {
+        await notifyAcceptance(st, app, { station: app.station, station_loc: app.station_loc });
+        flash = mailer.configured() ? 'sent' : 'mock';
+      } catch (e) { console.error('[mail] resend acceptance failed:', e && e.message); flash = 'error'; }
+    }
+    res.redirect('/admin/applications?mail=' + flash);
+  } catch (e) { next(e); }
+});
 
 // Super admin: mark a talent as attended (basis for the digital certificate).
 app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), async (req, res, next) => {
