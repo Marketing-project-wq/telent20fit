@@ -2418,10 +2418,15 @@ function adminEventEdit({ staff, event, lang }) {
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */
-function adminApplications({ staff, applications, lang }) {
+function adminApplications({ staff, applications, lang, flash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
+  const flashBanner = {
+    sent: `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr.mailSent')}</div>`,
+    mock: `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">⚠️ ${t('mpr.mailMock')}</div>`,
+    error: `<div class="card" style="margin-top:14px;border:1px solid var(--err);background:var(--err-soft);font-size:14px">⚠️ ${t('mpr.mailError')}</div>`,
+  }[flash] || '';
   // Labels for application answer keys (new category forms + legacy MP q1–q4).
   const ANSWER_LABEL = {
     name: 'common.fullname', phone: 'dd.phone', city: 'dd.city',
@@ -2471,6 +2476,9 @@ function adminApplications({ staff, applications, lang }) {
           <input type="hidden" name="attended" value="${a.attended ? '0' : '1'}">
           <button class="btn btn-ghost btn-sm">${a.attended ? t('mpr.unattend') : t('mpr.attend')}</button>
         </form>
+        <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
+          <button class="btn btn-ghost btn-sm" title="${t('mpr.resendHint')}">✉ ${t('mpr.resendEmail')}</button>
+        </form>
         ${a.attended ? (a.certificate
           ? `<span class="pill ${a.certificate.revoked_at ? 'pill-off' : 'pill-ok'}">🎖️ ${esc(a.certificate.cert_no)}${a.certificate.revoked_at ? ` · ${t('cert.revoked')}` : ''}</span>
              ${a.certificate.revoked_at ? '' : `<a href="/admin/certificates/${esc(a.certificate.id)}" class="btn btn-ghost btn-sm">⬇ ${t('cert.download')}</a>`}
@@ -2492,6 +2500,7 @@ function adminApplications({ staff, applications, lang }) {
   const body = `<div class="wrap">
   ${staffHead(staff, t('mpr.title'), L)}
   <p class="sub">${t('mpr.sub')}</p>
+  ${flashBanner}
   <p class="muted" style="font-size:13px;margin-top:6px">${t('mpr.count', { n: applications.length })}</p>
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
 </div>`;
