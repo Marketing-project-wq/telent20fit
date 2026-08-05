@@ -404,7 +404,7 @@
   "mp.err.roleRequired": "Please choose a jobdesk first.",
   "mp.err.sowRequired": "You must agree to the SOW to continue.",
 
-  "nav.applications": "MP Applications",
+  "nav.applications": "Main Power",
   "mpr.title": "Main Power Applications",
   "mpr.sub": "Review Main Power applications, approve or reject, then assign a station.",
   "mpr.empty": "No Main Power applications yet.",
@@ -432,6 +432,7 @@
   "mpr.notAttended": "Not attended",
   "mpr.reject": "Reject",
   "mpr.updateStation": "Save Station",
+  "mpr.stationSaved": "✓ Saved",
   "mpr.reviewedBy": "Reviewed",
   "mpr.noStation": "No station yet",
   "confirm.rejectApp": "Reject this application?",

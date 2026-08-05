@@ -2456,11 +2456,17 @@ function adminApplications({ staff, applications, lang, flash }) {
         <div style="font-size:14px;margin-top:2px;word-break:break-word">${val}</div></div>`;
       }).join('');
 
-    const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
+    // For an already-approved app the primary button starts in a muted "saved"
+    // state and only turns red again once the station inputs are edited (wired
+    // by the stationScript below). A pending app keeps the solid red "Setujui".
+    const saveBtn = a.status === 'approved'
+      ? `<button class="btn btn-ghost btn-sm station-save" name="action" value="approve" data-clean="${esc(t('mpr.stationSaved'))}" data-dirty="${esc(t('mpr.updateStation'))}">${esc(t('mpr.stationSaved'))}</button>`
+      : `<button class="btn btn-sm" name="action" value="approve">${t('mpr.approve')}</button>`;
+    const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" class="station-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<input type="text" name="station" maxlength="120" value="${esc(a.station || '')}"></label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
         <input type="hidden" name="note" value="${esc(a.note || '')}">
-        <button class="btn btn-sm" name="action" value="approve">${a.status === 'approved' ? t('mpr.updateStation') : t('mpr.approve')}</button>
+        ${saveBtn}
         ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
       </form>`;
 
@@ -2515,7 +2521,23 @@ function adminApplications({ staff, applications, lang, flash }) {
     </form>
   </div>
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
-</div>`;
+</div>
+<script>
+(function(){
+  document.querySelectorAll('.station-save').forEach(function(btn){
+    var form = btn.closest('form'); if(!form) return;
+    var inputs = form.querySelectorAll('input[name="station"], input[name="station_loc"]');
+    var initial = Array.prototype.map.call(inputs, function(i){ return i.value; });
+    function sync(){
+      var dirty = Array.prototype.some.call(inputs, function(i, idx){ return i.value !== initial[idx]; });
+      if(dirty){ btn.classList.remove('btn-ghost'); btn.disabled = false; btn.textContent = btn.dataset.dirty; }
+      else { btn.classList.add('btn-ghost'); btn.disabled = true; btn.textContent = btn.dataset.clean; }
+    }
+    inputs.forEach(function(i){ i.addEventListener('input', sync); });
+    sync();
+  });
+})();
+</script>`;
   return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
 }
 
