@@ -404,7 +404,7 @@
   "mp.err.roleRequired": "Pilih jobdesk dulu.",
   "mp.err.sowRequired": "Kamu harus menyetujui SOW untuk lanjut.",
 
-  "nav.applications": "Aplikasi MP",
+  "nav.applications": "Main Power",
   "mpr.title": "Aplikasi Main Power",
   "mpr.sub": "Tinjau aplikasi Main Power, setujui atau tolak, lalu assign station.",
   "mpr.empty": "Belum ada aplikasi Main Power.",
@@ -432,6 +432,7 @@
   "mpr.notAttended": "Belum hadir",
   "mpr.reject": "Tolak",
   "mpr.updateStation": "Simpan Station",
+  "mpr.stationSaved": "✓ Tersimpan",
   "mpr.reviewedBy": "Sudah ditinjau",
   "mpr.noStation": "Belum ada station",
   "confirm.rejectApp": "Tolak aplikasi ini?",
