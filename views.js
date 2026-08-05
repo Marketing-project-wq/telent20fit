@@ -101,6 +101,10 @@ a{color:var(--red)}
 .tab-bar{display:none}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 70px}
 .wrap.narrow{max-width:640px}
+/* Talent pages sit next to the sidebar — left-align the content so narrow
+   pages hug the sidebar instead of floating awkwardly centered. */
+.talent-app .wrap{margin-left:0;margin-right:auto}
+@media(min-width:900px){.talent-app .wrap{padding-left:34px}}
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .sub{color:var(--muted);font-size:15px;margin-top:5px}
