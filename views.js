@@ -2422,10 +2422,17 @@ function adminApplications({ staff, applications, lang, flash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
+  const okBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${msg}</div>`;
+  const warnBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">⚠️ ${msg}</div>`;
+  const errBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--err);background:var(--err-soft);font-size:14px">⚠️ ${msg}</div>`;
   const flashBanner = {
-    sent: `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr.mailSent')}</div>`,
-    mock: `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">⚠️ ${t('mpr.mailMock')}</div>`,
-    error: `<div class="card" style="margin-top:14px;border:1px solid var(--err);background:var(--err-soft);font-size:14px">⚠️ ${t('mpr.mailError')}</div>`,
+    sent: okBanner(t('mpr.mailSent')),
+    mock: warnBanner(t('mpr.mailMock')),
+    error: errBanner(t('mpr.mailError')),
+    remsent: okBanner(t('mpr.remSent')),
+    remmock: warnBanner(t('mpr.remMock')),
+    rem0: okBanner(t('mpr.remNone')),
+    remerr: errBanner(t('mpr.mailError')),
   }[flash] || '';
   // Labels for application answer keys (new category forms + legacy MP q1–q4).
   const ANSWER_LABEL = {
@@ -2501,7 +2508,12 @@ function adminApplications({ staff, applications, lang, flash }) {
   ${staffHead(staff, t('mpr.title'), L)}
   <p class="sub">${t('mpr.sub')}</p>
   ${flashBanner}
-  <p class="muted" style="font-size:13px;margin-top:6px">${t('mpr.count', { n: applications.length })}</p>
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
+    <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
+    <form method="post" action="/admin/reminders/run" class="inline-form">
+      <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
+    </form>
+  </div>
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
 </div>`;
   return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });

@@ -119,6 +119,69 @@ function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, categ
 </body></html>`;
 }
 
+function reminderEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) {
+  const id = lang !== 'en';
+  const t = id ? {
+    hi: ('Halo ' + (name || '')).trim() + ',',
+    body: 'Pengingat ya! 📅 <b>Besok</b> kamu bertugas di event berikut. Mohon datang tepat waktu dan siapkan semua kebutuhanmu.',
+    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori', stn: 'Penempatan / station',
+    stnPending: 'Akan diinformasikan lebih lanjut oleh tim.',
+    next: 'Sampai jumpa besok di lokasi! Kalau ada kendala, segera hubungi tim 20FIT.',
+    foot: 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
+  } : {
+    hi: ('Hi ' + (name || '')).trim() + ',',
+    body: "Friendly reminder! 📅 You're on duty for the event below <b>tomorrow</b>. Please arrive on time and bring everything you need.",
+    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category', stn: 'Placement / station',
+    stnPending: 'Will be shared by the team soon.',
+    next: 'See you there tomorrow! If anything comes up, reach out to the 20FIT team.',
+    foot: 'Automated email from 20FIT Talent. Please do not reply.',
+  };
+  const stationVal = station ? esc(station) + (stationLoc ? ' · ' + esc(stationLoc) : '')
+    : '<span style="color:#8b8f97">' + esc(t.stnPending) + '</span>';
+  const row = (label, value) => value
+    ? `<tr><td style="padding:7px 0;font-size:13px;color:#8b8f97;width:150px;vertical-align:top">${esc(label)}</td><td style="padding:7px 0;font-size:14px;color:#17171d;font-weight:600">${value}</td></tr>`
+    : '';
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      <tr><td style="background:#E4121F;padding:20px 28px;color:#fff;font-size:20px;font-weight:800">20FIT Talent</td></tr>
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
+        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#41454d">${t.body}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f8fa;border:1px solid #e8ebf0;border-radius:12px;padding:6px 18px">
+          ${row(t.ev, esc(eventName))}
+          ${row(t.date, eventDate ? esc(eventDate) : '')}
+          ${row(t.loc, location ? esc(location) : '')}
+          ${row(t.cat, esc(category))}
+          ${row(t.stn, stationVal)}
+        </table>
+        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.next)}</p>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Remind a talent their event is tomorrow (H-1). Returns { delivered }. Never throws for a missing key. */
+async function sendReminderEmail({ to, name, lang, eventName, eventDate, location, category, station, stationLoc }) {
+  const subject = (lang !== 'en' ? 'Pengingat: ' : 'Reminder: ') + (eventName || 'event 20FIT') + (lang !== 'en' ? ' besok!' : ' is tomorrow!') + ' — 20FIT Talent';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — reminder for ' + to + ' (' + eventName + ')');
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: reminderEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
 /** Notify a talent their application was approved. Returns { delivered }. Never throws for a missing key. */
 async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, location, category, station, stationLoc }) {
   const subject = (lang !== 'en' ? 'Kamu diterima di ' : "You're accepted for ") + (eventName || 'event 20FIT') + ' — 20FIT Talent';
@@ -138,4 +201,4 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendAcceptanceEmail };
+module.exports = { configured, sendResetEmail, sendAcceptanceEmail, sendReminderEmail };
