@@ -105,6 +105,13 @@ h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .sub{color:var(--muted);font-size:15px;margin-top:5px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}
+.ev-card{overflow:hidden;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.ev-card:hover{transform:translateY(-3px);border-color:var(--red);box-shadow:0 10px 26px rgba(0,0,0,.28)}
+.ev-cover{position:relative;height:96px;margin:-24px -24px 16px;overflow:hidden}
+.ev-cover-tex{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.06) 0,rgba(255,255,255,.06) 2px,transparent 2px,transparent 13px)}
+.ev-cover-ini{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:46px;font-weight:900;color:rgba(255,255,255,.92);letter-spacing:-.03em;text-shadow:0 2px 12px rgba(0,0,0,.28);line-height:1}
+.ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
+.ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
 input[type=text],input[type=url],input[type=password],input[type=datetime-local],input[type=number],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
@@ -917,6 +924,39 @@ function forgotPasswordSent({ type, lang }) {
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+// Deterministic cover palette + accent icon for an event, keyed off a stable
+// seed (event id/name) so a given event always gets the same look. Keeps the
+// brand red first, with a few energetic sport-themed gradients for variety.
+const EV_COVERS = [
+  ['#E4121F', '#7a0a12', '🔥'],
+  ['#ff7a18', '#af002d', '⚡'],
+  ['#f59e0b', '#b45309', '🏆'],
+  ['#10b981', '#065f46', '🏅'],
+  ['#0ea5e9', '#1e3a8a', '🎯'],
+  ['#7c3aed', '#4c1d95', '🎪'],
+];
+function evCoverPick(seed) {
+  const s = String(seed || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return EV_COVERS[h % EV_COVERS.length];
+}
+/** Full-bleed gradient "cover" for an event card, with initial, icon & status badge. */
+function eventCover(e, lang) {
+  const L = normLang(lang);
+  const [c1, c2, icon] = evCoverPick(e.id || e.name);
+  const initial = esc(String(e.name || '?').trim().charAt(0).toUpperCase() || '?');
+  const ongoing = e.status === 'ongoing';
+  const badgeColor = ongoing ? '#0f9d6a' : '#E4121F';
+  const badgeText = tr(L, ongoing ? 'ev.status.ongoing' : 'ev.status.upcoming');
+  return `<div class="ev-cover" style="background:linear-gradient(135deg,${c1},${c2})">
+      <div class="ev-cover-tex"></div>
+      <div class="ev-cover-ini">${initial}</div>
+      <div class="ev-cover-ico">${icon}</div>
+      <span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>
+    </div>`;
+}
+
 /** Small status badge for an event teaser: ongoing (ok) / coming soon (warn). */
 function eventStatusBadge(status, lang) {
   const L = normLang(lang);
@@ -1362,11 +1402,9 @@ function kolEventsPage({ account, events, lang }) {
             ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
           applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
         }
-        return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
-            <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
-            ${eventStatusBadge(e.status, L)}
-          </div>
+        return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card ev-card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+          ${eventCover(e, L)}
+          <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
           <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
           ${applied}
         </a>`;
