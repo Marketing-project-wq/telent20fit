@@ -2557,7 +2557,6 @@ function adminApplications({ staff, applications, lang, flash }) {
 
   const body = `<div class="wrap">
   ${staffHead(staff, t('mpr.title'), L)}
-  <p class="sub">${t('mpr.sub')}</p>
   ${flashBanner}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
