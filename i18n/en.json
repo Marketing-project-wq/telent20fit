@@ -433,6 +433,7 @@
   "mpr.reject": "Reject",
   "mpr.updateStation": "Save Station",
   "mpr.stationSaved": "✓ Saved",
+  "mpr.detailToggle": "Profile & application answers",
   "mpr.reviewedBy": "Reviewed",
   "mpr.noStation": "No station yet",
   "confirm.rejectApp": "Reject this application?",

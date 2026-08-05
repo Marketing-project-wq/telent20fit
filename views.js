@@ -2498,15 +2498,18 @@ function adminApplications({ staff, applications, lang, flash }) {
              <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
           : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
       </div>` : ''}
-      <div style="margin-top:12px">
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
-        <div style="margin-top:8px">${talentProfileBlock(a.profile, L)}</div>
-      </div>
-      <div style="margin-top:12px">
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
-        ${answerRows || `<div class="muted" style="font-size:13px;margin-top:6px">—</div>`}
-      </div>
       ${stationForm}
+      <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
+        <div style="margin-top:10px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
+          <div style="margin-top:8px">${talentProfileBlock(a.profile, L)}</div>
+        </div>
+        <div style="margin-top:12px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
+          ${answerRows || `<div class="muted" style="font-size:13px;margin-top:6px">—</div>`}
+        </div>
+      </details>
     </div>`;
   }).join('');
 
