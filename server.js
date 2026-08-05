@@ -1249,13 +1249,32 @@ app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), a
 // in as they arrive. The token is an HMAC of the event id (auth.attendanceToken),
 // so no account is needed and one link maps to exactly one event.
 
-// Build the sorted list of approved Man Power for an event (name, station, attended).
-async function attendanceRows(st, eventId) {
+// Per-day attendance is stored as a reserved key on the application's answers
+// JSON (answers.__att = ['YYYY-MM-DD', ...]) so no schema change is needed. The
+// legacy attended/attended_at booleans are kept in sync (attended = any day) so
+// certificate issuance keeps working.
+function attDates(app) {
+  const d = app && app.answers && app.answers.__att;
+  return Array.isArray(d) ? d.filter((x) => typeof x === 'string') : [];
+}
+// Inclusive list of an event's calendar days (YYYY-MM-DD), capped for safety.
+function eventDays(ev) {
+  const s = String((ev && ev.starts_at) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return [];
+  let end = String((ev && ev.ends_at) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end < s) end = s;
+  const days = []; let d = s; let guard = 0;
+  while (guard++ < 60) { days.push(d); if (d >= end) break; d = addDaysYMD(d, 1); }
+  return days;
+}
+
+// Approved Man Power for an event, sorted by name, with per-day + total attendance.
+async function attendanceRows(st, eventId, day) {
   const [apps, talents] = await Promise.all([st.listApplications(), st.listTalents()]);
   const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
   return apps
     .filter((a) => a.event_id === eventId && a.status === 'approved' && a.talent_type === 'main_power')
-    .map((a) => ({ id: a.id, name: nameById.get(a.talent_id) || '—', station: a.station, station_loc: a.station_loc, attended: !!a.attended }))
+    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: a.station, station_loc: a.station_loc, count: dates.length, checked: day ? dates.includes(day) : false }; })
     .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
 }
 
@@ -1268,8 +1287,12 @@ app.get('/absensi/:eventId', async (req, res, next) => {
     const ok = auth.verifyAttendanceToken(eventId, token);
     const ev = (await st.listEvents()).find((e) => e.id === eventId) || null;
     if (!ok || !ev) return res.status(ok ? 404 : 403).send(V.attendancePage({ invalid: true, lang: req.lang }));
-    const rows = await attendanceRows(st, eventId);
-    res.send(V.attendancePage({ event: ev, eventDate: eventDateStr(ev), rows, token, lang: req.lang, done: String(req.query.done || '') }));
+    const days = eventDays(ev);
+    const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[0] || today);
+    const rows = await attendanceRows(st, eventId, day);
+    res.send(V.attendancePage({ event: ev, eventDate: eventDateStr(ev), rows, days, day, token, lang: req.lang, done: String(req.query.done || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1282,20 +1305,87 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
     if (!auth.verifyAttendanceToken(eventId, token)) return res.status(403).send(V.attendancePage({ invalid: true, lang: req.lang }));
     const appId = String(req.body.app || '');
     const attended = req.body.attended === '1';
+    const day = String(req.body.day || '');
+    const ev = (await st.listEvents()).find((e) => e.id === eventId) || null;
     const app0 = await st.getApplication(appId);
-    // Guard: the token is event-scoped, so only touch an approved MP row of THIS event.
+    // Guard: token is event-scoped and the day must be one of the event's days.
     let doneName = '';
-    if (app0 && app0.event_id === eventId && app0.status === 'approved' && app0.talent_type === 'main_power') {
-      await st.updateApplication(appId, { attended, attended_at: attended ? new Date().toISOString() : null });
-      if (attended) {
-        const tt = (await st.listTalents()).find((x) => x.id === app0.talent_id);
-        doneName = (tt && tt.name) || '';
-      }
+    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && app0.status === 'approved' && app0.talent_type === 'main_power') {
+      const set = new Set(attDates(app0));
+      if (attended) set.add(day); else set.delete(day);
+      const arr = [...set].sort();
+      const answers = Object.assign({}, app0.answers || {}, { __att: arr });
+      await st.updateApplication(appId, { answers, attended: arr.length > 0, attended_at: arr.length ? (app0.attended_at || new Date().toISOString()) : null });
+      if (attended) { const tt = (await st.listTalents()).find((x) => x.id === app0.talent_id); doneName = (tt && tt.name) || ''; }
     }
-    const q = 'k=' + encodeURIComponent(token) + (doneName ? '&done=' + encodeURIComponent(doneName) : '');
+    const q = 'k=' + encodeURIComponent(token) + '&day=' + encodeURIComponent(day) + (doneName ? '&done=' + encodeURIComponent(doneName) : '');
     res.redirect('/absensi/' + encodeURIComponent(eventId) + '?' + q);
   } catch (e) { next(e); }
 });
+
+// Super admin: download a PPTX report of Man Power who have checked in — bank
+// details, phone, and how many days each attended. Payment/reconciliation aid.
+app.get('/admin/applications/report.pptx', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
+    const evById = new Map(events.map((e) => [e.id, e]));
+    const tById = new Map(talents.map((tt) => [tt.id, tt]));
+    const rows = apps
+      .filter((a) => a.status === 'approved' && a.talent_type === 'main_power' && attDates(a).length > 0)
+      .map((a) => {
+        const tt = tById.get(a.talent_id) || {}; const ans = a.answers || {};
+        return {
+          name: tt.name || '—', event: (evById.get(a.event_id) || {}).name || '—',
+          phone: tt.phone || '—', bank: ans.bank_name || '—', acct: ans.bank_account || '—',
+          holder: ans.bank_holder || '—', count: attDates(a).length,
+        };
+      })
+      .sort((x, y) => x.event.localeCompare(y.event) || x.name.localeCompare(y.name, 'id'));
+    const buf = await buildAttendancePptx(rows);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pptx"');
+    res.send(buf);
+  } catch (e) { next(e); }
+});
+
+// Build the attendance PPTX (title slide + auto-paginated table). Lazy-require
+// pptxgenjs so it isn't loaded on every boot.
+async function buildAttendancePptx(rows) {
+  const PptxGenJS = require('pptxgenjs');
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5in
+  pptx.author = '20FIT Talent';
+  const cover = pptx.addSlide();
+  cover.background = { color: 'FFFFFF' };
+  cover.addShape('rect', { x: 0, y: 0, w: 13.33, h: 2.2, fill: { color: 'E4121F' } });
+  cover.addText('20FIT TALENT', { x: 0.6, y: 0.55, w: 12, h: 0.5, fontSize: 16, bold: true, color: 'FFFFFF', charSpacing: 3 });
+  cover.addText('Report Absensi Man Power', { x: 0.6, y: 1.0, w: 12, h: 0.9, fontSize: 32, bold: true, color: 'FFFFFF' });
+  cover.addText('Nama bank & nomor telepon Man Power yang sudah melakukan absensi, beserta jumlah kehadiran.',
+    { x: 0.6, y: 2.6, w: 12, h: 0.6, fontSize: 14, color: '444444' });
+  cover.addText('Total ' + rows.length + ' Man Power', { x: 0.6, y: 3.3, w: 12, h: 0.5, fontSize: 16, bold: true, color: 'E4121F' });
+
+  const slide = pptx.addSlide();
+  slide.addText('Daftar Man Power yang Sudah Absen', { x: 0.4, y: 0.25, w: 12.5, h: 0.5, fontSize: 20, bold: true, color: '17171D' });
+  if (!rows.length) {
+    slide.addText('Belum ada Man Power yang melakukan absensi.', { x: 0.4, y: 1.0, w: 12.5, h: 1, fontSize: 16, italic: true, color: '888888' });
+    return pptx.write({ outputType: 'nodebuffer' });
+  }
+  const header = ['No', 'Nama', 'Event', 'No. Telepon', 'Nama Bank', 'No. Rekening', 'Atas Nama', 'Jumlah Absen'];
+  const headRow = header.map((h) => ({ text: h, options: { bold: true, color: 'FFFFFF', fill: { color: 'E4121F' }, align: 'center', valign: 'middle' } }));
+  const bodyRows = rows.map((r, i) => [
+    { text: String(i + 1), options: { align: 'center' } },
+    r.name, r.event, r.phone, r.bank, r.acct, r.holder,
+    { text: String(r.count) + '×', options: { align: 'center', bold: true, color: 'E4121F' } },
+  ]);
+  slide.addTable([headRow, ...bodyRows], {
+    x: 0.4, y: 0.9, w: 12.53, colW: [0.6, 2.3, 2.0, 1.73, 1.5, 1.7, 1.6, 1.1],
+    fontSize: 11, color: '17171D', border: { type: 'solid', color: 'E4E8EE', pt: 1 },
+    align: 'left', valign: 'middle', autoPage: true, autoPageRepeatHeader: true,
+  });
+  return pptx.write({ outputType: 'nodebuffer' });
+}
 
 // Super admin: mark an event finished (enables certificate issuance) or reopen it.
 app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async (req, res, next) => {
