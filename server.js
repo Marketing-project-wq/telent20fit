@@ -1362,8 +1362,8 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     if (req.body.need_kol) needs.push({ talent_type: 'kol', headcount: hc('kol_headcount') });
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: hc('mp_headcount') });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer', headcount: hc('fg_headcount') });
-    const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    const patch = { location, starts_at, ends_at, mp_sow, needs };
+    // mp_sow is no longer edited from the UI; leave any existing value untouched.
+    const patch = { location, starts_at, ends_at, needs };
     if (name) patch.name = name;
     await st.updateEvent(req.params.id, patch);
     res.redirect('/admin/manage');

@@ -2353,7 +2353,6 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.mpQuota')}<input type="number" name="mp_headcount" min="1" value="1" style="width:90px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
-      <textarea name="mp_sow" rows="2" maxlength="2000" placeholder="${t('manage.mpSow')}" style="flex-basis:100%;width:100%"></textarea>
       <button class="btn btn-sm">${t('btn.createEvent')}</button>
     </form>
     <div class="table-wrap"><table>
@@ -2458,10 +2457,6 @@ function adminEventEdit({ staff, event, lang }) {
       ${needRow('kol', 'kol_headcount', t('manage.kolQuota'))}
       ${needRow('main_power', 'mp_headcount', t('manage.mpQuota'))}
       ${needRow('fotografer', 'fg_headcount', t('manage.fgQuota'))}
-    </div>
-    <div class="field" style="margin-top:18px">
-      <label for="mp_sow">${t('manage.mpSow')}</label>
-      <textarea id="mp_sow" name="mp_sow" rows="3" maxlength="2000">${esc(ev.mp_sow || '')}</textarea>
     </div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <a href="/admin/manage?lang=${L}" class="btn btn-ghost">${t('common.cancel')}</a>
