@@ -1158,8 +1158,8 @@ async function runDueReminders(st) {
       if (!to || !/@/.test(to)) continue;
       const ev = dueEvents.get(a.event_id);
       const r = await mailer.sendReminderEmail({
-        to, name: account.name, lang: 'id',
-        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
+        to, name: account.name, lang: 'en',
+        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStrEn(ev),
         location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
         station: a.station, stationLoc: a.station_loc,
       });
