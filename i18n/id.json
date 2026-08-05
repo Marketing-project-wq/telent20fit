@@ -433,6 +433,7 @@
   "mpr.reject": "Tolak",
   "mpr.updateStation": "Simpan Station",
   "mpr.stationSaved": "✓ Tersimpan",
+  "mpr.detailToggle": "Data diri & jawaban aplikasi",
   "mpr.reviewedBy": "Sudah ditinjau",
   "mpr.noStation": "Belum ada station",
   "confirm.rejectApp": "Tolak aplikasi ini?",
