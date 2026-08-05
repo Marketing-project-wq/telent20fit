@@ -1114,6 +1114,78 @@ async function notifyAcceptance(st, app, patch) {
   });
 }
 
+// --- H-1 event reminders --------------------------------------------------
+// All date math is done in Asia/Jakarta (WIB) so "tomorrow" matches the local
+// calendar day, not the server's UTC day.
+function jakartaDateStr(d) { return (d || new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); }
+function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function jakartaHour(d) { return parseInt((d || new Date()).toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }), 10); }
+
+// Email an H-1 reminder to every approved talent whose event starts tomorrow
+// and who hasn't been reminded yet. Idempotent via reminder_sent_at, so it is
+// safe to call repeatedly. Returns the number of reminders sent.
+async function runDueReminders(st) {
+  if (!st) return 0;
+  const target = addDaysYMD(jakartaDateStr(), 1); // events starting tomorrow (WIB)
+  const events = await st.listEvents();
+  const dueEvents = new Map(events
+    .filter((e) => e.is_active && !e.completed_at && String(e.starts_at || '').slice(0, 10) === target)
+    .map((e) => [e.id, e]));
+  if (!dueEvents.size) return 0;
+  const apps = await st.listApplications();
+  const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
+  let sent = 0;
+  for (const a of due) {
+    try {
+      const account = await st.getAccountById(a.talent_id);
+      const to = account && account.login;
+      if (!to || !/@/.test(to)) continue;
+      const ev = dueEvents.get(a.event_id);
+      await mailer.sendReminderEmail({
+        to, name: account.name, lang: 'id',
+        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
+        location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
+        station: a.station, stationLoc: a.station_loc,
+      });
+      await st.updateApplication(a.id, { reminder_sent_at: new Date().toISOString() });
+      sent++;
+    } catch (e) { console.error('[mail] reminder failed for app ' + a.id + ':', e && e.message); }
+  }
+  if (sent) console.log('[reminders] sent ' + sent + ' H-1 reminder(s) for events on ' + target);
+  return sent;
+}
+
+// Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
+// is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
+// even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
+let _remTimer = null;
+function startReminderScheduler() {
+  if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
+  const tick = () => {
+    const h = jakartaHour();
+    if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
+    runDueReminders(db()).catch((e) => console.error('[reminders] tick failed:', e && e.message));
+  };
+  _remTimer = setInterval(tick, 60 * 60 * 1000); // hourly
+  if (_remTimer.unref) _remTimer.unref();
+  const boot = setTimeout(tick, 15000); // also run shortly after boot
+  if (boot.unref) boot.unref();
+}
+
+// Super admin: run the H-1 reminder job on demand (for testing / catch-up).
+app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    let flash = 'remerr';
+    try {
+      const n = await runDueReminders(st);
+      flash = n === 0 ? 'rem0' : (mailer.configured() ? 'remsent' : 'remmock');
+    } catch (e) { console.error('[reminders] manual run failed:', e && e.message); flash = 'remerr'; }
+    res.redirect('/admin/applications?mail=' + flash);
+  } catch (e) { next(e); }
+});
+
 // Super admin: manually (re)send the acceptance email for an approved application.
 // Unlike the auto-send on approval, this always sends — used to re-notify a talent
 // who was approved before the auto-email existed, or whose placement changed.
@@ -1406,4 +1478,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, HOST, () => {
   console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
+  startReminderScheduler();
 });
