@@ -499,6 +499,22 @@ function eventDateStr(ev) {
   const e = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10) ? fmtDayID(ev.ends_at) : null;
   return e ? `${s} – ${e}` : s;
 }
+// English event date, e.g. "August 6–7, 2026" (same month) or "August 6, 2026".
+const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function eventDateStrEn(ev) {
+  const s = String(ev.starts_at || '').slice(0, 10).split('-');
+  if (s.length !== 3) return eventDateStr(ev);
+  const y = +s[0], m = +s[1] - 1, d1 = +s[2];
+  const mn = EN_MONTHS[m] || '';
+  const eSame = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10);
+  if (eSame) {
+    const e = String(ev.ends_at).slice(0, 10).split('-');
+    const y2 = +e[0], m2 = +e[1] - 1, d2 = +e[2];
+    if (y2 === y && m2 === m) return `${mn} ${d1}–${d2}, ${y}`;
+    return `${mn} ${d1}, ${y} – ${EN_MONTHS[m2] || ''} ${d2}, ${y2}`;
+  }
+  return `${mn} ${d1}, ${y}`;
+}
 
 // Issue certificates for eligible applications: attended + event finished +
 // cert_auto (not explicitly off). Idempotent via the unique (talent,event)
@@ -1105,9 +1121,9 @@ async function notifyAcceptance(st, app, patch) {
   if (!to || !/@/.test(to)) return; // no usable email on file
   const ev = (await st.listEvents()).find((e) => e.id === app.event_id) || {};
   await mailer.sendAcceptanceEmail({
-    to, name: account.name, lang: 'id',
+    to, name: account.name, lang: 'en',
     eventName: ev.name || 'Event 20FIT',
-    eventDate: eventDateStr(ev),
+    eventDate: eventDateStrEn(ev),
     location: ev.location || null,
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
     station: patch.station, stationLoc: patch.station_loc,
