@@ -57,6 +57,20 @@ function setSession(res, account) {
 
 function clearSession(res) { res.clearCookie(COOKIE, { path: '/' }); }
 
+// Per-event attendance access token: a stable HMAC of the event id. The admin
+// shares the link (/absensi/:eventId?k=<token>) with an on-site PIC who can then
+// check people in without a full admin login. No DB column needed.
+function attendanceToken(eventId) {
+  return crypto.createHmac('sha256', SECRET).update('attend:' + String(eventId)).digest('base64url').slice(0, 24);
+}
+function verifyAttendanceToken(eventId, token) {
+  if (!token) return false;
+  const expected = attendanceToken(eventId);
+  const a = Buffer.from(String(token));
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function currentTalent(req) { return unsign(req.cookies ? req.cookies[COOKIE] : null); }
 
 /** Middleware: require a logged-in talent of the given type, else redirect to its login. */
@@ -78,4 +92,4 @@ function requireStaff(roles) {
   };
 }
 
-module.exports = { hashPassword, verifyPassword, setSession, clearSession, currentTalent, requireTalent, requireStaff, COOKIE };
+module.exports = { hashPassword, verifyPassword, setSession, clearSession, currentTalent, requireTalent, requireStaff, attendanceToken, verifyAttendanceToken, COOKIE };

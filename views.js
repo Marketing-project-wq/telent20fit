@@ -2472,7 +2472,7 @@ function adminEventEdit({ staff, event, lang }) {
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */
-function adminApplications({ staff, applications, lang, flash }) {
+function adminApplications({ staff, applications, attendanceLinks, lang, flash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
@@ -2567,6 +2567,17 @@ function adminApplications({ staff, applications, lang, flash }) {
     </div>`;
   }).join('');
 
+  const attnHtml = (attendanceLinks && attendanceLinks.length) ? `
+  <div class="card" style="margin-top:14px">
+    <div style="font-weight:800;font-size:15px">📋 ${t('mpr.attnHead')}</div>
+    <p class="muted" style="font-size:12.5px;margin:6px 0 6px">${t('mpr.attnSub')}</p>
+    ${attendanceLinks.map((a) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0;flex:1"><b>${esc(a.name)}</b> <span class="muted" style="font-size:12.5px">· ${t('mpr.attnPeople', { n: a.count })}</span></div>
+      <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(a.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
+      <a href="${esc(a.path)}" target="_blank" rel="noopener" class="btn btn-sm">${t('mpr.attnOpen')} ↗</a>
+    </div>`).join('')}
+  </div>` : '';
+
   const body = `<div class="wrap">
   ${staffHead(staff, t('mpr.title'), L)}
   ${flashBanner}
@@ -2576,6 +2587,7 @@ function adminApplications({ staff, applications, lang, flash }) {
       <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
     </form>
   </div>
+  ${attnHtml}
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
 </div>
 <script>
@@ -2592,9 +2604,91 @@ function adminApplications({ staff, applications, lang, flash }) {
     inputs.forEach(function(i){ i.addEventListener('input', sync); i.addEventListener('change', sync); });
     sync();
   });
+  document.querySelectorAll('.attn-copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var url = location.origin + btn.dataset.path;
+      var done = function(){ btn.textContent = btn.dataset.copied; setTimeout(function(){ btn.textContent = btn.dataset.label; }, 1600); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done, done); }
+      else { var ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
+    });
+  });
 })();
 </script>`;
   return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+}
+
+/**
+ * On-site attendance page (public, tokened). An event PIC opens the shared link
+ * and checks approved Man Power in as they arrive. Self-contained copy (id/en);
+ * no sidebar — meant to be used quickly on a phone at the venue.
+ */
+function attendancePage({ invalid, event, eventDate, rows, token, lang, done }) {
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const s = id ? {
+    title: 'Absensi Man Power',
+    invalid: 'Link absensi tidak valid atau sudah tidak berlaku.',
+    invalidSub: 'Minta link terbaru ke admin 20FIT.',
+    search: 'Cari nama…',
+    checkin: 'Check-in', present: '✓ Hadir', undo: 'Batalkan',
+    empty: 'Belum ada Man Power yang disetujui untuk event ini.',
+    noStation: 'Tanpa station',
+    hint: 'Peserta sebutkan namanya, cari di daftar, lalu tekan Check-in.',
+    doneMsg: (n) => (n ? n + ' ' : '') + 'berhasil check-in ✓',
+  } : {
+    title: 'Man Power Attendance',
+    invalid: 'This attendance link is invalid or no longer active.',
+    invalidSub: 'Ask a 20FIT admin for the latest link.',
+    search: 'Search name…',
+    checkin: 'Check in', present: '✓ Present', undo: 'Undo',
+    empty: 'No approved Man Power for this event yet.',
+    noStation: 'No station',
+    hint: 'Have the person say their name, find it in the list, then tap Check in.',
+    doneMsg: (n) => (n ? n + ' ' : '') + 'checked in ✓',
+  };
+  if (invalid) {
+    const b = `<div class="wrap narrow"><div class="card" style="margin-top:48px;text-align:center">
+      <div style="font-size:42px">🔒</div>
+      <h1 style="margin:12px 0 6px;font-size:20px">${esc(s.invalid)}</h1>
+      <p class="muted" style="margin:0">${esc(s.invalidSub)}</p></div></div>`;
+    return layout({ title: s.title + ' — 20FIT', body: b, brand: 'TALENT', lang: L });
+  }
+  const total = rows.length;
+  const doneCount = rows.filter((r) => r.attended).length;
+  const list = total ? rows.map((r, i) => {
+    const st = r.station ? esc(r.station) + (r.station_loc ? ' · ' + esc(r.station_loc) : '') : `<span class="muted">${esc(s.noStation)}</span>`;
+    const f = (attended, inner) => `<form method="post" action="/absensi/${esc(event.id)}/checkin" style="margin:0;flex-shrink:0"><input type="hidden" name="k" value="${esc(token)}"><input type="hidden" name="app" value="${esc(r.id)}"><input type="hidden" name="attended" value="${attended}">${inner}</form>`;
+    const ctl = r.attended
+      ? `<div style="display:flex;gap:8px;align-items:center;flex-shrink:0"><span class="pill pill-ok">${s.present}</span>${f('0', `<button class="btn btn-ghost btn-sm">${esc(s.undo)}</button>`)}</div>`
+      : f('1', `<button class="btn btn-sm">${esc(s.checkin)}</button>`);
+    return `<div class="att-row" data-name="${esc(String(r.name).toLowerCase())}" style="display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 2px;border-top:${i ? '1px solid var(--line)' : '0'}">
+      <div style="min-width:0"><b style="font-size:15px">${esc(r.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">📍 ${st}</div></div>
+      ${ctl}
+    </div>`;
+  }).join('') : `<p class="muted" style="margin:16px 0 0">${esc(s.empty)}</p>`;
+  const doneBanner = done ? `<div class="banner banner-ok" style="margin-bottom:12px">${esc(s.doneMsg(done))}</div>` : '';
+  const body = `<div class="wrap narrow">
+  <h1 style="margin:6px 0 2px;font-size:22px">${esc(s.title)}</h1>
+  <p class="sub" style="margin:0 0 2px">${esc(event.name)}${eventDate ? ' · ' + esc(eventDate) : ''}</p>
+  <p class="muted" style="font-size:12.5px;margin:2px 0 14px">${esc(s.hint)}</p>
+  ${doneBanner}
+  <div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:0;padding:14px 16px">
+    <input type="text" id="attSearch" placeholder="${esc(s.search)}" autocomplete="off" inputmode="search" style="flex:1;min-width:0">
+    <span class="pill pill-ok" style="white-space:nowrap"><b>${doneCount}</b>/${total}</span>
+  </div>
+  <div class="card" style="margin-top:12px">${list}</div>
+</div>
+<script>
+(function(){
+  var q=document.getElementById('attSearch'); if(!q) return;
+  var rows=[].slice.call(document.querySelectorAll('.att-row'));
+  q.addEventListener('input', function(){
+    var v=q.value.trim().toLowerCase();
+    rows.forEach(function(r){ r.style.display=(!v||r.dataset.name.indexOf(v)>=0)?'':'none'; });
+  });
+})();
+</script>`;
+  return layout({ title: s.title + ' — 20FIT', body, brand: 'TALENT', lang: L });
 }
 
 function performancePage(board, totalSubs) {
@@ -2654,7 +2748,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
 };
