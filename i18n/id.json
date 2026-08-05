@@ -415,6 +415,8 @@
   "mpr.attnCopied": "Tersalin!",
   "mpr.attnOpen": "Buka",
   "mpr.attnPeople": "{n} orang",
+  "mpr.report": "Report PPT",
+  "mpr.reportHint": "Unduh report PPT: nama bank, no. telepon & jumlah absen Man Power yang sudah check-in",
   "mpr.appliedOn": "Apply {date}",
   "mpr.answersTitle": "Jawaban aplikasi",
   "mpr.contact": "Kontak",

@@ -2499,7 +2499,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   const cards = applications.map((a) => {
     const ans = a.answers || {};
     const answerRows = Object.keys(ans)
-      .filter((k) => ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
+      .filter((k) => !k.startsWith('__') && ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
       .map((k) => {
         const raw = String(ans[k]);
         let label; let val;
@@ -2583,9 +2583,12 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   ${flashBanner}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
-    <form method="post" action="/admin/reminders/run" class="inline-form">
-      <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
-    </form>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <form method="post" action="/admin/reminders/run" class="inline-form">
+        <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
+      </form>
+      <a href="/admin/applications/report.pptx" class="btn btn-sm" title="${t('mpr.reportHint')}">📊 ${t('mpr.report')}</a>
+    </div>
   </div>
   ${attnHtml}
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
@@ -2622,7 +2625,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
  * and checks approved Man Power in as they arrive. Self-contained copy (id/en);
  * no sidebar — meant to be used quickly on a phone at the venue.
  */
-function attendancePage({ invalid, event, eventDate, rows, token, lang, done }) {
+function attendancePage({ invalid, event, eventDate, rows, days, day, token, lang, done }) {
   const L = normLang(lang);
   const id = L !== 'en';
   const s = id ? {
@@ -2633,8 +2636,9 @@ function attendancePage({ invalid, event, eventDate, rows, token, lang, done }) 
     checkin: 'Check-in', present: '✓ Hadir', undo: 'Batalkan',
     empty: 'Belum ada Man Power yang disetujui untuk event ini.',
     noStation: 'Tanpa station',
-    hint: 'Peserta sebutkan namanya, cari di daftar, lalu tekan Check-in.',
+    hint: 'Pilih hari, lalu peserta sebutkan namanya → cari → tekan Check-in.',
     doneMsg: (n) => (n ? n + ' ' : '') + 'berhasil check-in ✓',
+    dayN: (n) => 'Hari ' + n, todayLabel: 'Hadir hari ini', timesTitle: 'Total hari absen',
   } : {
     title: 'Man Power Attendance',
     invalid: 'This attendance link is invalid or no longer active.',
@@ -2643,8 +2647,9 @@ function attendancePage({ invalid, event, eventDate, rows, token, lang, done }) 
     checkin: 'Check in', present: '✓ Present', undo: 'Undo',
     empty: 'No approved Man Power for this event yet.',
     noStation: 'No station',
-    hint: 'Have the person say their name, find it in the list, then tap Check in.',
+    hint: 'Pick the day, then have the person say their name → search → tap Check in.',
     doneMsg: (n) => (n ? n + ' ' : '') + 'checked in ✓',
+    dayN: (n) => 'Day ' + n, todayLabel: 'Present this day', timesTitle: 'Total days attended',
   };
   if (invalid) {
     const b = `<div class="wrap narrow"><div class="card" style="margin-top:48px;text-align:center">
@@ -2653,28 +2658,35 @@ function attendancePage({ invalid, event, eventDate, rows, token, lang, done }) 
       <p class="muted" style="margin:0">${esc(s.invalidSub)}</p></div></div>`;
     return layout({ title: s.title + ' — 20FIT', body: b, brand: 'TALENT', lang: L });
   }
+  const dayList = days || [];
+  const daySel = (dayList.length > 1) ? `
+  <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
+    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+  </div>` : '';
   const total = rows.length;
-  const doneCount = rows.filter((r) => r.attended).length;
+  const doneCount = rows.filter((r) => r.checked).length;
   const list = total ? rows.map((r, i) => {
     const st = r.station ? esc(r.station) + (r.station_loc ? ' · ' + esc(r.station_loc) : '') : `<span class="muted">${esc(s.noStation)}</span>`;
-    const f = (attended, inner) => `<form method="post" action="/absensi/${esc(event.id)}/checkin" style="margin:0;flex-shrink:0"><input type="hidden" name="k" value="${esc(token)}"><input type="hidden" name="app" value="${esc(r.id)}"><input type="hidden" name="attended" value="${attended}">${inner}</form>`;
-    const ctl = r.attended
-      ? `<div style="display:flex;gap:8px;align-items:center;flex-shrink:0"><span class="pill pill-ok">${s.present}</span>${f('0', `<button class="btn btn-ghost btn-sm">${esc(s.undo)}</button>`)}</div>`
+    const f = (attended, inner) => `<form method="post" action="/absensi/${esc(event.id)}/checkin" style="margin:0;flex-shrink:0"><input type="hidden" name="k" value="${esc(token)}"><input type="hidden" name="app" value="${esc(r.id)}"><input type="hidden" name="day" value="${esc(day || '')}"><input type="hidden" name="attended" value="${attended}">${inner}</form>`;
+    const totalBadge = r.count > 0 ? `<span class="pill pill-ok" title="${esc(s.timesTitle)}" style="font-size:11px">${r.count}×</span>` : '';
+    const toggle = r.checked
+      ? `<span class="pill pill-ok">${s.present}</span>${f('0', `<button class="btn btn-ghost btn-sm">${esc(s.undo)}</button>`)}`
       : f('1', `<button class="btn btn-sm">${esc(s.checkin)}</button>`);
     return `<div class="att-row" data-name="${esc(String(r.name).toLowerCase())}" style="display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 2px;border-top:${i ? '1px solid var(--line)' : '0'}">
       <div style="min-width:0"><b style="font-size:15px">${esc(r.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">📍 ${st}</div></div>
-      ${ctl}
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">${totalBadge}${toggle}</div>
     </div>`;
   }).join('') : `<p class="muted" style="margin:16px 0 0">${esc(s.empty)}</p>`;
   const doneBanner = done ? `<div class="banner banner-ok" style="margin-bottom:12px">${esc(s.doneMsg(done))}</div>` : '';
   const body = `<div class="wrap narrow">
   <h1 style="margin:6px 0 2px;font-size:22px">${esc(s.title)}</h1>
   <p class="sub" style="margin:0 0 2px">${esc(event.name)}${eventDate ? ' · ' + esc(eventDate) : ''}</p>
-  <p class="muted" style="font-size:12.5px;margin:2px 0 14px">${esc(s.hint)}</p>
+  <p class="muted" style="font-size:12.5px;margin:2px 0 12px">${esc(s.hint)}</p>
   ${doneBanner}
+  ${daySel}
   <div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:0;padding:14px 16px">
     <input type="text" id="attSearch" placeholder="${esc(s.search)}" autocomplete="off" inputmode="search" style="flex:1;min-width:0">
-    <span class="pill pill-ok" style="white-space:nowrap"><b>${doneCount}</b>/${total}</span>
+    <span class="pill pill-ok" style="white-space:nowrap" title="${esc(s.todayLabel)}"><b>${doneCount}</b>/${total}</span>
   </div>
   <div class="card" style="margin-top:12px">${list}</div>
 </div>
