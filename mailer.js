@@ -76,21 +76,29 @@ async function sendResetEmail({ to, name, link, lang }) {
 }
 
 function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) {
-  const id = lang !== 'en';
+  const id = lang === 'id';
   const t = id ? {
     hi: ('Halo ' + (name || '')).trim() + ',',
-    body: 'Selamat! 🎉 Pendaftaran kamu untuk event di bawah ini sudah <b>disetujui</b>. Berikut detail penempatan kamu:',
-    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori', stn: 'Penempatan / station',
+    body: 'Selamat! Pendaftaran kamu untuk event di bawah ini sudah <b>disetujui</b>. Berikut detail penugasan kamu:',
+    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori', stn: 'Penugasan / Station',
     stnPending: 'Akan diinformasikan lebih lanjut oleh tim.',
-    next: 'Tim 20FIT akan menghubungi kamu untuk info teknis & jadwal briefing. Mohon simpan email ini sebagai bukti penerimaan.',
-    foot: 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
+    next: 'Tim 20FIT Talent akan menghubungi kamu untuk info teknis, jadwal briefing, dan persiapan yang dibutuhkan sebelum event.',
+    keep: 'Mohon simpan email ini sebagai konfirmasi keberhasilan pendaftaran kamu.',
+    thanks: 'Terima kasih sudah menjadi bagian dari event ini. Sampai jumpa di lokasi!',
+    regards: 'Salam hangat,',
+    team: '20FIT Talent Team',
+    foot: 'Ini adalah email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
   } : {
-    hi: ('Hi ' + (name || '')).trim() + ',',
-    body: "Congratulations! 🎉 Your application for the event below has been <b>approved</b>. Here are your placement details:",
-    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category', stn: 'Placement / station',
+    hi: ('Hello ' + (name || '')).trim() + ',',
+    body: 'Congratulations! Your registration for the following event has been <b>approved</b>. Below are your assignment details:',
+    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category', stn: 'Assignment / Station',
     stnPending: 'Will be shared by the team soon.',
-    next: 'The 20FIT team will reach out with technical details and the briefing schedule. Please keep this email as proof of acceptance.',
-    foot: 'Automated email from 20FIT Talent. Please do not reply.',
+    next: 'The 20FIT Talent team will contact you with technical information, the briefing schedule, and any preparations required before the event.',
+    keep: 'Please keep this email as confirmation of your successful registration.',
+    thanks: 'Thank you for being part of the event. We look forward to seeing you there.',
+    regards: 'Best regards,',
+    team: '20FIT Talent Team',
+    foot: 'This is an automated email from 20FIT Talent. Please do not reply to this email.',
   };
   const stationVal = station ? esc(station) + (stationLoc ? ' · ' + esc(stationLoc) : '')
     : '<span style="color:#8b8f97">' + esc(t.stnPending) + '</span>';
@@ -112,6 +120,9 @@ function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, categ
           ${row(t.stn, stationVal)}
         </table>
         <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.next)}</p>
+        <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.keep)}</p>
+        <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.thanks)}</p>
+        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#41454d">${esc(t.regards)}<br><b>${esc(t.team)}</b></p>
       </td></tr>
       <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
     </table>
@@ -184,7 +195,9 @@ async function sendReminderEmail({ to, name, lang, eventName, eventDate, locatio
 
 /** Notify a talent their application was approved. Returns { delivered }. Never throws for a missing key. */
 async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, location, category, station, stationLoc }) {
-  const subject = (lang !== 'en' ? 'Kamu diterima di ' : "You're accepted for ") + (eventName || 'event 20FIT') + ' — 20FIT Talent';
+  const subject = lang === 'id'
+    ? 'Pendaftaran Event Kamu Telah Disetujui — 20FIT Talent'
+    : 'Your Event Registration Has Been Approved';
   if (!API_KEY || process.env.MAIL_MOCK === '1') {
     console.log('[mail] email service not configured — acceptance for ' + to + ' (' + eventName + ')');
     return { delivered: false };
