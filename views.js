@@ -116,6 +116,9 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-ini{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:46px;font-weight:900;color:rgba(255,255,255,.92);letter-spacing:-.03em;text-shadow:0 2px 12px rgba(0,0,0,.28);line-height:1}
 .ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
 .ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ev-detail-hero{width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;display:block;background:rgba(0,0,0,.04)}
+.ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
 input[type=text],input[type=url],input[type=password],input[type=datetime-local],input[type=number],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
@@ -953,10 +956,12 @@ function eventCover(e, lang) {
   const ongoing = e.status === 'ongoing';
   const badgeColor = ongoing ? '#0f9d6a' : '#E4121F';
   const badgeText = tr(L, ongoing ? 'ev.status.ongoing' : 'ev.status.upcoming');
+  const img = e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-cover-img" loading="lazy" onerror="this.style.display='none'">` : '';
   return `<div class="ev-cover" style="background:linear-gradient(135deg,${c1},${c2})">
       <div class="ev-cover-tex"></div>
       <div class="ev-cover-ini">${initial}</div>
       <div class="ev-cover-ico">${icon}</div>
+      ${img}
       <span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>
     </div>`;
 }
@@ -1455,6 +1460,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   }
   const body = `<div class="wrap narrow">
   <a href="/kol/event?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${event.mockup_url ? `<img src="${esc(event.mockup_url)}" alt="${esc(event.name)}" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <h1 style="margin-top:0">${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
   ${locLine}
@@ -2322,7 +2328,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const scoreByTalent = new Map(talents.map((tt) => [tt.id, kolScore(proofsByTalent.get(tt.id) || [], settings)]));
 
   const eventRows = events.map((e) => `<tr>
-    <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+    <td data-label="${t('th.event')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<b>${esc(e.name)}</b></div></td>
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
@@ -2344,11 +2350,12 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
   <div class="section-head"><h2 style="margin:0">${t('manage.events')}</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
+    <form method="post" action="/admin/events" enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
       <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
       <input type="text" name="location" placeholder="${t('manage.locationPh')}" maxlength="200" style="flex:2;min-width:180px">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.startDate')}<input type="date" name="starts_at" style="min-width:150px"></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">📷 ${t('manage.mockup')}<input type="file" name="mockup" accept="image/*" style="min-width:170px;font-size:12px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.mpQuota')}<input type="number" name="mp_headcount" min="1" value="1" style="width:90px"></label>
@@ -2439,10 +2446,21 @@ function adminEventEdit({ staff, event, lang }) {
     <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
   </div>
   <p class="sub">${t('manage.editSub')}</p>
-  <form method="post" action="/admin/events/${esc(ev.id)}/edit" class="card" style="margin-top:16px">
+  <form method="post" action="/admin/events/${esc(ev.id)}/edit" enctype="multipart/form-data" class="card" style="margin-top:16px">
     <div class="field">
       <label for="name">${t('ph.eventName')}</label>
       <input type="text" id="name" name="name" required maxlength="140" value="${esc(ev.name || '')}">
+    </div>
+    <div class="field">
+      <label>📷 ${t('manage.mockup')}</label>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        ${ev.mockup_url ? `<img src="${esc(ev.mockup_url)}" alt="" style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
+        <div style="flex:1;min-width:180px">
+          <input type="file" name="mockup" accept="image/*">
+          <p class="muted" style="font-size:12px;margin:6px 0 0">${t('manage.mockupHint')}</p>
+          ${ev.mockup_url ? `<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:8px;cursor:pointer"><input type="checkbox" name="remove_mockup" value="1"> ${t('manage.mockupRemove')}</label>` : ''}
+        </div>
+      </div>
     </div>
     <div class="field">
       <label for="location">${t('manage.location')}</label>

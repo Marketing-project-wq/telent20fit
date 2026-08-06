@@ -539,6 +539,30 @@ async function issueCertsForApps(st, apps, eventById, nameById) {
   }
 }
 
+// Enrich event objects in place with a signed `mockup_url` for any that have a
+// stored mockup_path, so covers can render the uploaded image. Accepts one event
+// or an array; returns the same reference.
+async function attachMockups(st, events) {
+  const list = Array.isArray(events) ? events : [events];
+  const withPath = list.map((e, i) => ({ i, p: e && e.mockup_path })).filter((x) => x.p);
+  if (withPath.length) {
+    const urls = await st.signCovers(withPath.map((x) => x.p));
+    withPath.forEach((x, k) => { list[x.i].mockup_url = urls[k] || null; });
+  }
+  return events;
+}
+
+// Upload an event mockup image to storage and return its path. Only accepts
+// images; returns null when there's no usable file.
+async function saveMockup(st, eventId, file) {
+  if (!file || !file.buffer || !file.buffer.length) return null;
+  if (!/^image\//.test(file.mimetype || '')) return null;
+  const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+  const key = 'events/' + eventId + '/mockup-' + Date.now() + ext;
+  await st.uploadImage(key, file.buffer, file.mimetype);
+  return key;
+}
+
 // Talent Home: active events (ongoing + upcoming) with their category needs.
 app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
   try {
@@ -549,7 +573,7 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
     const rank = { ongoing: 0, upcoming: 1 };
     const events = allEvents.filter((e) => e.is_active)
       .map((e) => ({
-        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, status: eventStatusOf(e), cats: eventCats(e),
+        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
         applied: appByEvent.has(e.id) ? {
           category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status,
           station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
@@ -557,6 +581,7 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
       }))
       .filter((e) => e.status !== 'ended')
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
+    await attachMockups(st, events);
     res.send(V.kolEventsPage({ account: req.account, events, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -570,7 +595,8 @@ app.get('/kol/event/:id', requireTalentReady('kol'), async (req, res, next) => {
     const ev = allEvents.find((e) => e.id === req.params.id);
     if (!ev || !ev.is_active) return res.redirect('/kol/event?lang=' + req.lang);
     const myApplication = myApps.find((a) => a.event_id === ev.id) || null;
-    res.send(V.kolEventDetail({ account: req.account, event: { ...ev, status: eventStatusOf(ev) }, cats: eventCats(ev), myApplication, lang: req.lang }));
+    const event = await attachMockups(st, { ...ev, status: eventStatusOf(ev) });
+    res.send(V.kolEventDetail({ account: req.account, event, cats: eventCats(ev), myApplication, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1056,6 +1082,7 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
     const [events, assignments, talents, eos, settings, proofs] = await Promise.all([
       st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(), st.listProofs(),
     ]);
+    await attachMockups(st, events);
     res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
@@ -1435,7 +1462,7 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
 });
 
 // Super admin: create event with per-talent-type needs.
-app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1448,7 +1475,11 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: Math.max(1, parseInt(req.body.mp_headcount, 10) || 1) });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
     const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    if (name) await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
+    if (name) {
+      const ev = await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
+      const mockupPath = ev && ev.id ? await saveMockup(st, ev.id, req.file) : null;
+      if (mockupPath) await st.updateEvent(ev.id, { mockup_path: mockupPath });
+    }
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
@@ -1461,11 +1492,12 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     const events = await st.listEvents();
     const event = events.find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
+    await attachMockups(st, event);
     res.send(V.adminEventEdit({ staff: staffCtx(req), event, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1481,6 +1513,10 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     // mp_sow is no longer edited from the UI; leave any existing value untouched.
     const patch = { location, starts_at, ends_at, needs };
     if (name) patch.name = name;
+    // Mockup: a new upload replaces it; the "remove" checkbox clears it.
+    const newPath = await saveMockup(st, req.params.id, req.file);
+    if (newPath) patch.mockup_path = newPath;
+    else if (req.body.remove_mockup) patch.mockup_path = null;
     await st.updateEvent(req.params.id, patch);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }

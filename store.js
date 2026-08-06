@@ -66,6 +66,12 @@ function supabaseStore() {
       const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
       return (data || []).map((d) => d.signedUrl).filter(Boolean);
     },
+    // Like signImageUrls but keeps alignment: returns url-or-null per input path.
+    async signCovers(paths) {
+      if (!paths || !paths.length) return [];
+      const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+      return (data || []).map((d) => (d && d.signedUrl && !d.error) ? d.signedUrl : null);
+    },
     async downloadImage(pathKey) {
       const { data, error } = await sb.storage.from(BUCKET).download(pathKey);
       if (error || !data) return null;
@@ -181,6 +187,7 @@ function supabaseStore() {
       if (patch.starts_at !== undefined) row.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
+      if (patch.mockup_path !== undefined) row.mockup_path = patch.mockup_path || null;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
         await sb.from('talent_event_needs').delete().eq('event_id', id);
@@ -394,6 +401,7 @@ function memoryStore() {
     async toggleCampaign(id) { const c = campaigns.find((c) => c.id === id); if (c) c.is_active = !c.is_active; },
     async uploadImage(path, buffer, contentType) { images.set(path, { buffer, contentType }); },
     async signImageUrls(paths) { return (paths || []).map((p) => '/__mockimg/' + encodeURIComponent(p)); },
+    async signCovers(paths) { return (paths || []).map((p) => (p && images.has(p)) ? '/__mockimg/' + encodeURIComponent(p) : null); },
     async downloadImage(pathKey) { const r = images.get(pathKey); return r ? r.buffer : null; },
     async createSubmission(row) { submissions.push({ ...row, created_at: now() }); },
     async listSubmissions() { return submissions.slice().reverse(); },
@@ -438,6 +446,7 @@ function memoryStore() {
       if (patch.starts_at !== undefined) ev.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;
+      if (patch.mockup_path !== undefined) ev.mockup_path = patch.mockup_path || null;
       if (patch.needs) {
         for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
         patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
