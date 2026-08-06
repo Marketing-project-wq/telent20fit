@@ -1343,8 +1343,7 @@ app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), as
         };
       })
       .sort((x, y) => x.event.localeCompare(y.event) || x.name.localeCompare(y.name, 'id'));
-    const subtitle = 'Dibuat ' + fmtDayID(new Date()) + ' · ' + rows.length + ' Man Power';
-    const buf = await cert.renderAttendanceReportPDF(rows, { subtitle });
+    const buf = await cert.renderAttendanceReportPDF(rows, {});
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pdf"');
     res.send(buf);
