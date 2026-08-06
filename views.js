@@ -2568,13 +2568,13 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   }).join('');
 
   const attnHtml = (attendanceLinks && attendanceLinks.length) ? `
-  <div class="card" style="margin-top:14px">
-    <div style="font-weight:800;font-size:15px">📋 ${t('mpr.attnHead')}</div>
-    <p class="muted" style="font-size:12.5px;margin:6px 0 6px">${t('mpr.attnSub')}</p>
-    ${attendanceLinks.map((a) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px 0;border-top:1px solid var(--line)">
-      <div style="min-width:0;flex:1"><b>${esc(a.name)}</b> <span class="muted" style="font-size:12.5px">· ${t('mpr.attnPeople', { n: a.count })}</span></div>
+  <div class="card" style="margin-top:12px;padding:12px 14px">
+    <div style="font-weight:700;font-size:13.5px">📋 ${t('mpr.attnHead')}</div>
+    <p class="muted" style="font-size:12px;margin:4px 0 2px">${t('mpr.attnSub')}</p>
+    ${attendanceLinks.map((a) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0 1px;border-top:1px solid var(--line);margin-top:8px">
+      <div style="min-width:0;flex:1;font-size:13px"><b>${esc(a.name)}</b> <span class="muted" style="font-size:12px">· ${t('mpr.attnPeople', { n: a.count })}</span></div>
       <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(a.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
-      <a href="${esc(a.path)}" target="_blank" rel="noopener" class="btn btn-sm">${t('mpr.attnOpen')} ↗</a>
+      <a href="${esc(a.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>
     </div>`).join('')}
   </div>` : '';
 
