@@ -1323,9 +1323,9 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Super admin: download a PPTX report of Man Power who have checked in — bank
+// Super admin: download a PDF report of Man Power who have checked in — bank
 // details, phone, and how many days each attended. Payment/reconciliation aid.
-app.get('/admin/applications/report.pptx', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1343,49 +1343,13 @@ app.get('/admin/applications/report.pptx', auth.requireStaff(['super_admin']), a
         };
       })
       .sort((x, y) => x.event.localeCompare(y.event) || x.name.localeCompare(y.name, 'id'));
-    const buf = await buildAttendancePptx(rows);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
-    res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pptx"');
+    const subtitle = 'Dibuat ' + fmtDayID(new Date()) + ' · ' + rows.length + ' Man Power';
+    const buf = await cert.renderAttendanceReportPDF(rows, { subtitle });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pdf"');
     res.send(buf);
   } catch (e) { next(e); }
 });
-
-// Build the attendance PPTX (title slide + auto-paginated table). Lazy-require
-// pptxgenjs so it isn't loaded on every boot.
-async function buildAttendancePptx(rows) {
-  const PptxGenJS = require('pptxgenjs');
-  const pptx = new PptxGenJS();
-  pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5in
-  pptx.author = '20FIT Talent';
-  const cover = pptx.addSlide();
-  cover.background = { color: 'FFFFFF' };
-  cover.addShape('rect', { x: 0, y: 0, w: 13.33, h: 2.2, fill: { color: 'E4121F' } });
-  cover.addText('20FIT TALENT', { x: 0.6, y: 0.55, w: 12, h: 0.5, fontSize: 16, bold: true, color: 'FFFFFF', charSpacing: 3 });
-  cover.addText('Report Absensi Man Power', { x: 0.6, y: 1.0, w: 12, h: 0.9, fontSize: 32, bold: true, color: 'FFFFFF' });
-  cover.addText('Nama bank & nomor telepon Man Power yang sudah melakukan absensi, beserta jumlah kehadiran.',
-    { x: 0.6, y: 2.6, w: 12, h: 0.6, fontSize: 14, color: '444444' });
-  cover.addText('Total ' + rows.length + ' Man Power', { x: 0.6, y: 3.3, w: 12, h: 0.5, fontSize: 16, bold: true, color: 'E4121F' });
-
-  const slide = pptx.addSlide();
-  slide.addText('Daftar Man Power yang Sudah Absen', { x: 0.4, y: 0.25, w: 12.5, h: 0.5, fontSize: 20, bold: true, color: '17171D' });
-  if (!rows.length) {
-    slide.addText('Belum ada Man Power yang melakukan absensi.', { x: 0.4, y: 1.0, w: 12.5, h: 1, fontSize: 16, italic: true, color: '888888' });
-    return pptx.write({ outputType: 'nodebuffer' });
-  }
-  const header = ['No', 'Nama', 'Event', 'No. Telepon', 'Nama Bank', 'No. Rekening', 'Atas Nama', 'Jumlah Absen'];
-  const headRow = header.map((h) => ({ text: h, options: { bold: true, color: 'FFFFFF', fill: { color: 'E4121F' }, align: 'center', valign: 'middle' } }));
-  const bodyRows = rows.map((r, i) => [
-    { text: String(i + 1), options: { align: 'center' } },
-    r.name, r.event, r.phone, r.bank, r.acct, r.holder,
-    { text: String(r.count) + '×', options: { align: 'center', bold: true, color: 'E4121F' } },
-  ]);
-  slide.addTable([headRow, ...bodyRows], {
-    x: 0.4, y: 0.9, w: 12.53, colW: [0.6, 2.3, 2.0, 1.73, 1.5, 1.7, 1.6, 1.1],
-    fontSize: 11, color: '17171D', border: { type: 'solid', color: 'E4E8EE', pt: 1 },
-    align: 'left', valign: 'middle', autoPage: true, autoPageRepeatHeader: true,
-  });
-  return pptx.write({ outputType: 'nodebuffer' });
-}
 
 // Super admin: mark an event finished (enables certificate issuance) or reopen it.
 app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async (req, res, next) => {
