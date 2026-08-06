@@ -2587,7 +2587,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
       <form method="post" action="/admin/reminders/run" class="inline-form">
         <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
       </form>
-      <a href="/admin/applications/report.pptx" class="btn btn-sm" title="${t('mpr.reportHint')}">📊 ${t('mpr.report')}</a>
+      <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
   ${attnHtml}
