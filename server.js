@@ -934,6 +934,40 @@ function staffLoginHandler(variant) {
 app.post('/admin/login', staffLoginHandler('admin'));
 app.post('/eo/login', staffLoginHandler('eo'));
 
+// EO self-registration: an EO creates their own account, then completes their
+// profile before they can create events.
+app.get('/eo/register', (req, res) => {
+  if (auth.anySession(req, ['eo'])) return res.redirect('/eo');
+  res.send(V.eoRegister({ lang: req.lang }));
+});
+app.post('/eo/register', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const name = String(req.body.name || '').trim();
+    const login = String(req.body.login || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const password2 = String(req.body.password2 || '');
+    const values = { name, login };
+    const errors = [];
+    if (!name) errors.push(req.t('eo.reg.err.name'));
+    if (!login) errors.push(req.t('err.emailRequired'));
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
+    if (errors.length) return res.status(400).send(V.eoRegister({ lang: req.lang, errors, values }));
+    let staff;
+    try {
+      staff = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+    } catch (e) {
+      if (e.code === 'DUP') return res.status(400).send(V.eoRegister({ lang: req.lang, errors: [req.t('eo.reg.err.dup')], values }));
+      throw e;
+    }
+    auth.setSession(res, staff);
+    res.redirect('/eo/profile');
+  } catch (e) { next(e); }
+});
+
 // --- Staff (EO / super admin) forgot + reset password ------------------------
 // Mirrors the talent flow but against staff_accounts + staff_password_resets.
 function staffForgotPost() {
@@ -1050,6 +1084,8 @@ app.get('/eo/profile', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const profile = await st.getEoProfile(req.staff.id) || {};
     if (profile.logo_path) { const [url] = await st.signCovers([profile.logo_path]); profile.logo_url = url || null; }
+    // Pre-fill org name from the account name for a first-time profile.
+    if (!profile.org_name) profile.org_name = req.staff.name || '';
     res.send(V.eoProfile({ staff: eoCtx(req), profile, saved: req.query.saved === '1', lang: req.lang }));
   } catch (e) { next(e); }
 });

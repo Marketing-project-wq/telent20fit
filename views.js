@@ -1194,6 +1194,7 @@ function staffLogin(opts = {}) {
       <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
     <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
+    ${isEo ? `<p style="text-align:center;margin:10px 0 0;font-size:14px">${t('eo.login.noAccount')} <a href="/eo/register?lang=${L}">${t('eo.login.registerLink')}</a></p>` : ''}
   </div>
   <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
 </div>`;
@@ -1334,6 +1335,34 @@ function eoProfile({ staff, profile, saved, errors, lang }) {
   </form>
 </div>`;
   return appLayout({ title: t('eo.profileTitle') + ' — 20FIT', body, role: 'eo', active: 'profile', user: staff.name, lang: L });
+}
+
+// EO self-registration form.
+function eoRegister({ lang, errors, values }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const v = values || {};
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/eo/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+  </div>
+  <h1>${t('eo.reg.title')}</h1>
+  <p class="sub">${t('eo.reg.sub')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="/eo/register">
+      <div class="field"><label for="name">${t('eo.reg.name')}</label><input type="text" id="name" name="name" required maxlength="140" value="${esc(v.name || '')}"></div>
+      <div class="field"><label for="login">${t('common.email')}</label><input type="email" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
+      <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
+      <div class="field"><label for="password2">${t('auth.reset.confirm')}</label><input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password"></div>
+      <button type="submit" class="btn btn-block">${t('eo.reg.submit')}</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px">${t('eo.reg.haveAccount')} <a href="/eo/login?lang=${L}">${t('btn.signin')}</a></p>
+  </div>
+</div>`;
+  return layout({ title: t('eo.reg.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
 // Registration-status badge for an EO event.
@@ -3118,5 +3147,5 @@ module.exports = {
   talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail,
+  eoEvents, eoEventForm, eoEventDetail, eoRegister,
 };
