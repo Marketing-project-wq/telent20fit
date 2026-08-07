@@ -484,6 +484,10 @@
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy.",
 
+  "ev.findTitle": "Cari Event",
+  "ev.searchPh": "Cari nama atau lokasi event…",
+  "ev.filterAll": "Semua",
+  "ev.noMatch": "Tidak ada event yang cocok.",
   "ev.status.ongoing": "Sedang berjalan",
   "ev.status.upcoming": "Segera hadir",
 

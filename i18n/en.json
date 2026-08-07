@@ -484,6 +484,10 @@
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy.",
 
+  "ev.findTitle": "Find Events",
+  "ev.searchPh": "Search event name or location…",
+  "ev.filterAll": "All",
+  "ev.noMatch": "No matching events.",
   "ev.status.ongoing": "Ongoing",
   "ev.status.upcoming": "Coming soon",
 

@@ -119,6 +119,9 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ev-detail-hero{width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;display:block;background:rgba(0,0,0,.04)}
 .ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
+.ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
+.ev-chip:hover{border-color:var(--red)}
+.ev-chip.is-on{background:var(--red);border-color:var(--red);color:#fff}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
 input[type=text],input[type=url],input[type=password],input[type=datetime-local],input[type=number],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
@@ -1399,32 +1402,67 @@ const CAT_FIELDS = {
 function kolEventsPage({ account, events, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const list = (events && events.length)
-    ? events.map((e) => {
-        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
-        const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
-        const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
-        let applied = '';
-        if (e.applied) {
-          const ap = e.applied;
-          const stn = (ap.status === 'approved' && ap.station)
-            ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
-          applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
-        }
-        return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card ev-card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
-          ${eventCover(e, L)}
-          <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
-          <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
-          ${applied}
-        </a>`;
-      }).join('')
+  const evs = events || [];
+  const cards = evs.map((e) => {
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
+    const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
+    let applied = '';
+    if (e.applied) {
+      const ap = e.applied;
+      const stn = (ap.status === 'approved' && ap.station)
+        ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
+      applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
+    }
+    const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
+    return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+      ${eventCover(e, L)}
+      <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
+      <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
+      ${applied}
+    </a>`;
+  }).join('');
+
+  const chip = (f, label) => `<button type="button" class="ev-chip${f === 'all' ? ' is-on' : ''}" data-filter="${f}">${esc(label)}</button>`;
+  const controls = evs.length ? `
+  <div class="card" style="margin-top:14px;padding:12px 14px">
+    <input type="text" id="evSearch" placeholder="${esc(t('ev.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${chip('all', t('ev.filterAll'))}${chip('ongoing', t('ev.status.ongoing'))}${chip('upcoming', t('ev.status.upcoming'))}
+    </div>
+  </div>` : '';
+
+  const listBlock = evs.length
+    ? `<div id="evList">${cards}</div><p class="muted" id="evNoMatch" style="margin-top:16px;display:none">${t('ev.noMatch')}</p>`
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
+
   const body = `<div class="wrap">
-  <h1 style="margin-top:0">${t('nav.events')}</h1>
+  <h1 style="margin-top:0">${t('ev.findTitle')}</h1>
   <p class="sub">${t('apply.homeSub')}</p>
-  ${list}
-</div>`;
-  return appLayout({ title: t('nav.events') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+  ${controls}
+  ${listBlock}
+</div>
+<script>
+(function(){
+  var q=document.getElementById('evSearch'); if(!q) return;
+  var items=[].slice.call(document.querySelectorAll('.ev-item'));
+  var chips=[].slice.call(document.querySelectorAll('.ev-chip'));
+  var noMatch=document.getElementById('evNoMatch');
+  var flt='all';
+  function apply(){
+    var v=q.value.trim().toLowerCase(); var shown=0;
+    items.forEach(function(it){
+      var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okQ=!v||it.getAttribute('data-search').indexOf(v)>=0;
+      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+    });
+    if(noMatch)noMatch.style.display=shown?'none':'';
+  }
+  q.addEventListener('input',apply);
+  chips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
+})();
+</script>`;
+  return appLayout({ title: t('ev.findTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
 /** Event detail: description + category the talent can register for (or their status). */
