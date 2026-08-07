@@ -159,6 +159,32 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
+    // ---- EO profiles + staff password resets ----
+    async getEoProfile(staffId) {
+      const { data } = await sb.from('talent_eo_profiles').select('*').eq('staff_id', staffId).maybeSingle();
+      return data || null;
+    },
+    async upsertEoProfile(staffId, patch) {
+      const row = Object.assign({ staff_id: staffId, updated_at: new Date().toISOString() }, patch);
+      const { error } = await sb.from('talent_eo_profiles').upsert(row, { onConflict: 'staff_id' });
+      if (error) throw new Error(error.message);
+    },
+    async setStaffPassword(staffId, passwordHash) {
+      const { error } = await sb.from('staff_accounts').update({ password_hash: passwordHash }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async createStaffPasswordReset({ staff_id, token_hash, expires_at }) {
+      const { error } = await sb.from('staff_password_resets').insert({ staff_id, token_hash, expires_at });
+      if (error) throw new Error(error.message);
+    },
+    async getStaffPasswordReset(tokenHash) {
+      const { data } = await sb.from('staff_password_resets').select('id,staff_id,expires_at,used_at').eq('token_hash', tokenHash).maybeSingle();
+      return data || null;
+    },
+    async markStaffPasswordResetUsed(id) {
+      const { error } = await sb.from('staff_password_resets').update({ used_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
       let q = sb.from('talent_accounts')
@@ -369,7 +395,12 @@ function memoryStore() {
   const staff = [{
     id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
     password_hash: hashPassword('Admin_12345'), created_at: now(),
+  }, {
+    id: 'staff-eo', role: 'eo', name: 'Demo EO', login: 'eo1@gmail.com',
+    password_hash: hashPassword('Eo_12345'), created_at: now(),
   }];
+  const eoProfiles = [];
+  const staffResets = [];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
     { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
@@ -430,6 +461,12 @@ function memoryStore() {
     async findStaff(login) { return staff.find((s) => s.login === login) || null; },
     async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
     async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
+    async getEoProfile(staffId) { const p = eoProfiles.find((x) => x.staff_id === staffId); return p ? { ...p } : null; },
+    async upsertEoProfile(staffId, patch) { let p = eoProfiles.find((x) => x.staff_id === staffId); if (!p) { p = { id: 'eop-' + (++seq), staff_id: staffId, created_at: now() }; eoProfiles.push(p); } Object.assign(p, patch, { updated_at: now() }); },
+    async setStaffPassword(staffId, passwordHash) { const s = staff.find((s) => s.id === staffId); if (s) s.password_hash = passwordHash; },
+    async createStaffPasswordReset({ staff_id, token_hash, expires_at }) { staffResets.push({ id: 'spr-' + (++seq), staff_id, token_hash, expires_at, used_at: null, created_at: now() }); },
+    async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
+    async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
     async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
       const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };

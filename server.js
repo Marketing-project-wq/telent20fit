@@ -901,15 +901,18 @@ app.post('/reset-password', async (req, res, next) => {
 
 // ----------------------------------------------------------------- admin ----
 
+// Where a signed-in staff member belongs, based on their role.
+function staffHome(type) { return type === 'eo' ? '/eo' : '/admin'; }
+
 app.get('/admin/login', (req, res) => {
   const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
 app.get('/eo/login', (req, res) => {
   const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
 
@@ -928,18 +931,167 @@ function staffLoginHandler(variant) {
         return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang, variant }));
       }
       auth.setSession(res, staff);
-      res.redirect('/admin');
+      res.redirect(staffHome(staff.role));
     } catch (e) { next(e); }
   };
 }
 app.post('/admin/login', staffLoginHandler('admin'));
 app.post('/eo/login', staffLoginHandler('eo'));
 
+// --- Staff (EO / super admin) forgot + reset password ------------------------
+// Mirrors the talent flow but against staff_accounts + staff_password_resets.
+function staffForgotPost() {
+  return async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const login = String(req.body.login || '').trim().toLowerCase();
+      if (login) {
+        const staff = await st.findStaff(login);
+        if (staff) {
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+          await st.createStaffPasswordReset({ staff_id: staff.id, token_hash: tokenHash, expires_at: expiresAt });
+          const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+          const link = base + '/staff/reset-password?token=' + token;
+          try { await mailer.sendResetEmail({ to: staff.login, name: staff.name, link, lang: req.lang }); }
+          catch (e) { console.error('[staff-reset-mail]', (e && e.message) || e); }
+        }
+      }
+      res.send(V.staffForgotSent({ lang: req.lang }));
+    } catch (e) { next(e); }
+  };
+}
+app.get('/eo/forgot-password', (req, res) => res.send(V.staffForgot({ variant: 'eo', lang: req.lang })));
+app.post('/eo/forgot-password', staffForgotPost());
+app.get('/admin/forgot-password', (req, res) => res.send(V.staffForgot({ variant: 'admin', lang: req.lang })));
+app.post('/admin/forgot-password', staffForgotPost());
+
+async function validStaffResetToken(st, token) {
+  if (!token || token.length < 32) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const r = await st.getStaffPasswordReset(tokenHash);
+  if (!r || r.used_at) return null;
+  if (new Date(r.expires_at).getTime() < Date.now()) return null;
+  return r;
+}
+
+app.get('/staff/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.query.token || '');
+    const reset = await validStaffResetToken(st, token);
+    res.send(V.staffReset({ token, valid: !!reset, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/staff/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.body.token || '');
+    const reset = await validStaffResetToken(st, token);
+    if (!reset) return res.status(400).send(V.staffReset({ token, valid: false, lang: req.lang }));
+    const password = String(req.body.password || '');
+    const confirm = String(req.body.confirm || '');
+    const errors = [];
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    if (password !== confirm) errors.push(req.t('err.passwordMismatch'));
+    if (errors.length) return res.status(400).send(V.staffReset({ token, valid: true, errors, lang: req.lang }));
+    await st.setStaffPassword(reset.staff_id, auth.hashPassword(password));
+    await st.markStaffPasswordResetUsed(reset.id);
+    res.send(V.staffResetDone({ lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 app.post('/admin/logout', (req, res) => {
   const t = auth.currentTalent(req);
   const dest = (t && t.type === 'eo') ? '/eo/login' : '/admin/login';
   auth.clearSession(res);
   res.redirect(dest);
+});
+
+// ------------------------------------------------------------------- EO ----
+// Event Organizer area. EO staff see only their own data (events created_by
+// them, and applications to those events). Profile must be complete before an
+// EO can create events (enforced in the event phase; surfaced as a reminder here).
+const requireEo = auth.requireStaff(['eo']);
+
+function eoCtx(req) { return { role: 'eo', name: req.staff.name }; }
+
+// Required EO profile fields; profile is "complete" only when all are filled.
+const EO_REQUIRED = ['org_name', 'email', 'phone', 'description'];
+function eoProfileComplete(p) { return !!(p && EO_REQUIRED.every((k) => String(p[k] || '').trim())); }
+
+// Dashboard summary numbers, scoped to one EO's events.
+async function eoStats(st, staffId) {
+  const [allEvents, allApps] = await Promise.all([st.listEvents(), st.listApplications()]);
+  const mine = allEvents.filter((e) => e.created_by === staffId);
+  const myIds = new Set(mine.map((e) => e.id));
+  const apps = allApps.filter((a) => myIds.has(a.event_id));
+  const accepted = new Set(['approved', 'assigned', 'completed']);
+  return {
+    totalEvents: mine.length,
+    activeEvents: mine.filter((e) => e.is_active && !e.completed_at).length,
+    totalApplies: apps.length,
+    accepted: apps.filter((a) => accepted.has(a.status)).length,
+    doneEvents: mine.filter((e) => e.completed_at).length,
+  };
+}
+
+app.get('/eo', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [stats, profile] = await Promise.all([eoStats(st, req.staff.id), st.getEoProfile(req.staff.id)]);
+    res.send(V.eoDashboard({ staff: eoCtx(req), stats, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/profile', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const profile = await st.getEoProfile(req.staff.id) || {};
+    if (profile.logo_path) { const [url] = await st.signCovers([profile.logo_path]); profile.logo_url = url || null; }
+    res.send(V.eoProfile({ staff: eoCtx(req), profile, saved: req.query.saved === '1', lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/profile', requireEo, upload.single('logo'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const clean = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+    const patch = {
+      org_name: clean('org_name', 140),
+      email: clean('email', 160),
+      phone: clean('phone', 40),
+      description: clean('description', 2000),
+      website: clean('website', 200) || null,
+      instagram: clean('instagram', 100).replace(/^@/, '') || null,
+    };
+    const errors = [];
+    if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
+    if (!patch.email) errors.push(req.t('eo.err.email'));
+    if (!patch.phone) errors.push(req.t('eo.err.phone'));
+    if (!patch.description) errors.push(req.t('eo.err.desc'));
+    const existing = await st.getEoProfile(req.staff.id) || {};
+    if (errors.length) {
+      const profile = Object.assign({}, existing, patch);
+      if (existing.logo_path) { const [url] = await st.signCovers([existing.logo_path]); profile.logo_url = url || null; }
+      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile, errors, lang: req.lang }));
+    }
+    if (req.file) {
+      const mockup = await saveMockup(st, 'eo-' + req.staff.id, req.file);
+      if (mockup) patch.logo_path = mockup;
+    }
+    patch.completed_at = existing.completed_at || new Date().toISOString();
+    await st.upsertEoProfile(req.staff.id, patch);
+    res.redirect('/eo/profile?saved=1');
+  } catch (e) { next(e); }
 });
 
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
@@ -969,7 +1121,7 @@ function staffCtx(req) { return { role: req.staff.type, name: req.staff.name }; 
 
 // Tab 1 — Dashboard: aggregate KOL statistics. Attaches talent names to proofs
 // but skips thumbnail signing (not shown here).
-app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -983,7 +1135,7 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
 });
 
 // Per-KOL eligibility detail (both staff roles).
-app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/kol/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -997,7 +1149,7 @@ app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, 
 });
 
 // Tab — Analisis: engagement metric breakdowns (both staff roles).
-app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/analytics', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1014,7 +1166,7 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req
 });
 
 // Tab — Ringkasan Performa: per-event totals + per-KOL breakdown.
-app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/overview', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1031,7 +1183,7 @@ app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req,
 });
 
 // AI insight over the aggregated performance data (JSON; fetched by the overview page).
-app.get('/admin/overview/insight', auth.requireStaff(['super_admin', 'eo']), async (req, res) => {
+app.get('/admin/overview/insight', auth.requireStaff(['super_admin']), async (req, res) => {
   try {
     const st = db();
     if (!st) return res.status(503).json({ error: 'not configured' });
@@ -1063,7 +1215,7 @@ app.get('/admin/overview/insight', auth.requireStaff(['super_admin', 'eo']), asy
 });
 
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
-app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/proofs', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1610,7 +1762,7 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
   } catch (e) { next(e); }
 });
 
-app.get('/performance', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/performance', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
