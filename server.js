@@ -1094,6 +1094,143 @@ app.post('/eo/profile', requireEo, upload.single('logo'), async (req, res, next)
   } catch (e) { next(e); }
 });
 
+// --- EO: event management ---------------------------------------------------
+const EO_ACCEPTED = new Set(['approved', 'assigned', 'completed']);
+const EO_POS_TYPES = ['kol', 'main_power', 'fotografer'];
+
+// Load an EO's own event (with needs) by id, or null if not theirs.
+async function eoOwnedEvent(st, staffId, eventId) {
+  return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
+}
+
+// Per-position quota (needed/filled/full), apply count, and registration status.
+function eoEventView(ev, apps) {
+  const evApps = apps.filter((a) => a.event_id === ev.id);
+  const filled = {};
+  evApps.forEach((a) => { if (EO_ACCEPTED.has(a.status)) filled[a.talent_type] = (filled[a.talent_type] || 0) + 1; });
+  const positions = (ev.needs || []).filter((n) => V.CAT_LABEL[n.talent_type]).map((n) => {
+    const needed = n.headcount || 0; const f = filled[n.talent_type] || 0;
+    return { type: n.talent_type, label: V.CAT_LABEL[n.talent_type], needed, filled: f, full: needed > 0 && f >= needed };
+  });
+  const allFull = positions.length > 0 && positions.every((p) => p.full);
+  const regClosed = !!ev.reg_closed_at || allFull;
+  return { applyCount: evApps.length, positions, allFull, regClosed, status: ev.completed_at ? 'done' : regClosed ? 'closed' : 'open' };
+}
+
+// Parse the create/edit event form into { data, needs, echo }.
+function parseEventForm(req) {
+  const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+  const data = {
+    name: s('name', 140), description: s('description', 4000) || null, category: s('category', 80) || null,
+    location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
+    start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null, reg_deadline: s('reg_deadline', 10) || null,
+  };
+  const types = [].concat(req.body.pos_type || []);
+  const quotas = [].concat(req.body.pos_quota || []);
+  const seen = new Set(); const needs = [];
+  types.forEach((tp, i) => {
+    tp = String(tp || '');
+    if (!EO_POS_TYPES.includes(tp) || seen.has(tp)) return;
+    const q = Math.max(1, parseInt(quotas[i], 10) || 0);
+    if (q > 0) { seen.add(tp); needs.push({ talent_type: tp, headcount: q }); }
+  });
+  return { data, needs, echo: Object.assign({}, data, { needs }) };
+}
+function validateEventForm(f, req) {
+  const e = [];
+  if (!f.data.name) e.push(req.t('eo.ev.err.name'));
+  if (!f.data.category) e.push(req.t('eo.ev.err.category'));
+  if (!f.data.location) e.push(req.t('eo.ev.err.location'));
+  if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
+  if (!f.needs.length) e.push(req.t('eo.ev.err.positions'));
+  return e;
+}
+
+app.get('/eo/events', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [events, apps] = await Promise.all([st.listEvents(), st.listApplications()]);
+    const mine = events.filter((e) => e.created_by === req.staff.id).map((e) => Object.assign(e, { view: eoEventView(e, apps) }));
+    await attachMockups(st, mine);
+    const profile = await st.getEoProfile(req.staff.id);
+    res.send(V.eoEvents({ staff: eoCtx(req), events: mine, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/new', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
+    const f = parseEventForm(req);
+    const errors = validateEventForm(f, req);
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, errors, lang: req.lang }));
+    const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id, needs: f.needs }));
+    if (ev && ev.id) { const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster }); }
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    await attachMockups(st, ev);
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const f = parseEventForm(req);
+    const errors = validateEventForm(f, req);
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), errors, lang: req.lang }));
+    const patch = Object.assign({}, f.data, { needs: f.needs });
+    const poster = await saveMockup(st, ev.id, req.file);
+    if (poster) patch.mockup_path = poster;
+    await st.updateEvent(ev.id, patch);
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/close', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (ev) await st.updateEvent(ev.id, { reg_closed_at: req.body.reopen ? null : new Date().toISOString() });
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [ev, apps] = await Promise.all([eoOwnedEvent(st, req.staff.id, req.params.id), st.listApplications()]);
+    if (!ev) return res.redirect('/eo/events');
+    const view = eoEventView(ev, apps);
+    await attachMockups(st, ev);
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
 app.get('/admin/health', async (req, res) => {
   const st = db();

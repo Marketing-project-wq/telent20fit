@@ -195,9 +195,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null })
+        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -214,6 +214,11 @@ function supabaseStore() {
       if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
       if (patch.mockup_path !== undefined) row.mockup_path = patch.mockup_path || null;
+      if (patch.category !== undefined) row.category = patch.category || null;
+      if (patch.start_time !== undefined) row.start_time = patch.start_time || null;
+      if (patch.end_time !== undefined) row.end_time = patch.end_time || null;
+      if (patch.reg_deadline !== undefined) row.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_closed_at !== undefined) row.reg_closed_at = patch.reg_closed_at;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
         await sb.from('talent_event_needs').delete().eq('event_id', id);
@@ -468,8 +473,8 @@ function memoryStore() {
     async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_closed_at: null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -484,6 +489,11 @@ function memoryStore() {
       if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;
       if (patch.mockup_path !== undefined) ev.mockup_path = patch.mockup_path || null;
+      if (patch.category !== undefined) ev.category = patch.category || null;
+      if (patch.start_time !== undefined) ev.start_time = patch.start_time || null;
+      if (patch.end_time !== undefined) ev.end_time = patch.end_time || null;
+      if (patch.reg_deadline !== undefined) ev.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_closed_at !== undefined) ev.reg_closed_at = patch.reg_closed_at;
       if (patch.needs) {
         for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
         patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
