@@ -118,13 +118,12 @@ function verifyAttendanceToken(eventId, token) {
 // Compat: any current session (talent-first). Prefer sessionFor/anySession.
 function currentTalent(req) { return anySession(req, ALL_TYPES); }
 
-/** Middleware: require a logged-in talent of the given type, else redirect to its login. */
+/** Middleware: require a logged-in talent of the given type, else the unified talent login. */
 function requireTalent(type) {
-  const loginPath = '/' + type.replace(/_/g, '-') + '/login';
   return (req, res, next) => {
     const t = sessionFor(req, type);
     if (t) { req.talent = t; return next(); }
-    res.redirect(loginPath);
+    res.redirect('/login');
   };
 }
 
