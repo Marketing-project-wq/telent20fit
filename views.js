@@ -1317,20 +1317,10 @@ function eoProfile({ staff, profile, saved, errors, lang }) {
   ${staffHead(staff, t('eo.profileTitle'), L)}
   <p class="sub">${t('eo.profileSub')}</p>
   ${savedBanner}${eb}
-  <form method="post" action="/eo/profile" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:640px">
+  <form method="post" action="/eo/profile" class="card" style="margin-top:14px;max-width:640px">
     <div class="field"><label for="org_name">${t('eo.f.orgName')}${req}</label><input type="text" id="org_name" name="org_name" required maxlength="140" value="${esc(p.org_name || '')}"></div>
-    <div class="field">
-      <label>${t('eo.f.logo')}</label>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        ${p.logo_url ? `<img src="${esc(p.logo_url)}" alt="" style="width:88px;height:88px;object-fit:cover;border-radius:12px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
-        <div style="flex:1;min-width:180px"><input type="file" name="logo" accept="image/*"><p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.f.logoHint')}</p></div>
-      </div>
-    </div>
     <div class="field"><label for="email">${t('eo.f.email')}${req}</label><input type="email" id="email" name="email" required maxlength="160" value="${esc(p.email || '')}"></div>
-    <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
     <div class="field"><label for="description">${t('eo.f.desc')}${req}</label><textarea id="description" name="description" required rows="4" maxlength="2000">${esc(p.description || '')}</textarea></div>
-    <div class="field"><label for="website">${t('eo.f.website')}</label><input type="url" id="website" name="website" maxlength="200" placeholder="https://" value="${esc(p.website || '')}"></div>
-    <div class="field"><label for="instagram">${t('eo.f.instagram')}</label><input type="text" id="instagram" name="instagram" maxlength="100" placeholder="@akun" value="${esc(p.instagram ? '@' + p.instagram : '')}"></div>
     <button type="submit" class="btn btn-block">${t('eo.f.save')}</button>
   </form>
 </div>`;
