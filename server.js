@@ -101,7 +101,7 @@ function requireTalentReady(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
@@ -118,7 +118,7 @@ function dataDiriGet(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
       res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
@@ -134,7 +134,7 @@ function dataDiriPost(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       const values = {
         city: String(req.body.city || '').trim().slice(0, 80),
         ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 16),
@@ -366,11 +366,7 @@ function talentRegisterPost(type, opts = {}) {
 
 app.post('/kol/register', talentRegisterPost('kol'));
 
-app.get('/kol/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'kol') return res.redirect('/kol');
-  res.send(V.talentLogin('kol', { lang: req.lang }));
-});
+app.get('/kol/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
 app.post('/kol/login', async (req, res, next) => {
   try {
@@ -387,7 +383,7 @@ app.post('/kol/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/kol/login'); });
+app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
 
 app.get('/kol/data-diri', dataDiriGet('kol'));
 app.post('/kol/data-diri', dataDiriPost('kol'));
@@ -742,11 +738,7 @@ app.get('/main-power/register', (req, res) => {
 
 app.post('/main-power/register', talentRegisterPost('main_power'));
 
-app.get('/main-power/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'main_power') return res.redirect('/main-power');
-  res.send(V.talentLogin('main_power', { lang: req.lang }));
-});
+app.get('/main-power/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
 app.post('/main-power/login', async (req, res, next) => {
   try {
@@ -763,7 +755,7 @@ app.post('/main-power/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/main-power/login'); });
+app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
 
 app.get('/main-power/data-diri', dataDiriGet('main_power'));
 app.post('/main-power/data-diri', dataDiriPost('main_power'));
