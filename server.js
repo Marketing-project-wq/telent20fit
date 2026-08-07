@@ -1050,7 +1050,7 @@ const requireEo = auth.requireStaff(['eo']);
 function eoCtx(req) { return { role: 'eo', name: req.staff.name }; }
 
 // Required EO profile fields; profile is "complete" only when all are filled.
-const EO_REQUIRED = ['org_name', 'email', 'phone', 'description'];
+const EO_REQUIRED = ['org_name', 'email', 'description'];
 function eoProfileComplete(p) { return !!(p && EO_REQUIRED.every((k) => String(p[k] || '').trim())); }
 
 // Dashboard summary numbers, scoped to one EO's events.
@@ -1083,14 +1083,13 @@ app.get('/eo/profile', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     const profile = await st.getEoProfile(req.staff.id) || {};
-    if (profile.logo_path) { const [url] = await st.signCovers([profile.logo_path]); profile.logo_url = url || null; }
     // Pre-fill org name from the account name for a first-time profile.
     if (!profile.org_name) profile.org_name = req.staff.name || '';
     res.send(V.eoProfile({ staff: eoCtx(req), profile, saved: req.query.saved === '1', lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-app.post('/eo/profile', requireEo, upload.single('logo'), async (req, res, next) => {
+app.post('/eo/profile', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1098,25 +1097,15 @@ app.post('/eo/profile', requireEo, upload.single('logo'), async (req, res, next)
     const patch = {
       org_name: clean('org_name', 140),
       email: clean('email', 160),
-      phone: clean('phone', 40),
       description: clean('description', 2000),
-      website: clean('website', 200) || null,
-      instagram: clean('instagram', 100).replace(/^@/, '') || null,
     };
     const errors = [];
     if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
     if (!patch.email) errors.push(req.t('eo.err.email'));
-    if (!patch.phone) errors.push(req.t('eo.err.phone'));
     if (!patch.description) errors.push(req.t('eo.err.desc'));
     const existing = await st.getEoProfile(req.staff.id) || {};
     if (errors.length) {
-      const profile = Object.assign({}, existing, patch);
-      if (existing.logo_path) { const [url] = await st.signCovers([existing.logo_path]); profile.logo_url = url || null; }
-      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile, errors, lang: req.lang }));
-    }
-    if (req.file) {
-      const mockup = await saveMockup(st, 'eo-' + req.staff.id, req.file);
-      if (mockup) patch.logo_path = mockup;
+      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, existing, patch), errors, lang: req.lang }));
     }
     patch.completed_at = existing.completed_at || new Date().toISOString();
     await st.upsertEoProfile(req.staff.id, patch);
