@@ -302,7 +302,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   const isStaff = role === 'super_admin' || isEo;
   const roleLabel = t('role.' + (role || 'kol'));
   const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/kol';
-  const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
+  const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/kol/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))

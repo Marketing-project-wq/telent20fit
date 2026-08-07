@@ -101,7 +101,7 @@ function requireTalentReady(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
       if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
@@ -118,7 +118,7 @@ function dataDiriGet(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
       if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
       res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
@@ -134,7 +134,7 @@ function dataDiriPost(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/' + p + '/login'); }
       const values = {
         city: String(req.body.city || '').trim().slice(0, 80),
         ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 16),
@@ -387,7 +387,7 @@ app.post('/kol/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/kol/logout', (req, res) => { auth.clearSession(res); res.redirect('/kol/login'); });
+app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/kol/login'); });
 
 app.get('/kol/data-diri', dataDiriGet('kol'));
 app.post('/kol/data-diri', dataDiriPost('kol'));
@@ -763,7 +763,7 @@ app.post('/main-power/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/logout', (req, res) => { auth.clearSession(res); res.redirect('/main-power/login'); });
+app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/main-power/login'); });
 
 app.get('/main-power/data-diri', dataDiriGet('main_power'));
 app.post('/main-power/data-diri', dataDiriPost('main_power'));
@@ -909,14 +909,14 @@ app.post('/reset-password', async (req, res, next) => {
 function staffHome(type) { return type === 'eo' ? '/eo' : '/admin'; }
 
 app.get('/admin/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect(staffHome(t.type));
+  const t = auth.anySession(req, ['super_admin', 'eo']);
+  if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
 app.get('/eo/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect(staffHome(t.type));
+  const t = auth.anySession(req, ['super_admin', 'eo']);
+  if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
 
@@ -1010,12 +1010,10 @@ app.post('/staff/reset-password', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/admin/logout', (req, res) => {
-  const t = auth.currentTalent(req);
-  const dest = (t && t.type === 'eo') ? '/eo/login' : '/admin/login';
-  auth.clearSession(res);
-  res.redirect(dest);
-});
+// Each staff area logs out only its own session, so signing out of EO doesn't
+// touch a Super Admin session open in another tab (and vice versa).
+app.post('/admin/logout', (req, res) => { auth.clearSession(res, 'super_admin'); res.redirect('/admin/login'); });
+app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/eo/login'); });
 
 // ------------------------------------------------------------------- EO ----
 // Event Organizer area. EO staff see only their own data (events created_by
