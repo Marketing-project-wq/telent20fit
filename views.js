@@ -298,20 +298,24 @@ function navLink(href, key, active, icon, label) {
 function appLayout({ title, body, role, active, user, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const isStaff = role === 'super_admin' || role === 'eo';
+  const isEo = role === 'eo';
+  const isStaff = role === 'super_admin' || isEo;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isStaff ? '/admin' : '/kol';
+  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/kol';
   const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
-  const items = isStaff
-    ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
-      + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
-      + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
-      + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
-      + (role === 'super_admin' ? navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications')) : '')
-      + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
-    : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
-      + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
-      + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
+  const items = isEo
+    ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+      + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
+    : isStaff
+      ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+        + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
+        + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
+        + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
+        + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
+        + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
+      : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
+        + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
+        + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1188,10 +1192,147 @@ function staffLogin(opts = {}) {
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
   </div>
   <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
 </div>`;
   return layout({ title: title + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// --- EO: forgot / reset password (staff_accounts) ---------------------------
+function staffForgot({ variant, lang, errors, values }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const base = variant === 'eo' ? '/eo' : '/admin';
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="${base}/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+  </div>
+  <h1>${t('auth.forgot.title')}</h1>
+  <p class="sub">${t('auth.forgot.subStaff')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="${base}/forgot-password">
+      <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc((values && values.login) || '')}"></div>
+      <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${base}/login?lang=${L}">${t('auth.forgot.backToLogin')}</a></p>
+  </div>
+</div>`;
+  return layout({ title: t('auth.forgot.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffForgotSent({ lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
+    <h1>${t('auth.forgot.sentTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
+    <a href="/eo/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+  </div></div>`;
+  return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffReset({ token, valid, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  if (!valid) {
+    const body = `<div class="wrap narrow"><div class="card success">
+      <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+      <h1>${t('auth.reset.invalidTitle')}</h1>
+      <p class="sub" style="margin:10px auto 24px;max-width:420px">${t('auth.reset.invalidBody')}</p>
+      <a href="/eo/forgot-password?lang=${L}" class="btn btn-ghost">${t('auth.reset.requestAgain')}</a>
+    </div></div>`;
+    return layout({ title: t('auth.reset.invalidTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+  }
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <h1 style="margin-top:22px">${t('auth.reset.title')}</h1>
+  <p class="sub">${t('auth.reset.sub')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="/staff/reset-password">
+      <input type="hidden" name="token" value="${esc(token)}">
+      <div class="field"><label for="password">${t('auth.reset.newPassword')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
+      <div class="field"><label for="confirm">${t('auth.reset.confirm')}</label><input type="password" id="confirm" name="confirm" required minlength="6" autocomplete="new-password"></div>
+      <button type="submit" class="btn btn-block">${t('auth.reset.btn')}</button>
+    </form>
+  </div>
+</div>`;
+  return layout({ title: t('auth.reset.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffResetDone({ lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check" style="background:var(--ok-soft);color:var(--ok)">✓</div>
+    <h1>${t('auth.reset.doneTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
+    <a href="/eo/login?lang=${L}" class="btn">${t('btn.signin')}</a>
+  </div></div>`;
+  return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// --- EO: dashboard + profile ------------------------------------------------
+function eoDashboard({ staff, stats, profileComplete, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const card = (label, val, icon) => `<div class="card" style="margin:0">
+    <div style="font-size:24px;line-height:1">${icon}</div>
+    <div style="font-size:30px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
+    <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(label)}</div>
+  </div>`;
+  const reminder = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:14px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('eo.dashTitle'), L)}
+  <p class="sub">${t('eo.dashSub')}</p>
+  ${reminder}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:14px;margin-top:16px">
+    ${card(t('eo.stat.totalEvents'), stats.totalEvents, '📅')}
+    ${card(t('eo.stat.activeEvents'), stats.activeEvents, '🟢')}
+    ${card(t('eo.stat.totalApplies'), stats.totalApplies, '📝')}
+    ${card(t('eo.stat.accepted'), stats.accepted, '✅')}
+    ${card(t('eo.stat.doneEvents'), stats.doneEvents, '🏁')}
+  </div>
+</div>`;
+  return appLayout({ title: t('eo.dashTitle') + ' — 20FIT', body, role: 'eo', active: 'dashboard', user: staff.name, lang: L });
+}
+
+function eoProfile({ staff, profile, saved, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = profile || {};
+  const req = ' <span style="color:var(--red)">*</span>';
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const savedBanner = saved ? `<div class="banner banner-ok">✓ ${t('eo.profileSaved')}</div>` : '';
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('eo.profileTitle'), L)}
+  <p class="sub">${t('eo.profileSub')}</p>
+  ${savedBanner}${eb}
+  <form method="post" action="/eo/profile" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:640px">
+    <div class="field"><label for="org_name">${t('eo.f.orgName')}${req}</label><input type="text" id="org_name" name="org_name" required maxlength="140" value="${esc(p.org_name || '')}"></div>
+    <div class="field">
+      <label>${t('eo.f.logo')}</label>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        ${p.logo_url ? `<img src="${esc(p.logo_url)}" alt="" style="width:88px;height:88px;object-fit:cover;border-radius:12px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
+        <div style="flex:1;min-width:180px"><input type="file" name="logo" accept="image/*"><p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.f.logoHint')}</p></div>
+      </div>
+    </div>
+    <div class="field"><label for="email">${t('eo.f.email')}${req}</label><input type="email" id="email" name="email" required maxlength="160" value="${esc(p.email || '')}"></div>
+    <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
+    <div class="field"><label for="description">${t('eo.f.desc')}${req}</label><textarea id="description" name="description" required rows="4" maxlength="2000">${esc(p.description || '')}</textarea></div>
+    <div class="field"><label for="website">${t('eo.f.website')}</label><input type="url" id="website" name="website" maxlength="200" placeholder="https://" value="${esc(p.website || '')}"></div>
+    <div class="field"><label for="instagram">${t('eo.f.instagram')}</label><input type="text" id="instagram" name="instagram" maxlength="100" placeholder="@akun" value="${esc(p.instagram ? '@' + p.instagram : '')}"></div>
+    <button type="submit" class="btn btn-block">${t('eo.f.save')}</button>
+  </form>
+</div>`;
+  return appLayout({ title: t('eo.profileTitle') + ' — 20FIT', body, role: 'eo', active: 'profile', user: staff.name, lang: L });
 }
 
 /**
@@ -2819,4 +2960,5 @@ module.exports = {
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
+  staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
 };
