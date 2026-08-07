@@ -47,6 +47,10 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Keep the login alive: refresh a still-valid session cookie on every request
+// (rolling expiry) so open tabs / returning users stay signed in until they
+// explicitly log out. Skip logout so it can still clear the cookie.
+app.use((req, res, next) => { if (!/\/logout$/.test(req.path)) auth.touchSession(req, res); next(); });
 // Resolve the request language once (from ?lang= or the persisted `lang` cookie).
 app.use((req, res, next) => { req.lang = readLang(req, res); req.t = (k, v) => i18n.t(req.lang, k, v); next(); });
 

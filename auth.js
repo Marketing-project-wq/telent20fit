@@ -9,7 +9,14 @@ const crypto = require('crypto');
 
 const SECRET = process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'dev-insecure-secret';
 const COOKIE = 'tsid';
-const MAX_AGE_MS = 30 * 24 * 3600 * 1000; // 30 days
+const MAX_AGE_MS = 60 * 24 * 3600 * 1000; // 60 days — rolling (see touchSession)
+
+// Persistent cookie so the login survives closing tabs, the browser, and
+// reboots. `secure` only in production (Railway is HTTPS); left off locally so
+// http testing still works.
+function cookieOptions() {
+  return { httpOnly: true, sameSite: 'lax', maxAge: MAX_AGE_MS, path: '/', secure: process.env.NODE_ENV === 'production' };
+}
 
 function hashPassword(pw) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -52,7 +59,17 @@ function setSession(res, account) {
   // Talents carry talent_type; staff carry role. Both become the session "type".
   const type = account.talent_type || account.role;
   const token = sign({ id: account.id, type, name: account.name, exp: Date.now() + MAX_AGE_MS });
-  res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', maxAge: MAX_AGE_MS, path: '/' });
+  res.cookie(COOKIE, token, cookieOptions());
+}
+
+// Rolling session: on each request with a still-valid cookie, re-issue it with a
+// fresh 60-day window and refreshed maxAge. So an account that keeps being used
+// never gets logged out on its own — only an explicit logout clears it.
+function touchSession(req, res) {
+  const t = currentTalent(req);
+  if (!t) return;
+  const token = sign({ id: t.id, type: t.type, name: t.name, exp: Date.now() + MAX_AGE_MS });
+  res.cookie(COOKIE, token, cookieOptions());
 }
 
 function clearSession(res) { res.clearCookie(COOKIE, { path: '/' }); }
@@ -92,4 +109,4 @@ function requireStaff(roles) {
   };
 }
 
-module.exports = { hashPassword, verifyPassword, setSession, clearSession, currentTalent, requireTalent, requireStaff, attendanceToken, verifyAttendanceToken, COOKIE };
+module.exports = { hashPassword, verifyPassword, setSession, touchSession, clearSession, currentTalent, requireTalent, requireStaff, attendanceToken, verifyAttendanceToken, COOKIE };
