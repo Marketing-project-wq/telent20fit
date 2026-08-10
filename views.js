@@ -1329,10 +1329,17 @@ function eoProfile({ staff, profile, saved, errors, lang }) {
     <div class="field"><label for="email">${t('eo.f.emailLogin')}</label><input type="email" id="email" value="${esc(p.email || '')}" readonly disabled style="opacity:.7;cursor:not-allowed"><div class="hint" style="margin-top:6px">${t('eo.f.emailLoginHint')}</div></div>
     <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
     <div class="field"><label for="city">${t('eo.f.city')}${req}</label><input type="text" id="city" name="city" required maxlength="100" value="${esc(p.city || '')}"></div>
-    <div class="field"><label for="description">${t('eo.f.desc')}${req}</label><textarea id="description" name="description" required rows="4" maxlength="1000">${esc(p.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
+    <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span>${req}</label><textarea id="description" name="description" required rows="4" maxlength="1000">${esc(p.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
     <button type="submit" class="btn btn-block">${t('eo.f.save')}</button>
   </form>
-  <script>(function(){var d=document.getElementById('description'),c=document.getElementById('descCount');if(!d||!c)return;var u=function(){c.textContent=d.value.length;};d.addEventListener('input',u);u();})();</script>
+  <script>(function(){
+    var d=document.getElementById('description'),c=document.getElementById('descCount');
+    if(d&&c){var u=function(){c.textContent=d.value.length;};d.addEventListener('input',u);u();}
+    var sel=document.getElementById('org_type'),lt=document.getElementById('descLabelText');
+    if(sel&&lt){var tpl=lt.getAttribute('data-tpl'),base=lt.getAttribute('data-base');
+      var up=function(){var o=sel.options[sel.selectedIndex];lt.textContent=(sel.value&&o)?tpl.replace('{type}',o.text):base;};
+      sel.addEventListener('change',up);up();}
+  })();</script>
 </div>`;
   return appLayout({ title: t('eo.profileTitle') + ' — 20FIT', body, role: 'eo', active: 'profile', user: staff.name, lang: L });
 }
