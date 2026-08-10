@@ -544,7 +544,10 @@ async function issueCertsForApps(st, apps, eventById, nameById) {
 // or an array; returns the same reference.
 async function attachMockups(st, events) {
   const list = Array.isArray(events) ? events : [events];
-  const withPath = list.map((e, i) => ({ i, p: e && e.mockup_path })).filter((x) => x.p);
+  // A full http(s) mockup_path is an external image URL — use it as-is; only
+  // storage paths need a signed URL.
+  list.forEach((e) => { if (e && e.mockup_path && /^https?:\/\//i.test(e.mockup_path)) e.mockup_url = e.mockup_path; });
+  const withPath = list.map((e, i) => ({ i, p: e && e.mockup_path })).filter((x) => x.p && !/^https?:\/\//i.test(x.p));
   if (withPath.length) {
     const urls = await st.signCovers(withPath.map((x) => x.p));
     withPath.forEach((x, k) => { list[x.i].mockup_url = urls[k] || null; });
