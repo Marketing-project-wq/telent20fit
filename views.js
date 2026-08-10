@@ -2981,7 +2981,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -3050,6 +3050,7 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
       <h1 style="margin:0">${esc(eo.name || '')}</h1>${statusPill}
     </div>
     <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at)}</p>
+    ${suspended ? `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.suspendedNote')}</div>` : ''}
 
     <div class="section-head"><h2 style="margin:0">${t('eo.detail.profile')}</h2></div>
     ${profileCard}
@@ -3057,9 +3058,15 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
     <div class="section-head"><h2 style="margin:0">${t('eo.detail.events')}</h2></div>
     <div class="card" style="margin-top:14px">${evList}</div>
 
-    <form method="post" action="/admin/eos/${esc(eo.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))} style="margin-top:20px">
-      <button class="btn btn-ghost btn-sm">🗑 ${t('title.delete')}</button>
-    </form>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+      <form method="post" action="/admin/eos/${esc(eo.id)}/status" ${suspended ? '' : jsConfirm(t('eo.detail.suspendConfirm'))}>
+        <input type="hidden" name="status" value="${suspended ? 'active' : 'suspended'}">
+        <button class="btn btn-sm">${suspended ? '✓ ' + t('eo.detail.activate') : '⏸ ' + t('eo.detail.suspend')}</button>
+      </form>
+      <form method="post" action="/admin/eos/${esc(eo.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}>
+        <button class="btn btn-ghost btn-sm">🗑 ${t('title.delete')}</button>
+      </form>
+    </div>
   </div>`;
   return appLayout({ title: (eo.name || t('eo.detail.title')) + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }

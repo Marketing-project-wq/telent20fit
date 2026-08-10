@@ -456,6 +456,10 @@
   "eo.detail.view": "Lihat detail",
   "eo.status.active": "Aktif",
   "eo.status.suspended": "Ditangguhkan",
+  "eo.detail.suspend": "Tangguhkan EO",
+  "eo.detail.activate": "Aktifkan EO",
+  "eo.detail.suspendConfirm": "Tangguhkan EO ini? Mereka tidak akan bisa login sampai diaktifkan lagi.",
+  "eo.detail.suspendedNote": "EO ini sedang ditangguhkan — tidak bisa login. Event yang sudah ada tetap aman.",
 
   "err.nameRequired": "Nama wajib diisi.",
   "err.loginRequired": "Email / No. HP wajib diisi.",
