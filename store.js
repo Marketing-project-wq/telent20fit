@@ -216,9 +216,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline }) {
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null })
+        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published' })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -239,6 +239,8 @@ function supabaseStore() {
       if (patch.start_time !== undefined) row.start_time = patch.start_time || null;
       if (patch.end_time !== undefined) row.end_time = patch.end_time || null;
       if (patch.reg_deadline !== undefined) row.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_open !== undefined) row.reg_open = patch.reg_open || null;
+      if (patch.status !== undefined) row.status = patch.status;
       if (patch.reg_closed_at !== undefined) row.reg_closed_at = patch.reg_closed_at;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
@@ -256,6 +258,29 @@ function supabaseStore() {
       const byEvent = new Map();
       (nd.data || []).forEach((n) => { const a = byEvent.get(n.event_id) || []; a.push(n); byEvent.set(n.event_id, a); });
       return (ev.data || []).map((e) => ({ ...e, needs: byEvent.get(e.id) || [] }));
+    },
+    // ---- master positions + per-event opened positions ----
+    async listPositions() {
+      const { data, error } = await sb.from('talent_positions').select('*').eq('is_active', true).order('sort');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listEventPositions(eventId) {
+      const { data, error } = await sb.from('talent_event_positions')
+        .select('id,quota,closed_at,position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
+      if (error) throw new Error(error.message);
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+        .sort((a, b) => a.sort - b.sort);
+    },
+    async setEventPositions(eventId, positions) {
+      await sb.from('talent_event_positions').delete().eq('event_id', eventId);
+      const rows = (positions || []).filter((p) => p && p.position_id && p.quota > 0).map((p) => ({ event_id: eventId, position_id: p.position_id, quota: p.quota }));
+      if (rows.length) { const r = await sb.from('talent_event_positions').insert(rows); if (r.error) throw new Error(r.error.message); }
+    },
+    async listApplicationChoices() {
+      const { data, error } = await sb.from('talent_application_choices').select('id,application_id,position_id,priority,accepted');
+      if (error) throw new Error(error.message);
+      return data || [];
     },
     async listActiveEvents() {
       const { data, error } = await sb.from('talent_events').select('id,name').eq('is_active', true).order('name');
@@ -441,6 +466,14 @@ function memoryStore() {
     { event_id: 'ev-bali', talent_type: 'main_power', headcount: 8 },
   ];
   const assignments = [];
+  const positions = [
+    ['judge', 'Judge', 'Judge', 10], ['runner', 'Runner', 'Runner', 20], ['kol', 'KOL', 'KOL', 30],
+    ['registration_staff', 'Registration Staff', 'Registration Staff', 40], ['water_station', 'Water Station', 'Water Station', 50],
+    ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
+    ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
+  ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
+  const eventPositions = [];
+  const applicationChoices = [];
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
@@ -500,8 +533,8 @@ function memoryStore() {
     async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_closed_at: null };
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', reg_closed_at: null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -520,12 +553,23 @@ function memoryStore() {
       if (patch.start_time !== undefined) ev.start_time = patch.start_time || null;
       if (patch.end_time !== undefined) ev.end_time = patch.end_time || null;
       if (patch.reg_deadline !== undefined) ev.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_open !== undefined) ev.reg_open = patch.reg_open || null;
+      if (patch.status !== undefined) ev.status = patch.status;
       if (patch.reg_closed_at !== undefined) ev.reg_closed_at = patch.reg_closed_at;
       if (patch.needs) {
         for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
         patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       }
     },
+    async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
+    async listEventPositions(eventId) {
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
+    },
+    async setEventPositions(eventId, poss) {
+      for (let j = eventPositions.length - 1; j >= 0; j--) if (eventPositions[j].event_id === eventId) eventPositions.splice(j, 1);
+      (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null }));
+    },
+    async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },
     async listActiveEvents() { return events.filter((e) => e.is_active).map((e) => ({ id: e.id, name: e.name })); },
     async toggleEvent(id) { const e = events.find((e) => e.id === id); if (e) e.is_active = !e.is_active; },
