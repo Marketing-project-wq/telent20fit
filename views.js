@@ -242,7 +242,7 @@ tr:last-child td{border-bottom:none}
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 const THEME_HEAD = `<script>
-(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
+(function(){try{if(localStorage.getItem('theme')!=='dark')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
 function setTheme(m){var el=document.documentElement;if(m==='light')el.setAttribute('data-theme','light');else el.removeAttribute('data-theme');try{localStorage.setItem('theme',m);}catch(e){}syncThemeBtns();}
 function syncThemeBtns(){var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';var bs=document.querySelectorAll('[data-theme-set]');for(var i=0;i<bs.length;i++){bs[i].classList.toggle('active',bs[i].getAttribute('data-theme-set')===cur);}}
 if(document.readyState!=='loading')syncThemeBtns();else document.addEventListener('DOMContentLoaded',syncThemeBtns);
