@@ -951,26 +951,37 @@ app.post('/eo/register', async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const login = String(req.body.login || '').trim().toLowerCase();
+    const c = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+    const org_type = c('org_type', 20);
+    const org_name = c('org_name', 140);
+    const pic_name = c('pic_name', 140);
+    const login = c('login', 160).toLowerCase();
+    const phone = c('phone', 40);
+    const city = c('city', 100);
     const password = String(req.body.password || '');
     const password2 = String(req.body.password2 || '');
-    const values = { name, login };
+    const values = { org_type, org_name, pic_name, login, phone, city };
     const errors = [];
-    if (!name) errors.push(req.t('eo.reg.err.name'));
+    if (!EO_ORG_TYPES.includes(org_type)) errors.push(req.t('eo.reg.err.type'));
+    if (!org_name) errors.push(req.t('eo.reg.err.orgName'));
+    if (!pic_name) errors.push(req.t('eo.reg.err.pic'));
     if (!login) errors.push(req.t('err.emailRequired'));
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
+    if (!phone) errors.push(req.t('eo.reg.err.phone'));
+    if (!city) errors.push(req.t('eo.reg.err.city'));
     if (password.length < 6) errors.push(req.t('err.passwordMin6'));
     else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
     if (errors.length) return res.status(400).send(V.eoRegister({ lang: req.lang, errors, values }));
     let staff;
     try {
       // New EO starts 'pending' + unverified; email verification activates it.
-      staff = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password), status: 'pending' });
+      staff = await st.createStaff({ role: 'eo', name: org_name, login, password_hash: auth.hashPassword(password), status: 'pending' });
     } catch (e) {
       if (e.code === 'DUP') return res.status(400).send(V.eoRegister({ lang: req.lang, errors: [req.t('eo.reg.err.dup')], values }));
       throw e;
     }
+    // Store the identity captured at registration into the EO profile (description added later).
+    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, city });
     await sendEoVerification(st, req, staff);
     res.send(V.eoVerifySent({ email: login, lang: req.lang }));
   } catch (e) { next(e); }
@@ -1108,7 +1119,8 @@ const requireEo = auth.requireStaff(['eo']);
 function eoCtx(req) { return { role: 'eo', name: req.staff.name }; }
 
 // Required EO profile fields; profile is "complete" only when all are filled.
-const EO_REQUIRED = ['org_name', 'email', 'description'];
+const EO_ORG_TYPES = ['company', 'community', 'individual'];
+const EO_REQUIRED = ['org_type', 'org_name', 'pic_name', 'email', 'phone', 'city', 'description'];
 function eoProfileComplete(p) { return !!(p && EO_REQUIRED.every((k) => String(p[k] || '').trim())); }
 
 // Dashboard summary numbers, scoped to one EO's events.
@@ -1140,9 +1152,11 @@ app.get('/eo/profile', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const profile = await st.getEoProfile(req.staff.id) || {};
-    // Pre-fill org name from the account name for a first-time profile.
+    const [profile0, staffRec] = await Promise.all([st.getEoProfile(req.staff.id), st.getStaffById(req.staff.id)]);
+    const profile = profile0 || {};
+    // Pre-fill for a first-time profile; email always mirrors the login (read-only).
     if (!profile.org_name) profile.org_name = req.staff.name || '';
+    profile.email = profile.email || (staffRec && staffRec.login) || '';
     res.send(V.eoProfile({ staff: eoCtx(req), profile, saved: req.query.saved === '1', lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -1153,19 +1167,28 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const clean = (k, max) => String(req.body[k] || '').trim().slice(0, max);
     const patch = {
+      org_type: clean('org_type', 20),
       org_name: clean('org_name', 140),
-      email: clean('email', 160),
-      description: clean('description', 2000),
+      pic_name: clean('pic_name', 140),
+      phone: clean('phone', 40),
+      city: clean('city', 100),
+      description: clean('description', 1000),
     };
+    const [existing, staffRec] = await Promise.all([st.getEoProfile(req.staff.id), st.getStaffById(req.staff.id)]);
+    const ex = existing || {};
+    // Email is the login credential — read-only; never changed from the profile form.
+    patch.email = ex.email || (staffRec && staffRec.login) || '';
     const errors = [];
+    if (!EO_ORG_TYPES.includes(patch.org_type)) errors.push(req.t('eo.reg.err.type'));
     if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
-    if (!patch.email) errors.push(req.t('eo.err.email'));
+    if (!patch.pic_name) errors.push(req.t('eo.reg.err.pic'));
+    if (!patch.phone) errors.push(req.t('eo.reg.err.phone'));
+    if (!patch.city) errors.push(req.t('eo.reg.err.city'));
     if (!patch.description) errors.push(req.t('eo.err.desc'));
-    const existing = await st.getEoProfile(req.staff.id) || {};
     if (errors.length) {
-      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, existing, patch), errors, lang: req.lang }));
+      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, ex, patch), errors, lang: req.lang }));
     }
-    patch.completed_at = existing.completed_at || new Date().toISOString();
+    patch.completed_at = ex.completed_at || new Date().toISOString();
     await st.upsertEoProfile(req.staff.id, patch);
     res.redirect('/eo/profile?saved=1');
   } catch (e) { next(e); }
