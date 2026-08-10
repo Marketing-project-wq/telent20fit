@@ -649,6 +649,149 @@ app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, nex
   } catch (e) { next(e); }
 });
 
+// ---- Type-agnostic talent apply to position-based (EO) events ---------------
+// Any logged-in talent (KOL / Man Power / Fotografer) with a complete profile
+// can browse open EO events and apply with 1..3 prioritised position choices.
+function requireAnyTalentReady() {
+  return async (req, res, next) => {
+    try {
+      const t = auth.anySession(req, auth.TALENT_TYPES);
+      if (!t) return res.redirect('/login');
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(t.id);
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login'); }
+      if (!acc.profile_completed_at) return res.redirect('/' + t.type.replace(/_/g, '-') + '/data-diri?lang=' + req.lang);
+      req.talent = t; req.account = acc;
+      next();
+    } catch (e) { next(e); }
+  };
+}
+
+// Is the event currently accepting applications? (published + within reg window)
+function eventRegOpen(ev) {
+  if (!ev || ev.status !== 'published' || ev.reg_closed_at) return false;
+  const today = jakartaDateStr();
+  if (ev.reg_open && today < String(ev.reg_open).slice(0, 10)) return false;
+  if (ev.reg_deadline && today > String(ev.reg_deadline).slice(0, 10)) return false;
+  return true;
+}
+
+// Build the apply context for one event + talent (positions, open slots, my application).
+async function positionApplyCtx(st, ev, talentId) {
+  const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+  const view = eoEventView(ev, positions, apps, choices);
+  const openPositions = view.positions.filter((p) => !p.closed_at && !p.full);
+  const myApp = await st.getApplicationForEvent(talentId, ev.id);
+  const myChoices = myApp ? await st.listChoicesForApplication(myApp.id) : [];
+  const posById = new Map(view.positions.map((p) => [p.position_id, p]));
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, regOpen: eventRegOpen(ev) };
+}
+
+// Events open to talents: published, position-based, within reg window, with a free slot.
+app.get('/events', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
+    const eoName = new Map(staff.map((s) => [s.id, s.name]));
+    const myApps = apps.filter((a) => a.talent_id === req.talent.id);
+    const appliedEventIds = new Set(myApps.map((a) => a.event_id));
+    const open = [];
+    for (const ev of events) {
+      if (!eventRegOpen(ev)) continue;
+      const positions = await st.listEventPositions(ev.id);
+      if (!positions.length) continue;
+      const view = eoEventView(ev, positions, apps, choices);
+      const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
+      if (!openPos.length) continue;
+      open.push(Object.assign({}, ev, { openPositions: openPos, eoName: eoName.get(ev.created_by) || '', applied: appliedEventIds.has(ev.id) }));
+    }
+    open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));
+    await attachMockups(st, open);
+    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/event/:id', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const ctx = await positionApplyCtx(st, ev, req.talent.id);
+    if (!ctx.positions.length) return res.redirect('/events'); // not a position-based event
+    await attachMockups(st, ev);
+    res.send(V.talentEventApply({ account: req.account, event: ev, ctx, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Parse + validate the 1..3 prioritised choices against BR-2/3/5/7.
+function parseApplyChoices(req, ctx) {
+  const openIds = new Set(ctx.openPositions.map((p) => p.position_id));
+  const inEvent = new Set(ctx.positions.map((p) => p.position_id));
+  const slots = [String(req.body.pos1 || ''), String(req.body.pos2 || ''), String(req.body.pos3 || '')];
+  const errors = [];
+  if (!slots[0]) errors.push(req.t('ta.err.p1required')); // BR-2 min 1 / BR-5 P1 first
+  if (!slots[1] && slots[2]) errors.push(req.t('ta.err.gap')); // BR-5 no gap
+  const chosen = [];
+  slots.forEach((pid, i) => {
+    if (!pid) return;
+    if (i > 0 && !slots[i - 1]) return; // gap already flagged
+    if (chosen.some((c) => c.position_id === pid)) { errors.push(req.t('ta.err.dup')); return; } // BR-3
+    if (!inEvent.has(pid)) { errors.push(req.t('ta.err.notOpen')); return; }
+    // BR-7: position must be open (unless it's one the talent already holds)
+    const heldPriority = (ctx.myChoices.find((c) => c.position_id === pid) || {}).priority;
+    if (!openIds.has(pid) && heldPriority === undefined) { errors.push(req.t('ta.err.notOpen')); return; }
+    chosen.push({ position_id: pid, priority: chosen.length + 1 });
+  });
+  return { chosen, errors };
+}
+
+app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const ctx = await positionApplyCtx(st, ev, req.talent.id);
+    if (!ctx.positions.length) return res.redirect('/events');
+    // BR-8: can only apply/edit while pending and registration is open.
+    const editable = !ctx.myApp || (['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
+    if (!ctx.regOpen || !editable) {
+      const ctx2 = Object.assign({}, ctx, { errors: [req.t('ta.err.closed')] });
+      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: ctx2, lang: req.lang }));
+    }
+    const { chosen, errors } = parseApplyChoices(req, ctx);
+    if (errors.length) {
+      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors }), lang: req.lang }));
+    }
+    if (ctx.myApp) {
+      await st.replaceApplicationChoices(ctx.myApp.id, chosen);
+    } else {
+      const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
+      await st.updateApplication(app.id, { status: 'applied' });
+      await st.addApplicationChoices(app.id, chosen);
+    }
+    res.redirect('/event/' + ev.id + '?lang=' + req.lang + '&saved=1');
+  } catch (e) { next(e); }
+});
+
+app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const myApp = await st.getApplicationForEvent(req.talent.id, ev.id);
+    // BR-8: cancel only while pending + registration open.
+    if (myApp && ['applied', 'pending', 'under_review'].includes(myApp.status) && eventRegOpen(ev)) {
+      await st.deleteApplication(myApp.id);
+    }
+    res.redirect('/event/' + ev.id + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
 app.get('/kol/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();

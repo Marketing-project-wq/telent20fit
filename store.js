@@ -340,6 +340,29 @@ function supabaseStore() {
       const { error } = await sb.from('talent_applications').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
     },
+    async getApplicationForEvent(talentId, eventId) {
+      const { data } = await sb.from('talent_applications').select('*').eq('talent_id', talentId).eq('event_id', eventId).maybeSingle();
+      return data || null;
+    },
+    async addApplicationChoices(applicationId, choices) {
+      const rows = (choices || []).map((c) => ({ application_id: applicationId, position_id: c.position_id, priority: c.priority }));
+      if (rows.length) { const r = await sb.from('talent_application_choices').insert(rows); if (r.error) throw new Error(r.error.message); }
+    },
+    async replaceApplicationChoices(applicationId, choices) {
+      await sb.from('talent_application_choices').delete().eq('application_id', applicationId);
+      await this.addApplicationChoices(applicationId, choices);
+    },
+    async listChoicesForApplication(applicationId) {
+      const { data } = await sb.from('talent_application_choices').select('id,position_id,priority,accepted').eq('application_id', applicationId).order('priority');
+      return data || [];
+    },
+    async deleteApplication(id) {
+      // No FK cascade on talent_application_choices, so remove choices first to
+      // avoid leaving orphaned rows behind.
+      await sb.from('talent_application_choices').delete().eq('application_id', id);
+      const { error } = await sb.from('talent_applications').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createCertificate(row) {
       const { data, error } = await sb.from('talent_certificates').insert(row).select('id,cert_no').maybeSingle();
       if (error) {
@@ -591,6 +614,11 @@ function memoryStore() {
     async listApplicationsForTalent(talentId) { return applications.filter((a) => a.talent_id === talentId).slice().reverse(); },
     async getApplication(id) { return applications.find((a) => a.id === id) || null; },
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
+    async getApplicationForEvent(talentId, eventId) { return applications.find((a) => a.talent_id === talentId && a.event_id === eventId) || null; },
+    async addApplicationChoices(applicationId, choices) { (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
+    async replaceApplicationChoices(applicationId, choices) { for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === applicationId) applicationChoices.splice(j, 1); (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
+    async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
+    async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
       const rec = { id: 'cert-' + (++seq), revoked_at: null, issued_at: now(), ...row };

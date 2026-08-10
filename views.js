@@ -1853,6 +1853,11 @@ function kolEventsPage({ account, events, lang }) {
   const body = `<div class="wrap">
   <h1 style="margin-top:0">${t('ev.findTitle')}</h1>
   <p class="sub">${t('apply.homeSub')}</p>
+  <a href="/events?lang=${L}" class="card" style="display:flex;gap:12px;align-items:center;text-decoration:none;color:inherit;margin-top:14px">
+    <span style="font-size:22px">🔎</span>
+    <span style="min-width:0;flex:1"><b>${t('ta.discover')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('ta.discoverSub')}</div></span>
+    <span class="btn btn-sm" style="flex-shrink:0">→</span>
+  </a>
   ${controls}
   ${listBlock}
 </div>
@@ -2049,6 +2054,11 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
+  <a href="/events?lang=${L}" class="card" style="display:flex;gap:12px;align-items:center;text-decoration:none;color:inherit;margin-bottom:14px">
+    <span style="font-size:22px">🔎</span>
+    <span style="min-width:0;flex:1"><b>${t('ta.discover')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('ta.discoverSub')}</div></span>
+    <span class="btn btn-sm" style="flex-shrink:0">→</span>
+  </a>
   <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
 
   <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
@@ -3225,7 +3235,101 @@ function page500(msg) {
   return layout({ title: 'Error — 20FIT KOL', body });
 }
 
+// Badge for the prioritised-application status flow (applied → … → completed / rejected).
+function talentStatusBadge(status, lang) {
+  const L = normLang(lang);
+  const t = (k) => tr(L, k);
+  const map = {
+    applied: ['#1d4ed8', '#dbeafe'], pending: ['#1d4ed8', '#dbeafe'],
+    under_review: ['#b45309', '#fef3c7'], approved: ['#0f9d6a', '#d1fae5'],
+    assigned: ['#0e7490', '#cffafe'], completed: ['#374151', '#e5e7eb'], rejected: ['#b91c1c', '#fee2e2'],
+  };
+  const c = map[status] || map.applied;
+  return `<span class="pill" style="background:${c[1]};color:${c[0]}">${esc(t('ta.status.' + status) || status)}</span>`;
+}
+
+function talentHomePath(account) { return '/' + ((account && account.talent_type) || 'kol').replace(/_/g, '-'); }
+
+function talentOpenEvents({ account, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const cards = (events && events.length) ? events.map((e) => {
+    const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+    const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))} · ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</span>`).join('');
+    return `<a href="/event/${esc(e.id)}?lang=${L}" class="card ev-card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+      ${eventCover(e, L)}
+      <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
+      ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
+      ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
+      ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
+      ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+      <div style="margin-top:10px">${posLine}</div>
+      ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge('applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
+    </a>`;
+  }).join('') : `<p class="muted" style="margin-top:14px">${t('ta.noOpen')}</p>`;
+  const body = `<div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
+      <h1 style="margin:0">${t('ta.openTitle')}</h1>
+      <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    </div>
+    <p class="sub">${t('ta.openSub')}</p>
+    ${cards}
+  </div>`;
+  return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+}
+
+function talentEventApply({ account, event, ctx, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event;
+  const errors = ctx.errors || [];
+  const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
+  const opt = (sel, allowNone) => {
+    let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
+    (ctx.openPositions || []).forEach((p) => { o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}>${esc(posLabel(p, L))} — ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</option>`; });
+    if (sel && !(ctx.openPositions || []).some((p) => p.position_id === sel)) { const pp = ctx.posById.get(sel) || {}; o += `<option value="${esc(sel)}" selected>${esc(posLabel(pp, L))}</option>`; }
+    return o;
+  };
+  let myBlock = '';
+  if (ctx.myApp) {
+    const rows = ctx.myChoices.map((c) => { const p = ctx.posById.get(c.position_id) || {}; return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${c.accepted ? `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>` : ''}</div>`; }).join('');
+    myBlock = `<div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>${t('ta.yourApp')}</b>${talentStatusBadge(ctx.myApp.status, L)}</div>
+      <div class="dl-list" style="margin-top:8px">${rows}</div>
+    </div>`;
+  }
+  const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
+  let formBlock = '';
+  if (editable) {
+    formBlock = `<form method="post" action="/event/${esc(e.id)}/apply" class="card" style="margin-top:14px">
+      <div style="font-weight:700;margin-bottom:4px">${ctx.myApp ? t('ta.editChoices') : t('ta.pickChoices')}</div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
+      <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select></div>
+      <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select></div>
+      <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select></div>
+      <button type="submit" class="btn btn-block">${ctx.myApp ? t('ta.update') : t('ta.submit')}</button>
+    </form>`;
+    if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
+  } else if (!ctx.myApp) {
+    formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
+  }
+  const body = `<div class="wrap narrow">
+    <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
+    <h1 style="margin:0">${esc(e.name)}</h1>
+    <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
+    ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px">${esc(e.description)}</p>` : ''}
+    ${eb}${myBlock}${formBlock}
+  </div>`;
+  return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+}
+
 module.exports = {
+  talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
