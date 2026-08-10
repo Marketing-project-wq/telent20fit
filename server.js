@@ -1487,7 +1487,69 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     await attachMockups(st, ev);
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, lang: req.lang }));
+    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Tahap 7: EO processes an applicant. Loads the EO-owned event + the application
+// (which must belong to that event) and returns them, or null if not authorised.
+async function eoOwnedApplication(st, staffId, eventId, appId) {
+  const ev = await eoOwnedEvent(st, staffId, eventId);
+  if (!ev) return null;
+  const app = (await st.listApplications()).find((a) => a.id === appId && a.event_id === ev.id);
+  if (!app) return null;
+  return { ev, app };
+}
+
+// Accept an applicant into one of their chosen positions (respects quota BR-9;
+// the DB enforces one accepted position per application).
+app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const myChoices = choices.filter((c) => c.application_id === found.app.id);
+    if (!myChoices.some((c) => c.position_id === positionId)) return res.redirect(backTo); // not one of their choices
+    const pos = positions.find((p) => p.position_id === positionId);
+    const quota = pos ? pos.quota : 0;
+    // Quota check: accepted choices for this position across the event, excluding this application.
+    const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
+    const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
+    if (quota > 0 && acceptedElsewhere >= quota) return res.redirect(backTo + '&err=full');
+    await st.acceptApplicationChoice(found.app.id, positionId);
+    await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    res.redirect(backTo + '&ok=accepted');
+  } catch (e) { next(e); }
+});
+
+// Reject an applicant (clears any acceptance).
+app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
+  } catch (e) { next(e); }
+});
+
+// Undo a decision: back to pending, acceptance cleared.
+app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
+    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 
