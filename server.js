@@ -2083,6 +2083,32 @@ app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin']), async (
 app.post('/admin/events/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await st.deleteEvent(req.params.id); res.redirect('/admin/manage'); } catch (e) { next(e); }
 });
+// Super Admin read-only detail for one EO: profile + the events they created.
+app.get('/admin/eos/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const eo = await st.getStaffById(req.params.id);
+    if (!eo || eo.role !== 'eo') return res.redirect('/admin/manage');
+    const [profile, allEvents, apps] = await Promise.all([
+      st.getEoProfile(eo.id), st.listEvents(), st.listApplications(),
+    ]);
+    const applyCountByEvent = {};
+    apps.forEach((a) => { applyCountByEvent[a.event_id] = (applyCountByEvent[a.event_id] || 0) + 1; });
+    const events = allEvents
+      .filter((e) => e.created_by === eo.id)
+      .map((e) => {
+        let displayStatus;
+        if (e.completed_at) displayStatus = 'done';
+        else if (e.status === 'draft') displayStatus = 'draft';
+        else if (e.status === 'closed' || e.reg_closed_at) displayStatus = 'closed';
+        else displayStatus = 'published';
+        return Object.assign({}, e, { applyCount: applyCountByEvent[e.id] || 0, displayStatus });
+      })
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    res.send(V.adminEoDetail({ staff: staffCtx(req), eo, profile, events, lang: req.lang }));
+  } catch (e) { next(e); }
+});
 app.post('/admin/eos/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
