@@ -356,6 +356,17 @@ function supabaseStore() {
       const { data } = await sb.from('talent_application_choices').select('id,position_id,priority,accepted').eq('application_id', applicationId).order('priority');
       return data || [];
     },
+    // Mark exactly one of an application's choices as accepted (clears the rest
+    // first so the "one accepted per application" unique index never trips).
+    async acceptApplicationChoice(applicationId, positionId) {
+      await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
+      const { error } = await sb.from('talent_application_choices').update({ accepted: true }).eq('application_id', applicationId).eq('position_id', positionId);
+      if (error) throw new Error(error.message);
+    },
+    async clearApplicationAccepted(applicationId) {
+      const { error } = await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
+      if (error) throw new Error(error.message);
+    },
     async deleteApplication(id) {
       // No FK cascade on talent_application_choices, so remove choices first to
       // avoid leaving orphaned rows behind.
@@ -618,6 +629,8 @@ function memoryStore() {
     async addApplicationChoices(applicationId, choices) { (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
     async replaceApplicationChoices(applicationId, choices) { for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === applicationId) applicationChoices.splice(j, 1); (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
     async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
+    async acceptApplicationChoice(applicationId, positionId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); }); },
+    async clearApplicationAccepted(applicationId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = false; }); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }

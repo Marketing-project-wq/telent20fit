@@ -1572,11 +1572,15 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoEventDetail({ staff, event, view, applicants, lang }) {
+function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
   const aps = applicants || [];
+  const f = flash || {};
+  const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
+    : f.ok === 'rejected' ? `<div class="banner banner-ok">${t('eo.ap.okRejected')}</div>`
+    : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
@@ -1591,6 +1595,7 @@ function eoEventDetail({ staff, event, view, applicants, lang }) {
   else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${flashBanner}
   ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
@@ -1633,6 +1638,35 @@ function eoApplicantsSection(e, view, aps, L) {
     return bits.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${bits.join(' · ')}</div>` : '';
   };
 
+  // Accept / reject controls per applicant. Accept is offered per chosen
+  // position that still has quota; a full position is shown disabled.
+  const decisionControls = (a) => {
+    const base = `/eo/events/${esc(e.id)}/applicants/${esc(a.id)}`;
+    const acceptedChoice = a.choices.find((c) => c.accepted);
+    if (a.status === 'approved' && acceptedChoice) {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
+    }
+    if (a.status === 'rejected') {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
+    }
+    const acceptBtns = a.choices.map((c) => {
+      const p = posById.get(c.position_id) || {};
+      if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
+      return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`;
+    }).join('');
+    return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${acceptBtns}
+        <form class="inline-form" method="post" action="${base}/reject" ${jsConfirm(t('eo.ap.rejectConfirm'))}><button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
+      </div>
+    </div>`;
+  };
+
   // Per-talent cards
   const talentCards = aps.map((a) => `<div class="card ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
@@ -1641,6 +1675,7 @@ function eoApplicantsSection(e, view, aps, L) {
     </div>
     ${contactLine(a)}
     <div style="margin-top:10px">${choiceChips(a.choices)}</div>
+    ${decisionControls(a)}
   </div>`).join('');
 
   // Per-position groups
