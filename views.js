@@ -1070,7 +1070,7 @@ function talentDataDiri(type, opts = {}) {
     </div>
     <div class="field">
       <label for="ktp">${t('dd.ktp')}${req}</label>
-      <input type="text" id="ktp" name="ktp" required inputmode="numeric" maxlength="16" placeholder="${esc(t('dd.ktpPh'))}" value="${esc(v.ktp || '')}">
+      <input type="text" id="ktp" name="ktp" required inputmode="numeric" maxlength="20" placeholder="${esc(t('dd.ktpPh'))}" value="${esc(v.ktp || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.ktpHint')}</div>
     </div>
     <div class="field">
@@ -2123,12 +2123,11 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, false)).join('');
   const mpRows = (openEvents && openEvents.length) ? openEvents.map((e) => {
     const full = e.slotsLeft <= 0;
-    const slot = full
-      ? `<span class="dl-when dl-late">${t('mp.slotFull')}</span>`
-      : `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${t('mp.slotLeft', { n: e.slotsLeft })}</span>`;
+    // Slot counts are hidden from talents; only mark when registration is full.
+    const slot = full ? `<div style="margin-top:8px"><span class="dl-when dl-late">${t('mp.slotFull')}</span></div>` : '';
     const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
-      <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}<div style="margin-top:8px">${slot}</div></div>
+      <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}${slot}</div>
       ${full ? '' : `<a href="/main-power/apply/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
     </div>`;
   }).join('') : '';
@@ -2154,7 +2153,6 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
-  <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
 
   <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
   <p class="muted" style="font-size:13px;margin:6px 0 0">${t('mp.newEventsSub')}</p>
@@ -3403,7 +3401,7 @@ function talentPositionCard(e, lang, filterable) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
-  const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))} · ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</span>`).join('');
+  const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))}</span>`).join('');
   const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
   const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
   const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-search="${esc(hay)}"` : '';
@@ -3446,7 +3444,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
   const opt = (sel, allowNone) => {
     let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
-    (ctx.openPositions || []).forEach((p) => { o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}>${esc(posLabel(p, L))} — ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</option>`; });
+    (ctx.openPositions || []).forEach((p) => { o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}>${esc(posLabel(p, L))}</option>`; });
     if (sel && !(ctx.openPositions || []).some((p) => p.position_id === sel)) { const pp = ctx.posById.get(sel) || {}; o += `<option value="${esc(sel)}" selected>${esc(posLabel(pp, L))}</option>`; }
     return o;
   };
