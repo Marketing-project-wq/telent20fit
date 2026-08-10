@@ -509,7 +509,6 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     </span>
     <div class="lp-toggles">
       <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
-      <a href="/admin/login" class="lp-submit">🔑 ${esc(t('land.admin'))}</a>
       ${toggle}
       ${themeToggle()}
     </div>
@@ -554,7 +553,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     <div class="foot-main">
       <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
     </div>
-    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/admin/login">Login Admin</a> · <a href="/eo/login">Login EO</a></div>
+    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
   </footer>
 </div>
 </body></html>`;
