@@ -1143,46 +1143,52 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
 });
 
 // --- EO: event management ---------------------------------------------------
-const EO_ACCEPTED = new Set(['approved', 'assigned', 'completed']);
-const EO_POS_TYPES = ['kol', 'main_power', 'fotografer'];
+const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from the close button
 
-// Load an EO's own event (with needs) by id, or null if not theirs.
+// Load an EO's own event by id, or null if not theirs.
 async function eoOwnedEvent(st, staffId, eventId) {
   return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
 }
+function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = p.quota; }); return m; }
 
-// Per-position quota (needed/filled/full), apply count, and registration status.
-function eoEventView(ev, apps) {
+// Per-event view: opened positions with filled(accepted)/applicants/quota, apply count, display status.
+function eoEventView(ev, positions, apps, choices) {
   const evApps = apps.filter((a) => a.event_id === ev.id);
-  const filled = {};
-  evApps.forEach((a) => { if (EO_ACCEPTED.has(a.status)) filled[a.talent_type] = (filled[a.talent_type] || 0) + 1; });
-  const positions = (ev.needs || []).filter((n) => V.CAT_LABEL[n.talent_type]).map((n) => {
-    const needed = n.headcount || 0; const f = filled[n.talent_type] || 0;
-    return { type: n.talent_type, label: V.CAT_LABEL[n.talent_type], needed, filled: f, full: needed > 0 && f >= needed };
-  });
-  const allFull = positions.length > 0 && positions.every((p) => p.full);
-  const regClosed = !!ev.reg_closed_at || allFull;
-  return { applyCount: evApps.length, positions, allFull, regClosed, status: ev.completed_at ? 'done' : regClosed ? 'closed' : 'open' };
+  const appIds = new Set(evApps.map((a) => a.id));
+  const evChoices = (choices || []).filter((c) => appIds.has(c.application_id));
+  const filled = {}; const applicants = {};
+  evChoices.forEach((c) => { applicants[c.position_id] = (applicants[c.position_id] || 0) + 1; if (c.accepted) filled[c.position_id] = (filled[c.position_id] || 0) + 1; });
+  const pos = (positions || []).map((p) => { const f = filled[p.position_id] || 0; return Object.assign({}, p, { filled: f, applicants: applicants[p.position_id] || 0, full: p.quota > 0 && f >= p.quota }); });
+  const allFull = pos.length > 0 && pos.every((p) => p.full);
+  let display;
+  if (ev.completed_at) display = 'done';
+  else if (ev.status === 'draft') display = 'draft';
+  else if (ev.status === 'closed' || ev.reg_closed_at || allFull) display = 'closed';
+  else display = 'published';
+  return { applyCount: evApps.length, positions: pos, allFull, status: display };
 }
 
-// Parse the create/edit event form into { data, needs, echo }.
-function parseEventForm(req) {
+// Parse the create/edit event form. positionsMaster gives the valid position ids.
+function parseEventForm(req, positionsMaster) {
   const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+  const st = s('status', 12);
   const data = {
     name: s('name', 140), description: s('description', 4000) || null, category: s('category', 80) || null,
     location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
-    start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null, reg_deadline: s('reg_deadline', 10) || null,
+    start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
+    reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
+    status: EO_STATUSES.includes(st) ? st : 'draft',
   };
-  const types = [].concat(req.body.pos_type || []);
-  const quotas = [].concat(req.body.pos_quota || []);
-  const seen = new Set(); const needs = [];
-  types.forEach((tp, i) => {
-    tp = String(tp || '');
-    if (!EO_POS_TYPES.includes(tp) || seen.has(tp)) return;
-    const q = Math.max(1, parseInt(quotas[i], 10) || 0);
-    if (q > 0) { seen.add(tp); needs.push({ talent_type: tp, headcount: q }); }
+  const validIds = new Set((positionsMaster || []).map((p) => p.id));
+  const chosen = [].concat(req.body.pos || []);
+  const seen = new Set(); const positions = [];
+  chosen.forEach((id) => {
+    id = String(id);
+    if (!validIds.has(id) || seen.has(id)) return;
+    const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
+    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q }); }
   });
-  return { data, needs, echo: Object.assign({}, data, { needs }) };
+  return { data, positions, echo: Object.assign({}, data, { positions }) };
 }
 function validateEventForm(f, req) {
   const e = [];
@@ -1190,7 +1196,7 @@ function validateEventForm(f, req) {
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
   if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
-  if (!f.needs.length) e.push(req.t('eo.ev.err.positions'));
+  if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   return e;
 }
 
@@ -1198,11 +1204,12 @@ app.get('/eo/events', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, apps] = await Promise.all([st.listEvents(), st.listApplications()]);
-    const mine = events.filter((e) => e.created_by === req.staff.id).map((e) => Object.assign(e, { view: eoEventView(e, apps) }));
-    await attachMockups(st, mine);
+    const [events, apps, choices] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices()]);
+    const mine = events.filter((e) => e.created_by === req.staff.id);
+    const withView = await Promise.all(mine.map(async (e) => Object.assign(e, { view: eoEventView(e, await st.listEventPositions(e.id), apps, choices) })));
+    await attachMockups(st, withView);
     const profile = await st.getEoProfile(req.staff.id);
-    res.send(V.eoEvents({ staff: eoCtx(req), events: mine, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1211,7 +1218,8 @@ app.get('/eo/events/new', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, lang: req.lang }));
+    const positionsMaster = await st.listPositions();
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, selected: {}, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1220,11 +1228,15 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const f = parseEventForm(req);
+    const positionsMaster = await st.listPositions();
+    const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, errors, lang: req.lang }));
-    const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id, needs: f.needs }));
-    if (ev && ev.id) { const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster }); }
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, selected: eoSelMap(f.positions), errors, lang: req.lang }));
+    const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
+    if (ev && ev.id) {
+      await st.setEventPositions(ev.id, f.positions);
+      const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
+    }
     res.redirect('/eo/events');
   } catch (e) { next(e); }
 });
@@ -1235,8 +1247,9 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
+    const [positionsMaster, evPos] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id)]);
     await attachMockups(st, ev);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, lang: req.lang }));
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, selected: eoSelMap(evPos), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1246,13 +1259,21 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const f = parseEventForm(req);
+    const [positionsMaster, evPos, apps, choices] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), errors, lang: req.lang }));
-    const patch = Object.assign({}, f.data, { needs: f.needs });
-    const poster = await saveMockup(st, ev.id, req.file);
-    if (poster) patch.mockup_path = poster;
+    // Guards: a position with applicants can't be removed; quota can't drop below accepted.
+    const view = eoEventView(ev, evPos, apps, choices);
+    const newByPos = eoSelMap(f.positions);
+    view.positions.forEach((p) => {
+      if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
+      if (p.position_id in newByPos && newByPos[p.position_id] < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
+    });
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang }));
+    const patch = Object.assign({}, f.data);
+    const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
+    await st.setEventPositions(ev.id, f.positions);
     res.redirect('/eo/events');
   } catch (e) { next(e); }
 });
@@ -1262,7 +1283,22 @@ app.post('/eo/events/:id/close', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
-    if (ev) await st.updateEvent(ev.id, { reg_closed_at: req.body.reopen ? null : new Date().toISOString() });
+    if (ev) await st.updateEvent(ev.id, req.body.reopen ? { status: 'published', reg_closed_at: null } : { status: 'closed', reg_closed_at: new Date().toISOString() });
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+// Delete only if the event has no applicants; otherwise close it (never drop someone's application).
+app.post('/eo/events/:id/delete', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (ev) {
+      const hasApplicants = (await st.listApplications()).some((a) => a.event_id === ev.id);
+      if (hasApplicants) await st.updateEvent(ev.id, { status: 'closed', reg_closed_at: new Date().toISOString() });
+      else await st.deleteEvent(ev.id);
+    }
     res.redirect('/eo/events');
   } catch (e) { next(e); }
 });
@@ -1271,9 +1307,10 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [ev, apps] = await Promise.all([eoOwnedEvent(st, req.staff.id, req.params.id), st.listApplications()]);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const view = eoEventView(ev, apps);
+    const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const view = eoEventView(ev, positions, apps, choices);
     await attachMockups(st, ev);
     res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, lang: req.lang }));
   } catch (e) { next(e); }

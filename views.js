@@ -1439,12 +1439,16 @@ function eoVerifyNeeded({ email, lang }) {
 }
 
 // Registration-status badge for an EO event.
+// Localized label for a master/event position.
+function posLabel(p, lang) { return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
+
 function eoRegBadge(status, lang) {
   const L = normLang(lang);
   const t = (k) => tr(L, k);
   if (status === 'done') return `<span class="pill pill-off">${t('eo.ev.status.done')}</span>`;
+  if (status === 'draft') return `<span class="pill pill-off">${t('eo.ev.status.draft')}</span>`;
   if (status === 'closed') return `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.status.closed')}</span>`;
-  return `<span class="pill pill-ok">${t('eo.ev.status.open')}</span>`;
+  return `<span class="pill pill-ok">${t('eo.ev.status.published')}</span>`;
 }
 
 function eoEvents({ staff, events, profileComplete, lang }) {
@@ -1453,9 +1457,10 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   const rows = (events && events.length) ? events.map((e) => {
     const v = e.view;
     const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
-    const closeBtn = v.status === 'done' ? '' : (e.reg_closed_at
-      ? `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`
-      : `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`);
+    let closeBtn = '';
+    if (v.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
+    else if (v.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
+    const delBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/delete" ${jsConfirm(t('eo.ev.deleteConfirm'))}><button class="btn btn-ghost btn-sm" title="${t('eo.ev.delete')}">🗑</button></form>`;
     return `<tr>
       <td data-label="${t('eo.ev.th.name')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<div style="min-width:0"><b>${esc(e.name)}</b>${e.category ? `<div class="muted" style="font-size:12px">${esc(e.category)}</div>` : ''}</div></div></td>
       <td data-label="${t('eo.ev.th.date')}" class="muted" style="font-size:13px;white-space:nowrap">${date}${e.start_time ? `<div style="font-size:12px">${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}</div>` : ''}</td>
@@ -1465,7 +1470,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
       <td style="text-align:right;white-space:nowrap">
         <a href="/eo/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.ev.detail')}</a>
         <a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
-        ${closeBtn}
+        ${closeBtn}${delBtn}
       </td>
     </tr>`;
   }).join('') : `<tr><td colspan="6" class="muted">${t('eo.ev.empty')}</td></tr>`;
@@ -1486,29 +1491,27 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   return appLayout({ title: t('eo.ev.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoPosRow(tp, qty, L) {
-  const t = (k) => tr(L, k);
-  const opts = ['kol', 'main_power', 'fotografer'].map((x) => `<option value="${x}"${tp === x ? ' selected' : ''}>${esc(CAT_LABEL[x])}</option>`).join('');
-  return `<div class="pos-row" style="display:flex;gap:8px;align-items:center;margin-top:8px">
-    <select name="pos_type" style="flex:1;min-width:0">${opts}</select>
-    <input type="number" name="pos_quota" min="1" value="${qty ? esc(qty) : '1'}" style="width:120px" aria-label="${t('eo.ev.quota')}">
-    <button type="button" class="btn btn-ghost btn-sm pos-del" title="${t('eo.ev.removePos')}">✕</button>
-  </div>`;
-}
-
-function eoEventForm({ staff, event, errors, lang }) {
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
+  const sel = selected || {};
   const editing = !!e.id;
   const rq = ' <span style="color:var(--red)">*</span>';
   const eb = (errors && errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const action = editing ? `/eo/events/${esc(e.id)}/edit` : '/eo/events';
-  const needMap = {}; (e.needs || []).forEach((n) => { needMap[n.talent_type] = n.headcount; });
-  const posKeys = Object.keys(needMap).filter((k) => CAT_LABEL[k]);
-  const initialRows = posKeys.length ? posKeys.map((tp) => eoPosRow(tp, needMap[tp], L)).join('') : eoPosRow('kol', '', L);
+  const dval = (v) => esc(String(v || '').slice(0, 10));
   const field = (name, label, val, type, required, extra) => `<div class="field"><label for="${name}">${label}${required ? rq : ''}</label><input type="${type || 'text'}" id="${name}" name="${name}" ${required ? 'required' : ''} value="${esc(val || '')}" ${extra || ''}></div>`;
+  const status = e.status || 'draft';
+  const posRows = (positionsMaster || []).map((p) => {
+    const on = Object.prototype.hasOwnProperty.call(sel, p.id);
+    return `<label class="posm-row" style="display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)">
+      <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
+      <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
+      <input type="number" name="quota_${esc(p.id)}" min="1" value="${on && sel[p.id] ? esc(sel[p.id]) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
+    </label>`;
+  }).join('');
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
@@ -1519,19 +1522,29 @@ function eoEventForm({ staff, event, errors, lang }) {
     ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
     <div class="field"><label for="category">${t('eo.ev.f.category')}${rq}</label>
       <input type="text" id="category" name="category" required maxlength="80" list="evcats" value="${esc(e.category || '')}" placeholder="${t('eo.ev.f.categoryPh')}">
-      <datalist id="evcats"><option value="Marathon"><option value="Fun Run"><option value="Trail Run"><option value="Triathlon"><option value="Turnamen"><option value="Konser"><option value="Expo"><option value="Gathering"></datalist>
+      <datalist id="evcats"><option value="Marathon"><option value="Fun Run"><option value="Trail Run"><option value="HYROX / Fungsional"><option value="Triathlon"><option value="Turnamen"><option value="Konser"><option value="Expo"></datalist>
     </div>
     <div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
     ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
-      <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), e.starts_at, 'date', true, '')}</div>
-      <div style="flex:1;min-width:150px">${field('ends_at', t('eo.ev.f.endDate'), e.ends_at, 'date', false, '')}</div>
+      <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
+      <div style="flex:1;min-width:150px">${field('ends_at', t('eo.ev.f.endDate'), dval(e.ends_at), 'date', false, '')}</div>
     </div>
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('start_time', t('eo.ev.f.startTime'), e.start_time, 'time', false, '')}</div>
       <div style="flex:1;min-width:150px">${field('end_time', t('eo.ev.f.endTime'), e.end_time, 'time', false, '')}</div>
     </div>
-    ${field('reg_deadline', t('eo.ev.f.deadline'), e.reg_deadline, 'date', false, '')}
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">${field('reg_open', t('eo.ev.f.regOpen'), dval(e.reg_open), 'date', false, '')}</div>
+      <div style="flex:1;min-width:150px">${field('reg_deadline', t('eo.ev.f.deadline'), dval(e.reg_deadline), 'date', false, '')}</div>
+    </div>
+    <div class="field"><label for="status">${t('eo.ev.f.status')}</label>
+      <select id="status" name="status">
+        <option value="draft"${status === 'draft' ? ' selected' : ''}>${t('eo.ev.status.draft')}</option>
+        <option value="published"${status === 'published' ? ' selected' : ''}>${t('eo.ev.status.published')}</option>
+      </select>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.statusHint')}</p>
+    </div>
     <div class="field">
       <label>${t('eo.ev.f.poster')}</label>
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
@@ -1540,19 +1553,20 @@ function eoEventForm({ staff, event, errors, lang }) {
       </div>
     </div>
     <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
-    <p class="muted" style="font-size:12.5px;margin:2px 0 8px">${t('eo.ev.positionsHint')}</p>
-    <div id="posList">${initialRows}</div>
-    <button type="button" class="btn btn-ghost btn-sm" id="posAdd" style="margin-top:10px">+ ${t('eo.ev.addPos')}</button>
-    <button type="submit" class="btn btn-block" style="margin-top:20px">${editing ? t('btn.save') : t('eo.ev.publish')}</button>
+    <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
+    <div id="posmList">${posRows}</div>
+    <button type="submit" class="btn btn-block" style="margin-top:22px">${editing ? t('btn.save') : t('eo.ev.saveEvent')}</button>
   </form>
 </div>
 <script>
 (function(){
-  var list=document.getElementById('posList'), add=document.getElementById('posAdd');
-  if(!list||!add) return;
-  function bind(r){ var d=r.querySelector('.pos-del'); if(d) d.onclick=function(){ if(list.querySelectorAll('.pos-row').length>1) r.remove(); }; }
-  [].slice.call(list.querySelectorAll('.pos-row')).forEach(bind);
-  add.onclick=function(){ var f=list.querySelector('.pos-row'); if(!f) return; var c=f.cloneNode(true); var i=c.querySelector('input'); if(i)i.value='1'; var s=c.querySelector('select'); if(s)s.selectedIndex=0; list.appendChild(c); bind(c); };
+  var list=document.getElementById('posmList'); if(!list) return;
+  [].slice.call(list.querySelectorAll('.posm-row')).forEach(function(r){
+    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q');
+    if(!cb||!q) return;
+    cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } });
+    q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; });
+  });
 })();
 </script>`;
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
@@ -1566,14 +1580,14 @@ function eoEventDetail({ staff, event, view, lang }) {
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <b>${esc(p.label)}</b>${p.full ? `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.full')}</span>` : `<span class="pill pill-ok">${t('eo.ev.openPos')}</span>`}
+      <b>${esc(posLabel(p, L))}</b>${p.full ? `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.full')}</span>` : `<span class="pill pill-ok">${t('eo.ev.openPos')}</span>`}
     </div>
-    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.needed}</span></div>
+    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span></div>
     <div class="muted" style="font-size:12px">${t('eo.ev.filledNeeded')}</div>
   </div>`).join('') : `<p class="muted">${t('eo.ev.noPositions')}</p>`;
-  const closeBtn = view.status === 'done' ? '' : (e.reg_closed_at
-    ? `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`
-    : `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`);
+  let closeBtn = '';
+  if (view.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
+  else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
