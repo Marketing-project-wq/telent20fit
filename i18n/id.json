@@ -220,6 +220,8 @@
   "eo.ev.addPos": "Tambah Posisi",
   "eo.ev.removePos": "Hapus posisi",
   "eo.ev.quota": "Kuota",
+  "eo.ev.jobdeskPh": "Jobdesk / tugas posisi ini (opsional) — muncul ke talent saat memilih posisi.",
+  "ta.jobdesk": "Jobdesk",
   "eo.ev.f.name": "Nama Event",
   "eo.ev.f.category": "Kategori Event",
   "eo.ev.f.categoryPh": "mis. Marathon, Fun Run, Turnamen",
