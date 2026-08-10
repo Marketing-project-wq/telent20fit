@@ -1506,11 +1506,17 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
   const status = e.status || 'draft';
   const posRows = (positionsMaster || []).map((p) => {
     const on = Object.prototype.hasOwnProperty.call(sel, p.id);
-    return `<label class="posm-row" style="display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)">
-      <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
-      <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
-      <input type="number" name="quota_${esc(p.id)}" min="1" value="${on && sel[p.id] ? esc(sel[p.id]) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
-    </label>`;
+    const cur = on ? sel[p.id] : null;
+    const q = cur ? (typeof cur === 'object' ? cur.quota : cur) : '';
+    const jd = cur && typeof cur === 'object' ? (cur.jobdesk || '') : '';
+    return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
+      <label style="display:flex;gap:10px;align-items:center">
+        <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
+        <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
+        <input type="number" name="quota_${esc(p.id)}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
+      </label>
+      <textarea name="jobdesk_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" class="posm-jd" style="width:100%;box-sizing:border-box;margin-top:8px;font-size:13px${on ? '' : ';display:none'}">${esc(jd)}</textarea>
+    </div>`;
   }).join('');
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
@@ -1562,10 +1568,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
   [].slice.call(list.querySelectorAll('.posm-row')).forEach(function(r){
-    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q');
+    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q'), jd=r.querySelector('.posm-jd');
     if(!cb||!q) return;
-    cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } });
-    q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; });
+    function sync(){ if(jd) jd.style.display = cb.checked ? '' : 'none'; }
+    cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } sync(); });
+    q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; sync(); });
   });
 })();
 </script>`;
@@ -3498,17 +3505,23 @@ function talentEventApply({ account, event, ctx, lang }) {
       <div class="dl-list" style="margin-top:8px">${rows}</div>
     </div>`;
   }
+  // Jobdesk shown after the talent picks a position (per-slot, live).
+  const jdMap = {};
+  (ctx.positions || []).forEach((p) => { if (p.jobdesk) jdMap[p.position_id] = p.jobdesk; });
+  const hasJd = Object.keys(jdMap).length > 0;
+  const jdPanel = (slot) => `<div class="jd-panel" data-jd="${slot}" style="display:none;margin-top:8px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><b style="font-size:11.5px">📋 ${t('ta.jobdesk')}</b><div class="jd-text" style="margin-top:3px;white-space:pre-wrap"></div></div>`;
   const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
   let formBlock = '';
   if (editable) {
     formBlock = `<form method="post" action="/event/${esc(e.id)}/apply" class="card" style="margin-top:14px">
       <div style="font-weight:700;margin-bottom:4px">${ctx.myApp ? t('ta.editChoices') : t('ta.pickChoices')}</div>
       <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
-      <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select></div>
-      <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select></div>
-      <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select></div>
+      <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select>${hasJd ? jdPanel('pos1') : ''}</div>
+      <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select>${hasJd ? jdPanel('pos2') : ''}</div>
+      <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select>${hasJd ? jdPanel('pos3') : ''}</div>
       <button type="submit" class="btn btn-block">${ctx.myApp ? t('ta.update') : t('ta.submit')}</button>
     </form>`;
+    if (hasJd) formBlock += `<script>(function(){var JD=${JSON.stringify(jdMap).replace(/</g, '\\u003c')};['pos1','pos2','pos3'].forEach(function(id){var sel=document.getElementById(id);if(!sel)return;var panel=sel.parentNode.querySelector('.jd-panel');if(!panel)return;var txt=panel.querySelector('.jd-text');function upd(){var v=sel.value,d=v&&JD[v];if(d){txt.textContent=d;panel.style.display='';}else{panel.style.display='none';txt.textContent='';}}sel.addEventListener('change',upd);upd();});})();</script>`;
     if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
   } else if (!ctx.myApp) {
     formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;

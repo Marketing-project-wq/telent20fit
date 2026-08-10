@@ -1305,7 +1305,7 @@ const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from 
 async function eoOwnedEvent(st, staffId, eventId) {
   return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
 }
-function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = p.quota; }); return m; }
+function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = { quota: p.quota, jobdesk: p.jobdesk || '' }; }); return m; }
 
 // Per-event view: opened positions with filled(accepted)/applicants/quota, apply count, display status.
 function eoEventView(ev, positions, apps, choices) {
@@ -1342,7 +1342,8 @@ function parseEventForm(req, positionsMaster) {
     id = String(id);
     if (!validIds.has(id) || seen.has(id)) return;
     const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
-    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q }); }
+    const jobdesk = String(req.body['jobdesk_' + id] || '').trim().slice(0, 1000) || null;
+    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q, jobdesk }); }
   });
   return { data, positions, echo: Object.assign({}, data, { positions }) };
 }
@@ -1423,7 +1424,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     const newByPos = eoSelMap(f.positions);
     view.positions.forEach((p) => {
       if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
-      if (p.position_id in newByPos && newByPos[p.position_id] < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
+      if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang }));
     const patch = Object.assign({}, f.data);
