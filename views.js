@@ -117,6 +117,8 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
 .ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ev-cover-photo{height:auto;background:rgba(0,0,0,.04)}
+.ev-cover-photo-img{display:block;width:100%;height:auto}
 .ev-detail-hero{width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;display:block;background:rgba(0,0,0,.04)}
 .ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
 .ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
@@ -958,18 +960,25 @@ function evCoverPick(seed) {
 /** Full-bleed gradient "cover" for an event card, with initial, icon & status badge. */
 function eventCover(e, lang) {
   const L = normLang(lang);
-  const [c1, c2, icon] = evCoverPick(e.id || e.name);
-  const initial = esc(String(e.name || '?').trim().charAt(0).toUpperCase() || '?');
   const ongoing = e.status === 'ongoing';
   const badgeColor = ongoing ? '#0f9d6a' : '#E4121F';
   const badgeText = tr(L, ongoing ? 'ev.status.ongoing' : 'ev.status.upcoming');
-  const img = e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-cover-img" loading="lazy" onerror="this.style.display='none'">` : '';
+  const badge = `<span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>`;
+  // With a poster, show the full image at its natural aspect ratio (no crop);
+  // otherwise fall back to the generated gradient cover.
+  if (e.mockup_url) {
+    return `<div class="ev-cover ev-cover-photo">
+      <img src="${esc(e.mockup_url)}" alt="" class="ev-cover-photo-img" loading="lazy" onerror="this.closest('.ev-cover').style.display='none'">
+      ${badge}
+    </div>`;
+  }
+  const [c1, c2, icon] = evCoverPick(e.id || e.name);
+  const initial = esc(String(e.name || '?').trim().charAt(0).toUpperCase() || '?');
   return `<div class="ev-cover" style="background:linear-gradient(135deg,${c1},${c2})">
       <div class="ev-cover-tex"></div>
       <div class="ev-cover-ini">${initial}</div>
       <div class="ev-cover-ico">${icon}</div>
-      ${img}
-      <span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>
+      ${badge}
     </div>`;
 }
 
