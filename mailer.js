@@ -75,6 +75,58 @@ async function sendResetEmail({ to, name, link, lang }) {
   return { delivered: true };
 }
 
+// Reuse the reset email layout for the EO email-verification link.
+function verifyEmailHtml({ name, link, lang }) {
+  const id = lang !== 'en';
+  const t = id ? {
+    hi: ('Halo ' + (name || '')).trim() + ',',
+    body: 'Terima kasih sudah mendaftar sebagai Event Organizer di 20FIT Talent. Klik tombol di bawah untuk memverifikasi email dan mengaktifkan akunmu. Link ini berlaku 24 jam.',
+    btn: 'Verifikasi Email',
+    ignore: 'Kalau kamu tidak mendaftar, abaikan saja email ini.',
+    foot: 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
+  } : {
+    hi: ('Hi ' + (name || '')).trim() + ',',
+    body: 'Thanks for registering as an Event Organizer on 20FIT Talent. Click the button below to verify your email and activate your account. This link is valid for 24 hours.',
+    btn: 'Verify Email',
+    ignore: 'If you did not register, just ignore this email.',
+    foot: 'Automated email from 20FIT Talent. Please do not reply.',
+  };
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      <tr><td style="background:#E4121F;padding:20px 28px;color:#fff;font-size:20px;font-weight:800">20FIT Talent</td></tr>
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
+        <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#41454d">${esc(t.body)}</p>
+        <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">${esc(t.btn)}</a>
+        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.ignore)}</p>
+        <p style="margin:18px 0 0;font-size:12px;word-break:break-all;color:#8b8f97">${esc(link)}</p>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Send an EO email-verification link. Never throws for a missing key. */
+async function sendVerifyEmail({ to, name, link, lang }) {
+  const subject = lang !== 'en' ? 'Verifikasi Email — 20FIT Talent' : 'Verify your email — 20FIT Talent';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — verify link for ' + to + ': ' + link);
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: verifyEmailHtml({ name, link, lang }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
 /**
  * Shared light, premium email shell used by both the acceptance and the H-1
  * reminder emails so their design stays identical. Off-white tones (#fffffe)
@@ -252,4 +304,4 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendAcceptanceEmail, sendReminderEmail };
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendReminderEmail };

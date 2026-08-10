@@ -926,6 +926,13 @@ function staffLoginHandler(variant) {
       if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
         return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang, variant }));
       }
+      if (staff.status === 'suspended') {
+        return res.status(403).send(V.staffLogin({ errors: [req.t('eo.err.suspended')], values: { login }, lang: req.lang, variant }));
+      }
+      // EO must verify their email before first login (super admin is grandfathered).
+      if (staff.role === 'eo' && !staff.email_verified_at) {
+        return res.status(403).send(V.eoVerifyNeeded({ email: staff.login, lang: req.lang }));
+      }
       auth.setSession(res, staff);
       res.redirect(staffHome(staff.role));
     } catch (e) { next(e); }
@@ -958,13 +965,64 @@ app.post('/eo/register', async (req, res, next) => {
     if (errors.length) return res.status(400).send(V.eoRegister({ lang: req.lang, errors, values }));
     let staff;
     try {
-      staff = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+      // New EO starts 'pending' + unverified; email verification activates it.
+      staff = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password), status: 'pending' });
     } catch (e) {
       if (e.code === 'DUP') return res.status(400).send(V.eoRegister({ lang: req.lang, errors: [req.t('eo.reg.err.dup')], values }));
       throw e;
     }
-    auth.setSession(res, staff);
+    await sendEoVerification(st, req, staff);
+    res.send(V.eoVerifySent({ email: login, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Create + email a 24h email-verification token for an EO account.
+async function sendEoVerification(st, req, staff) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  await st.createStaffEmailVerification({ staff_id: staff.id, token_hash: tokenHash, expires_at: expiresAt });
+  const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+  const link = base + '/eo/verify?token=' + token;
+  try { await mailer.sendVerifyEmail({ to: staff.login, name: staff.name, link, lang: req.lang }); }
+  catch (e) { console.error('[eo-verify-mail]', (e && e.message) || e); }
+}
+
+async function validStaffVerifyToken(st, token) {
+  if (!token || token.length < 32) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const r = await st.getStaffEmailVerification(tokenHash);
+  if (!r || r.used_at) return null;
+  if (new Date(r.expires_at).getTime() < Date.now()) return null;
+  return r;
+}
+
+// Click the verification link → activate the account and sign in.
+app.get('/eo/verify', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const rec = await validStaffVerifyToken(st, String(req.query.token || ''));
+    if (!rec) return res.status(400).send(V.eoVerifyResult({ ok: false, lang: req.lang }));
+    await st.setStaffVerified(rec.staff_id);
+    await st.markStaffEmailVerificationUsed(rec.id);
+    const staff = await st.getStaffById(rec.staff_id);
+    if (staff) auth.setSession(res, staff);
     res.redirect('/eo/profile');
+  } catch (e) { next(e); }
+});
+
+// Resend a verification email (neutral response; no account enumeration).
+app.post('/eo/verify/resend', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const login = String(req.body.login || '').trim().toLowerCase();
+    if (login) {
+      const staff = await st.findStaff(login);
+      if (staff && staff.role === 'eo' && !staff.email_verified_at) await sendEoVerification(st, req, staff);
+    }
+    res.send(V.eoVerifySent({ email: login, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1762,7 +1820,9 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
     const password = String(req.body.password || '');
     if (name && login && password.length >= 6) {
       try {
-        await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+        // Admin-created EO is vouched for → pre-verified & active (skips email verification).
+        const s = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+        if (s && s.id) await st.setStaffVerified(s.id);
       } catch (e) { if (e.code !== 'DUP') throw e; }
     }
     res.redirect('/admin/manage');
