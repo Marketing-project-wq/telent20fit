@@ -1326,7 +1326,7 @@ function eoProfile({ staff, profile, saved, errors, lang }) {
     </div>
     <div class="field"><label for="org_name">${t('eo.f.company')}${req}</label><input type="text" id="org_name" name="org_name" required maxlength="140" value="${esc(p.org_name || '')}"></div>
     <div class="field"><label for="pic_name">${t('eo.f.pic')}${req}</label><input type="text" id="pic_name" name="pic_name" required maxlength="140" value="${esc(p.pic_name || '')}"></div>
-    <div class="field"><label for="email">${t('eo.f.emailLogin')}</label><input type="email" id="email" value="${esc(p.email || '')}" readonly disabled style="opacity:.7;cursor:not-allowed"><div class="hint" style="margin-top:6px">${t('eo.f.emailLoginHint')}</div></div>
+    <div class="field"><label for="email">${t('eo.f.emailLogin')}</label><input type="email" id="email" value="${esc(p.email || '')}" readonly disabled style="opacity:.7;cursor:not-allowed"></div>
     <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
     <div class="field"><label for="city">${t('eo.f.city')}${req}</label><input type="text" id="city" name="city" required maxlength="100" value="${esc(p.city || '')}"></div>
     <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span>${req}</label><textarea id="description" name="description" required rows="4" maxlength="1000">${esc(p.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
@@ -1371,13 +1371,22 @@ function eoRegister({ lang, errors, values }) {
       <div class="field"><label for="login">${t('common.email')}</label><input type="email" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
       <div class="field"><label for="phone">${t('eo.f.phone')}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(v.phone || '')}"></div>
       <div class="field"><label for="city">${t('eo.f.city')}</label><input type="text" id="city" name="city" required maxlength="100" value="${esc(v.city || '')}"></div>
+      <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span></label><textarea id="description" name="description" required rows="3" maxlength="1000">${esc(v.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
       <div class="field"><label for="password2">${t('auth.reset.confirm')}</label><input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password"></div>
       <button type="submit" class="btn btn-block">${t('eo.reg.submit')}</button>
     </form>
     <p style="text-align:center;margin:14px 0 0;font-size:14px">${t('eo.reg.haveAccount')} <a href="/eo/login?lang=${L}">${t('btn.signin')}</a></p>
   </div>
-</div>`;
+</div>
+<script>(function(){
+  var d=document.getElementById('description'),c=document.getElementById('descCount');
+  if(d&&c){var u=function(){c.textContent=d.value.length;};d.addEventListener('input',u);u();}
+  var sel=document.getElementById('org_type'),lt=document.getElementById('descLabelText');
+  if(sel&&lt){var tpl=lt.getAttribute('data-tpl'),base=lt.getAttribute('data-base');
+    var up=function(){var o=sel.options[sel.selectedIndex];lt.textContent=(sel.value&&o)?tpl.replace('{type}',o.text):base;};
+    sel.addEventListener('change',up);up();}
+})();</script>`;
   return layout({ title: t('eo.reg.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 

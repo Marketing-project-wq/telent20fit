@@ -929,10 +929,6 @@ function staffLoginHandler(variant) {
       if (staff.status === 'suspended') {
         return res.status(403).send(V.staffLogin({ errors: [req.t('eo.err.suspended')], values: { login }, lang: req.lang, variant }));
       }
-      // EO must verify their email before first login (super admin is grandfathered).
-      if (staff.role === 'eo' && !staff.email_verified_at) {
-        return res.status(403).send(V.eoVerifyNeeded({ email: staff.login, lang: req.lang }));
-      }
       auth.setSession(res, staff);
       res.redirect(staffHome(staff.role));
     } catch (e) { next(e); }
@@ -958,9 +954,10 @@ app.post('/eo/register', async (req, res, next) => {
     const login = c('login', 160).toLowerCase();
     const phone = c('phone', 40);
     const city = c('city', 100);
+    const description = c('description', 1000);
     const password = String(req.body.password || '');
     const password2 = String(req.body.password2 || '');
-    const values = { org_type, org_name, pic_name, login, phone, city };
+    const values = { org_type, org_name, pic_name, login, phone, city, description };
     const errors = [];
     if (!EO_ORG_TYPES.includes(org_type)) errors.push(req.t('eo.reg.err.type'));
     if (!org_name) errors.push(req.t('eo.reg.err.orgName'));
@@ -969,71 +966,22 @@ app.post('/eo/register', async (req, res, next) => {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
     if (!phone) errors.push(req.t('eo.reg.err.phone'));
     if (!city) errors.push(req.t('eo.reg.err.city'));
+    if (!description) errors.push(req.t('eo.err.desc'));
     if (password.length < 6) errors.push(req.t('err.passwordMin6'));
     else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
     if (errors.length) return res.status(400).send(V.eoRegister({ lang: req.lang, errors, values }));
     let staff;
     try {
-      // New EO starts 'pending' + unverified; email verification activates it.
-      staff = await st.createStaff({ role: 'eo', name: org_name, login, password_hash: auth.hashPassword(password), status: 'pending' });
+      // Account is active immediately — no email verification step.
+      staff = await st.createStaff({ role: 'eo', name: org_name, login, password_hash: auth.hashPassword(password), status: 'active' });
     } catch (e) {
       if (e.code === 'DUP') return res.status(400).send(V.eoRegister({ lang: req.lang, errors: [req.t('eo.reg.err.dup')], values }));
       throw e;
     }
-    // Store the identity captured at registration into the EO profile (description added later).
-    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, city });
-    await sendEoVerification(st, req, staff);
-    res.send(V.eoVerifySent({ email: login, lang: req.lang }));
-  } catch (e) { next(e); }
-});
-
-// Create + email a 24h email-verification token for an EO account.
-async function sendEoVerification(st, req, staff) {
-  const token = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  await st.createStaffEmailVerification({ staff_id: staff.id, token_hash: tokenHash, expires_at: expiresAt });
-  const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-  const link = base + '/eo/verify?token=' + token;
-  try { await mailer.sendVerifyEmail({ to: staff.login, name: staff.name, link, lang: req.lang }); }
-  catch (e) { console.error('[eo-verify-mail]', (e && e.message) || e); }
-}
-
-async function validStaffVerifyToken(st, token) {
-  if (!token || token.length < 32) return null;
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const r = await st.getStaffEmailVerification(tokenHash);
-  if (!r || r.used_at) return null;
-  if (new Date(r.expires_at).getTime() < Date.now()) return null;
-  return r;
-}
-
-// Click the verification link → activate the account and sign in.
-app.get('/eo/verify', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const rec = await validStaffVerifyToken(st, String(req.query.token || ''));
-    if (!rec) return res.status(400).send(V.eoVerifyResult({ ok: false, lang: req.lang }));
-    await st.setStaffVerified(rec.staff_id);
-    await st.markStaffEmailVerificationUsed(rec.id);
-    const staff = await st.getStaffById(rec.staff_id);
-    if (staff) auth.setSession(res, staff);
-    res.redirect('/eo/profile');
-  } catch (e) { next(e); }
-});
-
-// Resend a verification email (neutral response; no account enumeration).
-app.post('/eo/verify/resend', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const login = String(req.body.login || '').trim().toLowerCase();
-    if (login) {
-      const staff = await st.findStaff(login);
-      if (staff && staff.role === 'eo' && !staff.email_verified_at) await sendEoVerification(st, req, staff);
-    }
-    res.send(V.eoVerifySent({ email: login, lang: req.lang }));
+    // Full profile (incl. description) is captured at signup, so it's complete right away.
+    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, city, description, completed_at: new Date().toISOString() });
+    auth.setSession(res, staff);
+    res.redirect('/eo');
   } catch (e) { next(e); }
 });
 
