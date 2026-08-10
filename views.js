@@ -501,61 +501,31 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
 <body>
-<div style="min-height:100vh">
-  <div class="hero-stage">
-  <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
+<div style="min-height:100vh;display:flex;flex-direction:column">
   <header class="lp-head">
     <span class="lp-logo-box">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </span>
     <div class="lp-toggles">
-      <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
       ${toggle}
       ${themeToggle()}
     </div>
   </header>
 
-  <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
-    <div>
-      <h1 class="hero-in d1" style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
-      <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
-      <div class="hero-in d3" style="display:flex;gap:12px;flex-wrap:wrap">
+  <section style="flex:1;display:flex;align-items:center;justify-content:center;padding:56px 28px;text-align:center">
+    <div style="max-width:640px">
+      <h1 style="font:800 clamp(38px,6vw,68px)/0.95 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 18px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
+      <p style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 auto 30px">${esc(tr(L, 'hero.subheadline'))}</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
         <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t('land.login'))}</a>
       </div>
     </div>
-    <div style="position:relative">
-      <div class="lp-float" style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
-        <img src="https://media.20fit.id/wp-content/uploads/2026/07/Background-BRI-WELNESS-EXPERIENCE.jpeg" alt="Platarox Jakarta Hybrid Race" style="width:100%;height:auto;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
-          <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase">Platarox Jakarta Hybrid Race</div>
-          <span style="background:var(--ok);color:#fff;font:600 11px/1 Barlow,sans-serif;padding:5px 9px;border-radius:6px">${esc(t('land.slot'))}</span>
-        </div>
-        <div style="font-size:13px;color:var(--lp-tx3)">12 Sep 2026 · Jakarta · Judges</div>
-      </div>
-    </div>
-  </section>
-  </div>
-
-  <section style="background:var(--lp-bg2);padding:56px 0">
-    <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('land.featTitle'))}</h2>
-      <div class="resp3">${featHtml}</div>
-    </div>
-  </section>
-
-  <section style="max-width:1180px;margin:0 auto;padding:64px 28px;text-align:center">
-    <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px">${esc(t('land.ecoTitle'))}</h2>
-    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px">${esc(t('land.ecoSub'))}</p>
-    <div class="eco-grid">${ecoHtml}</div>
   </section>
 
   <footer>
-    <div class="foot-main">
-      <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
-    </div>
-    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
+    <div class="foot-bottom" style="margin-top:0">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
   </footer>
 </div>
 </body></html>`;
