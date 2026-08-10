@@ -1355,6 +1355,54 @@ function eoRegister({ lang, errors, values }) {
   return layout({ title: t('eo.reg.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+// Shared "resend verification email" mini-form.
+function eoResendForm(email, L, t) {
+  return `<form method="post" action="/eo/verify/resend" style="margin-top:14px">
+    ${email ? `<input type="hidden" name="login" value="${esc(email)}">`
+      : `<div class="field"><label for="login">${t('eo.verify.emailLabel')}</label><input type="email" id="login" name="login" required></div>`}
+    <button type="submit" class="btn btn-ghost btn-block">${t('eo.verify.resend')}</button>
+  </form>`;
+}
+
+function eoVerifySent({ email, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card success" style="margin-top:40px">
+    <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
+    <h1>${t('eo.verify.sentTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px">${t('eo.verify.sentBody', { email: esc(email || '') })}</p>
+    ${eoResendForm(email, L, t)}
+    <p style="margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function eoVerifyResult({ ok, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card" style="margin-top:40px">
+    <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+    <h1 style="text-align:center">${t('eo.verify.failTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.failBody')}</p>
+    ${eoResendForm('', L, t)}
+    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.failTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function eoVerifyNeeded({ email, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card" style="margin-top:40px">
+    <div class="check" style="background:var(--warn-soft, var(--red-soft));color:var(--warn, var(--red))">✉</div>
+    <h1 style="text-align:center">${t('eo.verify.neededTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.neededBody', { email: esc(email || '') })}</p>
+    ${eoResendForm(email, L, t)}
+    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.neededTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
 // Registration-status badge for an EO event.
 function eoRegBadge(status, lang) {
   const L = normLang(lang);
@@ -3137,5 +3185,5 @@ module.exports = {
   talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoRegister,
+  eoEvents, eoEventForm, eoEventDetail, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

@@ -145,15 +145,15 @@ function supabaseStore() {
       return data;
     },
     async findStaff(login) {
-      const { data } = await sb.from('staff_accounts').select('id,role,name,login,password_hash').eq('login', login).maybeSingle();
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login,password_hash,status,email_verified_at').eq('login', login).maybeSingle();
       return data || null;
     },
     async getStaffById(id) {
-      const { data } = await sb.from('staff_accounts').select('id,role,name,login').eq('id', id).maybeSingle();
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login,status,email_verified_at').eq('id', id).maybeSingle();
       return data || null;
     },
     async listStaff(role) {
-      let q = sb.from('staff_accounts').select('id,role,name,login,created_at').order('created_at');
+      let q = sb.from('staff_accounts').select('id,role,name,login,status,email_verified_at,created_at').order('created_at');
       if (role) q = q.eq('role', role);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
@@ -183,6 +183,27 @@ function supabaseStore() {
     },
     async markStaffPasswordResetUsed(id) {
       const { error } = await sb.from('staff_password_resets').update({ used_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    // ---- staff email verification + account status ----
+    async setStaffVerified(staffId) {
+      const { error } = await sb.from('staff_accounts').update({ email_verified_at: new Date().toISOString(), status: 'active' }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async setStaffStatus(staffId, status) {
+      const { error } = await sb.from('staff_accounts').update({ status }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async createStaffEmailVerification({ staff_id, token_hash, expires_at }) {
+      const { error } = await sb.from('staff_email_verifications').insert({ staff_id, token_hash, expires_at });
+      if (error) throw new Error(error.message);
+    },
+    async getStaffEmailVerification(tokenHash) {
+      const { data } = await sb.from('staff_email_verifications').select('id,staff_id,expires_at,used_at').eq('token_hash', tokenHash).maybeSingle();
+      return data || null;
+    },
+    async markStaffEmailVerificationUsed(id) {
+      const { error } = await sb.from('staff_email_verifications').update({ used_at: new Date().toISOString() }).eq('id', id);
       if (error) throw new Error(error.message);
     },
     // ---- events / assignments / proofs ----
@@ -399,13 +420,14 @@ function memoryStore() {
   const images = new Map();
   const staff = [{
     id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
-    password_hash: hashPassword('Admin_12345'), created_at: now(),
+    password_hash: hashPassword('Admin_12345'), created_at: now(), status: 'active', email_verified_at: now(),
   }, {
     id: 'staff-eo', role: 'eo', name: 'Demo EO', login: 'eo1@gmail.com',
-    password_hash: hashPassword('Eo_12345'), created_at: now(),
+    password_hash: hashPassword('Eo_12345'), created_at: now(), status: 'active', email_verified_at: now(),
   }];
   const eoProfiles = [];
   const staffResets = [];
+  const staffVerifications = [];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
     { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
@@ -459,13 +481,18 @@ function memoryStore() {
     async markPasswordResetUsed(id) { const r = passwordResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async createStaff(acc) {
       if (staff.find((s) => s.login === acc.login)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
-      const rec = { id: 'staff-' + (++seq), ...acc, created_at: now() };
+      const rec = { id: 'staff-' + (++seq), status: 'active', email_verified_at: null, ...acc, created_at: now() };
       staff.push(rec);
       return { id: rec.id, role: rec.role, name: rec.name, login: rec.login };
     },
     async findStaff(login) { return staff.find((s) => s.login === login) || null; },
-    async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
-    async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
+    async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login, status: s.status, email_verified_at: s.email_verified_at } : null; },
+    async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, status: s.status, email_verified_at: s.email_verified_at, created_at: s.created_at })); },
+    async setStaffVerified(staffId) { const s = staff.find((s) => s.id === staffId); if (s) { s.email_verified_at = now(); s.status = 'active'; } },
+    async setStaffStatus(staffId, status) { const s = staff.find((s) => s.id === staffId); if (s) s.status = status; },
+    async createStaffEmailVerification({ staff_id, token_hash, expires_at }) { staffVerifications.push({ id: 'sev-' + (++seq), staff_id, token_hash, expires_at, used_at: null, created_at: now() }); },
+    async getStaffEmailVerification(tokenHash) { const r = staffVerifications.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
+    async markStaffEmailVerificationUsed(id) { const r = staffVerifications.find((r) => r.id === id); if (r) r.used_at = now(); },
     async getEoProfile(staffId) { const p = eoProfiles.find((x) => x.staff_id === staffId); return p ? { ...p } : null; },
     async upsertEoProfile(staffId, patch) { let p = eoProfiles.find((x) => x.staff_id === staffId); if (!p) { p = { id: 'eop-' + (++seq), staff_id: staffId, created_at: now() }; eoProfiles.push(p); } Object.assign(p, patch, { updated_at: now() }); },
     async setStaffPassword(staffId, passwordHash) { const s = staff.find((s) => s.id === staffId); if (s) s.password_hash = passwordHash; },
