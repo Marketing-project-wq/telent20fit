@@ -357,6 +357,9 @@ function supabaseStore() {
       return data || [];
     },
     async deleteApplication(id) {
+      // No FK cascade on talent_application_choices, so remove choices first to
+      // avoid leaving orphaned rows behind.
+      await sb.from('talent_application_choices').delete().eq('application_id', id);
       const { error } = await sb.from('talent_applications').delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
