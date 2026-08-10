@@ -587,7 +587,11 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
     const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
     const appByEvent = new Map(myApps.map((a) => [a.event_id, a]));
     const rank = { ongoing: 0, upcoming: 1 };
-    const events = allEvents.filter((e) => e.is_active)
+    // Position-based events render as their own cards; keep the legacy list to
+    // events with old-style needs and not already shown above (no duplicates).
+    const eoEvents = await openPositionEvents(st, req.talent.id);
+    const eoIds = new Set(eoEvents.map((e) => e.id));
+    const events = allEvents.filter((e) => e.is_active && !eoIds.has(e.id))
       .map((e) => ({
         id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
         applied: appByEvent.has(e.id) ? {
@@ -595,10 +599,9 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
           station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
         } : null,
       }))
-      .filter((e) => e.status !== 'ended')
+      .filter((e) => e.status !== 'ended' && e.cats.length > 0)
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
     await attachMockups(st, events);
-    const eoEvents = await openPositionEvents(st, req.talent.id);
     res.send(V.kolEventsPage({ account: req.account, events, eoEvents, lang: req.lang }));
   } catch (e) { next(e); }
 });
