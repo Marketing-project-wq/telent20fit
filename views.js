@@ -1572,10 +1572,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoEventDetail({ staff, event, view, lang }) {
+function eoEventDetail({ staff, event, view, applicants, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
+  const aps = applicants || [];
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
@@ -1603,9 +1604,104 @@ function eoEventDetail({ staff, event, view, lang }) {
     <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
-  <p class="muted" style="font-size:12.5px;margin-top:18px">${t('eo.ev.applicantsSoon')}</p>
-</div>`;
+  ${eoApplicantsSection(e, view, aps, L)}
+</div>${eoApplicantsScript()}`;
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
+// Tahap 6: applicants for one EO event — per-talent and per-position, with a
+// name search + status filter (all client-side). Contact is shown so the EO
+// can coordinate with talents who applied.
+function eoApplicantsSection(e, view, aps, L) {
+  const t = (k, v) => tr(L, k, v);
+  const posById = new Map((view.positions || []).map((p) => [p.position_id, p]));
+  const posLbl = (pid) => { const p = posById.get(pid); return p ? posLabel(p, L) : pid; };
+  const header = `<div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('eo.ap.title')}</h2>
+    <span class="muted" style="font-size:13px">${t('eo.ap.count', { n: aps.length })}</span></div>`;
+  if (!aps.length) return `${header}<p class="muted" style="margin-top:12px">${t('eo.ap.none')}</p>`;
+
+  const choiceChips = (choices) => choices.map((c) => {
+    const on = c.accepted;
+    return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : ''}" title="${on ? esc(t('eo.ap.acceptedHere')) : ''}">P${c.priority} · ${esc(posLbl(c.position_id))}${on ? ' ✓' : ''}</span>`;
+  }).join('');
+  const contactLine = (a) => {
+    const bits = [];
+    if (a.phone) bits.push(`📱 ${esc(a.phone)}`);
+    if (a.instagram) bits.push(`📷 @${esc(a.instagram)}`);
+    if (a.city) bits.push(`📍 ${esc(a.city)}`);
+    if (a.login) bits.push(`✉️ ${esc(a.login)}`);
+    return bits.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${bits.join(' · ')}</div>` : '';
+  };
+
+  // Per-talent cards
+  const talentCards = aps.map((a) => `<div class="card ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}</div>
+      ${talentStatusBadge(a.status, L)}
+    </div>
+    ${contactLine(a)}
+    <div style="margin-top:10px">${choiceChips(a.choices)}</div>
+  </div>`).join('');
+
+  // Per-position groups
+  const posGroups = (view.positions || []).map((p) => {
+    const rows = aps.map((a) => { const c = a.choices.find((x) => x.position_id === p.position_id); return c ? { a, c } : null; })
+      .filter(Boolean).sort((x, y) => x.c.priority - y.c.priority);
+    const list = rows.length ? rows.map(({ a, c }) => `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
+      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">· ${esc(talentLabel(L, a.type))}</span>` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
+      ${talentStatusBadge(a.status, L)}
+    </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
+    return `<div class="card" style="margin-top:12px;padding:14px 16px">
+      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.filled} / ${p.quota})</span></div>
+      <div class="dl-list" style="margin-top:8px">${list}</div>
+    </div>`;
+  }).join('');
+
+  // Status filter chips (all + distinct statuses present)
+  const statuses = Array.from(new Set(aps.map((a) => a.status)));
+  const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
+  const statusChips = sChip('all', t('eo.ap.filterAll'), true) + statuses.map((s) => sChip(s, t('ta.status.' + s), false)).join('');
+
+  return `${header}
+  <div class="card" style="margin-top:14px;padding:12px 14px">
+    <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button type="button" class="ev-chip is-on" data-aptab="talent">${t('eo.ap.byTalent')}</button>
+      <button type="button" class="ev-chip" data-aptab="position">${t('eo.ap.byPosition')}</button>
+    </div>
+  </div>
+  <div id="apTalent">${talentCards}</div>
+  <div id="apPosition" style="display:none">${posGroups}</div>
+  <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`;
+}
+
+function eoApplicantsScript() {
+  return `<script>
+(function(){
+  var search=document.getElementById('apSearch'); if(!search) return;
+  var noMatch=document.getElementById('apNoMatch');
+  var talentBox=document.getElementById('apTalent'), posBox=document.getElementById('apPosition');
+  var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
+  var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
+  var flt='all', tab='talent';
+  function apply(){
+    var q=search.value.trim().toLowerCase();
+    var box=tab==='talent'?talentBox:posBox;
+    var items=[].slice.call(box.querySelectorAll('.ap-item'));
+    var shown=0;
+    items.forEach(function(it){
+      var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+    });
+    if(noMatch)noMatch.style.display=(tab==='talent'&&shown===0)?'':'none';
+  }
+  search.addEventListener('input',apply);
+  statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
+})();
+</script>`;
 }
 
 /**

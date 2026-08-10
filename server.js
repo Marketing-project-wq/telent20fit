@@ -1465,10 +1465,29 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const [positions, apps, choices, talents] = await Promise.all([
+      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+    ]);
     const view = eoEventView(ev, positions, apps, choices);
+    // Tahap 6: applicants for this event, each with their prioritised choices + contact.
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const choicesByApp = new Map();
+    choices.forEach((c) => { const a = choicesByApp.get(c.application_id) || []; a.push(c); choicesByApp.set(c.application_id, a); });
+    const applicants = apps
+      .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
+      .map((a) => {
+        const tt = talentById.get(a.talent_id) || {};
+        const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
+          .map((c) => ({ priority: c.priority, position_id: c.position_id, accepted: !!c.accepted }));
+        return {
+          id: a.id, talentId: a.talent_id, name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
+          phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
+          status: a.status || 'applied', createdAt: a.created_at, choices: ch,
+        };
+      })
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     await attachMockups(st, ev);
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, lang: req.lang }));
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
