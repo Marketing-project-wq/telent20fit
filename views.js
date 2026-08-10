@@ -1813,10 +1813,13 @@ const CAT_FIELDS = {
 };
 
 /** Talent Home: available events + which talent categories each one needs. */
-function kolEventsPage({ account, events, lang }) {
+function kolEventsPage({ account, events, eoEvents, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const evs = events || [];
+  const eoEvs = eoEvents || [];
+  // EO position-based events show inline in the same list (newest reg-deadline first).
+  const eoCards = eoEvs.map((e) => talentPositionCard(e, L, true)).join('');
   const cards = evs.map((e) => {
     const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
     const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
@@ -1837,8 +1840,9 @@ function kolEventsPage({ account, events, lang }) {
     </a>`;
   }).join('');
 
+  const hasAny = evs.length || eoEvs.length;
   const chip = (f, label) => `<button type="button" class="ev-chip${f === 'all' ? ' is-on' : ''}" data-filter="${f}">${esc(label)}</button>`;
-  const controls = evs.length ? `
+  const controls = hasAny ? `
   <div class="card" style="margin-top:14px;padding:12px 14px">
     <input type="text" id="evSearch" placeholder="${esc(t('ev.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
@@ -1846,18 +1850,13 @@ function kolEventsPage({ account, events, lang }) {
     </div>
   </div>` : '';
 
-  const listBlock = evs.length
-    ? `<div id="evList">${cards}</div><p class="muted" id="evNoMatch" style="margin-top:16px;display:none">${t('ev.noMatch')}</p>`
+  const listBlock = hasAny
+    ? `<div id="evList">${eoCards}${cards}</div><p class="muted" id="evNoMatch" style="margin-top:16px;display:none">${t('ev.noMatch')}</p>`
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
 
   const body = `<div class="wrap">
   <h1 style="margin-top:0">${t('ev.findTitle')}</h1>
   <p class="sub">${t('apply.homeSub')}</p>
-  <a href="/events?lang=${L}" class="card" style="display:flex;gap:12px;align-items:center;text-decoration:none;color:inherit;margin-top:14px">
-    <span style="font-size:22px">🔎</span>
-    <span style="min-width:0;flex:1"><b>${t('ta.discover')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('ta.discoverSub')}</div></span>
-    <span class="btn btn-sm" style="flex-shrink:0">→</span>
-  </a>
   ${controls}
   ${listBlock}
 </div>
@@ -2021,10 +2020,12 @@ function mpAnswerLabel(val, lang) {
  * Man Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
  * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
  */
-function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
+function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applied }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const openCards = (openEvents && openEvents.length) ? openEvents.map((e) => {
+  const eoEvs = eoEvents || [];
+  const eoCards = eoEvs.map((e) => talentPositionCard(e, L, false)).join('');
+  const mpRows = (openEvents && openEvents.length) ? openEvents.map((e) => {
     const full = e.slotsLeft <= 0;
     const slot = full
       ? `<span class="dl-when dl-late">${t('mp.slotFull')}</span>`
@@ -2034,7 +2035,10 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
       <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}<div style="margin-top:8px">${slot}</div></div>
       ${full ? '' : `<a href="/main-power/apply/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
     </div>`;
-  }).join('') : `<p class="muted" style="margin-top:12px">${t('mp.noOpenEvents')}</p>`;
+  }).join('') : '';
+  const openCards = (eoCards || mpRows)
+    ? `${eoCards}${mpRows ? `<div class="dl-list">${mpRows}</div>` : ''}`
+    : `<p class="muted" style="margin-top:12px">${t('mp.noOpenEvents')}</p>`;
 
   const appCards = (myApps && myApps.length) ? myApps.map((a) => {
     const station = (a.status === 'approved' && a.station)
@@ -2054,16 +2058,11 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
-  <a href="/events?lang=${L}" class="card" style="display:flex;gap:12px;align-items:center;text-decoration:none;color:inherit;margin-bottom:14px">
-    <span style="font-size:22px">🔎</span>
-    <span style="min-width:0;flex:1"><b>${t('ta.discover')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('ta.discoverSub')}</div></span>
-    <span class="btn btn-sm" style="flex-shrink:0">→</span>
-  </a>
   <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
 
   <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
   <p class="muted" style="font-size:13px;margin:6px 0 0">${t('mp.newEventsSub')}</p>
-  <div class="dl-list">${openCards}</div>
+  ${openCards}
 
   <div class="section-head"><h2 style="margin:0">${t('mp.myApps')}</h2></div>
   <div class="dl-list">${appCards}</div>
@@ -3301,23 +3300,35 @@ function talentStatusBadge(status, lang) {
 
 function talentHomePath(account) { return '/' + ((account && account.talent_type) || 'kol').replace(/_/g, '-'); }
 
+// One card for a position-based EO event. filterable=true adds the search/
+// filter hooks (data-status/data-search + ev-item) so it works inside the
+// KOL events list; false renders a plain card for dashboards.
+function talentPositionCard(e, lang, filterable) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))} · ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</span>`).join('');
+  const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
+  const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
+  const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-search="${esc(hay)}"` : '';
+  return `<a href="/event/${esc(e.id)}?lang=${L}" class="${cls}"${hooks} style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+    ${eventCover(e, L)}
+    <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
+    ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
+    ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
+    ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    <div style="margin-top:10px">${posLine}</div>
+    ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
+  </a>`;
+}
+
 function talentOpenEvents({ account, events, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const cards = (events && events.length) ? events.map((e) => {
-    const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
-    const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))} · ${t('ta.slotsLeft', { n: Math.max(0, p.quota - p.filled) })}</span>`).join('');
-    return `<a href="/event/${esc(e.id)}?lang=${L}" class="card ev-card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
-      ${eventCover(e, L)}
-      <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
-      ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
-      ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
-      ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
-      ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
-      <div style="margin-top:10px">${posLine}</div>
-      ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge('applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
-    </a>`;
-  }).join('') : `<p class="muted" style="margin-top:14px">${t('ta.noOpen')}</p>`;
+  const cards = (events && events.length)
+    ? events.map((e) => talentPositionCard(e, L, false)).join('')
+    : `<p class="muted" style="margin-top:14px">${t('ta.noOpen')}</p>`;
   const body = `<div class="wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
       <h1 style="margin:0">${t('ta.openTitle')}</h1>

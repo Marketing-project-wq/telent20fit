@@ -582,7 +582,8 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
       .filter((e) => e.status !== 'ended')
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
     await attachMockups(st, events);
-    res.send(V.kolEventsPage({ account: req.account, events, lang: req.lang }));
+    const eoEvents = await openPositionEvents(st, req.talent.id);
+    res.send(V.kolEventsPage({ account: req.account, events, eoEvents, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -688,27 +689,38 @@ async function positionApplyCtx(st, ev, talentId) {
   return { view, positions: view.positions, openPositions, posById, myApp, myChoices, regOpen: eventRegOpen(ev) };
 }
 
+// Position-based EO events currently open to a talent: published, within the
+// reg window, at least one free position. Shared by /events and the per-type
+// talent lists (KOL page, Man Power dashboard) so EO events show up inline.
+async function openPositionEvents(st, talentId) {
+  const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
+  const eoName = new Map(staff.map((s) => [s.id, s.name]));
+  const myAppByEvent = new Map(apps.filter((a) => a.talent_id === talentId).map((a) => [a.event_id, a]));
+  const open = [];
+  for (const ev of events) {
+    if (!eventRegOpen(ev)) continue;
+    const positions = await st.listEventPositions(ev.id);
+    if (!positions.length) continue;
+    const view = eoEventView(ev, positions, apps, choices);
+    const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
+    if (!openPos.length) continue;
+    const myApp = myAppByEvent.get(ev.id) || null;
+    open.push(Object.assign({}, ev, {
+      openPositions: openPos, eoName: eoName.get(ev.created_by) || '',
+      applied: !!myApp, myStatus: myApp ? myApp.status : null, status: eventStatusOf(ev),
+    }));
+  }
+  open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));
+  await attachMockups(st, open);
+  return open;
+}
+
 // Events open to talents: published, position-based, within reg window, with a free slot.
 app.get('/events', requireAnyTalentReady(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
-    const eoName = new Map(staff.map((s) => [s.id, s.name]));
-    const myApps = apps.filter((a) => a.talent_id === req.talent.id);
-    const appliedEventIds = new Set(myApps.map((a) => a.event_id));
-    const open = [];
-    for (const ev of events) {
-      if (!eventRegOpen(ev)) continue;
-      const positions = await st.listEventPositions(ev.id);
-      if (!positions.length) continue;
-      const view = eoEventView(ev, positions, apps, choices);
-      const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
-      if (!openPos.length) continue;
-      open.push(Object.assign({}, ev, { openPositions: openPos, eoName: eoName.get(ev.created_by) || '', applied: appliedEventIds.has(ev.id) }));
-    }
-    open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));
-    await attachMockups(st, open);
+    const open = await openPositionEvents(st, req.talent.id);
     res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -914,7 +926,8 @@ app.get('/main-power', requireTalentReady('main_power'), async (req, res, next) 
     const appliedEventIds = new Set(myApps.map((a) => a.event_id));
     const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
     const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
-    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+    const eoEvents = await openPositionEvents(st, req.talent.id);
+    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
   } catch (e) { next(e); }
 });
 
