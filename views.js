@@ -2853,7 +2853,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><b>${esc(e.name)}</b></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right"><form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -2883,6 +2883,57 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   </div>
 </div>`;
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
+// Super Admin read-only detail for one EO account: profile + the events they created.
+function adminEoDetail({ staff, eo, profile, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = profile || {};
+  const suspended = eo.status === 'suspended';
+  const statusPill = `<span class="pill ${suspended ? 'pill-off' : 'pill-ok'}">${suspended ? t('eo.status.suspended') : t('eo.status.active')}</span>`;
+  const typeLabel = p.org_type ? t('eo.type.' + p.org_type) : null;
+  const row = (label, val) => val ? `<div class="dl-item" style="align-items:flex-start"><div class="muted" style="min-width:150px;font-size:13px">${label}</div><div style="flex:1;min-width:0">${val}</div></div>` : '';
+  const profileCard = (profile && (p.org_name || p.pic_name || p.phone || p.city || p.description))
+    ? `<div class="card" style="margin-top:14px"><div class="dl-list">
+        ${row(t('eo.f.orgType'), typeLabel ? esc(typeLabel) : '')}
+        ${row(t('eo.f.company'), esc(p.org_name || eo.name || ''))}
+        ${row(t('eo.f.pic'), esc(p.pic_name || ''))}
+        ${row(t('eo.f.email'), esc(p.email || eo.login || ''))}
+        ${row(t('eo.f.phone'), esc(p.phone || ''))}
+        ${row(t('eo.f.city'), esc(p.city || ''))}
+        ${row(t('eo.f.desc'), p.description ? `<span style="white-space:pre-wrap">${esc(p.description)}</span>` : '')}
+      </div></div>`
+    : `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.noProfile')}</div>`;
+  const evList = (events || []).length
+    ? `<div class="table-wrap"><table>
+        <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.status')}</th><th style="text-align:right">${t('eo.detail.applicants')}</th></tr></thead>
+        <tbody>${events.map((e) => `<tr>
+          <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—'}</td>
+          <td data-label="${t('th.status')}">${eoRegBadge(e.displayStatus || e.status, L)}</td>
+          <td data-label="${t('eo.detail.applicants')}" style="text-align:right"><b>${e.applyCount || 0}</b></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+    : `<p class="muted" style="margin-top:12px">${t('eo.detail.noEvents')}</p>`;
+  const body = `<div class="wrap">
+    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h1 style="margin:0">${esc(eo.name || '')}</h1>${statusPill}
+    </div>
+    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at)}</p>
+
+    <div class="section-head"><h2 style="margin:0">${t('eo.detail.profile')}</h2></div>
+    ${profileCard}
+
+    <div class="section-head"><h2 style="margin:0">${t('eo.detail.events')}</h2></div>
+    <div class="card" style="margin-top:14px">${evList}</div>
+
+    <form method="post" action="/admin/eos/${esc(eo.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))} style="margin-top:20px">
+      <button class="btn btn-ghost btn-sm">🗑 ${t('title.delete')}</button>
+    </form>
+  </div>`;
+  return appLayout({ title: (eo.name || t('eo.detail.title')) + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
 /**
@@ -3334,7 +3385,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
