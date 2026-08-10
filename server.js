@@ -45,6 +45,19 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+// Canonical host: when APP_BASE_URL is set (e.g. https://talent.20fit.id),
+// send visitors who arrive on any other host (like the *.up.railway.app URL)
+// to the canonical domain so every link stays on it. Off unless APP_BASE_URL
+// is set; never redirects the Railway health check.
+const CANONICAL_HOST = (() => { try { return process.env.APP_BASE_URL ? new URL(process.env.APP_BASE_URL).host : null; } catch { return null; } })();
+if (CANONICAL_HOST) {
+  app.use((req, res, next) => {
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path === '/health') return next();
+    const host = req.get('host');
+    if (host && host !== CANONICAL_HOST) return res.redirect(302, 'https://' + CANONICAL_HOST + req.originalUrl);
+    next();
+  });
+}
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 // Keep the login alive: refresh a still-valid session cookie on every request
