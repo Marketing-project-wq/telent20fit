@@ -456,6 +456,10 @@
   "eo.detail.view": "View detail",
   "eo.status.active": "Active",
   "eo.status.suspended": "Suspended",
+  "eo.detail.suspend": "Suspend EO",
+  "eo.detail.activate": "Activate EO",
+  "eo.detail.suspendConfirm": "Suspend this EO? They won't be able to log in until reactivated.",
+  "eo.detail.suspendedNote": "This EO is suspended — they can't log in. Existing events stay intact.",
 
   "err.nameRequired": "Name is required.",
   "err.loginRequired": "Email / phone is required.",

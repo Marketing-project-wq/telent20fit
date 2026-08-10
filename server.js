@@ -2212,6 +2212,19 @@ app.post('/admin/eos/:id/delete', auth.requireStaff(['super_admin']), async (req
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
+// Super admin: suspend / activate an EO account. A suspended EO cannot log in
+// (its existing events stay intact); reactivating restores access.
+app.post('/admin/eos/:id/status', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const target = await st.getStaffById(req.params.id);
+    if (!target || target.role !== 'eo') return res.redirect('/admin/manage'); // never touch a super admin
+    const next_ = req.body.status === 'suspended' ? 'suspended' : 'active';
+    await st.setStaffStatus(target.id, next_);
+    res.redirect('/admin/eos/' + target.id + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
 // Super admin: update the timeliness (SLA) thresholds.
 app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
