@@ -117,8 +117,8 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
 .ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.ev-cover-photo{height:auto;background:rgba(0,0,0,.04)}
-.ev-cover-photo-img{display:block;width:100%;height:auto}
+.ev-cover-photo{height:auto;max-height:200px;background:rgba(0,0,0,.04);display:flex;align-items:center;justify-content:center}
+.ev-cover-photo-img{display:block;width:100%;height:auto;max-height:200px;object-fit:contain}
 .ev-detail-hero{width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;display:block;background:rgba(0,0,0,.04)}
 .ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
 .ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
