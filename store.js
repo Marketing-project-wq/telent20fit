@@ -125,6 +125,14 @@ function supabaseStore() {
       const { error } = await sb.from('talent_accounts').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
     },
+    // Talents who uploaded a HYROX certificate (for the staff verification queue).
+    async listHyroxCerts() {
+      const { data, error } = await sb.from('talent_accounts')
+        .select('id,talent_type,name,login,city,instagram,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_at,hyrox_cert_note')
+        .not('hyrox_cert_path', 'is', null);
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
     async setTalentPassword(talentId, passwordHash) {
       const { error } = await sb.from('talent_accounts').update({ password_hash: passwordHash }).eq('id', talentId);
       if (error) throw new Error(error.message);
@@ -577,6 +585,7 @@ function memoryStore() {
     async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
+    async listHyroxCerts() { return accounts.filter((a) => a.hyrox_cert_path).map(accountProfile); },
     async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
       const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', reg_closed_at: null };
       events.unshift(ev);

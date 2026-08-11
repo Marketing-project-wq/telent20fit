@@ -2024,6 +2024,62 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
   } catch (e) { next(e); }
 });
 
+// ---- HYROX certificate verification (Super Admin + EO) ----------------------
+// Talents upload a HYROX 360 certificate on their Dokumen page; staff review it
+// here. Verification is global (once verified it counts for every event).
+
+app.get('/admin/hyrox', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const rk = (s) => (s === 'pending' ? 0 : s === 'rejected' ? 1 : 2); // pending first
+    const certs = (await st.listHyroxCerts()).slice()
+      .sort((a, b) => rk(a.hyrox_cert_status) - rk(b.hyrox_cert_status) || String(a.name || '').localeCompare(String(b.name || '')));
+    res.send(V.adminHyroxCerts({ staff: staffCtx(req), certs, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Stream a talent's uploaded HYROX certificate to the reviewing staff member.
+app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const acc = await st.getAccountById(req.params.talentId);
+    const key = acc && acc.hyrox_cert_path;
+    if (!key) return res.redirect('/admin/hyrox');
+    const buf = await st.downloadImage(key);
+    if (!buf) return res.redirect('/admin/hyrox');
+    const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+    const ct = ext === '.pdf' ? 'application/pdf'
+      : ext === '.png' ? 'image/png'
+      : ext === '.webp' ? 'image/webp'
+      : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Content-Disposition', 'inline');
+    res.send(buf);
+  } catch (e) { next(e); }
+});
+
+// Verify or reject a talent's HYROX certificate.
+app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const action = String(req.body.action || '');
+    if (action !== 'verify' && action !== 'reject') return res.redirect('/admin/hyrox');
+    const acc = await st.getAccountById(req.params.talentId);
+    if (!acc || !acc.hyrox_cert_path) return res.redirect('/admin/hyrox');
+    const note = String(req.body.note || '').trim().slice(0, 300);
+    await st.updateAccountProfile(req.params.talentId, {
+      hyrox_cert_status: action === 'verify' ? 'verified' : 'rejected',
+      hyrox_cert_verified_by: req.staff.id,
+      hyrox_cert_verified_at: new Date().toISOString(),
+      hyrox_cert_note: action === 'reject' ? (note || null) : null,
+    });
+    res.redirect('/admin/hyrox');
+  } catch (e) { next(e); }
+});
+
 // Super admin: manually (re)send the acceptance email for an approved application.
 // Unlike the auto-send on approval, this always sends — used to re-notify a talent
 // who was approved before the auto-email existed, or whose placement changed.
