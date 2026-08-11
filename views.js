@@ -713,9 +713,10 @@ const PROVINCES = [
 // profile and both EO forms so the option list stays in one place.
 function provinceSelect(selected, lang) {
   const L = normLang(lang);
+  const opts = PROVINCES.slice().sort((a, b) => a.localeCompare(b, 'id'));
   return `<select id="city" name="city" required>
     <option value="" disabled${selected ? '' : ' selected'}>${tr(L, 'dd.provincePick')}</option>
-    ${PROVINCES.map((pr) => `<option value="${esc(pr)}"${selected === pr ? ' selected' : ''}>${esc(pr)}</option>`).join('')}
+    ${opts.map((pr) => `<option value="${esc(pr)}"${selected === pr ? ' selected' : ''}>${esc(pr)}</option>`).join('')}
   </select>`;
 }
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
