@@ -60,6 +60,11 @@ const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSiz
   { name: 'reels_images', maxCount: 5 },
   { name: 'story_images', maxCount: 5 },
 ]);
+// Talent documents (CV + HYROX certificate): PDF or image, a little larger than
+// a screenshot to fit multi-page CVs / cert scans.
+const MAX_DOC_BYTES = 8 * 1024 * 1024;
+const uploadDocs = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_DOC_BYTES, files: 2 } })
+  .fields([{ name: 'cv', maxCount: 1 }, { name: 'hyrox_cert', maxCount: 1 }]);
 
 const db = () => store();
 const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
@@ -174,6 +179,115 @@ function dataDiriPost(type) {
         profile_completed_at: acc.profile_completed_at || new Date().toISOString(),
       });
       res.redirect('/' + p + '?lang=' + req.lang);
+    } catch (e) { next(e); }
+  }];
+}
+
+// ---- Talent documents ("Dokumen Saya"): optional CV/portfolio + HYROX cert ----
+const DOC_KINDS = { cv: 'cv_path', hyrox: 'hyrox_cert_path' };
+const docTypeOk = (f) => f && (/^application\/pdf$/i.test(f.mimetype || '') || /^image\//i.test(f.mimetype || ''));
+const docExt = (f) => {
+  const m = String(f.originalname || '').toLowerCase().match(/\.[a-z0-9]{1,5}$/);
+  if (m) return m[0];
+  return /pdf/i.test(f.mimetype || '') ? '.pdf' : '.jpg';
+};
+
+// GET /{type}/dokumen — the documents page (req.account carries current values).
+function docsGet(type) {
+  return [requireTalentReady(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      res.send(V.talentDocuments(type, { account: req.account, flash: String(req.query.saved || ''), lang: req.lang }));
+    } catch (e) { next(e); }
+  }];
+}
+
+// POST /{type}/dokumen — save portfolio link + optional CV / HYROX cert uploads.
+function docsPost(type) {
+  const p = type.replace(/_/g, '-');
+  return [
+    requireTalentReady(type),
+    // Run multer manually so an oversized/invalid file becomes a friendly error
+    // instead of crashing into the generic 500 handler.
+    (req, res, next) => uploadDocs(req, res, (err) => {
+      if (err) return res.status(400).send(V.talentDocuments(type, { account: req.account, errors: [req.t('doc.err.size')], lang: req.lang }));
+      next();
+    }),
+    async (req, res, next) => {
+      try {
+        const st = db();
+        if (!st) return needConfig(req, res);
+        const acc = await st.getAccountById(req.talent.id);
+        if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+        const isCreator = (type === 'kol');
+        const files = req.files || {};
+        const patch = {};
+        const errors = [];
+
+        if (isCreator) {
+          const url = String(req.body.portfolio_url || '').trim().slice(0, 500);
+          if (url && !/^https?:\/\/.+/i.test(url)) errors.push(req.t('doc.err.url'));
+          else patch.portfolio_url = url || null;
+        }
+
+        const cvFile = isCreator && files.cv && files.cv[0];
+        if (cvFile) {
+          if (!docTypeOk(cvFile)) errors.push(req.t('doc.err.type'));
+          else {
+            const key = `docs/cv/${acc.id}/${crypto.randomUUID()}${docExt(cvFile)}`;
+            await st.uploadImage(key, cvFile.buffer, cvFile.mimetype);
+            if (acc.cv_path) await st.removeImage(acc.cv_path);
+            patch.cv_path = key;
+          }
+        }
+
+        const hxFile = files.hyrox_cert && files.hyrox_cert[0];
+        if (hxFile) {
+          if (!docTypeOk(hxFile)) errors.push(req.t('doc.err.type'));
+          else {
+            const key = `docs/hyrox/${acc.id}/${crypto.randomUUID()}${docExt(hxFile)}`;
+            await st.uploadImage(key, hxFile.buffer, hxFile.mimetype);
+            if (acc.hyrox_cert_path) await st.removeImage(acc.hyrox_cert_path);
+            // A fresh upload resets verification back to pending.
+            patch.hyrox_cert_path = key;
+            patch.hyrox_cert_status = 'pending';
+            patch.hyrox_cert_verified_by = null;
+            patch.hyrox_cert_verified_at = null;
+            patch.hyrox_cert_note = null;
+          }
+        }
+
+        if (errors.length) {
+          return res.status(400).send(V.talentDocuments(type, { account: acc, values: { portfolio_url: req.body.portfolio_url }, errors, lang: req.lang }));
+        }
+        if (Object.keys(patch).length) await st.updateAccountProfile(acc.id, patch);
+        res.redirect('/' + p + '/dokumen?saved=1&lang=' + req.lang);
+      } catch (e) { next(e); }
+    },
+  ];
+}
+
+// GET /{type}/dokumen/file/:kind — stream the talent's own CV / HYROX file.
+function docFile(type) {
+  const p = type.replace(/_/g, '-');
+  return [requireTalentReady(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const col = DOC_KINDS[req.params.kind];
+      const key = col && req.account[col];
+      if (!key) return res.redirect('/' + p + '/dokumen?lang=' + req.lang);
+      const buf = await st.downloadImage(key);
+      if (!buf) return res.redirect('/' + p + '/dokumen?lang=' + req.lang);
+      const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+      const ct = ext === '.pdf' ? 'application/pdf'
+        : ext === '.png' ? 'image/png'
+        : ext === '.webp' ? 'image/webp'
+        : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+      res.setHeader('Content-Type', ct);
+      res.setHeader('Content-Disposition', 'inline');
+      res.send(buf);
     } catch (e) { next(e); }
   }];
 }
@@ -387,6 +501,9 @@ app.post('/kol/logout', (req, res) => { auth.clearSession(res); res.redirect('/k
 
 app.get('/kol/data-diri', dataDiriGet('kol'));
 app.post('/kol/data-diri', dataDiriPost('kol'));
+app.get('/kol/dokumen', docsGet('kol'));
+app.post('/kol/dokumen', docsPost('kol'));
+app.get('/kol/dokumen/file/:kind', docFile('kol'));
 
 // ------------------------------------------------------------- KOL form ------
 
@@ -721,6 +838,9 @@ app.post('/main-power/logout', (req, res) => { auth.clearSession(res); res.redir
 
 app.get('/main-power/data-diri', dataDiriGet('main_power'));
 app.post('/main-power/data-diri', dataDiriPost('main_power'));
+app.get('/main-power/dokumen', docsGet('main_power'));
+app.post('/main-power/dokumen', docsPost('main_power'));
+app.get('/main-power/dokumen/file/:kind', docFile('main_power'));
 
 app.get('/main-power', requireTalentReady('main_power'), async (req, res, next) => {
   try {

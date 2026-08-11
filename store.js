@@ -61,6 +61,11 @@ function supabaseStore() {
       const { error } = await sb.storage.from(BUCKET).upload(path, buffer, { contentType, upsert: false });
       if (error) throw new Error(error.message);
     },
+    async removeImage(paths) {
+      const list = (Array.isArray(paths) ? paths : [paths]).filter(Boolean);
+      if (!list.length) return;
+      try { await sb.storage.from(BUCKET).remove(list); } catch (_) { /* best-effort */ }
+    },
     async signImageUrls(paths) {
       if (!paths || !paths.length) return [];
       const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
@@ -106,7 +111,7 @@ function supabaseStore() {
     },
     async getAccountById(id) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,cv_path,portfolio_url,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_by,hyrox_cert_verified_at,hyrox_cert_note')
         .eq('id', id).maybeSingle();
       return data || null;
     },
@@ -348,6 +353,10 @@ function memoryStore() {
     gender: a.gender || null, instagram: a.instagram || null,
     instagram_followers: a.instagram_followers != null ? a.instagram_followers : null,
     experience: a.experience || null, ktp: a.ktp || null, profile_completed_at: a.profile_completed_at || null,
+    cv_path: a.cv_path || null, portfolio_url: a.portfolio_url || null,
+    hyrox_cert_path: a.hyrox_cert_path || null, hyrox_cert_status: a.hyrox_cert_status || 'none',
+    hyrox_cert_verified_by: a.hyrox_cert_verified_by || null, hyrox_cert_verified_at: a.hyrox_cert_verified_at || null,
+    hyrox_cert_note: a.hyrox_cert_note || null,
   });
   const campaigns = [
     { id: 'camp-jakarta', name: 'Jakarta Run Series 2026', is_active: true, created_at: now() },
@@ -393,6 +402,7 @@ function memoryStore() {
     async createCampaign(name) { campaigns.push({ id: 'camp-' + (++seq), name, is_active: true, created_at: now() }); },
     async toggleCampaign(id) { const c = campaigns.find((c) => c.id === id); if (c) c.is_active = !c.is_active; },
     async uploadImage(path, buffer, contentType) { images.set(path, { buffer, contentType }); },
+    async removeImage(paths) { (Array.isArray(paths) ? paths : [paths]).filter(Boolean).forEach((p) => images.delete(p)); },
     async signImageUrls(paths) { return (paths || []).map((p) => '/__mockimg/' + encodeURIComponent(p)); },
     async downloadImage(pathKey) { const r = images.get(pathKey); return r ? r.buffer : null; },
     async createSubmission(row) { submissions.push({ ...row, created_at: now() }); },

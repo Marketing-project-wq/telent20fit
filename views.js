@@ -1291,9 +1291,85 @@ function kolProfilePage({ account, certs, lang }) {
   <div class="section-head" style="margin-top:26px"><h2 style="margin:0">🎖️ ${t('cert.myTitle')}</h2></div>
   ${certList}
 
+  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">📄 ${t('doc.title')}</h2></div>
+  <a href="/kol/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;text-decoration:none;color:inherit">
+    <span style="min-width:0"><b>${t('doc.manage')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageSub')}</div></span>
+    <span style="font-size:22px;flex-shrink:0">›</span>
+  </a>
+
   <form method="post" action="/kol/logout" style="margin-top:26px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
+}
+
+/**
+ * Talent "Dokumen Saya" page: optional CV + portfolio link (content creators)
+ * and an optional HYROX-360 certificate (all types) that the team verifies.
+ * Files go to Supabase Storage via the same mechanism as post-proofs; the
+ * portfolio is a plain URL. Reused by KOL (appLayout) and Main Power (layout).
+ */
+function talentDocuments(type, opts = {}) {
+  const L = normLang(opts.lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = talentPath(type);
+  const acc = opts.account || {};
+  const v = opts.values || acc;
+  const isCreator = (type === 'kol');
+  const opt = ` <span class="hint">${t('dd.optional')}</span>`;
+  const errorBanner = (opts.errors && opts.errors.length)
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const flashBanner = opts.flash === '1' ? `<div class="banner banner-ok">${t('doc.saved')}</div>` : '';
+
+  const fileRow = (kind, stored) => stored
+    ? `<div style="font-size:13px;margin:6px 0"><a href="/${p}/dokumen/file/${kind}?lang=${L}" target="_blank" rel="noopener">📎 ${t('doc.view')}</a> <span class="muted">· ${t('doc.replaceHint')}</span></div>`
+    : '';
+
+  const hxStatus = acc.hyrox_cert_status || 'none';
+  const hxBadge = {
+    pending:  `<span class="pill pill-off">⏳ ${t('doc.hx.pending')}</span>`,
+    verified: `<span class="pill pill-ok">✓ ${t('doc.hx.verified')}</span>`,
+    rejected: `<span class="pill" style="background:var(--err-soft);color:var(--err)">✕ ${t('doc.hx.rejected')}</span>`,
+  }[hxStatus] || '';
+  const hxNote = (hxStatus === 'rejected' && acc.hyrox_cert_note)
+    ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(acc.hyrox_cert_note)}</div>` : '';
+
+  const creatorFields = isCreator ? `
+    <div class="field">
+      <label>${t('doc.cv')}${opt}</label>
+      ${fileRow('cv', acc.cv_path)}
+      <input type="file" name="cv" accept=".pdf,image/*">
+      <div class="hint" style="margin-top:6px">${t('doc.fileHint')}</div>
+    </div>
+    <div class="field">
+      <label for="portfolio_url">${t('doc.portfolio')}${opt}</label>
+      <input type="url" id="portfolio_url" name="portfolio_url" maxlength="500" placeholder="https://…" value="${esc(v.portfolio_url || '')}">
+      <div class="hint" style="margin-top:6px">${t('doc.portfolioHint')}</div>
+    </div>` : '';
+
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/${p}?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
+  </div>
+  <h1>${t('doc.title')}</h1>
+  <p class="sub">${t('doc.sub')}</p>
+  ${flashBanner}
+  ${errorBanner}
+  <form class="card" method="post" action="/${p}/dokumen?lang=${L}" enctype="multipart/form-data">
+    ${creatorFields}
+    <div class="field">
+      <label>${t('doc.hyrox')}${opt} ${hxBadge}</label>
+      ${hxNote}
+      ${fileRow('hyrox', acc.hyrox_cert_path)}
+      <input type="file" name="hyrox_cert" accept=".pdf,image/*">
+      <div class="hint" style="margin-top:6px">${t('doc.hyroxHint')}</div>
+    </div>
+    <button class="btn btn-block" style="margin-top:8px">${t('doc.save')}</button>
+  </form>
+</div>`;
+
+  return type === 'kol'
+    ? appLayout({ title: t('doc.title') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L })
+    : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/main-power?lang=' + L, lang: L });
 }
 
 /** Public certificate verification page (reached from the cert's QR/number). */
@@ -1533,6 +1609,11 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
   <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
+
+  <a href="/main-power/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
+    <span style="min-width:0"><b>📄 ${t('doc.title')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageHyrox')}</div></span>
+    <span style="font-size:22px;flex-shrink:0">›</span>
+  </a>
 
   <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
   <p class="muted" style="font-size:13px;margin:6px 0 0">${t('mp.newEventsSub')}</p>
@@ -2602,6 +2683,6 @@ module.exports = {
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
-  talentLogin, talentRegister, talentDataDiri, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
+  talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
 };
