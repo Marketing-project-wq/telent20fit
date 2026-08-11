@@ -255,6 +255,8 @@
   "eo.ap.noApplicantsPos": "No applicants for this position yet.",
   "eo.ap.accept": "Accept",
   "eo.ap.reject": "Reject",
+  "eo.ap.hyroxOk": "HYROX verified",
+  "eo.ap.hyroxPending": "HYROX not verified yet",
   "eo.ap.rejectConfirm": "Reject this applicant?",
   "eo.ap.undo": "Undo decision",
   "eo.ap.acceptedAs": "Accepted: {pos}",

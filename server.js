@@ -1628,6 +1628,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         return {
           id: a.id, talentId: a.talent_id, name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
+          hyroxStatus: tt.hyrox_cert_status || 'none',
           status: a.status || 'applied', createdAt: a.created_at, choices: ch,
         };
       })

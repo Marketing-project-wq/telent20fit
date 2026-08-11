@@ -222,7 +222,7 @@ function supabaseStore() {
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
       let q = sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status')
         .order('name');
       if (talentType) q = q.eq('talent_type', talentType);
       const { data, error } = await q;

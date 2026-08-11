@@ -1655,6 +1655,13 @@ function eoApplicantsSection(e, view, aps, L) {
     if (a.login) bits.push(`✉️ ${esc(a.login)}`);
     return bits.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${bits.join(' · ')}</div>` : '';
   };
+  // HYROX certification signal for the EO's decision (Tahap 4). Only a verified
+  // cert is a positive signal; "pending" tells the EO one is awaiting review.
+  const hyroxBadge = (a) => {
+    if (a.hyroxStatus === 'verified') return `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>`;
+    if (a.hyroxStatus === 'pending') return `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>`;
+    return '';
+  };
 
   // Accept / reject controls per applicant. Accept is offered per chosen
   // position that still has quota; a full position is shown disabled.
@@ -1692,6 +1699,7 @@ function eoApplicantsSection(e, view, aps, L) {
       ${talentStatusBadge(a.status, L)}
     </div>
     ${contactLine(a)}
+    ${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices)}</div>
     ${decisionControls(a)}
   </div>`).join('');

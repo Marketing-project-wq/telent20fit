@@ -255,6 +255,8 @@
   "eo.ap.noApplicantsPos": "Belum ada pelamar untuk posisi ini.",
   "eo.ap.accept": "Terima",
   "eo.ap.reject": "Tolak",
+  "eo.ap.hyroxOk": "HYROX terverifikasi",
+  "eo.ap.hyroxPending": "HYROX belum diverifikasi",
   "eo.ap.rejectConfirm": "Tolak pelamar ini?",
   "eo.ap.undo": "Batalkan keputusan",
   "eo.ap.acceptedAs": "Diterima: {pos}",
