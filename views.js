@@ -101,10 +101,29 @@ a{color:var(--red)}
 .tab-bar{display:none}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 70px}
 .wrap.narrow{max-width:640px}
+/* Talent pages sit next to the sidebar — left-align the content so narrow
+   pages hug the sidebar instead of floating awkwardly centered. */
+.talent-app .wrap{margin-left:0;margin-right:auto}
+@media(min-width:900px){.talent-app .wrap{padding-left:34px}}
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .sub{color:var(--muted);font-size:15px;margin-top:5px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}
+.ev-card{overflow:hidden;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.ev-card:hover{transform:translateY(-3px);border-color:var(--red);box-shadow:0 10px 26px rgba(0,0,0,.28)}
+.ev-cover{position:relative;height:96px;margin:-24px -24px 16px;overflow:hidden}
+.ev-cover-tex{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.06) 0,rgba(255,255,255,.06) 2px,transparent 2px,transparent 13px)}
+.ev-cover-ini{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:46px;font-weight:900;color:rgba(255,255,255,.92);letter-spacing:-.03em;text-shadow:0 2px 12px rgba(0,0,0,.28);line-height:1}
+.ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
+.ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ev-cover-photo{height:190px;background:rgba(0,0,0,.04)}
+.ev-cover-photo-img{display:block;width:100%;height:100%;object-fit:cover}
+.ev-detail-hero{width:100%;max-height:420px;object-fit:contain;border-radius:14px;margin:0 0 16px;display:block;background:rgba(0,0,0,.04)}
+.ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
+.ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
+.ev-chip:hover{border-color:var(--red)}
+.ev-chip.is-on{background:var(--red);border-color:var(--red);color:#fff}
 label{display:block;font-weight:600;font-size:14px;margin-bottom:8px}
 .hint{color:var(--muted);font-weight:400;font-size:13px}
 input[type=text],input[type=url],input[type=password],input[type=datetime-local],input[type=number],select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
@@ -223,7 +242,7 @@ tr:last-child td{border-bottom:none}
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 const THEME_HEAD = `<script>
-(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
+(function(){try{if(localStorage.getItem('theme')!=='dark')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
 function setTheme(m){var el=document.documentElement;if(m==='light')el.setAttribute('data-theme','light');else el.removeAttribute('data-theme');try{localStorage.setItem('theme',m);}catch(e){}syncThemeBtns();}
 function syncThemeBtns(){var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';var bs=document.querySelectorAll('[data-theme-set]');for(var i=0;i<bs.length;i++){bs[i].classList.toggle('active',bs[i].getAttribute('data-theme-set')===cur);}}
 if(document.readyState!=='loading')syncThemeBtns();else document.addEventListener('DOMContentLoaded',syncThemeBtns);
@@ -281,20 +300,25 @@ function navLink(href, key, active, icon, label) {
 function appLayout({ title, body, role, active, user, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const isStaff = role === 'super_admin' || role === 'eo';
+  const isEo = role === 'eo';
+  const isStaff = role === 'super_admin' || isEo;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isStaff ? '/admin' : '/kol';
-  const logoutAction = isStaff ? '/admin/logout' : '/kol/logout';
-  const items = isStaff
-    ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
-      + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
-      + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
-      + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
-      + (role === 'super_admin' ? navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications')) : '')
-      + (role === 'super_admin' ? navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage')) : '')
-    : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
-      + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
-      + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
+  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/kol';
+  const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/kol/logout';
+  const items = isEo
+    ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+      + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
+      + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
+    : isStaff
+      ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+        + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
+        + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
+        + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
+        + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
+        + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
+      : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
+        + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
+        + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -487,7 +511,6 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     </span>
     <div class="lp-toggles">
       <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
-      <a href="/admin/login" class="lp-submit">🔑 ${esc(t('land.admin'))}</a>
       ${toggle}
       ${themeToggle()}
     </div>
@@ -532,7 +555,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     <div class="foot-main">
       <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
     </div>
-    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/admin/login">Login Admin</a> · <a href="/eo/login">Login EO</a></div>
+    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
   </footer>
 </div>
 </body></html>`;
@@ -547,7 +570,7 @@ function talentPicker(mode, lang) {
   }[L];
   const cats = [
     { type: 'kol', tag: 'KOL', name: 'KOL', id: 'Konten & endorsement campaign.', en: 'Content & campaign endorsement.', active: true },
-    { type: 'main_power', tag: 'MP', name: 'Main Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: true },
+    { type: 'main_power', tag: 'MP', name: 'Man Power', id: 'Judges, Marshal, Drop Bag, Registrasi — apply sendiri ke event sesuai jobdesk.', en: 'Judges, Marshal, Drop Bag, Registration — apply to events yourself per jobdesk.', active: true },
     { type: 'fotografer', tag: 'FG', name: 'Fotografer', id: 'Dokumentasi & portofolio foto.', en: 'Documentation & photo portfolio.', active: false },
   ];
   const q = `?lang=${L}`;
@@ -671,7 +694,7 @@ function kolForm(campaigns, opts = {}) {
   return layout({ title: 'Submit Hasil KOL — 20FIT', body, home: '/' });
 }
 
-const TALENT_LABEL = { kol: 'KOL', main_power: 'Main Power', fotografer: 'Fotografer' };
+const TALENT_LABEL = { kol: 'KOL', main_power: 'Man Power', fotografer: 'Fotografer' };
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
 function talentPath(type) { return type.replace(/_/g, '-'); }
 
@@ -917,6 +940,48 @@ function forgotPasswordSent({ type, lang }) {
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
+// Deterministic cover palette + accent icon for an event, keyed off a stable
+// seed (event id/name) so a given event always gets the same look. Keeps the
+// brand red first, with a few energetic sport-themed gradients for variety.
+const EV_COVERS = [
+  ['#E4121F', '#7a0a12', '🔥'],
+  ['#ff7a18', '#af002d', '⚡'],
+  ['#f59e0b', '#b45309', '🏆'],
+  ['#10b981', '#065f46', '🏅'],
+  ['#0ea5e9', '#1e3a8a', '🎯'],
+  ['#7c3aed', '#4c1d95', '🎪'],
+];
+function evCoverPick(seed) {
+  const s = String(seed || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return EV_COVERS[h % EV_COVERS.length];
+}
+/** Full-bleed gradient "cover" for an event card, with initial, icon & status badge. */
+function eventCover(e, lang) {
+  const L = normLang(lang);
+  const ongoing = e.status === 'ongoing';
+  const badgeColor = ongoing ? '#0f9d6a' : '#E4121F';
+  const badgeText = tr(L, ongoing ? 'ev.status.ongoing' : 'ev.status.upcoming');
+  const badge = `<span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>`;
+  // With a poster, show the full image at its natural aspect ratio (no crop);
+  // otherwise fall back to the generated gradient cover.
+  if (e.mockup_url) {
+    return `<div class="ev-cover ev-cover-photo">
+      <img src="${esc(e.mockup_url)}" alt="" class="ev-cover-photo-img" loading="lazy" onerror="this.closest('.ev-cover').style.display='none'">
+      ${badge}
+    </div>`;
+  }
+  const [c1, c2, icon] = evCoverPick(e.id || e.name);
+  const initial = esc(String(e.name || '?').trim().charAt(0).toUpperCase() || '?');
+  return `<div class="ev-cover" style="background:linear-gradient(135deg,${c1},${c2})">
+      <div class="ev-cover-tex"></div>
+      <div class="ev-cover-ini">${initial}</div>
+      <div class="ev-cover-ico">${icon}</div>
+      ${badge}
+    </div>`;
+}
+
 /** Small status badge for an event teaser: ongoing (ok) / coming soon (warn). */
 function eventStatusBadge(status, lang) {
   const L = normLang(lang);
@@ -1013,7 +1078,7 @@ function talentDataDiri(type, opts = {}) {
     </div>
     <div class="field">
       <label for="ktp">${t('dd.ktp')}${req}</label>
-      <input type="text" id="ktp" name="ktp" required inputmode="numeric" maxlength="16" placeholder="${esc(t('dd.ktpPh'))}" value="${esc(v.ktp || '')}">
+      <input type="text" id="ktp" name="ktp" required inputmode="numeric" maxlength="20" placeholder="${esc(t('dd.ktpPh'))}" value="${esc(v.ktp || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.ktpHint')}</div>
     </div>
     <div class="field">
@@ -1136,10 +1201,557 @@ function staffLogin(opts = {}) {
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
+    ${isEo ? `<p style="text-align:center;margin:10px 0 0;font-size:14px">${t('eo.login.noAccount')} <a href="/eo/register?lang=${L}">${t('eo.login.registerLink')}</a></p>` : ''}
   </div>
   <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
 </div>`;
   return layout({ title: title + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// --- EO: forgot / reset password (staff_accounts) ---------------------------
+function staffForgot({ variant, lang, errors, values }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const base = variant === 'eo' ? '/eo' : '/admin';
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="${base}/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+  </div>
+  <h1>${t('auth.forgot.title')}</h1>
+  <p class="sub">${t('auth.forgot.subStaff')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="${base}/forgot-password">
+      <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc((values && values.login) || '')}"></div>
+      <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${base}/login?lang=${L}">${t('auth.forgot.backToLogin')}</a></p>
+  </div>
+</div>`;
+  return layout({ title: t('auth.forgot.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffForgotSent({ lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
+    <h1>${t('auth.forgot.sentTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
+    <a href="/eo/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+  </div></div>`;
+  return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffReset({ token, valid, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  if (!valid) {
+    const body = `<div class="wrap narrow"><div class="card success">
+      <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+      <h1>${t('auth.reset.invalidTitle')}</h1>
+      <p class="sub" style="margin:10px auto 24px;max-width:420px">${t('auth.reset.invalidBody')}</p>
+      <a href="/eo/forgot-password?lang=${L}" class="btn btn-ghost">${t('auth.reset.requestAgain')}</a>
+    </div></div>`;
+    return layout({ title: t('auth.reset.invalidTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+  }
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <h1 style="margin-top:22px">${t('auth.reset.title')}</h1>
+  <p class="sub">${t('auth.reset.sub')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="/staff/reset-password">
+      <input type="hidden" name="token" value="${esc(token)}">
+      <div class="field"><label for="password">${t('auth.reset.newPassword')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
+      <div class="field"><label for="confirm">${t('auth.reset.confirm')}</label><input type="password" id="confirm" name="confirm" required minlength="6" autocomplete="new-password"></div>
+      <button type="submit" class="btn btn-block">${t('auth.reset.btn')}</button>
+    </form>
+  </div>
+</div>`;
+  return layout({ title: t('auth.reset.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function staffResetDone({ lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow"><div class="card success">
+    <div class="check" style="background:var(--ok-soft);color:var(--ok)">✓</div>
+    <h1>${t('auth.reset.doneTitle')}</h1>
+    <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
+    <a href="/eo/login?lang=${L}" class="btn">${t('btn.signin')}</a>
+  </div></div>`;
+  return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// --- EO: dashboard + profile ------------------------------------------------
+function eoDashboard({ staff, stats, profileComplete, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const card = (label, val, icon) => `<div class="card" style="margin:0">
+    <div style="font-size:24px;line-height:1">${icon}</div>
+    <div style="font-size:30px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
+    <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(label)}</div>
+  </div>`;
+  const reminder = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:14px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('eo.dashTitle'), L)}
+  <p class="sub">${t('eo.dashSub')}</p>
+  ${reminder}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:14px;margin-top:16px">
+    ${card(t('eo.stat.totalEvents'), stats.totalEvents, '📅')}
+    ${card(t('eo.stat.activeEvents'), stats.activeEvents, '🟢')}
+    ${card(t('eo.stat.totalApplies'), stats.totalApplies, '📝')}
+    ${card(t('eo.stat.accepted'), stats.accepted, '✅')}
+    ${card(t('eo.stat.doneEvents'), stats.doneEvents, '🏁')}
+  </div>
+</div>`;
+  return appLayout({ title: t('eo.dashTitle') + ' — 20FIT', body, role: 'eo', active: 'dashboard', user: staff.name, lang: L });
+}
+
+function eoProfile({ staff, profile, saved, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = profile || {};
+  const req = ' <span style="color:var(--red)">*</span>';
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const savedBanner = saved ? `<div class="banner banner-ok">✓ ${t('eo.profileSaved')}</div>` : '';
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('eo.profileTitle'), L)}
+  <p class="sub">${t('eo.profileSub')}</p>
+  ${savedBanner}${eb}
+  <form method="post" action="/eo/profile" class="card" style="margin-top:14px;max-width:640px">
+    <div class="field"><label for="org_type">${t('eo.f.orgType')}${req}</label>
+      <select id="org_type" name="org_type" required>
+        <option value="">${t('eo.f.orgTypePick')}</option>
+        ${['company', 'community', 'individual'].map((x) => `<option value="${x}"${p.org_type === x ? ' selected' : ''}>${esc(t('eo.type.' + x))}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label for="org_name">${t('eo.f.company')}${req}</label><input type="text" id="org_name" name="org_name" required maxlength="140" value="${esc(p.org_name || '')}"></div>
+    <div class="field"><label for="pic_name">${t('eo.f.pic')}${req}</label><input type="text" id="pic_name" name="pic_name" required maxlength="140" value="${esc(p.pic_name || '')}"></div>
+    <div class="field"><label for="email">${t('eo.f.emailLogin')}</label><input type="email" id="email" value="${esc(p.email || '')}" readonly disabled style="opacity:.7;cursor:not-allowed"></div>
+    <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
+    <div class="field"><label for="city">${t('eo.f.city')}${req}</label><input type="text" id="city" name="city" required maxlength="100" value="${esc(p.city || '')}"></div>
+    <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span>${req}</label><textarea id="description" name="description" required rows="4" maxlength="1000">${esc(p.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
+    <button type="submit" class="btn btn-block">${t('eo.f.save')}</button>
+  </form>
+  <script>(function(){
+    var d=document.getElementById('description'),c=document.getElementById('descCount');
+    if(d&&c){var u=function(){c.textContent=d.value.length;};d.addEventListener('input',u);u();}
+    var sel=document.getElementById('org_type'),lt=document.getElementById('descLabelText');
+    if(sel&&lt){var tpl=lt.getAttribute('data-tpl'),base=lt.getAttribute('data-base');
+      var up=function(){var o=sel.options[sel.selectedIndex];lt.textContent=(sel.value&&o)?tpl.replace('{type}',o.text):base;};
+      sel.addEventListener('change',up);up();}
+  })();</script>
+</div>`;
+  return appLayout({ title: t('eo.profileTitle') + ' — 20FIT', body, role: 'eo', active: 'profile', user: staff.name, lang: L });
+}
+
+// EO self-registration form.
+function eoRegister({ lang, errors, values }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const v = values || {};
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow" style="max-width:440px">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+    <a href="/eo/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+  </div>
+  <h1>${t('eo.reg.title')}</h1>
+  <p class="sub">${t('eo.reg.sub')}</p>
+  ${eb}
+  <div class="card">
+    <form method="post" action="/eo/register">
+      <div class="field"><label for="org_type">${t('eo.f.orgType')}</label>
+        <select id="org_type" name="org_type" required>
+          <option value="">${t('eo.f.orgTypePick')}</option>
+          ${['company', 'community', 'individual'].map((x) => `<option value="${x}"${v.org_type === x ? ' selected' : ''}>${esc(t('eo.type.' + x))}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label for="org_name">${t('eo.f.company')}</label><input type="text" id="org_name" name="org_name" required maxlength="140" value="${esc(v.org_name || '')}"></div>
+      <div class="field"><label for="pic_name">${t('eo.f.pic')}</label><input type="text" id="pic_name" name="pic_name" required maxlength="140" value="${esc(v.pic_name || '')}"></div>
+      <div class="field"><label for="login">${t('common.email')}</label><input type="email" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
+      <div class="field"><label for="phone">${t('eo.f.phone')}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(v.phone || '')}"></div>
+      <div class="field"><label for="city">${t('eo.f.city')}</label><input type="text" id="city" name="city" required maxlength="100" value="${esc(v.city || '')}"></div>
+      <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span></label><textarea id="description" name="description" required rows="3" maxlength="1000">${esc(v.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
+      <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
+      <div class="field"><label for="password2">${t('auth.reset.confirm')}</label><input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password"></div>
+      <button type="submit" class="btn btn-block">${t('eo.reg.submit')}</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px">${t('eo.reg.haveAccount')} <a href="/eo/login?lang=${L}">${t('btn.signin')}</a></p>
+  </div>
+</div>
+<script>(function(){
+  var d=document.getElementById('description'),c=document.getElementById('descCount');
+  if(d&&c){var u=function(){c.textContent=d.value.length;};d.addEventListener('input',u);u();}
+  var sel=document.getElementById('org_type'),lt=document.getElementById('descLabelText');
+  if(sel&&lt){var tpl=lt.getAttribute('data-tpl'),base=lt.getAttribute('data-base');
+    var up=function(){var o=sel.options[sel.selectedIndex];lt.textContent=(sel.value&&o)?tpl.replace('{type}',o.text):base;};
+    sel.addEventListener('change',up);up();}
+})();</script>`;
+  return layout({ title: t('eo.reg.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// Shared "resend verification email" mini-form.
+function eoResendForm(email, L, t) {
+  return `<form method="post" action="/eo/verify/resend" style="margin-top:14px">
+    ${email ? `<input type="hidden" name="login" value="${esc(email)}">`
+      : `<div class="field"><label for="login">${t('eo.verify.emailLabel')}</label><input type="email" id="login" name="login" required></div>`}
+    <button type="submit" class="btn btn-ghost btn-block">${t('eo.verify.resend')}</button>
+  </form>`;
+}
+
+function eoVerifySent({ email, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card success" style="margin-top:40px">
+    <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
+    <h1>${t('eo.verify.sentTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px">${t('eo.verify.sentBody', { email: esc(email || '') })}</p>
+    ${eoResendForm(email, L, t)}
+    <p style="margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function eoVerifyResult({ ok, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card" style="margin-top:40px">
+    <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
+    <h1 style="text-align:center">${t('eo.verify.failTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.failBody')}</p>
+    ${eoResendForm('', L, t)}
+    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.failTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+function eoVerifyNeeded({ email, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow" style="max-width:460px"><div class="card" style="margin-top:40px">
+    <div class="check" style="background:var(--warn-soft, var(--red-soft));color:var(--warn, var(--red))">✉</div>
+    <h1 style="text-align:center">${t('eo.verify.neededTitle')}</h1>
+    <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.neededBody', { email: esc(email || '') })}</p>
+    ${eoResendForm(email, L, t)}
+    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+  </div></div>`;
+  return layout({ title: t('eo.verify.neededTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
+}
+
+// Registration-status badge for an EO event.
+// Localized label for a master/event position.
+function posLabel(p, lang) { return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
+
+function eoRegBadge(status, lang) {
+  const L = normLang(lang);
+  const t = (k) => tr(L, k);
+  if (status === 'done') return `<span class="pill pill-off">${t('eo.ev.status.done')}</span>`;
+  if (status === 'draft') return `<span class="pill pill-off">${t('eo.ev.status.draft')}</span>`;
+  if (status === 'closed') return `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.status.closed')}</span>`;
+  return `<span class="pill pill-ok">${t('eo.ev.status.published')}</span>`;
+}
+
+function eoEvents({ staff, events, profileComplete, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const rows = (events && events.length) ? events.map((e) => {
+    const v = e.view;
+    const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+    let closeBtn = '';
+    if (v.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
+    else if (v.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
+    const delBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/delete" ${jsConfirm(t('eo.ev.deleteConfirm'))}><button class="btn btn-ghost btn-sm" title="${t('eo.ev.delete')}">🗑</button></form>`;
+    return `<tr>
+      <td data-label="${t('eo.ev.th.name')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<div style="min-width:0"><b>${esc(e.name)}</b>${e.category ? `<div class="muted" style="font-size:12px">${esc(e.category)}</div>` : ''}</div></div></td>
+      <td data-label="${t('eo.ev.th.date')}" class="muted" style="font-size:13px;white-space:nowrap">${date}${e.start_time ? `<div style="font-size:12px">${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}</div>` : ''}</td>
+      <td data-label="${t('eo.ev.th.loc')}">${e.location ? esc(e.location) : '<span class="muted">—</span>'}</td>
+      <td data-label="${t('eo.ev.th.status')}">${eoRegBadge(v.status, L)}</td>
+      <td data-label="${t('eo.ev.th.applies')}"><b style="font-size:15px">${v.applyCount}</b></td>
+      <td style="text-align:right;white-space:nowrap">
+        <a href="/eo/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.ev.detail')}</a>
+        <a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
+        ${closeBtn}${delBtn}
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" class="muted">${t('eo.ev.empty')}</td></tr>`;
+  const blocker = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
+  const createBtn = profileComplete ? `<a href="/eo/events/new?lang=${L}" class="btn btn-sm">+ ${t('eo.ev.create')}</a>` : '';
+  const body = `<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    ${staffHead(staff, t('eo.ev.title'), L)}
+    ${createBtn}
+  </div>
+  <p class="sub">${t('eo.ev.sub')}</p>
+  ${blocker}
+  <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('eo.ev.th.name')}</th><th>${t('eo.ev.th.date')}</th><th>${t('eo.ev.th.loc')}</th><th>${t('eo.ev.th.status')}</th><th>${t('eo.ev.th.applies')}</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div></div>
+</div>`;
+  return appLayout({ title: t('eo.ev.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const sel = selected || {};
+  const editing = !!e.id;
+  const rq = ' <span style="color:var(--red)">*</span>';
+  const eb = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const action = editing ? `/eo/events/${esc(e.id)}/edit` : '/eo/events';
+  const dval = (v) => esc(String(v || '').slice(0, 10));
+  const field = (name, label, val, type, required, extra) => `<div class="field"><label for="${name}">${label}${required ? rq : ''}</label><input type="${type || 'text'}" id="${name}" name="${name}" ${required ? 'required' : ''} value="${esc(val || '')}" ${extra || ''}></div>`;
+  const status = e.status || 'draft';
+  const posRows = (positionsMaster || []).map((p) => {
+    const on = Object.prototype.hasOwnProperty.call(sel, p.id);
+    const cur = on ? sel[p.id] : null;
+    const q = cur ? (typeof cur === 'object' ? cur.quota : cur) : '';
+    const jd = cur && typeof cur === 'object' ? (cur.jobdesk || '') : '';
+    return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
+      <label style="display:flex;gap:10px;align-items:center">
+        <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
+        <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
+        <input type="number" name="quota_${esc(p.id)}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
+      </label>
+      <textarea name="jobdesk_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" class="posm-jd" style="width:100%;box-sizing:border-box;margin-top:8px;font-size:13px${on ? '' : ';display:none'}">${esc(jd)}</textarea>
+    </div>`;
+  }).join('');
+  const body = `<div class="wrap">
+  <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
+  <p class="sub">${t('eo.ev.formSub')}</p>
+  ${eb}
+  <form method="post" action="${action}" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:720px">
+    <div style="font-weight:700;margin-bottom:6px">${t('eo.ev.sec.info')}</div>
+    ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
+    <div class="field"><label for="category">${t('eo.ev.f.category')}${rq}</label>
+      <input type="text" id="category" name="category" required maxlength="80" list="evcats" value="${esc(e.category || '')}" placeholder="${t('eo.ev.f.categoryPh')}">
+      <datalist id="evcats"><option value="Marathon"><option value="Fun Run"><option value="Trail Run"><option value="HYROX / Fungsional"><option value="Triathlon"><option value="Turnamen"><option value="Konser"><option value="Expo"></datalist>
+    </div>
+    <div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
+    ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
+      <div style="flex:1;min-width:150px">${field('ends_at', t('eo.ev.f.endDate'), dval(e.ends_at), 'date', false, '')}</div>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">${field('start_time', t('eo.ev.f.startTime'), e.start_time, 'time', false, '')}</div>
+      <div style="flex:1;min-width:150px">${field('end_time', t('eo.ev.f.endTime'), e.end_time, 'time', false, '')}</div>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">${field('reg_open', t('eo.ev.f.regOpen'), dval(e.reg_open), 'date', false, '')}</div>
+      <div style="flex:1;min-width:150px">${field('reg_deadline', t('eo.ev.f.deadline'), dval(e.reg_deadline), 'date', false, '')}</div>
+    </div>
+    <div class="field"><label for="status">${t('eo.ev.f.status')}</label>
+      <select id="status" name="status">
+        <option value="draft"${status === 'draft' ? ' selected' : ''}>${t('eo.ev.status.draft')}</option>
+        <option value="published"${status === 'published' ? ' selected' : ''}>${t('eo.ev.status.published')}</option>
+      </select>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.statusHint')}</p>
+    </div>
+    <div class="field">
+      <label>${t('eo.ev.f.poster')}</label>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
+        <div style="flex:1;min-width:180px"><input type="file" name="poster" accept="image/*"><p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.f.posterHint')}</p></div>
+      </div>
+    </div>
+    <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
+    <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
+    <div id="posmList">${posRows}</div>
+    <button type="submit" class="btn btn-block" style="margin-top:22px">${editing ? t('btn.save') : t('eo.ev.saveEvent')}</button>
+  </form>
+</div>
+<script>
+(function(){
+  var list=document.getElementById('posmList'); if(!list) return;
+  [].slice.call(list.querySelectorAll('.posm-row')).forEach(function(r){
+    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q'), jd=r.querySelector('.posm-jd');
+    if(!cb||!q) return;
+    function sync(){ if(jd) jd.style.display = cb.checked ? '' : 'none'; }
+    cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } sync(); });
+    q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; sync(); });
+  });
+})();
+</script>`;
+  return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
+function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const aps = applicants || [];
+  const f = flash || {};
+  const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
+    : f.ok === 'rejected' ? `<div class="banner banner-ok">${t('eo.ap.okRejected')}</div>`
+    : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+  const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
+  const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <b>${esc(posLabel(p, L))}</b>${p.full ? `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.full')}</span>` : `<span class="pill pill-ok">${t('eo.ev.openPos')}</span>`}
+    </div>
+    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span></div>
+    <div class="muted" style="font-size:12px">${t('eo.ev.filledNeeded')}</div>
+  </div>`).join('') : `<p class="muted">${t('eo.ev.noPositions')}</p>`;
+  let closeBtn = '';
+  if (view.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
+  else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
+  const body = `<div class="wrap">
+  <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${flashBanner}
+  ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
+    <div style="display:flex;gap:8px;align-items:center">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
+  </div>
+  ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+  ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+  ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(e.description)}</p>` : ''}
+  <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
+    <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>
+    <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
+  ${eoApplicantsSection(e, view, aps, L)}
+</div>${eoApplicantsScript()}`;
+  return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
+// Tahap 6: applicants for one EO event — per-talent and per-position, with a
+// name search + status filter (all client-side). Contact is shown so the EO
+// can coordinate with talents who applied.
+function eoApplicantsSection(e, view, aps, L) {
+  const t = (k, v) => tr(L, k, v);
+  const posById = new Map((view.positions || []).map((p) => [p.position_id, p]));
+  const posLbl = (pid) => { const p = posById.get(pid); return p ? posLabel(p, L) : pid; };
+  const header = `<div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('eo.ap.title')}</h2>
+    <span class="muted" style="font-size:13px">${t('eo.ap.count', { n: aps.length })}</span></div>`;
+  if (!aps.length) return `${header}<p class="muted" style="margin-top:12px">${t('eo.ap.none')}</p>`;
+
+  const choiceChips = (choices) => choices.map((c) => {
+    const on = c.accepted;
+    return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : ''}" title="${on ? esc(t('eo.ap.acceptedHere')) : ''}">P${c.priority} · ${esc(posLbl(c.position_id))}${on ? ' ✓' : ''}</span>`;
+  }).join('');
+  const contactLine = (a) => {
+    const bits = [];
+    if (a.phone) bits.push(`📱 ${esc(a.phone)}`);
+    if (a.instagram) bits.push(`📷 @${esc(a.instagram)}`);
+    if (a.city) bits.push(`📍 ${esc(a.city)}`);
+    if (a.login) bits.push(`✉️ ${esc(a.login)}`);
+    return bits.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${bits.join(' · ')}</div>` : '';
+  };
+
+  // Accept / reject controls per applicant. Accept is offered per chosen
+  // position that still has quota; a full position is shown disabled.
+  const decisionControls = (a) => {
+    const base = `/eo/events/${esc(e.id)}/applicants/${esc(a.id)}`;
+    const acceptedChoice = a.choices.find((c) => c.accepted);
+    if (a.status === 'approved' && acceptedChoice) {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
+    }
+    if (a.status === 'rejected') {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
+    }
+    const acceptBtns = a.choices.map((c) => {
+      const p = posById.get(c.position_id) || {};
+      if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
+      return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`;
+    }).join('');
+    return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${acceptBtns}
+        <form class="inline-form" method="post" action="${base}/reject" ${jsConfirm(t('eo.ap.rejectConfirm'))}><button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
+      </div>
+    </div>`;
+  };
+
+  // Per-talent cards
+  const talentCards = aps.map((a) => `<div class="card ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}</div>
+      ${talentStatusBadge(a.status, L)}
+    </div>
+    ${contactLine(a)}
+    <div style="margin-top:10px">${choiceChips(a.choices)}</div>
+    ${decisionControls(a)}
+  </div>`).join('');
+
+  // Per-position groups
+  const posGroups = (view.positions || []).map((p) => {
+    const rows = aps.map((a) => { const c = a.choices.find((x) => x.position_id === p.position_id); return c ? { a, c } : null; })
+      .filter(Boolean).sort((x, y) => x.c.priority - y.c.priority);
+    const list = rows.length ? rows.map(({ a, c }) => `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
+      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">· ${esc(talentLabel(L, a.type))}</span>` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
+      ${talentStatusBadge(a.status, L)}
+    </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
+    return `<div class="card" style="margin-top:12px;padding:14px 16px">
+      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.filled} / ${p.quota})</span></div>
+      <div class="dl-list" style="margin-top:8px">${list}</div>
+    </div>`;
+  }).join('');
+
+  // Status filter chips (all + distinct statuses present)
+  const statuses = Array.from(new Set(aps.map((a) => a.status)));
+  const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
+  const statusChips = sChip('all', t('eo.ap.filterAll'), true) + statuses.map((s) => sChip(s, t('ta.status.' + s), false)).join('');
+
+  return `${header}
+  <div class="card" style="margin-top:14px;padding:12px 14px">
+    <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button type="button" class="ev-chip is-on" data-aptab="talent">${t('eo.ap.byTalent')}</button>
+      <button type="button" class="ev-chip" data-aptab="position">${t('eo.ap.byPosition')}</button>
+    </div>
+  </div>
+  <div id="apTalent">${talentCards}</div>
+  <div id="apPosition" style="display:none">${posGroups}</div>
+  <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`;
+}
+
+function eoApplicantsScript() {
+  return `<script>
+(function(){
+  var search=document.getElementById('apSearch'); if(!search) return;
+  var noMatch=document.getElementById('apNoMatch');
+  var talentBox=document.getElementById('apTalent'), posBox=document.getElementById('apPosition');
+  var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
+  var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
+  var flt='all', tab='talent';
+  function apply(){
+    var q=search.value.trim().toLowerCase();
+    var box=tab==='talent'?talentBox:posBox;
+    var items=[].slice.call(box.querySelectorAll('.ap-item'));
+    var shown=0;
+    items.forEach(function(it){
+      var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+    });
+    if(noMatch)noMatch.style.display=(tab==='talent'&&shown===0)?'':'none';
+  }
+  search.addEventListener('input',apply);
+  statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
+})();
+</script>`;
 }
 
 /**
@@ -1399,7 +2011,7 @@ function certVerifyPage({ cert, certNo, lang }) {
 }
 
 // Talent categories a person can apply as, per event (matches talent_event_needs).
-const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Manpower' };
+const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Man Power' };
 // Per-category application fields (beyond name + phone, which prefill from the
 // profile). label/ph/hint are i18n keys. type: text|number|url. req: required.
 const CAT_FIELDS = {
@@ -1423,37 +2035,74 @@ const CAT_FIELDS = {
 };
 
 /** Talent Home: available events + which talent categories each one needs. */
-function kolEventsPage({ account, events, lang }) {
+function kolEventsPage({ account, events, eoEvents, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const list = (events && events.length)
-    ? events.map((e) => {
-        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
-        const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
-        const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
-        let applied = '';
-        if (e.applied) {
-          const ap = e.applied;
-          const stn = (ap.status === 'approved' && ap.station)
-            ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
-          applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
-        }
-        return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
-          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
-            <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
-            ${eventStatusBadge(e.status, L)}
-          </div>
-          <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
-          ${applied}
-        </a>`;
-      }).join('')
+  const evs = events || [];
+  const eoEvs = eoEvents || [];
+  // EO position-based events show inline in the same list (newest reg-deadline first).
+  const eoCards = eoEvs.map((e) => talentPositionCard(e, L, true)).join('');
+  const cards = evs.map((e) => {
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
+    const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
+    let applied = '';
+    if (e.applied) {
+      const ap = e.applied;
+      const stn = (ap.status === 'approved' && ap.station)
+        ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
+      applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
+    }
+    const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
+    return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+      ${eventCover(e, L)}
+      <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
+      <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
+      ${applied}
+    </a>`;
+  }).join('');
+
+  const hasAny = evs.length || eoEvs.length;
+  const chip = (f, label) => `<button type="button" class="ev-chip${f === 'all' ? ' is-on' : ''}" data-filter="${f}">${esc(label)}</button>`;
+  const controls = hasAny ? `
+  <div class="card" style="margin-top:14px;padding:12px 14px">
+    <input type="text" id="evSearch" placeholder="${esc(t('ev.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      ${chip('all', t('ev.filterAll'))}${chip('ongoing', t('ev.status.ongoing'))}${chip('upcoming', t('ev.status.upcoming'))}
+    </div>
+  </div>` : '';
+
+  const listBlock = hasAny
+    ? `<div id="evList">${eoCards}${cards}</div><p class="muted" id="evNoMatch" style="margin-top:16px;display:none">${t('ev.noMatch')}</p>`
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
+
   const body = `<div class="wrap">
-  <h1 style="margin-top:0">${t('nav.events')}</h1>
+  <h1 style="margin-top:0">${t('ev.findTitle')}</h1>
   <p class="sub">${t('apply.homeSub')}</p>
-  ${list}
-</div>`;
-  return appLayout({ title: t('nav.events') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+  ${controls}
+  ${listBlock}
+</div>
+<script>
+(function(){
+  var q=document.getElementById('evSearch'); if(!q) return;
+  var items=[].slice.call(document.querySelectorAll('.ev-item'));
+  var chips=[].slice.call(document.querySelectorAll('.ev-chip'));
+  var noMatch=document.getElementById('evNoMatch');
+  var flt='all';
+  function apply(){
+    var v=q.value.trim().toLowerCase(); var shown=0;
+    items.forEach(function(it){
+      var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okQ=!v||it.getAttribute('data-search').indexOf(v)>=0;
+      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+    });
+    if(noMatch)noMatch.style.display=shown?'none':'';
+  }
+  q.addEventListener('input',apply);
+  chips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
+})();
+</script>`;
+  return appLayout({ title: t('ev.findTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
 /** Event detail: description + category the talent can register for (or their status). */
@@ -1489,6 +2138,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   }
   const body = `<div class="wrap narrow">
   <a href="/kol/event?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${event.mockup_url ? `<img src="${esc(event.mockup_url)}" alt="${esc(event.name)}" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <h1 style="margin-top:0">${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
   ${locLine}
@@ -1550,10 +2200,27 @@ function kolApplyDone({ account, event, lang }) {
   return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
 }
 
-// ------------------------------------------------------------ Main Power ----
+// ------------------------------------------------------------ Man Power ----
 
-// The four on-ground jobdesks a Main Power talent can apply for.
+// The four on-ground jobdesks a Man Power talent can apply for.
 const MP_JOBDESKS = ['Judges', 'Marshal', 'Drop Bag', 'Registrasi'];
+
+// Stations an admin can assign an approved Man Power talent to.
+const MP_STATIONS = [
+  'Skierg', 'Rowing', 'Sled Push', 'Sled Pull', 'Wallball', 'Sandbag',
+  'Farmers Carry', 'Burpee Broad Jump', 'Marshal In Station', 'Marshal Out Station',
+  'Trafic Control', 'Time Keeper', 'Start Crew', 'Finish Crew', 'Bag Deposit',
+  'Registrasi', 'Refreshment Crew', 'Water Station', 'Runner Crew',
+];
+/** <option> list for the station picker; keeps a legacy/free-text value selectable. */
+function stationOptions(current, placeholder) {
+  const cur = current == null ? '' : String(current);
+  const inList = MP_STATIONS.some((s) => s === cur);
+  const opts = [`<option value=""${cur === '' ? ' selected' : ''}>${esc(placeholder)}</option>`];
+  if (cur !== '' && !inList) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)}</option>`);
+  for (const s of MP_STATIONS) opts.push(`<option value="${esc(s)}"${s === cur ? ' selected' : ''}>${esc(s)}</option>`);
+  return opts.join('');
+}
 
 /** Application status badge: pending (warn) / approved (ok) / rejected (err). */
 function mpStatusBadge(status, lang) {
@@ -1572,23 +2239,27 @@ function mpAnswerLabel(val, lang) {
 }
 
 /**
- * Main Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
+ * Man Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
  * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
  */
-function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
+function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applied }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const openCards = (openEvents && openEvents.length) ? openEvents.map((e) => {
+  const eoEvs = eoEvents || [];
+  const eoCards = eoEvs.map((e) => talentPositionCard(e, L, false)).join('');
+  const mpRows = (openEvents && openEvents.length) ? openEvents.map((e) => {
     const full = e.slotsLeft <= 0;
-    const slot = full
-      ? `<span class="dl-when dl-late">${t('mp.slotFull')}</span>`
-      : `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${t('mp.slotLeft', { n: e.slotsLeft })}</span>`;
+    // Slot counts are hidden from talents; only mark when registration is full.
+    const slot = full ? `<div style="margin-top:8px"><span class="dl-when dl-late">${t('mp.slotFull')}</span></div>` : '';
     const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
-      <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}<div style="margin-top:8px">${slot}</div></div>
+      <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}${slot}</div>
       ${full ? '' : `<a href="/main-power/apply/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
     </div>`;
-  }).join('') : `<p class="muted" style="margin-top:12px">${t('mp.noOpenEvents')}</p>`;
+  }).join('') : '';
+  const openCards = (eoCards || mpRows)
+    ? `${eoCards}${mpRows ? `<div class="dl-list">${mpRows}</div>` : ''}`
+    : `<p class="muted" style="margin-top:12px">${t('mp.noOpenEvents')}</p>`;
 
   const appCards = (myApps && myApps.length) ? myApps.map((a) => {
     const station = (a.status === 'approved' && a.station)
@@ -1608,7 +2279,6 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
-  <div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('mp.dash.verifyNote')}</span></div>
 
   <a href="/main-power/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
     <span style="min-width:0"><b>📄 ${t('doc.title')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageHyrox')}</div></span>
@@ -1617,7 +2287,7 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
 
   <div class="section-head"><h2 style="margin:0">${t('mp.newEvents')}</h2></div>
   <p class="muted" style="font-size:13px;margin:6px 0 0">${t('mp.newEventsSub')}</p>
-  <div class="dl-list">${openCards}</div>
+  ${openCards}
 
   <div class="section-head"><h2 style="margin:0">${t('mp.myApps')}</h2></div>
   <div class="dl-list">${appCards}</div>
@@ -1626,7 +2296,7 @@ function mainPowerDashboard({ talent, openEvents, myApps, lang, applied }) {
 }
 
 /**
- * Main Power apply page: a 2-step form (SOW + jobdesk + agree, then the four
+ * Man Power apply page: a 2-step form (SOW + jobdesk + agree, then the four
  * application questions). A small script reveals step 2; with JS off both steps
  * are visible and still submit. Step 3 ("Selesai") is the server-rendered
  * confirmation after POST.
@@ -1732,7 +2402,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
   return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
 }
 
-/** Confirmation after a Main Power application is submitted. */
+/** Confirmation after a Man Power application is submitted. */
 function mainPowerApplyDone({ event, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -2344,7 +3014,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const scoreByTalent = new Map(talents.map((tt) => [tt.id, kolScore(proofsByTalent.get(tt.id) || [], settings)]));
 
   const eventRows = events.map((e) => `<tr>
-    <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+    <td data-label="${t('th.event')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<b>${esc(e.name)}</b></div></td>
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
@@ -2366,16 +3036,16 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
   <div class="section-head"><h2 style="margin:0">${t('manage.events')}</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/events" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
+    <form method="post" action="/admin/events" enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
       <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
       <input type="text" name="location" placeholder="${t('manage.locationPh')}" maxlength="200" style="flex:2;min-width:180px">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.startDate')}<input type="date" name="starts_at" style="min-width:150px"></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">📷 ${t('manage.mockup')}<input type="file" name="mockup" accept="image/*" style="min-width:170px;font-size:12px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.mpQuota')}<input type="number" name="mp_headcount" min="1" value="1" style="width:90px"></label>
       <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
-      <textarea name="mp_sow" rows="2" maxlength="2000" placeholder="${t('manage.mpSow')}" style="flex-basis:100%;width:100%"></textarea>
       <button class="btn btn-sm">${t('btn.createEvent')}</button>
     </form>
     <div class="table-wrap"><table>
@@ -2407,7 +3077,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><b>${esc(e.name)}</b></td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right"><form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -2439,9 +3109,67 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   return appLayout({ title: t('manage.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
+// Super Admin read-only detail for one EO account: profile + the events they created.
+function adminEoDetail({ staff, eo, profile, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const p = profile || {};
+  const suspended = eo.status === 'suspended';
+  const statusPill = `<span class="pill ${suspended ? 'pill-off' : 'pill-ok'}">${suspended ? t('eo.status.suspended') : t('eo.status.active')}</span>`;
+  const typeLabel = p.org_type ? t('eo.type.' + p.org_type) : null;
+  const row = (label, val) => val ? `<div class="dl-item" style="align-items:flex-start"><div class="muted" style="min-width:150px;font-size:13px">${label}</div><div style="flex:1;min-width:0">${val}</div></div>` : '';
+  const profileCard = (profile && (p.org_name || p.pic_name || p.phone || p.city || p.description))
+    ? `<div class="card" style="margin-top:14px"><div class="dl-list">
+        ${row(t('eo.f.orgType'), typeLabel ? esc(typeLabel) : '')}
+        ${row(t('eo.f.company'), esc(p.org_name || eo.name || ''))}
+        ${row(t('eo.f.pic'), esc(p.pic_name || ''))}
+        ${row(t('eo.f.email'), esc(p.email || eo.login || ''))}
+        ${row(t('eo.f.phone'), esc(p.phone || ''))}
+        ${row(t('eo.f.city'), esc(p.city || ''))}
+        ${row(t('eo.f.desc'), p.description ? `<span style="white-space:pre-wrap">${esc(p.description)}</span>` : '')}
+      </div></div>`
+    : `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.noProfile')}</div>`;
+  const evList = (events || []).length
+    ? `<div class="table-wrap"><table>
+        <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.status')}</th><th style="text-align:right">${t('eo.detail.applicants')}</th></tr></thead>
+        <tbody>${events.map((e) => `<tr>
+          <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
+          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—'}</td>
+          <td data-label="${t('th.status')}">${eoRegBadge(e.displayStatus || e.status, L)}</td>
+          <td data-label="${t('eo.detail.applicants')}" style="text-align:right"><b>${e.applyCount || 0}</b></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+    : `<p class="muted" style="margin-top:12px">${t('eo.detail.noEvents')}</p>`;
+  const body = `<div class="wrap">
+    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h1 style="margin:0">${esc(eo.name || '')}</h1>${statusPill}
+    </div>
+    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at)}</p>
+    ${suspended ? `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.suspendedNote')}</div>` : ''}
+
+    <div class="section-head"><h2 style="margin:0">${t('eo.detail.profile')}</h2></div>
+    ${profileCard}
+
+    <div class="section-head"><h2 style="margin:0">${t('eo.detail.events')}</h2></div>
+    <div class="card" style="margin-top:14px">${evList}</div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+      <form method="post" action="/admin/eos/${esc(eo.id)}/status" ${suspended ? '' : jsConfirm(t('eo.detail.suspendConfirm'))}>
+        <input type="hidden" name="status" value="${suspended ? 'active' : 'suspended'}">
+        <button class="btn btn-sm">${suspended ? '✓ ' + t('eo.detail.activate') : '⏸ ' + t('eo.detail.suspend')}</button>
+      </form>
+      <form method="post" action="/admin/eos/${esc(eo.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}>
+        <button class="btn btn-ghost btn-sm">🗑 ${t('title.delete')}</button>
+      </form>
+    </div>
+  </div>`;
+  return appLayout({ title: (eo.name || t('eo.detail.title')) + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
 /**
  * Super Admin: edit an existing event — schedule, which talent types it needs
- * (KOL / Main Power / Fotografer) with per-type quotas, and the Main Power SOW.
+ * (KOL / Man Power / Fotografer) with per-type quotas, and the Man Power SOW.
  */
 function adminEventEdit({ staff, event, lang }) {
   const L = normLang(lang);
@@ -2462,10 +3190,21 @@ function adminEventEdit({ staff, event, lang }) {
     <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
   </div>
   <p class="sub">${t('manage.editSub')}</p>
-  <form method="post" action="/admin/events/${esc(ev.id)}/edit" class="card" style="margin-top:16px">
+  <form method="post" action="/admin/events/${esc(ev.id)}/edit" enctype="multipart/form-data" class="card" style="margin-top:16px">
     <div class="field">
       <label for="name">${t('ph.eventName')}</label>
       <input type="text" id="name" name="name" required maxlength="140" value="${esc(ev.name || '')}">
+    </div>
+    <div class="field">
+      <label>📷 ${t('manage.mockup')}</label>
+      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        ${ev.mockup_url ? `<img src="${esc(ev.mockup_url)}" alt="" style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
+        <div style="flex:1;min-width:180px">
+          <input type="file" name="mockup" accept="image/*">
+          <p class="muted" style="font-size:12px;margin:6px 0 0">${t('manage.mockupHint')}</p>
+          ${ev.mockup_url ? `<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:8px;cursor:pointer"><input type="checkbox" name="remove_mockup" value="1"> ${t('manage.mockupRemove')}</label>` : ''}
+        </div>
+      </div>
     </div>
     <div class="field">
       <label for="location">${t('manage.location')}</label>
@@ -2481,10 +3220,6 @@ function adminEventEdit({ staff, event, lang }) {
       ${needRow('main_power', 'mp_headcount', t('manage.mpQuota'))}
       ${needRow('fotografer', 'fg_headcount', t('manage.fgQuota'))}
     </div>
-    <div class="field" style="margin-top:18px">
-      <label for="mp_sow">${t('manage.mpSow')}</label>
-      <textarea id="mp_sow" name="mp_sow" rows="3" maxlength="2000">${esc(ev.mp_sow || '')}</textarea>
-    </div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <a href="/admin/manage?lang=${L}" class="btn btn-ghost">${t('common.cancel')}</a>
       <button type="submit" class="btn" style="flex:1">${t('btn.save')}</button>
@@ -2495,11 +3230,11 @@ function adminEventEdit({ staff, event, lang }) {
 }
 
 /**
- * Super Admin review of Main Power applications: applicant + jobdesk + answers,
+ * Super Admin review of Man Power applications: applicant + jobdesk + answers,
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */
-function adminApplications({ staff, applications, lang, flash }) {
+function adminApplications({ staff, applications, attendanceLinks, lang, flash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
@@ -2526,7 +3261,7 @@ function adminApplications({ staff, applications, lang, flash }) {
   const cards = applications.map((a) => {
     const ans = a.answers || {};
     const answerRows = Object.keys(ans)
-      .filter((k) => ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
+      .filter((k) => !k.startsWith('__') && ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
       .map((k) => {
         const raw = String(ans[k]);
         let label; let val;
@@ -2544,7 +3279,7 @@ function adminApplications({ staff, applications, lang, flash }) {
       ? `<button class="btn btn-ghost btn-sm station-save" name="action" value="approve" data-clean="${esc(t('mpr.stationSaved'))}" data-dirty="${esc(t('mpr.updateStation'))}">${esc(t('mpr.stationSaved'))}</button>`
       : `<button class="btn btn-sm" name="action" value="approve">${t('mpr.approve')}</button>`;
     const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" class="station-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<input type="text" name="station" maxlength="120" value="${esc(a.station || '')}"></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<select name="station">${stationOptions(a.station, t('mpr.stationPick'))}</select></label>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
         <input type="hidden" name="note" value="${esc(a.note || '')}">
         ${saveBtn}
@@ -2594,35 +3329,140 @@ function adminApplications({ staff, applications, lang, flash }) {
     </div>`;
   }).join('');
 
+  const attnHtml = (attendanceLinks && attendanceLinks.length) ? `
+  <div class="card" style="margin-top:12px;padding:12px 14px">
+    <div style="font-weight:700;font-size:13.5px">📋 ${t('mpr.attnHead')}</div>
+    <p class="muted" style="font-size:12px;margin:4px 0 2px">${t('mpr.attnSub')}</p>
+    ${attendanceLinks.map((a) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0 1px;border-top:1px solid var(--line);margin-top:8px">
+      <div style="min-width:0;flex:1;font-size:13px"><b>${esc(a.name)}</b> <span class="muted" style="font-size:12px">· ${t('mpr.attnPeople', { n: a.count })}</span></div>
+      <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(a.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
+      <a href="${esc(a.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>
+    </div>`).join('')}
+  </div>` : '';
+
   const body = `<div class="wrap">
   ${staffHead(staff, t('mpr.title'), L)}
-  <p class="sub">${t('mpr.sub')}</p>
   ${flashBanner}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
-    <form method="post" action="/admin/reminders/run" class="inline-form">
-      <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
-    </form>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <form method="post" action="/admin/reminders/run" class="inline-form">
+        <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
+      </form>
+      <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
+    </div>
   </div>
+  ${attnHtml}
   ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
 </div>
 <script>
 (function(){
   document.querySelectorAll('.station-save').forEach(function(btn){
     var form = btn.closest('form'); if(!form) return;
-    var inputs = form.querySelectorAll('input[name="station"], input[name="station_loc"]');
+    var inputs = form.querySelectorAll('[name="station"], [name="station_loc"]');
     var initial = Array.prototype.map.call(inputs, function(i){ return i.value; });
     function sync(){
       var dirty = Array.prototype.some.call(inputs, function(i, idx){ return i.value !== initial[idx]; });
       if(dirty){ btn.classList.remove('btn-ghost'); btn.disabled = false; btn.textContent = btn.dataset.dirty; }
       else { btn.classList.add('btn-ghost'); btn.disabled = true; btn.textContent = btn.dataset.clean; }
     }
-    inputs.forEach(function(i){ i.addEventListener('input', sync); });
+    inputs.forEach(function(i){ i.addEventListener('input', sync); i.addEventListener('change', sync); });
     sync();
+  });
+  document.querySelectorAll('.attn-copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var url = location.origin + btn.dataset.path;
+      var done = function(){ btn.textContent = btn.dataset.copied; setTimeout(function(){ btn.textContent = btn.dataset.label; }, 1600); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done, done); }
+      else { var ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
+    });
   });
 })();
 </script>`;
   return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+}
+
+/**
+ * On-site attendance page (public, tokened). An event PIC opens the shared link
+ * and checks approved Man Power in as they arrive. Self-contained copy (id/en);
+ * no sidebar — meant to be used quickly on a phone at the venue.
+ */
+function attendancePage({ invalid, event, eventDate, rows, days, day, token, lang, done }) {
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const s = id ? {
+    title: 'Absensi Man Power',
+    invalid: 'Link absensi tidak valid atau sudah tidak berlaku.',
+    invalidSub: 'Minta link terbaru ke admin 20FIT.',
+    search: 'Cari nama…',
+    checkin: 'Check-in', present: '✓ Hadir', undo: 'Batalkan',
+    empty: 'Belum ada Man Power yang disetujui untuk event ini.',
+    noStation: 'Tanpa station',
+    hint: 'Pilih hari, lalu peserta sebutkan namanya → cari → tekan Check-in.',
+    doneMsg: (n) => (n ? n + ' ' : '') + 'berhasil check-in ✓',
+    dayN: (n) => 'Hari ' + n, todayLabel: 'Hadir hari ini', timesTitle: 'Total hari absen',
+  } : {
+    title: 'Man Power Attendance',
+    invalid: 'This attendance link is invalid or no longer active.',
+    invalidSub: 'Ask a 20FIT admin for the latest link.',
+    search: 'Search name…',
+    checkin: 'Check in', present: '✓ Present', undo: 'Undo',
+    empty: 'No approved Man Power for this event yet.',
+    noStation: 'No station',
+    hint: 'Pick the day, then have the person say their name → search → tap Check in.',
+    doneMsg: (n) => (n ? n + ' ' : '') + 'checked in ✓',
+    dayN: (n) => 'Day ' + n, todayLabel: 'Present this day', timesTitle: 'Total days attended',
+  };
+  if (invalid) {
+    const b = `<div class="wrap narrow"><div class="card" style="margin-top:48px;text-align:center">
+      <div style="font-size:42px">🔒</div>
+      <h1 style="margin:12px 0 6px;font-size:20px">${esc(s.invalid)}</h1>
+      <p class="muted" style="margin:0">${esc(s.invalidSub)}</p></div></div>`;
+    return layout({ title: s.title + ' — 20FIT', body: b, brand: 'TALENT', lang: L });
+  }
+  const dayList = days || [];
+  const daySel = (dayList.length > 1) ? `
+  <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
+    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+  </div>` : '';
+  const total = rows.length;
+  const doneCount = rows.filter((r) => r.checked).length;
+  const list = total ? rows.map((r, i) => {
+    const st = r.station ? esc(r.station) + (r.station_loc ? ' · ' + esc(r.station_loc) : '') : `<span class="muted">${esc(s.noStation)}</span>`;
+    const f = (attended, inner) => `<form method="post" action="/absensi/${esc(event.id)}/checkin" style="margin:0;flex-shrink:0"><input type="hidden" name="k" value="${esc(token)}"><input type="hidden" name="app" value="${esc(r.id)}"><input type="hidden" name="day" value="${esc(day || '')}"><input type="hidden" name="attended" value="${attended}">${inner}</form>`;
+    const totalBadge = r.count > 0 ? `<span class="pill pill-ok" title="${esc(s.timesTitle)}" style="font-size:11px">${r.count}×</span>` : '';
+    const toggle = r.checked
+      ? `<span class="pill pill-ok">${s.present}</span>${f('0', `<button class="btn btn-ghost btn-sm">${esc(s.undo)}</button>`)}`
+      : f('1', `<button class="btn btn-sm">${esc(s.checkin)}</button>`);
+    return `<div class="att-row" data-name="${esc(String(r.name).toLowerCase())}" style="display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 2px;border-top:${i ? '1px solid var(--line)' : '0'}">
+      <div style="min-width:0"><b style="font-size:15px">${esc(r.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">📍 ${st}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">${totalBadge}${toggle}</div>
+    </div>`;
+  }).join('') : `<p class="muted" style="margin:16px 0 0">${esc(s.empty)}</p>`;
+  const doneBanner = done ? `<div class="banner banner-ok" style="margin-bottom:12px">${esc(s.doneMsg(done))}</div>` : '';
+  const body = `<div class="wrap narrow">
+  <h1 style="margin:6px 0 2px;font-size:22px">${esc(s.title)}</h1>
+  <p class="sub" style="margin:0 0 2px">${esc(event.name)}${eventDate ? ' · ' + esc(eventDate) : ''}</p>
+  <p class="muted" style="font-size:12.5px;margin:2px 0 12px">${esc(s.hint)}</p>
+  ${doneBanner}
+  ${daySel}
+  <div class="card" style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:0;padding:14px 16px">
+    <input type="text" id="attSearch" placeholder="${esc(s.search)}" autocomplete="off" inputmode="search" style="flex:1;min-width:0">
+    <span class="pill pill-ok" style="white-space:nowrap" title="${esc(s.todayLabel)}"><b>${doneCount}</b>/${total}</span>
+  </div>
+  <div class="card" style="margin-top:12px">${list}</div>
+</div>
+<script>
+(function(){
+  var q=document.getElementById('attSearch'); if(!q) return;
+  var rows=[].slice.call(document.querySelectorAll('.att-row'));
+  q.addEventListener('input', function(){
+    var v=q.value.trim().toLowerCase();
+    rows.forEach(function(r){ r.style.display=(!v||r.dataset.name.indexOf(v)>=0)?'':'none'; });
+  });
+})();
+</script>`;
+  return layout({ title: s.title + ' — 20FIT', body, brand: 'TALENT', lang: L });
 }
 
 function performancePage(board, totalSubs) {
@@ -2677,12 +3517,126 @@ function page500(msg) {
   return layout({ title: 'Error — 20FIT KOL', body });
 }
 
+// Badge for the prioritised-application status flow (applied → … → completed / rejected).
+function talentStatusBadge(status, lang) {
+  const L = normLang(lang);
+  const t = (k) => tr(L, k);
+  const map = {
+    applied: ['#1d4ed8', '#dbeafe'], pending: ['#1d4ed8', '#dbeafe'],
+    under_review: ['#b45309', '#fef3c7'], approved: ['#0f9d6a', '#d1fae5'],
+    assigned: ['#0e7490', '#cffafe'], completed: ['#374151', '#e5e7eb'], rejected: ['#b91c1c', '#fee2e2'],
+  };
+  const c = map[status] || map.applied;
+  return `<span class="pill" style="background:${c[1]};color:${c[0]}">${esc(t('ta.status.' + status) || status)}</span>`;
+}
+
+function talentHomePath(account) { return '/' + ((account && account.talent_type) || 'kol').replace(/_/g, '-'); }
+
+// One card for a position-based EO event. filterable=true adds the search/
+// filter hooks (data-status/data-search + ev-item) so it works inside the
+// KOL events list; false renders a plain card for dashboards.
+function talentPositionCard(e, lang, filterable) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))}</span>`).join('');
+  const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
+  const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
+  const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-search="${esc(hay)}"` : '';
+  return `<a href="/event/${esc(e.id)}?lang=${L}" class="${cls}"${hooks} style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+    ${eventCover(e, L)}
+    <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
+    ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
+    ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
+    ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    <div style="margin-top:10px">${posLine}</div>
+    ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
+  </a>`;
+}
+
+function talentOpenEvents({ account, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const cards = (events && events.length)
+    ? events.map((e) => talentPositionCard(e, L, false)).join('')
+    : `<p class="muted" style="margin-top:14px">${t('ta.noOpen')}</p>`;
+  const body = `<div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
+      <h1 style="margin:0">${t('ta.openTitle')}</h1>
+      <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    </div>
+    <p class="sub">${t('ta.openSub')}</p>
+    ${cards}
+  </div>`;
+  return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+}
+
+function talentEventApply({ account, event, ctx, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event;
+  const errors = ctx.errors || [];
+  const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
+  const opt = (sel, allowNone) => {
+    let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
+    (ctx.openPositions || []).forEach((p) => { o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}>${esc(posLabel(p, L))}</option>`; });
+    if (sel && !(ctx.openPositions || []).some((p) => p.position_id === sel)) { const pp = ctx.posById.get(sel) || {}; o += `<option value="${esc(sel)}" selected>${esc(posLabel(pp, L))}</option>`; }
+    return o;
+  };
+  let myBlock = '';
+  if (ctx.myApp) {
+    const rows = ctx.myChoices.map((c) => { const p = ctx.posById.get(c.position_id) || {}; return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${c.accepted ? `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>` : ''}</div>`; }).join('');
+    myBlock = `<div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>${t('ta.yourApp')}</b>${talentStatusBadge(ctx.myApp.status, L)}</div>
+      <div class="dl-list" style="margin-top:8px">${rows}</div>
+    </div>`;
+  }
+  // Jobdesk shown after the talent picks a position (per-slot, live).
+  const jdMap = {};
+  (ctx.positions || []).forEach((p) => { if (p.jobdesk) jdMap[p.position_id] = p.jobdesk; });
+  const hasJd = Object.keys(jdMap).length > 0;
+  const jdPanel = (slot) => `<div class="jd-panel" data-jd="${slot}" style="display:none;margin-top:8px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><b style="font-size:11.5px">📋 ${t('ta.jobdesk')}</b><div class="jd-text" style="margin-top:3px;white-space:pre-wrap"></div></div>`;
+  const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
+  let formBlock = '';
+  if (editable) {
+    formBlock = `<form method="post" action="/event/${esc(e.id)}/apply" class="card" style="margin-top:14px">
+      <div style="font-weight:700;margin-bottom:4px">${ctx.myApp ? t('ta.editChoices') : t('ta.pickChoices')}</div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
+      <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select>${hasJd ? jdPanel('pos1') : ''}</div>
+      <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select>${hasJd ? jdPanel('pos2') : ''}</div>
+      <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select>${hasJd ? jdPanel('pos3') : ''}</div>
+      <button type="submit" class="btn btn-block">${ctx.myApp ? t('ta.update') : t('ta.submit')}</button>
+    </form>`;
+    if (hasJd) formBlock += `<script>(function(){var JD=${JSON.stringify(jdMap).replace(/</g, '\\u003c')};['pos1','pos2','pos3'].forEach(function(id){var sel=document.getElementById(id);if(!sel)return;var panel=sel.parentNode.querySelector('.jd-panel');if(!panel)return;var txt=panel.querySelector('.jd-text');function upd(){var v=sel.value,d=v&&JD[v];if(d){txt.textContent=d;panel.style.display='';}else{panel.style.display='none';txt.textContent='';}}sel.addEventListener('change',upd);upd();});})();</script>`;
+    if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
+  } else if (!ctx.myApp) {
+    formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
+  }
+  const body = `<div class="wrap narrow">
+    <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
+    <h1 style="margin:0">${esc(e.name)}</h1>
+    <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
+    ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px">${esc(e.description)}</p>` : ''}
+    ${eb}${myBlock}${formBlock}
+  </div>`;
+  return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+}
+
 module.exports = {
+  talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEventEdit, adminApplications, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
+  staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
+  eoEvents, eoEventForm, eoEventDetail, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

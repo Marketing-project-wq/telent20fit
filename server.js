@@ -45,8 +45,25 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+// Canonical host: when APP_BASE_URL is set (e.g. https://talent.20fit.id),
+// send visitors who arrive on any other host (like the *.up.railway.app URL)
+// to the canonical domain so every link stays on it. Off unless APP_BASE_URL
+// is set; never redirects the Railway health check.
+const CANONICAL_HOST = (() => { try { return process.env.APP_BASE_URL ? new URL(process.env.APP_BASE_URL).host : null; } catch { return null; } })();
+if (CANONICAL_HOST) {
+  app.use((req, res, next) => {
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path === '/health') return next();
+    const host = req.get('host');
+    if (host && host !== CANONICAL_HOST) return res.redirect(302, 'https://' + CANONICAL_HOST + req.originalUrl);
+    next();
+  });
+}
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+// Keep the login alive: refresh a still-valid session cookie on every request
+// (rolling expiry) so open tabs / returning users stay signed in until they
+// explicitly log out. Skip logout so it can still clear the cookie.
+app.use((req, res, next) => { if (!/\/logout$/.test(req.path)) auth.touchSession(req, res); next(); });
 // Resolve the request language once (from ?lang= or the persisted `lang` cookie).
 app.use((req, res, next) => { req.lang = readLang(req, res); req.t = (k, v) => i18n.t(req.lang, k, v); next(); });
 
@@ -102,7 +119,7 @@ function requireTalentReady(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
@@ -119,7 +136,7 @@ function dataDiriGet(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
       res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
@@ -135,10 +152,10 @@ function dataDiriPost(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       const values = {
         city: String(req.body.city || '').trim().slice(0, 80),
-        ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 16),
+        ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 20),
         birthdate: String(req.body.birthdate || '').trim(),
         gender: String(req.body.gender || '').trim(),
         instagram: String(req.body.instagram || '').trim().replace(/^@+/, '').slice(0, 60),
@@ -156,7 +173,7 @@ function dataDiriPost(type) {
       }
       if (!bdOk) errors.push(req.t('dd.err.birthdate'));
       if (values.gender !== 'male' && values.gender !== 'female') errors.push(req.t('dd.err.gender'));
-      if (!/^\d{16}$/.test(values.ktp)) errors.push(req.t('dd.err.ktp'));
+      if (!values.ktp) errors.push(req.t('dd.err.ktp')); // just collect the number, no verification
       if (type === 'kol' && !values.instagram) errors.push(req.t('dd.err.instagram'));
       let followers = null;
       if (values.instagram_followers) {
@@ -431,7 +448,7 @@ app.get('/kol/register', (req, res) => {
 
 // Registration collects Full Name, Email, WhatsApp, Password + confirmation.
 // The account is created inactive; the talent completes Data Diri next. Shared
-// by both talent types (KOL + Main Power).
+// by both talent types (KOL + Man Power).
 function talentRegisterPost(type, opts = {}) {
   const unified = !!opts.unified;
   const p = type.replace(/_/g, '-');
@@ -476,11 +493,7 @@ function talentRegisterPost(type, opts = {}) {
 
 app.post('/kol/register', talentRegisterPost('kol'));
 
-app.get('/kol/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'kol') return res.redirect('/kol');
-  res.send(V.talentLogin('kol', { lang: req.lang }));
-});
+app.get('/kol/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
 app.post('/kol/login', async (req, res, next) => {
   try {
@@ -497,7 +510,7 @@ app.post('/kol/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/kol/logout', (req, res) => { auth.clearSession(res); res.redirect('/kol/login'); });
+app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
 
 app.get('/kol/data-diri', dataDiriGet('kol'));
 app.post('/kol/data-diri', dataDiriPost('kol'));
@@ -616,6 +629,22 @@ function eventDateStr(ev) {
   const e = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10) ? fmtDayID(ev.ends_at) : null;
   return e ? `${s} – ${e}` : s;
 }
+// English event date, e.g. "August 6–7, 2026" (same month) or "August 6, 2026".
+const EN_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function eventDateStrEn(ev) {
+  const s = String(ev.starts_at || '').slice(0, 10).split('-');
+  if (s.length !== 3) return eventDateStr(ev);
+  const y = +s[0], m = +s[1] - 1, d1 = +s[2];
+  const mn = EN_MONTHS[m] || '';
+  const eSame = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10);
+  if (eSame) {
+    const e = String(ev.ends_at).slice(0, 10).split('-');
+    const y2 = +e[0], m2 = +e[1] - 1, d2 = +e[2];
+    if (y2 === y && m2 === m) return `${mn} ${d1}–${d2}, ${y}`;
+    return `${mn} ${d1}, ${y} – ${EN_MONTHS[m2] || ''} ${d2}, ${y2}`;
+  }
+  return `${mn} ${d1}, ${y}`;
+}
 
 // Issue certificates for eligible applications: attended + event finished +
 // cert_auto (not explicitly off). Idempotent via the unique (talent,event)
@@ -640,6 +669,33 @@ async function issueCertsForApps(st, apps, eventById, nameById) {
   }
 }
 
+// Enrich event objects in place with a signed `mockup_url` for any that have a
+// stored mockup_path, so covers can render the uploaded image. Accepts one event
+// or an array; returns the same reference.
+async function attachMockups(st, events) {
+  const list = Array.isArray(events) ? events : [events];
+  // A full http(s) mockup_path is an external image URL — use it as-is; only
+  // storage paths need a signed URL.
+  list.forEach((e) => { if (e && e.mockup_path && /^https?:\/\//i.test(e.mockup_path)) e.mockup_url = e.mockup_path; });
+  const withPath = list.map((e, i) => ({ i, p: e && e.mockup_path })).filter((x) => x.p && !/^https?:\/\//i.test(x.p));
+  if (withPath.length) {
+    const urls = await st.signCovers(withPath.map((x) => x.p));
+    withPath.forEach((x, k) => { list[x.i].mockup_url = urls[k] || null; });
+  }
+  return events;
+}
+
+// Upload an event mockup image to storage and return its path. Only accepts
+// images; returns null when there's no usable file.
+async function saveMockup(st, eventId, file) {
+  if (!file || !file.buffer || !file.buffer.length) return null;
+  if (!/^image\//.test(file.mimetype || '')) return null;
+  const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+  const key = 'events/' + eventId + '/mockup-' + Date.now() + ext;
+  await st.uploadImage(key, file.buffer, file.mimetype);
+  return key;
+}
+
 // Talent Home: active events (ongoing + upcoming) with their category needs.
 app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
   try {
@@ -648,17 +704,22 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
     const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
     const appByEvent = new Map(myApps.map((a) => [a.event_id, a]));
     const rank = { ongoing: 0, upcoming: 1 };
-    const events = allEvents.filter((e) => e.is_active)
+    // Position-based events render as their own cards; keep the legacy list to
+    // events with old-style needs and not already shown above (no duplicates).
+    const eoEvents = await openPositionEvents(st, req.talent.id);
+    const eoIds = new Set(eoEvents.map((e) => e.id));
+    const events = allEvents.filter((e) => e.is_active && !eoIds.has(e.id))
       .map((e) => ({
-        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, status: eventStatusOf(e), cats: eventCats(e),
+        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
         applied: appByEvent.has(e.id) ? {
           category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status,
           station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
         } : null,
       }))
-      .filter((e) => e.status !== 'ended')
+      .filter((e) => e.status !== 'ended' && e.cats.length > 0)
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
-    res.send(V.kolEventsPage({ account: req.account, events, lang: req.lang }));
+    await attachMockups(st, events);
+    res.send(V.kolEventsPage({ account: req.account, events, eoEvents, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -671,7 +732,8 @@ app.get('/kol/event/:id', requireTalentReady('kol'), async (req, res, next) => {
     const ev = allEvents.find((e) => e.id === req.params.id);
     if (!ev || !ev.is_active) return res.redirect('/kol/event?lang=' + req.lang);
     const myApplication = myApps.find((a) => a.event_id === ev.id) || null;
-    res.send(V.kolEventDetail({ account: req.account, event: { ...ev, status: eventStatusOf(ev) }, cats: eventCats(ev), myApplication, lang: req.lang }));
+    const event = await attachMockups(st, { ...ev, status: eventStatusOf(ev) });
+    res.send(V.kolEventDetail({ account: req.account, event, cats: eventCats(ev), myApplication, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -721,6 +783,166 @@ app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, nex
       throw e;
     }
     res.send(V.kolApplyDone({ account: req.account, event: ev, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// ---- Type-agnostic talent apply to position-based (EO) events ---------------
+// Any logged-in talent (KOL / Man Power / Fotografer) with a complete profile
+// can browse open EO events and apply with 1..3 prioritised position choices.
+function requireAnyTalentReady() {
+  return async (req, res, next) => {
+    try {
+      const t = auth.anySession(req, auth.TALENT_TYPES);
+      if (!t) return res.redirect('/login');
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(t.id);
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login'); }
+      if (!acc.profile_completed_at) return res.redirect('/' + t.type.replace(/_/g, '-') + '/data-diri?lang=' + req.lang);
+      req.talent = t; req.account = acc;
+      next();
+    } catch (e) { next(e); }
+  };
+}
+
+// Is the event currently accepting applications? (published + within reg window)
+function eventRegOpen(ev) {
+  if (!ev || ev.status !== 'published' || ev.reg_closed_at) return false;
+  const today = jakartaDateStr();
+  if (ev.reg_open && today < String(ev.reg_open).slice(0, 10)) return false;
+  if (ev.reg_deadline && today > String(ev.reg_deadline).slice(0, 10)) return false;
+  // Registration always closes at H-1 before the event starts, regardless of the
+  // EO-set deadline: no sign-ups from the day before the event onward.
+  if (ev.starts_at) {
+    const h1 = addDaysYMD(String(ev.starts_at).slice(0, 10), -1);
+    if (today >= h1) return false;
+  }
+  return true;
+}
+
+// Build the apply context for one event + talent (positions, open slots, my application).
+async function positionApplyCtx(st, ev, talentId) {
+  const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+  const view = eoEventView(ev, positions, apps, choices);
+  const openPositions = view.positions.filter((p) => !p.closed_at && !p.full);
+  const myApp = await st.getApplicationForEvent(talentId, ev.id);
+  const myChoices = myApp ? await st.listChoicesForApplication(myApp.id) : [];
+  const posById = new Map(view.positions.map((p) => [p.position_id, p]));
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, regOpen: eventRegOpen(ev) };
+}
+
+// Position-based EO events currently open to a talent: published, within the
+// reg window, at least one free position. Shared by /events and the per-type
+// talent lists (KOL page, Man Power dashboard) so EO events show up inline.
+async function openPositionEvents(st, talentId) {
+  const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
+  const eoName = new Map(staff.map((s) => [s.id, s.name]));
+  const myAppByEvent = new Map(apps.filter((a) => a.talent_id === talentId).map((a) => [a.event_id, a]));
+  const open = [];
+  for (const ev of events) {
+    if (!eventRegOpen(ev)) continue;
+    const positions = await st.listEventPositions(ev.id);
+    if (!positions.length) continue;
+    const view = eoEventView(ev, positions, apps, choices);
+    const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
+    if (!openPos.length) continue;
+    const myApp = myAppByEvent.get(ev.id) || null;
+    open.push(Object.assign({}, ev, {
+      openPositions: openPos, eoName: eoName.get(ev.created_by) || '',
+      applied: !!myApp, myStatus: myApp ? myApp.status : null, status: eventStatusOf(ev),
+    }));
+  }
+  open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));
+  await attachMockups(st, open);
+  return open;
+}
+
+// Events open to talents: published, position-based, within reg window, with a free slot.
+app.get('/events', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const open = await openPositionEvents(st, req.talent.id);
+    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/event/:id', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const ctx = await positionApplyCtx(st, ev, req.talent.id);
+    if (!ctx.positions.length) return res.redirect('/events'); // not a position-based event
+    await attachMockups(st, ev);
+    res.send(V.talentEventApply({ account: req.account, event: ev, ctx, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Parse + validate the 1..3 prioritised choices against BR-2/3/5/7.
+function parseApplyChoices(req, ctx) {
+  const openIds = new Set(ctx.openPositions.map((p) => p.position_id));
+  const inEvent = new Set(ctx.positions.map((p) => p.position_id));
+  const slots = [String(req.body.pos1 || ''), String(req.body.pos2 || ''), String(req.body.pos3 || '')];
+  const errors = [];
+  if (!slots[0]) errors.push(req.t('ta.err.p1required')); // BR-2 min 1 / BR-5 P1 first
+  if (!slots[1] && slots[2]) errors.push(req.t('ta.err.gap')); // BR-5 no gap
+  const chosen = [];
+  slots.forEach((pid, i) => {
+    if (!pid) return;
+    if (i > 0 && !slots[i - 1]) return; // gap already flagged
+    if (chosen.some((c) => c.position_id === pid)) { errors.push(req.t('ta.err.dup')); return; } // BR-3
+    if (!inEvent.has(pid)) { errors.push(req.t('ta.err.notOpen')); return; }
+    // BR-7: position must be open (unless it's one the talent already holds)
+    const heldPriority = (ctx.myChoices.find((c) => c.position_id === pid) || {}).priority;
+    if (!openIds.has(pid) && heldPriority === undefined) { errors.push(req.t('ta.err.notOpen')); return; }
+    chosen.push({ position_id: pid, priority: chosen.length + 1 });
+  });
+  return { chosen, errors };
+}
+
+app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const ctx = await positionApplyCtx(st, ev, req.talent.id);
+    if (!ctx.positions.length) return res.redirect('/events');
+    // BR-8: can only apply/edit while pending and registration is open.
+    const editable = !ctx.myApp || (['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
+    if (!ctx.regOpen || !editable) {
+      const ctx2 = Object.assign({}, ctx, { errors: [req.t('ta.err.closed')] });
+      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: ctx2, lang: req.lang }));
+    }
+    const { chosen, errors } = parseApplyChoices(req, ctx);
+    if (errors.length) {
+      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors }), lang: req.lang }));
+    }
+    if (ctx.myApp) {
+      await st.replaceApplicationChoices(ctx.myApp.id, chosen);
+    } else {
+      const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
+      await st.updateApplication(app.id, { status: 'applied' });
+      await st.addApplicationChoices(app.id, chosen);
+    }
+    res.redirect('/event/' + ev.id + '?lang=' + req.lang + '&saved=1');
+  } catch (e) { next(e); }
+});
+
+app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!ev) return res.redirect('/events');
+    const myApp = await st.getApplicationForEvent(req.talent.id, ev.id);
+    // BR-8: cancel only while pending + registration open.
+    if (myApp && ['applied', 'pending', 'under_review'].includes(myApp.status) && eventRegOpen(ev)) {
+      await st.deleteApplication(myApp.id);
+    }
+    res.redirect('/event/' + ev.id + '?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 
@@ -784,8 +1006,8 @@ app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), 
   } catch (e) { next(e); }
 });
 
-// ------------------------------------------------------------ Main Power ----
-// Main Power talents self-apply to events that open MP slots. An application
+// ------------------------------------------------------------ Man Power ----
+// Man Power talents self-apply to events that open MP slots. An application
 // (jobdesk + SOW agreement + answers) is reviewed by the Super Admin.
 
 // Active events opening MP slots, each with remaining slots (quota − approved).
@@ -813,11 +1035,7 @@ app.get('/main-power/register', (req, res) => {
 
 app.post('/main-power/register', talentRegisterPost('main_power'));
 
-app.get('/main-power/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'main_power') return res.redirect('/main-power');
-  res.send(V.talentLogin('main_power', { lang: req.lang }));
-});
+app.get('/main-power/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
 app.post('/main-power/login', async (req, res, next) => {
   try {
@@ -834,7 +1052,7 @@ app.post('/main-power/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/logout', (req, res) => { auth.clearSession(res); res.redirect('/main-power/login'); });
+app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
 
 app.get('/main-power/data-diri', dataDiriGet('main_power'));
 app.post('/main-power/data-diri', dataDiriPost('main_power'));
@@ -853,7 +1071,8 @@ app.get('/main-power', requireTalentReady('main_power'), async (req, res, next) 
     const appliedEventIds = new Set(myApps.map((a) => a.event_id));
     const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
     const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
-    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+    const eoEvents = await openPositionEvents(st, req.talent.id);
+    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
   } catch (e) { next(e); }
 });
 
@@ -979,15 +1198,18 @@ app.post('/reset-password', async (req, res, next) => {
 
 // ----------------------------------------------------------------- admin ----
 
+// Where a signed-in staff member belongs, based on their role.
+function staffHome(type) { return type === 'eo' ? '/eo' : '/admin'; }
+
 app.get('/admin/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  const t = auth.anySession(req, ['super_admin', 'eo']);
+  if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
 app.get('/eo/login', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && (t.type === 'super_admin' || t.type === 'eo')) return res.redirect('/admin');
+  const t = auth.anySession(req, ['super_admin', 'eo']);
+  if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
 
@@ -1005,19 +1227,480 @@ function staffLoginHandler(variant) {
       if (!staff || !auth.verifyPassword(password, staff.password_hash)) {
         return res.status(401).send(V.staffLogin({ errors: [req.t('err.badStaffCreds')], values: { login }, lang: req.lang, variant }));
       }
+      if (staff.status === 'suspended') {
+        return res.status(403).send(V.staffLogin({ errors: [req.t('eo.err.suspended')], values: { login }, lang: req.lang, variant }));
+      }
       auth.setSession(res, staff);
-      res.redirect('/admin');
+      res.redirect(staffHome(staff.role));
     } catch (e) { next(e); }
   };
 }
 app.post('/admin/login', staffLoginHandler('admin'));
 app.post('/eo/login', staffLoginHandler('eo'));
 
-app.post('/admin/logout', (req, res) => {
-  const t = auth.currentTalent(req);
-  const dest = (t && t.type === 'eo') ? '/eo/login' : '/admin/login';
-  auth.clearSession(res);
-  res.redirect(dest);
+// EO self-registration: an EO creates their own account, then completes their
+// profile before they can create events.
+app.get('/eo/register', (req, res) => {
+  if (auth.anySession(req, ['eo'])) return res.redirect('/eo');
+  res.send(V.eoRegister({ lang: req.lang }));
+});
+app.post('/eo/register', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+    const org_type = c('org_type', 20);
+    const org_name = c('org_name', 140);
+    const pic_name = c('pic_name', 140);
+    const login = c('login', 160).toLowerCase();
+    const phone = c('phone', 40);
+    const city = c('city', 100);
+    const description = c('description', 1000);
+    const password = String(req.body.password || '');
+    const password2 = String(req.body.password2 || '');
+    const values = { org_type, org_name, pic_name, login, phone, city, description };
+    const errors = [];
+    if (!EO_ORG_TYPES.includes(org_type)) errors.push(req.t('eo.reg.err.type'));
+    if (!org_name) errors.push(req.t('eo.reg.err.orgName'));
+    if (!pic_name) errors.push(req.t('eo.reg.err.pic'));
+    if (!login) errors.push(req.t('err.emailRequired'));
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
+    if (!phone) errors.push(req.t('eo.reg.err.phone'));
+    if (!city) errors.push(req.t('eo.reg.err.city'));
+    if (!description) errors.push(req.t('eo.err.desc'));
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
+    if (errors.length) return res.status(400).send(V.eoRegister({ lang: req.lang, errors, values }));
+    let staff;
+    try {
+      // Account is active immediately — no email verification step.
+      staff = await st.createStaff({ role: 'eo', name: org_name, login, password_hash: auth.hashPassword(password), status: 'active' });
+    } catch (e) {
+      if (e.code === 'DUP') return res.status(400).send(V.eoRegister({ lang: req.lang, errors: [req.t('eo.reg.err.dup')], values }));
+      throw e;
+    }
+    // Full profile (incl. description) is captured at signup, so it's complete right away.
+    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, city, description, completed_at: new Date().toISOString() });
+    auth.setSession(res, staff);
+    res.redirect('/eo');
+  } catch (e) { next(e); }
+});
+
+// --- Staff (EO / super admin) forgot + reset password ------------------------
+// Mirrors the talent flow but against staff_accounts + staff_password_resets.
+function staffForgotPost() {
+  return async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const login = String(req.body.login || '').trim().toLowerCase();
+      if (login) {
+        const staff = await st.findStaff(login);
+        if (staff) {
+          const token = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+          const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+          await st.createStaffPasswordReset({ staff_id: staff.id, token_hash: tokenHash, expires_at: expiresAt });
+          const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+          const link = base + '/staff/reset-password?token=' + token;
+          try { await mailer.sendResetEmail({ to: staff.login, name: staff.name, link, lang: req.lang }); }
+          catch (e) { console.error('[staff-reset-mail]', (e && e.message) || e); }
+        }
+      }
+      res.send(V.staffForgotSent({ lang: req.lang }));
+    } catch (e) { next(e); }
+  };
+}
+app.get('/eo/forgot-password', (req, res) => res.send(V.staffForgot({ variant: 'eo', lang: req.lang })));
+app.post('/eo/forgot-password', staffForgotPost());
+app.get('/admin/forgot-password', (req, res) => res.send(V.staffForgot({ variant: 'admin', lang: req.lang })));
+app.post('/admin/forgot-password', staffForgotPost());
+
+async function validStaffResetToken(st, token) {
+  if (!token || token.length < 32) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const r = await st.getStaffPasswordReset(tokenHash);
+  if (!r || r.used_at) return null;
+  if (new Date(r.expires_at).getTime() < Date.now()) return null;
+  return r;
+}
+
+app.get('/staff/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.query.token || '');
+    const reset = await validStaffResetToken(st, token);
+    res.send(V.staffReset({ token, valid: !!reset, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/staff/reset-password', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.body.token || '');
+    const reset = await validStaffResetToken(st, token);
+    if (!reset) return res.status(400).send(V.staffReset({ token, valid: false, lang: req.lang }));
+    const password = String(req.body.password || '');
+    const confirm = String(req.body.confirm || '');
+    const errors = [];
+    if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+    if (password !== confirm) errors.push(req.t('err.passwordMismatch'));
+    if (errors.length) return res.status(400).send(V.staffReset({ token, valid: true, errors, lang: req.lang }));
+    await st.setStaffPassword(reset.staff_id, auth.hashPassword(password));
+    await st.markStaffPasswordResetUsed(reset.id);
+    res.send(V.staffResetDone({ lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Each staff area logs out only its own session, so signing out of EO doesn't
+// touch a Super Admin session open in another tab (and vice versa).
+app.post('/admin/logout', (req, res) => { auth.clearSession(res, 'super_admin'); res.redirect('/admin/login'); });
+app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/eo/login'); });
+
+// ------------------------------------------------------------------- EO ----
+// Event Organizer area. EO staff see only their own data (events created_by
+// them, and applications to those events). Profile must be complete before an
+// EO can create events (enforced in the event phase; surfaced as a reminder here).
+const requireEo = auth.requireStaff(['eo']);
+
+function eoCtx(req) { return { role: 'eo', name: req.staff.name }; }
+
+// Required EO profile fields; profile is "complete" only when all are filled.
+const EO_ORG_TYPES = ['company', 'community', 'individual'];
+const EO_REQUIRED = ['org_type', 'org_name', 'pic_name', 'email', 'phone', 'city', 'description'];
+function eoProfileComplete(p) { return !!(p && EO_REQUIRED.every((k) => String(p[k] || '').trim())); }
+
+// Dashboard summary numbers, scoped to one EO's events.
+async function eoStats(st, staffId) {
+  const [allEvents, allApps] = await Promise.all([st.listEvents(), st.listApplications()]);
+  const mine = allEvents.filter((e) => e.created_by === staffId);
+  const myIds = new Set(mine.map((e) => e.id));
+  const apps = allApps.filter((a) => myIds.has(a.event_id));
+  const accepted = new Set(['approved', 'assigned', 'completed']);
+  return {
+    totalEvents: mine.length,
+    activeEvents: mine.filter((e) => e.is_active && !e.completed_at).length,
+    totalApplies: apps.length,
+    accepted: apps.filter((a) => accepted.has(a.status)).length,
+    doneEvents: mine.filter((e) => e.completed_at).length,
+  };
+}
+
+app.get('/eo', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [stats, profile] = await Promise.all([eoStats(st, req.staff.id), st.getEoProfile(req.staff.id)]);
+    res.send(V.eoDashboard({ staff: eoCtx(req), stats, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/profile', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [profile0, staffRec] = await Promise.all([st.getEoProfile(req.staff.id), st.getStaffById(req.staff.id)]);
+    const profile = profile0 || {};
+    // Pre-fill for a first-time profile; email always mirrors the login (read-only).
+    if (!profile.org_name) profile.org_name = req.staff.name || '';
+    profile.email = profile.email || (staffRec && staffRec.login) || '';
+    res.send(V.eoProfile({ staff: eoCtx(req), profile, saved: req.query.saved === '1', lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/profile', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const clean = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+    const patch = {
+      org_type: clean('org_type', 20),
+      org_name: clean('org_name', 140),
+      pic_name: clean('pic_name', 140),
+      phone: clean('phone', 40),
+      city: clean('city', 100),
+      description: clean('description', 1000),
+    };
+    const [existing, staffRec] = await Promise.all([st.getEoProfile(req.staff.id), st.getStaffById(req.staff.id)]);
+    const ex = existing || {};
+    // Email is the login credential — read-only; never changed from the profile form.
+    patch.email = ex.email || (staffRec && staffRec.login) || '';
+    const errors = [];
+    if (!EO_ORG_TYPES.includes(patch.org_type)) errors.push(req.t('eo.reg.err.type'));
+    if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
+    if (!patch.pic_name) errors.push(req.t('eo.reg.err.pic'));
+    if (!patch.phone) errors.push(req.t('eo.reg.err.phone'));
+    if (!patch.city) errors.push(req.t('eo.reg.err.city'));
+    if (!patch.description) errors.push(req.t('eo.err.desc'));
+    if (errors.length) {
+      return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, ex, patch), errors, lang: req.lang }));
+    }
+    patch.completed_at = ex.completed_at || new Date().toISOString();
+    await st.upsertEoProfile(req.staff.id, patch);
+    res.redirect('/eo/profile?saved=1');
+  } catch (e) { next(e); }
+});
+
+// --- EO: event management ---------------------------------------------------
+const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from the close button
+
+// Load an EO's own event by id, or null if not theirs.
+async function eoOwnedEvent(st, staffId, eventId) {
+  return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
+}
+function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = { quota: p.quota, jobdesk: p.jobdesk || '' }; }); return m; }
+
+// Per-event view: opened positions with filled(accepted)/applicants/quota, apply count, display status.
+function eoEventView(ev, positions, apps, choices) {
+  const evApps = apps.filter((a) => a.event_id === ev.id);
+  const appIds = new Set(evApps.map((a) => a.id));
+  const evChoices = (choices || []).filter((c) => appIds.has(c.application_id));
+  const filled = {}; const applicants = {};
+  evChoices.forEach((c) => { applicants[c.position_id] = (applicants[c.position_id] || 0) + 1; if (c.accepted) filled[c.position_id] = (filled[c.position_id] || 0) + 1; });
+  const pos = (positions || []).map((p) => { const f = filled[p.position_id] || 0; return Object.assign({}, p, { filled: f, applicants: applicants[p.position_id] || 0, full: p.quota > 0 && f >= p.quota }); });
+  const allFull = pos.length > 0 && pos.every((p) => p.full);
+  let display;
+  if (ev.completed_at) display = 'done';
+  else if (ev.status === 'draft') display = 'draft';
+  else if (ev.status === 'closed' || ev.reg_closed_at || allFull) display = 'closed';
+  else display = 'published';
+  return { applyCount: evApps.length, positions: pos, allFull, status: display };
+}
+
+// Parse the create/edit event form. positionsMaster gives the valid position ids.
+function parseEventForm(req, positionsMaster) {
+  const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
+  const st = s('status', 12);
+  const data = {
+    name: s('name', 140), description: s('description', 4000) || null, category: s('category', 80) || null,
+    location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
+    start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
+    reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
+    status: EO_STATUSES.includes(st) ? st : 'draft',
+  };
+  const validIds = new Set((positionsMaster || []).map((p) => p.id));
+  const chosen = [].concat(req.body.pos || []);
+  const seen = new Set(); const positions = [];
+  chosen.forEach((id) => {
+    id = String(id);
+    if (!validIds.has(id) || seen.has(id)) return;
+    const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
+    const jobdesk = String(req.body['jobdesk_' + id] || '').trim().slice(0, 1000) || null;
+    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q, jobdesk }); }
+  });
+  return { data, positions, echo: Object.assign({}, data, { positions }) };
+}
+function validateEventForm(f, req) {
+  const e = [];
+  if (!f.data.name) e.push(req.t('eo.ev.err.name'));
+  if (!f.data.category) e.push(req.t('eo.ev.err.category'));
+  if (!f.data.location) e.push(req.t('eo.ev.err.location'));
+  if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
+  if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
+  return e;
+}
+
+app.get('/eo/events', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [events, apps, choices] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices()]);
+    const mine = events.filter((e) => e.created_by === req.staff.id);
+    const withView = await Promise.all(mine.map(async (e) => Object.assign(e, { view: eoEventView(e, await st.listEventPositions(e.id), apps, choices) })));
+    await attachMockups(st, withView);
+    const profile = await st.getEoProfile(req.staff.id);
+    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/new', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
+    const positionsMaster = await st.listPositions();
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, selected: {}, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
+    const positionsMaster = await st.listPositions();
+    const f = parseEventForm(req, positionsMaster);
+    const errors = validateEventForm(f, req);
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, selected: eoSelMap(f.positions), errors, lang: req.lang }));
+    const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
+    if (ev && ev.id) {
+      await st.setEventPositions(ev.id, f.positions);
+      const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
+    }
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const [positionsMaster, evPos] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id)]);
+    await attachMockups(st, ev);
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, selected: eoSelMap(evPos), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const [positionsMaster, evPos, apps, choices] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const f = parseEventForm(req, positionsMaster);
+    const errors = validateEventForm(f, req);
+    // Guards: a position with applicants can't be removed; quota can't drop below accepted.
+    const view = eoEventView(ev, evPos, apps, choices);
+    const newByPos = eoSelMap(f.positions);
+    view.positions.forEach((p) => {
+      if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
+      if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
+    });
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang }));
+    const patch = Object.assign({}, f.data);
+    const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
+    await st.updateEvent(ev.id, patch);
+    await st.setEventPositions(ev.id, f.positions);
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/close', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (ev) await st.updateEvent(ev.id, req.body.reopen ? { status: 'published', reg_closed_at: null } : { status: 'closed', reg_closed_at: new Date().toISOString() });
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+// Delete only if the event has no applicants; otherwise close it (never drop someone's application).
+app.post('/eo/events/:id/delete', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (ev) {
+      const hasApplicants = (await st.listApplications()).some((a) => a.event_id === ev.id);
+      if (hasApplicants) await st.updateEvent(ev.id, { status: 'closed', reg_closed_at: new Date().toISOString() });
+      else await st.deleteEvent(ev.id);
+    }
+    res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const [positions, apps, choices, talents] = await Promise.all([
+      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+    ]);
+    const view = eoEventView(ev, positions, apps, choices);
+    // Tahap 6: applicants for this event, each with their prioritised choices + contact.
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const choicesByApp = new Map();
+    choices.forEach((c) => { const a = choicesByApp.get(c.application_id) || []; a.push(c); choicesByApp.set(c.application_id, a); });
+    const applicants = apps
+      .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
+      .map((a) => {
+        const tt = talentById.get(a.talent_id) || {};
+        const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
+          .map((c) => ({ priority: c.priority, position_id: c.position_id, accepted: !!c.accepted }));
+        return {
+          id: a.id, talentId: a.talent_id, name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
+          phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
+          status: a.status || 'applied', createdAt: a.created_at, choices: ch,
+        };
+      })
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    await attachMockups(st, ev);
+    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Tahap 7: EO processes an applicant. Loads the EO-owned event + the application
+// (which must belong to that event) and returns them, or null if not authorised.
+async function eoOwnedApplication(st, staffId, eventId, appId) {
+  const ev = await eoOwnedEvent(st, staffId, eventId);
+  if (!ev) return null;
+  const app = (await st.listApplications()).find((a) => a.id === appId && a.event_id === ev.id);
+  if (!app) return null;
+  return { ev, app };
+}
+
+// Accept an applicant into one of their chosen positions (respects quota BR-9;
+// the DB enforces one accepted position per application).
+app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const myChoices = choices.filter((c) => c.application_id === found.app.id);
+    if (!myChoices.some((c) => c.position_id === positionId)) return res.redirect(backTo); // not one of their choices
+    const pos = positions.find((p) => p.position_id === positionId);
+    const quota = pos ? pos.quota : 0;
+    // Quota check: accepted choices for this position across the event, excluding this application.
+    const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
+    const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
+    if (quota > 0 && acceptedElsewhere >= quota) return res.redirect(backTo + '&err=full');
+    const wasApproved = found.app.status === 'approved';
+    await st.acceptApplicationChoice(found.app.id, positionId);
+    await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    // Email the talent their acceptance only on the first approval (mirrors the
+    // admin path's no-spam rule; re-accepting a different position won't resend).
+    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
+    res.redirect(backTo + '&ok=accepted');
+  } catch (e) { next(e); }
+});
+
+// Reject an applicant (clears any acceptance).
+app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
+  } catch (e) { next(e); }
+});
+
+// Undo a decision: back to pending, acceptance cleared.
+app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
+    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang);
+  } catch (e) { next(e); }
 });
 
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
@@ -1047,7 +1730,7 @@ function staffCtx(req) { return { role: req.staff.type, name: req.staff.name }; 
 
 // Tab 1 — Dashboard: aggregate KOL statistics. Attaches talent names to proofs
 // but skips thumbnail signing (not shown here).
-app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1061,7 +1744,7 @@ app.get('/admin', auth.requireStaff(['super_admin', 'eo']), async (req, res, nex
 });
 
 // Per-KOL eligibility detail (both staff roles).
-app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/kol/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1075,7 +1758,7 @@ app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, 
 });
 
 // Tab — Analisis: engagement metric breakdowns (both staff roles).
-app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/analytics', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1092,7 +1775,7 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin', 'eo']), async (req
 });
 
 // Tab — Ringkasan Performa: per-event totals + per-KOL breakdown.
-app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/overview', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1109,7 +1792,7 @@ app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), async (req,
 });
 
 // AI insight over the aggregated performance data (JSON; fetched by the overview page).
-app.get('/admin/overview/insight', auth.requireStaff(['super_admin', 'eo']), async (req, res) => {
+app.get('/admin/overview/insight', auth.requireStaff(['super_admin']), async (req, res) => {
   try {
     const st = db();
     if (!st) return res.status(503).json({ error: 'not configured' });
@@ -1141,7 +1824,7 @@ app.get('/admin/overview/insight', auth.requireStaff(['super_admin', 'eo']), asy
 });
 
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
-app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/admin/proofs', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1160,11 +1843,12 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
     const [events, assignments, talents, eos, settings, proofs] = await Promise.all([
       st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(), st.listProofs(),
     ]);
+    await attachMockups(st, events);
     res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
 
-// Aplikasi MP (super admin only): review Main Power event applications.
+// Aplikasi MP (super admin only): review Man Power event applications.
 app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
@@ -1182,7 +1866,16 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null,
       };
     });
-    res.send(V.adminApplications({ staff: staffCtx(req), applications, lang: req.lang, flash: String(req.query.mail || '') }));
+    // Attendance links: one per event that has approved Man Power, for on-site PICs.
+    const mpCount = new Map();
+    for (const a of applications) {
+      if (a.status === 'approved' && a.talent_type === 'main_power') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
+    }
+    const attendanceLinks = [...mpCount.entries()].map(([eid, n]) => ({
+      name: eventName.get(eid) || '—', count: n,
+      path: '/absensi/' + encodeURIComponent(eid) + '?k=' + auth.attendanceToken(eid),
+    })).sort((a, b) => a.name.localeCompare(b.name));
+    res.send(V.adminApplications({ staff: staffCtx(req), applications, attendanceLinks, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1225,12 +1918,35 @@ async function notifyAcceptance(st, app, patch) {
   if (!to || !/@/.test(to)) return; // no usable email on file
   const ev = (await st.listEvents()).find((e) => e.id === app.event_id) || {};
   await mailer.sendAcceptanceEmail({
+    to, name: account.name, lang: 'en',
+    eventName: ev.name || 'Event 20FIT',
+    eventDate: eventDateStrEn(ev),
+    location: ev.location || null,
+    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
+    station: patch.station, stationLoc: patch.station_loc,
+  });
+}
+
+// Email a talent whose EO accepted them into a position. The accepted position
+// (e.g. "Judge") is shown as their assignment. Sent in Indonesian since talents
+// are the audience. Best-effort — never blocks the accept response.
+async function notifyPositionAcceptance(st, app, ev, positionId) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) return; // no usable email on file
+  let posLabel = null;
+  try {
+    const positions = await st.listEventPositions(ev.id);
+    const pos = positions.find((p) => p.position_id === positionId);
+    if (pos) posLabel = pos.label_id || pos.label_en || null;
+  } catch (_) { /* position label is best-effort */ }
+  await mailer.sendAcceptanceEmail({
     to, name: account.name, lang: 'id',
     eventName: ev.name || 'Event 20FIT',
     eventDate: eventDateStr(ev),
     location: ev.location || null,
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
-    station: patch.station, stationLoc: patch.station_loc,
+    station: posLabel, stationLoc: null,
   });
 }
 
@@ -1262,8 +1978,8 @@ async function runDueReminders(st) {
       if (!to || !/@/.test(to)) continue;
       const ev = dueEvents.get(a.event_id);
       const r = await mailer.sendReminderEmail({
-        to, name: account.name, lang: 'id',
-        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
+        to, name: account.name, lang: 'en',
+        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStrEn(ev),
         location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
         station: a.station, stationLoc: a.station_loc,
       });
@@ -1335,6 +2051,113 @@ app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), a
     const attended = req.body.attended === '1';
     await st.updateApplication(req.params.id, { attended, attended_at: attended ? new Date().toISOString() : null });
     res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// --- On-site attendance (tokened link, no login) --------------------------
+// A super admin shares /absensi/:eventId?k=<token> with an on-site PIC. The PIC
+// sees every approved Man Power for that event (sorted by name) and checks them
+// in as they arrive. The token is an HMAC of the event id (auth.attendanceToken),
+// so no account is needed and one link maps to exactly one event.
+
+// Per-day attendance is stored as a reserved key on the application's answers
+// JSON (answers.__att = ['YYYY-MM-DD', ...]) so no schema change is needed. The
+// legacy attended/attended_at booleans are kept in sync (attended = any day) so
+// certificate issuance keeps working.
+function attDates(app) {
+  const d = app && app.answers && app.answers.__att;
+  return Array.isArray(d) ? d.filter((x) => typeof x === 'string') : [];
+}
+// Inclusive list of an event's calendar days (YYYY-MM-DD), capped for safety.
+function eventDays(ev) {
+  const s = String((ev && ev.starts_at) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return [];
+  let end = String((ev && ev.ends_at) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end < s) end = s;
+  const days = []; let d = s; let guard = 0;
+  while (guard++ < 60) { days.push(d); if (d >= end) break; d = addDaysYMD(d, 1); }
+  return days;
+}
+
+// Approved Man Power for an event, sorted by name, with per-day + total attendance.
+async function attendanceRows(st, eventId, day) {
+  const [apps, talents] = await Promise.all([st.listApplications(), st.listTalents()]);
+  const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  return apps
+    .filter((a) => a.event_id === eventId && a.status === 'approved' && a.talent_type === 'main_power')
+    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: a.station, station_loc: a.station_loc, count: dates.length, checked: day ? dates.includes(day) : false }; })
+    .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
+}
+
+app.get('/absensi/:eventId', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.query.k || '');
+    const eventId = req.params.eventId;
+    const ok = auth.verifyAttendanceToken(eventId, token);
+    const ev = (await st.listEvents()).find((e) => e.id === eventId) || null;
+    if (!ok || !ev) return res.status(ok ? 404 : 403).send(V.attendancePage({ invalid: true, lang: req.lang }));
+    const days = eventDays(ev);
+    const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[0] || today);
+    const rows = await attendanceRows(st, eventId, day);
+    res.send(V.attendancePage({ event: ev, eventDate: eventDateStr(ev), rows, days, day, token, lang: req.lang, done: String(req.query.done || '') }));
+  } catch (e) { next(e); }
+});
+
+app.post('/absensi/:eventId/checkin', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const token = String(req.body.k || '');
+    const eventId = req.params.eventId;
+    if (!auth.verifyAttendanceToken(eventId, token)) return res.status(403).send(V.attendancePage({ invalid: true, lang: req.lang }));
+    const appId = String(req.body.app || '');
+    const attended = req.body.attended === '1';
+    const day = String(req.body.day || '');
+    const ev = (await st.listEvents()).find((e) => e.id === eventId) || null;
+    const app0 = await st.getApplication(appId);
+    // Guard: token is event-scoped and the day must be one of the event's days.
+    let doneName = '';
+    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && app0.status === 'approved' && app0.talent_type === 'main_power') {
+      const set = new Set(attDates(app0));
+      if (attended) set.add(day); else set.delete(day);
+      const arr = [...set].sort();
+      const answers = Object.assign({}, app0.answers || {}, { __att: arr });
+      await st.updateApplication(appId, { answers, attended: arr.length > 0, attended_at: arr.length ? (app0.attended_at || new Date().toISOString()) : null });
+      if (attended) { const tt = (await st.listTalents()).find((x) => x.id === app0.talent_id); doneName = (tt && tt.name) || ''; }
+    }
+    const q = 'k=' + encodeURIComponent(token) + '&day=' + encodeURIComponent(day) + (doneName ? '&done=' + encodeURIComponent(doneName) : '');
+    res.redirect('/absensi/' + encodeURIComponent(eventId) + '?' + q);
+  } catch (e) { next(e); }
+});
+
+// Super admin: download a PDF report of Man Power who have checked in — bank
+// details, phone, and how many days each attended. Payment/reconciliation aid.
+app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
+    const evById = new Map(events.map((e) => [e.id, e]));
+    const tById = new Map(talents.map((tt) => [tt.id, tt]));
+    const rows = apps
+      .filter((a) => a.status === 'approved' && a.talent_type === 'main_power' && attDates(a).length > 0)
+      .map((a) => {
+        const tt = tById.get(a.talent_id) || {}; const ans = a.answers || {};
+        return {
+          name: tt.name || '—', event: (evById.get(a.event_id) || {}).name || '—',
+          phone: tt.phone || '—', bank: ans.bank_name || '—', acct: ans.bank_account || '—',
+          holder: ans.bank_holder || '—', count: attDates(a).length,
+        };
+      })
+      .sort((x, y) => x.event.localeCompare(y.event) || x.name.localeCompare(y.name, 'id'));
+    const buf = await cert.renderAttendanceReportPDF(rows, {});
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pdf"');
+    res.send(buf);
   } catch (e) { next(e); }
 });
 
@@ -1415,7 +2238,9 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
     const password = String(req.body.password || '');
     if (name && login && password.length >= 6) {
       try {
-        await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+        // Admin-created EO is vouched for → pre-verified & active (skips email verification).
+        const s = await st.createStaff({ role: 'eo', name, login, password_hash: auth.hashPassword(password) });
+        if (s && s.id) await st.setStaffVerified(s.id);
       } catch (e) { if (e.code !== 'DUP') throw e; }
     }
     res.redirect('/admin/manage');
@@ -1423,7 +2248,7 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
 });
 
 // Super admin: create event with per-talent-type needs.
-app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1436,7 +2261,11 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: Math.max(1, parseInt(req.body.mp_headcount, 10) || 1) });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
     const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    if (name) await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
+    if (name) {
+      const ev = await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
+      const mockupPath = ev && ev.id ? await saveMockup(st, ev.id, req.file) : null;
+      if (mockupPath) await st.updateEvent(ev.id, { mockup_path: mockupPath });
+    }
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
@@ -1449,11 +2278,12 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     const events = await st.listEvents();
     const event = events.find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
+    await attachMockups(st, event);
     res.send(V.adminEventEdit({ staff: staffCtx(req), event, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1466,9 +2296,13 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     if (req.body.need_kol) needs.push({ talent_type: 'kol', headcount: hc('kol_headcount') });
     if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: hc('mp_headcount') });
     if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer', headcount: hc('fg_headcount') });
-    const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    const patch = { location, starts_at, ends_at, mp_sow, needs };
+    // mp_sow is no longer edited from the UI; leave any existing value untouched.
+    const patch = { location, starts_at, ends_at, needs };
     if (name) patch.name = name;
+    // Mockup: a new upload replaces it; the "remove" checkbox clears it.
+    const newPath = await saveMockup(st, req.params.id, req.file);
+    if (newPath) patch.mockup_path = newPath;
+    else if (req.body.remove_mockup) patch.mockup_path = null;
     await st.updateEvent(req.params.id, patch);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
@@ -1516,6 +2350,32 @@ app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin']), async (
 app.post('/admin/events/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await st.deleteEvent(req.params.id); res.redirect('/admin/manage'); } catch (e) { next(e); }
 });
+// Super Admin read-only detail for one EO: profile + the events they created.
+app.get('/admin/eos/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const eo = await st.getStaffById(req.params.id);
+    if (!eo || eo.role !== 'eo') return res.redirect('/admin/manage');
+    const [profile, allEvents, apps] = await Promise.all([
+      st.getEoProfile(eo.id), st.listEvents(), st.listApplications(),
+    ]);
+    const applyCountByEvent = {};
+    apps.forEach((a) => { applyCountByEvent[a.event_id] = (applyCountByEvent[a.event_id] || 0) + 1; });
+    const events = allEvents
+      .filter((e) => e.created_by === eo.id)
+      .map((e) => {
+        let displayStatus;
+        if (e.completed_at) displayStatus = 'done';
+        else if (e.status === 'draft') displayStatus = 'draft';
+        else if (e.status === 'closed' || e.reg_closed_at) displayStatus = 'closed';
+        else displayStatus = 'published';
+        return Object.assign({}, e, { applyCount: applyCountByEvent[e.id] || 0, displayStatus });
+      })
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    res.send(V.adminEoDetail({ staff: staffCtx(req), eo, profile, events, lang: req.lang }));
+  } catch (e) { next(e); }
+});
 app.post('/admin/eos/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
@@ -1523,6 +2383,19 @@ app.post('/admin/eos/:id/delete', auth.requireStaff(['super_admin']), async (req
     const target = await st.getStaffById(req.params.id);
     if (target && target.role === 'eo') await st.deleteStaff(req.params.id); // never delete a super admin
     res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+// Super admin: suspend / activate an EO account. A suspended EO cannot log in
+// (its existing events stay intact); reactivating restores access.
+app.post('/admin/eos/:id/status', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const target = await st.getStaffById(req.params.id);
+    if (!target || target.role !== 'eo') return res.redirect('/admin/manage'); // never touch a super admin
+    const next_ = req.body.status === 'suspended' ? 'suspended' : 'active';
+    await st.setStaffStatus(target.id, next_);
+    res.redirect('/admin/eos/' + target.id + '?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 // Super admin: update the timeliness (SLA) thresholds.
@@ -1562,7 +2435,7 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
   } catch (e) { next(e); }
 });
 
-app.get('/performance', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.get('/performance', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);

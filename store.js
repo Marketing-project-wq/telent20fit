@@ -71,6 +71,12 @@ function supabaseStore() {
       const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
       return (data || []).map((d) => d.signedUrl).filter(Boolean);
     },
+    // Like signImageUrls but keeps alignment: returns url-or-null per input path.
+    async signCovers(paths) {
+      if (!paths || !paths.length) return [];
+      const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
+      return (data || []).map((d) => (d && d.signedUrl && !d.error) ? d.signedUrl : null);
+    },
     async downloadImage(pathKey) {
       const { data, error } = await sb.storage.from(BUCKET).download(pathKey);
       if (error || !data) return null;
@@ -144,19 +150,66 @@ function supabaseStore() {
       return data;
     },
     async findStaff(login) {
-      const { data } = await sb.from('staff_accounts').select('id,role,name,login,password_hash').eq('login', login).maybeSingle();
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login,password_hash,status,email_verified_at').eq('login', login).maybeSingle();
       return data || null;
     },
     async getStaffById(id) {
-      const { data } = await sb.from('staff_accounts').select('id,role,name,login').eq('id', id).maybeSingle();
+      const { data } = await sb.from('staff_accounts').select('id,role,name,login,status,email_verified_at').eq('id', id).maybeSingle();
       return data || null;
     },
     async listStaff(role) {
-      let q = sb.from('staff_accounts').select('id,role,name,login,created_at').order('created_at');
+      let q = sb.from('staff_accounts').select('id,role,name,login,status,email_verified_at,created_at').order('created_at');
       if (role) q = q.eq('role', role);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return data || [];
+    },
+    // ---- EO profiles + staff password resets ----
+    async getEoProfile(staffId) {
+      const { data } = await sb.from('talent_eo_profiles').select('*').eq('staff_id', staffId).maybeSingle();
+      return data || null;
+    },
+    async upsertEoProfile(staffId, patch) {
+      const row = Object.assign({ staff_id: staffId, updated_at: new Date().toISOString() }, patch);
+      const { error } = await sb.from('talent_eo_profiles').upsert(row, { onConflict: 'staff_id' });
+      if (error) throw new Error(error.message);
+    },
+    async setStaffPassword(staffId, passwordHash) {
+      const { error } = await sb.from('staff_accounts').update({ password_hash: passwordHash }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async createStaffPasswordReset({ staff_id, token_hash, expires_at }) {
+      const { error } = await sb.from('staff_password_resets').insert({ staff_id, token_hash, expires_at });
+      if (error) throw new Error(error.message);
+    },
+    async getStaffPasswordReset(tokenHash) {
+      const { data } = await sb.from('staff_password_resets').select('id,staff_id,expires_at,used_at').eq('token_hash', tokenHash).maybeSingle();
+      return data || null;
+    },
+    async markStaffPasswordResetUsed(id) {
+      const { error } = await sb.from('staff_password_resets').update({ used_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    // ---- staff email verification + account status ----
+    async setStaffVerified(staffId) {
+      const { error } = await sb.from('staff_accounts').update({ email_verified_at: new Date().toISOString(), status: 'active' }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async setStaffStatus(staffId, status) {
+      const { error } = await sb.from('staff_accounts').update({ status }).eq('id', staffId);
+      if (error) throw new Error(error.message);
+    },
+    async createStaffEmailVerification({ staff_id, token_hash, expires_at }) {
+      const { error } = await sb.from('staff_email_verifications').insert({ staff_id, token_hash, expires_at });
+      if (error) throw new Error(error.message);
+    },
+    async getStaffEmailVerification(tokenHash) {
+      const { data } = await sb.from('staff_email_verifications').select('id,staff_id,expires_at,used_at').eq('token_hash', tokenHash).maybeSingle();
+      return data || null;
+    },
+    async markStaffEmailVerificationUsed(id) {
+      const { error } = await sb.from('staff_email_verifications').update({ used_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
     },
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
@@ -168,9 +221,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null })
+        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published' })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -186,6 +239,14 @@ function supabaseStore() {
       if (patch.starts_at !== undefined) row.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
+      if (patch.mockup_path !== undefined) row.mockup_path = patch.mockup_path || null;
+      if (patch.category !== undefined) row.category = patch.category || null;
+      if (patch.start_time !== undefined) row.start_time = patch.start_time || null;
+      if (patch.end_time !== undefined) row.end_time = patch.end_time || null;
+      if (patch.reg_deadline !== undefined) row.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_open !== undefined) row.reg_open = patch.reg_open || null;
+      if (patch.status !== undefined) row.status = patch.status;
+      if (patch.reg_closed_at !== undefined) row.reg_closed_at = patch.reg_closed_at;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
         await sb.from('talent_event_needs').delete().eq('event_id', id);
@@ -202,6 +263,29 @@ function supabaseStore() {
       const byEvent = new Map();
       (nd.data || []).forEach((n) => { const a = byEvent.get(n.event_id) || []; a.push(n); byEvent.set(n.event_id, a); });
       return (ev.data || []).map((e) => ({ ...e, needs: byEvent.get(e.id) || [] }));
+    },
+    // ---- master positions + per-event opened positions ----
+    async listPositions() {
+      const { data, error } = await sb.from('talent_positions').select('*').eq('is_active', true).order('sort');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listEventPositions(eventId) {
+      const { data, error } = await sb.from('talent_event_positions')
+        .select('id,quota,closed_at,jobdesk,position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
+      if (error) throw new Error(error.message);
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, jobdesk: r.jobdesk || null, key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+        .sort((a, b) => a.sort - b.sort);
+    },
+    async setEventPositions(eventId, positions) {
+      await sb.from('talent_event_positions').delete().eq('event_id', eventId);
+      const rows = (positions || []).filter((p) => p && p.position_id && p.quota > 0).map((p) => ({ event_id: eventId, position_id: p.position_id, quota: p.quota, jobdesk: p.jobdesk || null }));
+      if (rows.length) { const r = await sb.from('talent_event_positions').insert(rows); if (r.error) throw new Error(r.error.message); }
+    },
+    async listApplicationChoices() {
+      const { data, error } = await sb.from('talent_application_choices').select('id,application_id,position_id,priority,accepted');
+      if (error) throw new Error(error.message);
+      return data || [];
     },
     async listActiveEvents() {
       const { data, error } = await sb.from('talent_events').select('id,name').eq('is_active', true).order('name');
@@ -259,6 +343,40 @@ function supabaseStore() {
     },
     async updateApplication(id, patch) {
       const { error } = await sb.from('talent_applications').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async getApplicationForEvent(talentId, eventId) {
+      const { data } = await sb.from('talent_applications').select('*').eq('talent_id', talentId).eq('event_id', eventId).maybeSingle();
+      return data || null;
+    },
+    async addApplicationChoices(applicationId, choices) {
+      const rows = (choices || []).map((c) => ({ application_id: applicationId, position_id: c.position_id, priority: c.priority }));
+      if (rows.length) { const r = await sb.from('talent_application_choices').insert(rows); if (r.error) throw new Error(r.error.message); }
+    },
+    async replaceApplicationChoices(applicationId, choices) {
+      await sb.from('talent_application_choices').delete().eq('application_id', applicationId);
+      await this.addApplicationChoices(applicationId, choices);
+    },
+    async listChoicesForApplication(applicationId) {
+      const { data } = await sb.from('talent_application_choices').select('id,position_id,priority,accepted').eq('application_id', applicationId).order('priority');
+      return data || [];
+    },
+    // Mark exactly one of an application's choices as accepted (clears the rest
+    // first so the "one accepted per application" unique index never trips).
+    async acceptApplicationChoice(applicationId, positionId) {
+      await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
+      const { error } = await sb.from('talent_application_choices').update({ accepted: true }).eq('application_id', applicationId).eq('position_id', positionId);
+      if (error) throw new Error(error.message);
+    },
+    async clearApplicationAccepted(applicationId) {
+      const { error } = await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
+      if (error) throw new Error(error.message);
+    },
+    async deleteApplication(id) {
+      // No FK cascade on talent_application_choices, so remove choices first to
+      // avoid leaving orphaned rows behind.
+      await sb.from('talent_application_choices').delete().eq('application_id', id);
+      const { error } = await sb.from('talent_applications').delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
     async createCertificate(row) {
@@ -370,8 +488,14 @@ function memoryStore() {
   const images = new Map();
   const staff = [{
     id: 'staff-super', role: 'super_admin', name: 'Super Admin', login: 'admin1@gmail.com',
-    password_hash: hashPassword('Admin_12345'), created_at: now(),
+    password_hash: hashPassword('Admin_12345'), created_at: now(), status: 'active', email_verified_at: now(),
+  }, {
+    id: 'staff-eo', role: 'eo', name: 'Demo EO', login: 'eo1@gmail.com',
+    password_hash: hashPassword('Eo_12345'), created_at: now(), status: 'active', email_verified_at: now(),
   }];
+  const eoProfiles = [];
+  const staffResets = [];
+  const staffVerifications = [];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
     { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
@@ -385,6 +509,14 @@ function memoryStore() {
     { event_id: 'ev-bali', talent_type: 'main_power', headcount: 8 },
   ];
   const assignments = [];
+  const positions = [
+    ['judge', 'Judge', 'Judge', 10], ['runner', 'Runner', 'Runner', 20], ['kol', 'KOL', 'KOL', 30],
+    ['registration_staff', 'Registration Staff', 'Registration Staff', 40], ['water_station', 'Water Station', 'Water Station', 50],
+    ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
+    ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
+  ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
+  const eventPositions = [];
+  const applicationChoices = [];
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
@@ -404,6 +536,7 @@ function memoryStore() {
     async uploadImage(path, buffer, contentType) { images.set(path, { buffer, contentType }); },
     async removeImage(paths) { (Array.isArray(paths) ? paths : [paths]).filter(Boolean).forEach((p) => images.delete(p)); },
     async signImageUrls(paths) { return (paths || []).map((p) => '/__mockimg/' + encodeURIComponent(p)); },
+    async signCovers(paths) { return (paths || []).map((p) => (p && images.has(p)) ? '/__mockimg/' + encodeURIComponent(p) : null); },
     async downloadImage(pathKey) { const r = images.get(pathKey); return r ? r.buffer : null; },
     async createSubmission(row) { submissions.push({ ...row, created_at: now() }); },
     async listSubmissions() { return submissions.slice().reverse(); },
@@ -425,16 +558,27 @@ function memoryStore() {
     async markPasswordResetUsed(id) { const r = passwordResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async createStaff(acc) {
       if (staff.find((s) => s.login === acc.login)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
-      const rec = { id: 'staff-' + (++seq), ...acc, created_at: now() };
+      const rec = { id: 'staff-' + (++seq), status: 'active', email_verified_at: null, ...acc, created_at: now() };
       staff.push(rec);
       return { id: rec.id, role: rec.role, name: rec.name, login: rec.login };
     },
     async findStaff(login) { return staff.find((s) => s.login === login) || null; },
-    async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login } : null; },
-    async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, created_at: s.created_at })); },
+    async getStaffById(id) { const s = staff.find((s) => s.id === id); return s ? { id: s.id, role: s.role, name: s.name, login: s.login, status: s.status, email_verified_at: s.email_verified_at } : null; },
+    async listStaff(role) { return staff.filter((s) => !role || s.role === role).map((s) => ({ id: s.id, role: s.role, name: s.name, login: s.login, status: s.status, email_verified_at: s.email_verified_at, created_at: s.created_at })); },
+    async setStaffVerified(staffId) { const s = staff.find((s) => s.id === staffId); if (s) { s.email_verified_at = now(); s.status = 'active'; } },
+    async setStaffStatus(staffId, status) { const s = staff.find((s) => s.id === staffId); if (s) s.status = status; },
+    async createStaffEmailVerification({ staff_id, token_hash, expires_at }) { staffVerifications.push({ id: 'sev-' + (++seq), staff_id, token_hash, expires_at, used_at: null, created_at: now() }); },
+    async getStaffEmailVerification(tokenHash) { const r = staffVerifications.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
+    async markStaffEmailVerificationUsed(id) { const r = staffVerifications.find((r) => r.id === id); if (r) r.used_at = now(); },
+    async getEoProfile(staffId) { const p = eoProfiles.find((x) => x.staff_id === staffId); return p ? { ...p } : null; },
+    async upsertEoProfile(staffId, patch) { let p = eoProfiles.find((x) => x.staff_id === staffId); if (!p) { p = { id: 'eop-' + (++seq), staff_id: staffId, created_at: now() }; eoProfiles.push(p); } Object.assign(p, patch, { updated_at: now() }); },
+    async setStaffPassword(staffId, passwordHash) { const s = staff.find((s) => s.id === staffId); if (s) s.password_hash = passwordHash; },
+    async createStaffPasswordReset({ staff_id, token_hash, expires_at }) { staffResets.push({ id: 'spr-' + (++seq), staff_id, token_hash, expires_at, used_at: null, created_at: now() }); },
+    async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
+    async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null };
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', reg_closed_at: null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -448,11 +592,28 @@ function memoryStore() {
       if (patch.starts_at !== undefined) ev.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;
       if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;
+      if (patch.mockup_path !== undefined) ev.mockup_path = patch.mockup_path || null;
+      if (patch.category !== undefined) ev.category = patch.category || null;
+      if (patch.start_time !== undefined) ev.start_time = patch.start_time || null;
+      if (patch.end_time !== undefined) ev.end_time = patch.end_time || null;
+      if (patch.reg_deadline !== undefined) ev.reg_deadline = patch.reg_deadline || null;
+      if (patch.reg_open !== undefined) ev.reg_open = patch.reg_open || null;
+      if (patch.status !== undefined) ev.status = patch.status;
+      if (patch.reg_closed_at !== undefined) ev.reg_closed_at = patch.reg_closed_at;
       if (patch.needs) {
         for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
         patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       }
     },
+    async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
+    async listEventPositions(eventId) {
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, jobdesk: ep.jobdesk || null, key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
+    },
+    async setEventPositions(eventId, poss) {
+      for (let j = eventPositions.length - 1; j >= 0; j--) if (eventPositions[j].event_id === eventId) eventPositions.splice(j, 1);
+      (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null, jobdesk: p.jobdesk || null }));
+    },
+    async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },
     async listActiveEvents() { return events.filter((e) => e.is_active).map((e) => ({ id: e.id, name: e.name })); },
     async toggleEvent(id) { const e = events.find((e) => e.id === id); if (e) e.is_active = !e.is_active; },
@@ -474,6 +635,13 @@ function memoryStore() {
     async listApplicationsForTalent(talentId) { return applications.filter((a) => a.talent_id === talentId).slice().reverse(); },
     async getApplication(id) { return applications.find((a) => a.id === id) || null; },
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
+    async getApplicationForEvent(talentId, eventId) { return applications.find((a) => a.talent_id === talentId && a.event_id === eventId) || null; },
+    async addApplicationChoices(applicationId, choices) { (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
+    async replaceApplicationChoices(applicationId, choices) { for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === applicationId) applicationChoices.splice(j, 1); (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
+    async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
+    async acceptApplicationChoice(applicationId, positionId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); }); },
+    async clearApplicationAccepted(applicationId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = false; }); },
+    async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
       const rec = { id: 'cert-' + (++seq), revoked_at: null, issued_at: now(), ...row };
