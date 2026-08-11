@@ -524,7 +524,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
       <h1 class="hero-in d1" style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
       <div class="hero-in d3" style="display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))} →</a>
+        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))}</a>
         <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t('land.login'))}</a>
       </div>
     </div>
