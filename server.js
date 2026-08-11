@@ -221,7 +221,7 @@ function docsGet(type) {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
-      res.send(V.talentDocuments(type, { account: req.account, flash: String(req.query.saved || ''), lang: req.lang }));
+      res.send(V.talentDocuments(type, { account: req.account, flash: String(req.query.saved || ''), need: req.query.need === '1', lang: req.lang }));
     } catch (e) { next(e); }
   }];
 }
@@ -754,6 +754,8 @@ app.get('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next
     const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
     if (!opensCat) return res.redirect('/kol/event/' + req.params.id + '?lang=' + req.lang);
     if (myApps.some((a) => a.event_id === ev.id)) return res.redirect('/kol/event/' + ev.id + '?lang=' + req.lang);
+    // Creator roles require a CV + portfolio on file before applying.
+    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
     res.send(V.kolApplyForm({ account: req.account, event: ev, cat, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -767,6 +769,8 @@ app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, nex
     const cat = String(req.body.cat || '');
     const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
     if (!opensCat) return res.redirect('/kol/event?lang=' + req.lang);
+    // Creator roles require a CV + portfolio on file before applying.
+    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
 
     const values = { name: String(req.body.name || '').trim(), phone: String(req.body.phone || '').trim() };
     if (cat === 'main_power') values.city = String(req.body.city || '').trim().slice(0, 80);
@@ -926,6 +930,9 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
     if (errors.length) {
       return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors }), lang: req.lang }));
     }
+    // Creator positions (KOL / photographer / videographer) require CV + portfolio on file.
+    const picksCreator = chosen.some((c) => { const p = ctx.posById.get(c.position_id); return p && V.CREATOR_ROLES.includes(p.key); });
+    if (picksCreator && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
     if (ctx.myApp) {
       await st.replaceApplicationChoices(ctx.myApp.id, chosen);
     } else {

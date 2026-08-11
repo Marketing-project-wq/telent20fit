@@ -1970,9 +1970,11 @@ function talentDocuments(type, opts = {}) {
   const v = opts.values || acc;
   const isCreator = (type === 'kol');
   const opt = ` <span class="hint">${t('dd.optional')}</span>`;
+  const reqCreator = ` <span class="hint" style="color:var(--red);font-weight:600">${t('doc.reqCreator')}</span>`;
   const errorBanner = (opts.errors && opts.errors.length)
     ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const flashBanner = opts.flash === '1' ? `<div class="banner banner-ok">${t('doc.saved')}</div>` : '';
+  const needBanner = opts.need ? `<div class="banner banner-warn">${t('doc.needBanner')}</div>` : '';
 
   const fileRow = (kind, stored) => stored
     ? `<div style="font-size:13px;margin:6px 0"><a href="/${p}/dokumen/file/${kind}?lang=${L}" target="_blank" rel="noopener">📎 ${t('doc.view')}</a> <span class="muted">· ${t('doc.replaceHint')}</span></div>`
@@ -1989,13 +1991,13 @@ function talentDocuments(type, opts = {}) {
 
   const creatorFields = isCreator ? `
     <div class="field">
-      <label>${t('doc.cv')}${opt}</label>
+      <label>${t('doc.cv')}${reqCreator}</label>
       ${fileRow('cv', acc.cv_path)}
       <input type="file" name="cv" accept=".pdf,image/*">
       <div class="hint" style="margin-top:6px">${t('doc.fileHint')}</div>
     </div>
     <div class="field">
-      <label for="portfolio_url">${t('doc.portfolio')}${opt}</label>
+      <label for="portfolio_url">${t('doc.portfolio')}${reqCreator}</label>
       <input type="url" id="portfolio_url" name="portfolio_url" maxlength="500" placeholder="https://…" value="${esc(v.portfolio_url || '')}">
       <div class="hint" style="margin-top:6px">${t('doc.portfolioHint')}</div>
     </div>` : '';
@@ -2006,6 +2008,7 @@ function talentDocuments(type, opts = {}) {
   </div>
   <h1>${t('doc.title')}</h1>
   <p class="sub">${t('doc.sub')}</p>
+  ${needBanner}
   ${flashBanner}
   ${errorBanner}
   <form class="card" method="post" action="/${p}/dokumen?lang=${L}" enctype="multipart/form-data">
@@ -2054,6 +2057,9 @@ function certVerifyPage({ cert, certNo, lang }) {
 
 // Talent categories a person can apply as, per event (matches talent_event_needs).
 const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Man Power' };
+// Content-creator roles that must have a CV + portfolio on file before applying.
+const CREATOR_ROLES = ['kol', 'fotografer', 'videografer'];
+const hasCreatorDocs = (acc) => !!(acc && acc.cv_path && acc.portfolio_url && String(acc.portfolio_url).trim());
 // Per-category application fields (beyond name + phone, which prefill from the
 // profile). label/ph/hint are i18n keys. type: text|number|url. req: required.
 const CAT_FIELDS = {
@@ -2173,8 +2179,10 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
       ${myApplication.status === 'rejected' && myApplication.note ? `<div class="muted" style="font-size:13px;margin-top:8px">${esc(myApplication.note)}</div>` : ''}
     </div>`;
   } else if (cats && cats.length) {
+    const needDocs = !hasCreatorDocs(account) && cats.some((c) => CREATOR_ROLES.includes(c.type));
+    const warn = needDocs ? `<div class="banner banner-warn" style="margin-bottom:12px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>` : '';
     const btns = cats.map((c) => `<a href="/kol/event/${esc(event.id)}/apply?cat=${esc(c.type)}&lang=${L}" class="btn" style="margin:0 8px 8px 0">${t('apply.applyAs', { cat: esc(c.label) })}</a>`).join('');
-    action = `<div class="card" style="margin-top:16px"><div style="font-weight:700;margin-bottom:12px">${t('apply.pickCat')}</div>${btns}</div>`;
+    action = `<div class="card" style="margin-top:16px"><div style="font-weight:700;margin-bottom:12px">${t('apply.pickCat')}</div>${warn}${btns}</div>`;
   } else {
     action = `<div class="banner banner-warn" style="margin-top:16px">${t('apply.noNeeds')}</div>`;
   }
@@ -3703,6 +3711,11 @@ function talentEventApply({ account, event, ctx, lang }) {
   } else if (!ctx.myApp) {
     formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
   }
+  // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
+  const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
+  const docsWarn = (account && account.talent_type === 'kol' && !hasCreatorDocs(account) && creatorOpen)
+    ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
+    : '';
   const body = `<div class="wrap narrow">
     <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
     ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
@@ -3711,7 +3724,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
     ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
     ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px">${esc(e.description)}</p>` : ''}
-    ${eb}${myBlock}${formBlock}
+    ${eb}${docsWarn}${myBlock}${formBlock}
   </div>`;
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
@@ -3719,7 +3732,7 @@ function talentEventApply({ account, event, ctx, lang }) {
 module.exports = {
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
-  kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
+  kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
