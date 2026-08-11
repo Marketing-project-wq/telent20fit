@@ -698,6 +698,17 @@ function kolForm(campaigns, opts = {}) {
 }
 
 const TALENT_LABEL = { kol: 'KOL', main_power: 'Man Power', fotografer: 'Fotografer' };
+// The 38 provinces of Indonesia (incl. the four newest Papua provinces).
+const PROVINCES = [
+  'Aceh', 'Sumatera Utara', 'Sumatera Barat', 'Riau', 'Jambi', 'Sumatera Selatan',
+  'Bengkulu', 'Lampung', 'Kepulauan Bangka Belitung', 'Kepulauan Riau',
+  'DKI Jakarta', 'Jawa Barat', 'Jawa Tengah', 'DI Yogyakarta', 'Jawa Timur', 'Banten',
+  'Bali', 'Nusa Tenggara Barat', 'Nusa Tenggara Timur',
+  'Kalimantan Barat', 'Kalimantan Tengah', 'Kalimantan Selatan', 'Kalimantan Timur', 'Kalimantan Utara',
+  'Sulawesi Utara', 'Sulawesi Tengah', 'Sulawesi Selatan', 'Sulawesi Tenggara', 'Gorontalo', 'Sulawesi Barat',
+  'Maluku', 'Maluku Utara',
+  'Papua', 'Papua Barat', 'Papua Selatan', 'Papua Tengah', 'Papua Pegunungan', 'Papua Barat Daya',
+];
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
 function talentPath(type) { return type.replace(/_/g, '-'); }
 
@@ -1067,8 +1078,11 @@ function talentDataDiri(type, opts = {}) {
   ${errorBanner}
   <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
     <div class="field">
-      <label for="city">${t('dd.city')}${req}</label>
-      <input type="text" id="city" name="city" required maxlength="80" placeholder="${esc(t('dd.cityPh'))}" value="${esc(v.city || '')}">
+      <label for="city">${t('dd.province')}${req}</label>
+      <select id="city" name="city" required>
+        <option value="" disabled${v.city ? '' : ' selected'}>${t('dd.provincePick')}</option>
+        ${PROVINCES.map((pr) => `<option value="${esc(pr)}"${v.city === pr ? ' selected' : ''}>${esc(pr)}</option>`).join('')}
+      </select>
     </div>
     <div class="field">
       <label for="birthdate">${t('dd.birthdate')}${req}</label>
@@ -3691,6 +3705,7 @@ module.exports = {
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
+  PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
   eoEvents, eoEventForm, eoEventDetail, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,

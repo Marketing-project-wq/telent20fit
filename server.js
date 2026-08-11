@@ -163,7 +163,7 @@ function dataDiriPost(type) {
         experience: String(req.body.experience || '').trim().slice(0, 1000),
       };
       const errors = [];
-      if (!values.city) errors.push(req.t('dd.err.city'));
+      if (!V.PROVINCES.includes(values.city)) errors.push(req.t('dd.err.province'));
       let bdOk = /^\d{4}-\d{2}-\d{2}$/.test(values.birthdate);
       if (bdOk) {
         const d = new Date(values.birthdate + 'T00:00:00Z');
