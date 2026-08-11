@@ -752,8 +752,10 @@
   "dd.err.birthdate": "A valid date of birth is required.",
   "dd.err.gender": "Please choose a gender.",
   "dd.err.ktp": "KTP number is required.",
-  "dd.err.instagram": "Instagram username is required for KOL.",
+  "dd.err.instagram": "Instagram username is required.",
   "dd.err.followers": "Approx. followers must be a number.",
+  "dd.err.followersReq": "Approx. followers is required (enter 0 if none).",
+  "dd.err.experience": "Experience is required.",
 
   "adm.profile.title": "Profile",
   "adm.profile.phone": "WhatsApp",

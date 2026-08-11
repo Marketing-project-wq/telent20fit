@@ -752,8 +752,10 @@
   "dd.err.birthdate": "Tanggal lahir wajib diisi dengan benar.",
   "dd.err.gender": "Pilih jenis kelamin.",
   "dd.err.ktp": "Nomor KTP wajib diisi.",
-  "dd.err.instagram": "Username Instagram wajib diisi untuk KOL.",
+  "dd.err.instagram": "Username Instagram wajib diisi.",
   "dd.err.followers": "Perkiraan followers harus berupa angka.",
+  "dd.err.followersReq": "Perkiraan followers wajib diisi (isi 0 kalau belum ada).",
+  "dd.err.experience": "Pengalaman wajib diisi.",
 
   "adm.profile.title": "Data diri",
   "adm.profile.phone": "WhatsApp",
