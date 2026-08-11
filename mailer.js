@@ -54,8 +54,6 @@ function resetEmailHtml({ name, link, lang }) {
         <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
         <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#41454d">${esc(t.body)}</p>
         <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">${esc(t.btn)}</a>
-        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.ignore)}</p>
-        <p style="margin:18px 0 0;font-size:12px;word-break:break-all;color:#8b8f97">${esc(link)}</p>
       </td></tr>
       <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
     </table>
@@ -106,8 +104,6 @@ function verifyEmailHtml({ name, link, lang }) {
         <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
         <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#41454d">${esc(t.body)}</p>
         <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">${esc(t.btn)}</a>
-        <p style="margin:22px 0 0;font-size:13px;line-height:1.6;color:#63676e">${esc(t.ignore)}</p>
-        <p style="margin:18px 0 0;font-size:12px;word-break:break-all;color:#8b8f97">${esc(link)}</p>
       </td></tr>
       <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(t.foot)}</td></tr>
     </table>
@@ -176,7 +172,6 @@ function brandedEmailHtml(o) {
       <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:30px 30px 30px;text-align:center">
         <div style="width:62px;height:62px;border-radius:50%;background:#fffffe;font-size:30px;font-weight:900;color:#E4121F;line-height:62px;margin:0 auto">${icon}</div>
         <div style="margin-top:16px;font-size:22px;font-weight:800;color:#fffffe">${esc(o.hero)}</div>
-        <div style="margin-top:6px;font-size:13.5px;color:#ffe3e5">${esc(o.heroSub)}</div>
       </td></tr>
       <tr><td style="padding:28px 30px 6px">
         <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">${esc(o.hi)}</p>
