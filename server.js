@@ -1541,8 +1541,12 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
     const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
     if (quota > 0 && acceptedElsewhere >= quota) return res.redirect(backTo + '&err=full');
+    const wasApproved = found.app.status === 'approved';
     await st.acceptApplicationChoice(found.app.id, positionId);
     await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    // Email the talent their acceptance only on the first approval (mirrors the
+    // admin path's no-spam rule; re-accepting a different position won't resend).
+    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
     res.redirect(backTo + '&ok=accepted');
   } catch (e) { next(e); }
 });
@@ -1794,6 +1798,29 @@ async function notifyAcceptance(st, app, patch) {
     location: ev.location || null,
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
     station: patch.station, stationLoc: patch.station_loc,
+  });
+}
+
+// Email a talent whose EO accepted them into a position. The accepted position
+// (e.g. "Judge") is shown as their assignment. Sent in Indonesian since talents
+// are the audience. Best-effort — never blocks the accept response.
+async function notifyPositionAcceptance(st, app, ev, positionId) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) return; // no usable email on file
+  let posLabel = null;
+  try {
+    const positions = await st.listEventPositions(ev.id);
+    const pos = positions.find((p) => p.position_id === positionId);
+    if (pos) posLabel = pos.label_id || pos.label_en || null;
+  } catch (_) { /* position label is best-effort */ }
+  await mailer.sendAcceptanceEmail({
+    to, name: account.name, lang: 'id',
+    eventName: ev.name || 'Event 20FIT',
+    eventDate: eventDateStr(ev),
+    location: ev.location || null,
+    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
+    station: posLabel, stationLoc: null,
   });
 }
 
