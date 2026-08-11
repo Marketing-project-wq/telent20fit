@@ -284,6 +284,7 @@ const NAV_ICON = {
   applications: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
   event: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/></svg>',
+  hyrox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="5.5"/><path d="M8.5 13L7 22l5-2.7 5 2.7-1.5-9"/></svg>',
 };
 
 function navLink(href, key, active, icon, label) {
@@ -308,6 +309,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
+      + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
@@ -315,6 +317,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
         + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
         + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
+        + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
       : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
         + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
@@ -1652,6 +1655,13 @@ function eoApplicantsSection(e, view, aps, L) {
     if (a.login) bits.push(`✉️ ${esc(a.login)}`);
     return bits.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${bits.join(' · ')}</div>` : '';
   };
+  // HYROX certification signal for the EO's decision (Tahap 4). Only a verified
+  // cert is a positive signal; "pending" tells the EO one is awaiting review.
+  const hyroxBadge = (a) => {
+    if (a.hyroxStatus === 'verified') return `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>`;
+    if (a.hyroxStatus === 'pending') return `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>`;
+    return '';
+  };
 
   // Accept / reject controls per applicant. Accept is offered per chosen
   // position that still has quota; a full position is shown disabled.
@@ -1689,6 +1699,7 @@ function eoApplicantsSection(e, view, aps, L) {
       ${talentStatusBadge(a.status, L)}
     </div>
     ${contactLine(a)}
+    ${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices)}</div>
     ${decisionControls(a)}
   </div>`).join('');
@@ -3387,6 +3398,51 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
  * and checks approved Man Power in as they arrive. Self-contained copy (id/en);
  * no sidebar — meant to be used quickly on a phone at the venue.
  */
+/**
+ * Super Admin / EO: review & verify talent-uploaded HYROX 360 certificates.
+ * Lists everyone who uploaded a cert (pending first), with a link to view the
+ * file and verify / reject (with a reason) actions.
+ */
+function adminHyroxCerts({ staff, certs, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  certs = certs || [];
+  const badge = (s) => ({
+    pending:  `<span class="pill pill-off">⏳ ${t('doc.hx.pending')}</span>`,
+    verified: `<span class="pill pill-ok">✓ ${t('doc.hx.verified')}</span>`,
+    rejected: `<span class="pill" style="background:var(--err-soft);color:var(--err)">✕ ${t('doc.hx.rejected')}</span>`,
+  }[s] || '');
+  const cards = certs.map((c) => {
+    const meta = [c.login, c.city, c.instagram ? '@' + c.instagram : ''].filter(Boolean).map(esc).join(' · ');
+    const note = (c.hyrox_cert_status === 'rejected' && c.hyrox_cert_note)
+      ? `<div class="muted" style="font-size:12.5px;margin-top:6px">📝 ${esc(c.hyrox_cert_note)}</div>` : '';
+    return `<div class="card" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:0">
+          <b style="font-size:16px">${esc(c.name || '—')}</b> <span class="tag">${esc(talentLabel(L, c.talent_type))}</span>
+          ${meta ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${meta}</div>` : ''}
+        </div>
+        ${badge(c.hyrox_cert_status)}
+      </div>
+      ${note}
+      <div style="margin-top:12px"><a href="/admin/hyrox/${esc(c.id)}/file" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">📎 ${t('hx.view')}</a></div>
+      <form method="post" action="/admin/hyrox/${esc(c.id)}/review" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:12px">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:160px">${t('hx.note')}
+          <input type="text" name="note" maxlength="300" placeholder="${t('hx.notePh')}" value="${esc(c.hyrox_cert_status === 'rejected' ? (c.hyrox_cert_note || '') : '')}"></label>
+        <button class="btn btn-sm" name="action" value="verify">✓ ${t('hx.verify')}</button>
+        <button class="btn btn-ghost btn-sm" name="action" value="reject">${t('hx.reject')}</button>
+      </form>
+    </div>`;
+  }).join('');
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('hx.title'))}
+  <p class="sub">${t('hx.sub')}</p>
+  <p class="muted" style="font-size:13px;margin-top:6px">${t('hx.count', { n: certs.length })}</p>
+  ${certs.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('hx.empty')}</p></div>`}
+</div>`;
+  return appLayout({ title: t('hx.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'hyrox', user: staff && staff.name, lang: L });
+}
+
 function attendancePage({ invalid, event, eventDate, rows, days, day, token, lang, done }) {
   const L = normLang(lang);
   const id = L !== 'en';
@@ -3634,7 +3690,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
