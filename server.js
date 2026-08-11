@@ -1269,7 +1269,7 @@ app.post('/eo/register', async (req, res, next) => {
     if (!login) errors.push(req.t('err.emailRequired'));
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
     if (!phone) errors.push(req.t('eo.reg.err.phone'));
-    if (!city) errors.push(req.t('eo.reg.err.city'));
+    if (!V.PROVINCES.includes(city)) errors.push(req.t('dd.err.province'));
     if (!description) errors.push(req.t('eo.err.desc'));
     if (password.length < 6) errors.push(req.t('err.passwordMin6'));
     else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
@@ -1435,7 +1435,7 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
     if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
     if (!patch.pic_name) errors.push(req.t('eo.reg.err.pic'));
     if (!patch.phone) errors.push(req.t('eo.reg.err.phone'));
-    if (!patch.city) errors.push(req.t('eo.reg.err.city'));
+    if (!V.PROVINCES.includes(patch.city)) errors.push(req.t('dd.err.province'));
     if (!patch.description) errors.push(req.t('eo.err.desc'));
     if (errors.length) {
       return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, ex, patch), errors, lang: req.lang }));
