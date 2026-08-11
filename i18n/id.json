@@ -143,7 +143,7 @@
   "eo.type.individual": "Perorangan",
   "eo.f.company": "Nama Company / Komunitas",
   "eo.f.pic": "Nama PIC / Penanggung Jawab",
-  "eo.f.city": "Kota / Domisili",
+  "eo.f.city": "Provinsi",
   "eo.f.emailLogin": "Email (untuk login)",
   "eo.f.emailLoginHint": "Email ini dipakai untuk login & tidak bisa diubah di sini. Lupa password? gunakan menu Lupa Password.",
   "eo.login.noAccount": "Belum punya akun?",
