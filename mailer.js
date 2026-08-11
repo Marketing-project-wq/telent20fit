@@ -24,6 +24,13 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+// Shared brand mark for every email. A white band keeps the logo (which sits on
+// a white background) clean across email clients, including dark mode.
+const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fti-hitam-putih.jpg';
+function logoBar() {
+  return `<tr><td style="background:#ffffff;padding:22px 28px 18px;text-align:center;border-bottom:1px solid #eceff3"><img src="${LOGO_URL}" alt="20FIT" width="160" style="display:block;margin:0 auto;width:160px;max-width:60%;height:auto;border:0;outline:none;text-decoration:none"></td></tr>`;
+}
+
 function resetEmailHtml({ name, link, lang }) {
   const id = lang !== 'en';
   const t = id ? {
@@ -42,7 +49,7 @@ function resetEmailHtml({ name, link, lang }) {
   return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
-      <tr><td style="background:#E4121F;padding:20px 28px;color:#fff;font-size:20px;font-weight:800">20FIT Talent</td></tr>
+      ${logoBar()}
       <tr><td style="padding:28px">
         <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
         <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#41454d">${esc(t.body)}</p>
@@ -94,7 +101,7 @@ function verifyEmailHtml({ name, link, lang }) {
   return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
-      <tr><td style="background:#E4121F;padding:20px 28px;color:#fff;font-size:20px;font-weight:800">20FIT Talent</td></tr>
+      ${logoBar()}
       <tr><td style="padding:28px">
         <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(t.hi)}</p>
         <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#41454d">${esc(t.body)}</p>
@@ -165,9 +172,9 @@ function brandedEmailHtml(o) {
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(o.pre || '')}</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
-      <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:34px 30px 30px;text-align:center">
-        <div style="font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#fffffe">20FIT Talent</div>
-        <div style="width:62px;height:62px;border-radius:50%;background:#fffffe;font-size:30px;font-weight:900;color:#E4121F;line-height:62px;margin:20px auto 0">${icon}</div>
+      ${logoBar()}
+      <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:30px 30px 30px;text-align:center">
+        <div style="width:62px;height:62px;border-radius:50%;background:#fffffe;font-size:30px;font-weight:900;color:#E4121F;line-height:62px;margin:0 auto">${icon}</div>
         <div style="margin-top:16px;font-size:22px;font-weight:800;color:#fffffe">${esc(o.hero)}</div>
         <div style="margin-top:6px;font-size:13.5px;color:#ffe3e5">${esc(o.heroSub)}</div>
       </td></tr>
