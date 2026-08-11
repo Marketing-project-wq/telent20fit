@@ -688,7 +688,7 @@
   "ev.status.upcoming": "Segera hadir",
 
   "dd.title": "Lengkapi Data Diri",
-  "dd.sub": "Hai {name}, lengkapi data diri kamu dulu ya sebelum mulai.",
+  "dd.sub": "{name}, lengkapi data diri kamu dulu ya sebelum mulai.",
   "dd.editTitle": "Ubah Data Diri",
   "dd.editSub": "Perbarui data diri kamu.",
   "dd.notice": "Akun kamu belum aktif. Isi data diri di bawah untuk mengaktifkan akun dan bisa ikut event.",

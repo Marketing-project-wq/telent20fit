@@ -688,7 +688,7 @@
   "ev.status.upcoming": "Coming soon",
 
   "dd.title": "Complete Your Profile",
-  "dd.sub": "Hi {name}, please complete your profile before you get started.",
+  "dd.sub": "{name}, please complete your profile before you get started.",
   "dd.editTitle": "Edit Your Profile",
   "dd.editSub": "Update your personal details.",
   "dd.notice": "Your account isn't active yet. Fill in your details below to activate it and join events.",
