@@ -1064,7 +1064,6 @@ function talentDataDiri(type, opts = {}) {
   </div>
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
-  ${editing ? '' : `<div class="banner banner-warn" style="display:flex;gap:10px;align-items:flex-start"><span>🪪</span><span>${t('dd.notice')}</span></div>`}
   ${errorBanner}
   <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
     <div class="field">
@@ -1085,17 +1084,17 @@ function talentDataDiri(type, opts = {}) {
       <div class="hint" style="margin-top:6px">${t('dd.ktpHint')}</div>
     </div>
     <div class="field">
-      <label for="instagram">${t('dd.instagram')}${igRequired ? req : opt}</label>
-      <input type="text" id="instagram" name="instagram" maxlength="60" ${igRequired ? 'required' : ''} placeholder="username" value="${esc(v.instagram || '')}">
+      <label for="instagram">${t('dd.instagram')}${req}</label>
+      <input type="text" id="instagram" name="instagram" maxlength="60" required placeholder="username" value="${esc(v.instagram || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.instagramHint')}</div>
     </div>
     <div class="field">
-      <label for="instagram_followers">${t('dd.followers')}${opt}</label>
-      <input type="number" id="instagram_followers" name="instagram_followers" min="0" step="1" inputmode="numeric" placeholder="0" value="${esc(v.instagram_followers || '')}">
+      <label for="instagram_followers">${t('dd.followers')}${req}</label>
+      <input type="number" id="instagram_followers" name="instagram_followers" min="0" step="1" inputmode="numeric" required placeholder="0" value="${esc(v.instagram_followers || '')}">
     </div>
     <div class="field">
-      <label for="experience">${t('dd.experience')}${opt}</label>
-      <textarea id="experience" name="experience" rows="3" maxlength="1000" placeholder="${esc(t('dd.experiencePh'))}">${esc(v.experience || '')}</textarea>
+      <label for="experience">${t('dd.experience')}${req}</label>
+      <textarea id="experience" name="experience" rows="3" maxlength="1000" required placeholder="${esc(t('dd.experiencePh'))}">${esc(v.experience || '')}</textarea>
     </div>
     <button type="submit" class="btn btn-block">${editing ? t('dd.save') : t('dd.submit')}</button>
   </form>
