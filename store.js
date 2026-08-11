@@ -117,7 +117,7 @@ function supabaseStore() {
     },
     async getAccountById(id) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,cv_path,portfolio_url,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_by,hyrox_cert_verified_at,hyrox_cert_note')
+        .select('id,talent_type,name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,cv_path,portfolio_url,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_by,hyrox_cert_verified_at,hyrox_cert_note')
         .eq('id', id).maybeSingle();
       return data || null;
     },
@@ -475,7 +475,7 @@ function memoryStore() {
   // Project a stored account to the public shape (mirrors the Supabase select).
   const accountProfile = (a) => ({
     id: a.id, talent_type: a.talent_type, name: a.name, login: a.login,
-    phone: a.phone || null, city: a.city || null, birthdate: a.birthdate || null,
+    phone: a.phone || null, city: a.city || null, province: a.province || null, birthdate: a.birthdate || null,
     gender: a.gender || null, instagram: a.instagram || null,
     instagram_followers: a.instagram_followers != null ? a.instagram_followers : null,
     experience: a.experience || null, ktp: a.ktp || null, profile_completed_at: a.profile_completed_at || null,

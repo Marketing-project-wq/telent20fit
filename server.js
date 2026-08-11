@@ -154,6 +154,7 @@ function dataDiriPost(type) {
       const acc = await st.getAccountById(req.talent.id);
       if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
       const values = {
+        province: String(req.body.province || '').trim(),
         city: String(req.body.city || '').trim().slice(0, 80),
         ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 20),
         birthdate: String(req.body.birthdate || '').trim(),
@@ -163,7 +164,8 @@ function dataDiriPost(type) {
         experience: String(req.body.experience || '').trim().slice(0, 1000),
       };
       const errors = [];
-      if (!V.PROVINCES.includes(values.city)) errors.push(req.t('dd.err.province'));
+      if (!V.PROVINCES.includes(values.province)) errors.push(req.t('dd.err.province'));
+      if (!values.city) errors.push(req.t('dd.err.city'));
       let bdOk = /^\d{4}-\d{2}-\d{2}$/.test(values.birthdate);
       if (bdOk) {
         const d = new Date(values.birthdate + 'T00:00:00Z');
@@ -189,6 +191,7 @@ function dataDiriPost(type) {
         return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang }));
       }
       await st.updateAccountProfile(acc.id, {
+        province: values.province,
         city: values.city,
         ktp: values.ktp,
         birthdate: values.birthdate,
@@ -1257,11 +1260,12 @@ app.post('/eo/register', async (req, res, next) => {
     const pic_name = c('pic_name', 140);
     const login = c('login', 160).toLowerCase();
     const phone = c('phone', 40);
+    const province = c('province', 60);
     const city = c('city', 100);
     const description = c('description', 1000);
     const password = String(req.body.password || '');
     const password2 = String(req.body.password2 || '');
-    const values = { org_type, org_name, pic_name, login, phone, city, description };
+    const values = { org_type, org_name, pic_name, login, phone, province, city, description };
     const errors = [];
     if (!EO_ORG_TYPES.includes(org_type)) errors.push(req.t('eo.reg.err.type'));
     if (!org_name) errors.push(req.t('eo.reg.err.orgName'));
@@ -1269,7 +1273,8 @@ app.post('/eo/register', async (req, res, next) => {
     if (!login) errors.push(req.t('err.emailRequired'));
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
     if (!phone) errors.push(req.t('eo.reg.err.phone'));
-    if (!V.PROVINCES.includes(city)) errors.push(req.t('dd.err.province'));
+    if (!V.PROVINCES.includes(province)) errors.push(req.t('dd.err.province'));
+    if (!city) errors.push(req.t('dd.err.city'));
     if (!description) errors.push(req.t('eo.err.desc'));
     if (password.length < 6) errors.push(req.t('err.passwordMin6'));
     else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
@@ -1283,7 +1288,7 @@ app.post('/eo/register', async (req, res, next) => {
       throw e;
     }
     // Full profile (incl. description) is captured at signup, so it's complete right away.
-    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, city, description, completed_at: new Date().toISOString() });
+    await st.upsertEoProfile(staff.id, { org_type, org_name, pic_name, email: login, phone, province, city, description, completed_at: new Date().toISOString() });
     auth.setSession(res, staff);
     res.redirect('/eo');
   } catch (e) { next(e); }
@@ -1423,6 +1428,7 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
       org_name: clean('org_name', 140),
       pic_name: clean('pic_name', 140),
       phone: clean('phone', 40),
+      province: clean('province', 60),
       city: clean('city', 100),
       description: clean('description', 1000),
     };
@@ -1435,7 +1441,8 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
     if (!patch.org_name) errors.push(req.t('eo.err.orgName'));
     if (!patch.pic_name) errors.push(req.t('eo.reg.err.pic'));
     if (!patch.phone) errors.push(req.t('eo.reg.err.phone'));
-    if (!V.PROVINCES.includes(patch.city)) errors.push(req.t('dd.err.province'));
+    if (!V.PROVINCES.includes(patch.province)) errors.push(req.t('dd.err.province'));
+    if (!patch.city) errors.push(req.t('dd.err.city'));
     if (!patch.description) errors.push(req.t('eo.err.desc'));
     if (errors.length) {
       return res.status(400).send(V.eoProfile({ staff: eoCtx(req), profile: Object.assign({}, ex, patch), errors, lang: req.lang }));

@@ -714,10 +714,15 @@ const PROVINCES = [
 function provinceSelect(selected, lang) {
   const L = normLang(lang);
   const opts = PROVINCES.slice().sort((a, b) => a.localeCompare(b, 'id'));
-  return `<select id="city" name="city" required>
+  return `<select id="province" name="province" required>
     <option value="" disabled${selected ? '' : ' selected'}>${tr(L, 'dd.provincePick')}</option>
     ${opts.map((pr) => `<option value="${esc(pr)}"${selected === pr ? ' selected' : ''}>${esc(pr)}</option>`).join('')}
   </select>`;
+}
+// Free-text city/regency input paired with the province select above it.
+function citySelect(value, lang) {
+  const L = normLang(lang);
+  return `<input type="text" id="city" name="city" required maxlength="80" placeholder="${esc(tr(L, 'dd.cityPh'))}" value="${esc(value || '')}">`;
 }
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
 function talentPath(type) { return type.replace(/_/g, '-'); }
@@ -1088,8 +1093,12 @@ function talentDataDiri(type, opts = {}) {
   ${errorBanner}
   <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
     <div class="field">
-      <label for="city">${t('dd.province')}${req}</label>
-      ${provinceSelect(v.city, L)}
+      <label for="province">${t('dd.province')}${req}</label>
+      ${provinceSelect(v.province, L)}
+    </div>
+    <div class="field">
+      <label for="city">${t('dd.city')}${req}</label>
+      ${citySelect(v.city, L)}
     </div>
     <div class="field">
       <label for="birthdate">${t('dd.birthdate')}${req}</label>
@@ -1359,7 +1368,8 @@ function eoProfile({ staff, profile, saved, errors, lang }) {
     <div class="field"><label for="pic_name">${t('eo.f.pic')}${req}</label><input type="text" id="pic_name" name="pic_name" required maxlength="140" value="${esc(p.pic_name || '')}"></div>
     <div class="field"><label for="email">${t('eo.f.emailLogin')}</label><input type="email" id="email" value="${esc(p.email || '')}" readonly disabled style="opacity:.7;cursor:not-allowed"></div>
     <div class="field"><label for="phone">${t('eo.f.phone')}${req}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(p.phone || '')}"></div>
-    <div class="field"><label for="city">${t('eo.f.city')}${req}</label>${provinceSelect(p.city, L)}</div>
+    <div class="field"><label for="province">${t('dd.province')}${req}</label>${provinceSelect(p.province, L)}</div>
+    <div class="field"><label for="city">${t('dd.city')}${req}</label>${citySelect(p.city, L)}</div>
     <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span>${req}</label><textarea id="description" name="description" required rows="4" maxlength="1000">${esc(p.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
     <button type="submit" class="btn btn-block">${t('eo.f.save')}</button>
   </form>
@@ -1401,7 +1411,8 @@ function eoRegister({ lang, errors, values }) {
       <div class="field"><label for="pic_name">${t('eo.f.pic')}</label><input type="text" id="pic_name" name="pic_name" required maxlength="140" value="${esc(v.pic_name || '')}"></div>
       <div class="field"><label for="login">${t('common.email')}</label><input type="email" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
       <div class="field"><label for="phone">${t('eo.f.phone')}</label><input type="text" id="phone" name="phone" required maxlength="40" value="${esc(v.phone || '')}"></div>
-      <div class="field"><label for="city">${t('eo.f.city')}</label>${provinceSelect(v.city, L)}</div>
+      <div class="field"><label for="province">${t('dd.province')}</label>${provinceSelect(v.province, L)}</div>
+      <div class="field"><label for="city">${t('dd.city')}</label>${citySelect(v.city, L)}</div>
       <div class="field"><label for="description"><span id="descLabelText" data-tpl="${esc(t('eo.f.descOf'))}" data-base="${esc(t('eo.f.desc'))}">${t('eo.f.desc')}</span></label><textarea id="description" name="description" required rows="3" maxlength="1000">${esc(v.description || '')}</textarea><div class="hint" style="margin-top:6px"><span id="descCount">0</span>/1000</div></div>
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"><div class="hint" style="margin-top:6px">${t('hint.min6')}</div></div>
       <div class="field"><label for="password2">${t('auth.reset.confirm')}</label><input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password"></div>
@@ -3156,7 +3167,8 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
         ${row(t('eo.f.pic'), esc(p.pic_name || ''))}
         ${row(t('eo.f.email'), esc(p.email || eo.login || ''))}
         ${row(t('eo.f.phone'), esc(p.phone || ''))}
-        ${row(t('eo.f.city'), esc(p.city || ''))}
+        ${row(t('dd.province'), esc(p.province || ''))}
+        ${row(t('dd.city'), esc(p.city || ''))}
         ${row(t('eo.f.desc'), p.description ? `<span style="white-space:pre-wrap">${esc(p.description)}</span>` : '')}
       </div></div>`
     : `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.noProfile')}</div>`;
