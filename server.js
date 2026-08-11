@@ -694,6 +694,12 @@ function eventRegOpen(ev) {
   const today = jakartaDateStr();
   if (ev.reg_open && today < String(ev.reg_open).slice(0, 10)) return false;
   if (ev.reg_deadline && today > String(ev.reg_deadline).slice(0, 10)) return false;
+  // Registration always closes at H-1 before the event starts, regardless of the
+  // EO-set deadline: no sign-ups from the day before the event onward.
+  if (ev.starts_at) {
+    const h1 = addDaysYMD(String(ev.starts_at).slice(0, 10), -1);
+    if (today >= h1) return false;
+  }
   return true;
 }
 
