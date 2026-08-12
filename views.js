@@ -3359,7 +3359,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
         ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
       </form>`;
 
-    const stationLine = (a.status === 'approved')
+    const stationLine = (a.status === 'approved' && !(a.choices && a.choices.length))
       ? `<div style="margin-top:8px;font-size:13px">📍 <b>${a.station ? esc(a.station) + (a.station_loc ? ' · ' + esc(a.station_loc) : '') : `<span class="muted" style="font-weight:400">${t('mpr.noStation')}</span>`}</b></div>` : '';
 
     // Position-based apps: show the ranked position picks (P1/P2/P3) the talent chose.
@@ -3370,6 +3370,31 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => `<span class="tag">P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}</span>`).join('')}</div>
         </div>`
       : '';
+
+    // Per-position accept / reject / undo for Super Admin (mirrors the EO decision controls).
+    const posControls = () => {
+      const base = `/admin/applications/${esc(a.id)}`;
+      const acc = choices.find((c) => c.accepted);
+      if (a.status === 'approved' && acc) {
+        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+          <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLabel(acc, L) }))}</span>
+          <form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+        </div>`;
+      }
+      if (a.status === 'rejected') {
+        return `<div style="margin-top:12px"><form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form></div>`;
+      }
+      const btns = choices.map((c) => c.full
+        ? `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLabel(c, L))} · ${t('eo.ap.posFull')}</button>`
+        : `<form class="inline-form" method="post" action="${base}/accept-position"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLabel(c, L))}</button></form>`
+      ).join('');
+      return `<div style="margin-top:12px">
+        <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${btns}
+          <form class="inline-form" method="post" action="${base}/reject-position" ${jsConfirm(t('eo.ap.rejectConfirm'))}><button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
+        </div>
+      </div>`;
+    };
 
     return `<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
@@ -3397,7 +3422,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
              <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
           : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
       </div>` : ''}
-      ${stationForm}
+      ${choices.length ? posControls() : stationForm}
       <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
         <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
         <div style="margin-top:10px">
