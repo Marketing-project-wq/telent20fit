@@ -3697,10 +3697,15 @@ function talentEventApply({ account, event, ctx, lang }) {
   const errors = ctx.errors || [];
   const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  // A KOL-type talent without CV + portfolio can't pick creator positions (kol/photog/videog).
+  const docsMissing = !!(account && account.talent_type === 'kol' && !hasCreatorDocs(account));
   const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
   const opt = (sel, allowNone) => {
     let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
-    (ctx.openPositions || []).forEach((p) => { o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}>${esc(posLabel(p, L))}</option>`; });
+    (ctx.openPositions || []).forEach((p) => {
+      const lock = docsMissing && CREATOR_ROLES.includes(p.key) && sel !== p.position_id;
+      o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}${lock ? ' disabled' : ''}>${esc(posLabel(p, L))}${lock ? ' — ' + esc(t('doc.lockHint')) : ''}</option>`;
+    });
     if (sel && !(ctx.openPositions || []).some((p) => p.position_id === sel)) { const pp = ctx.posById.get(sel) || {}; o += `<option value="${esc(sel)}" selected>${esc(posLabel(pp, L))}</option>`; }
     return o;
   };
@@ -3735,7 +3740,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   }
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
   const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
-  const docsWarn = (account && account.talent_type === 'kol' && !hasCreatorDocs(account) && creatorOpen)
+  const docsWarn = (docsMissing && creatorOpen)
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
   const body = `<div class="wrap narrow">
