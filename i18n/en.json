@@ -725,6 +725,7 @@
   "doc.needBanner": "You must complete your CV and Portfolio before you can apply as a KOL, Photographer, or Videographer.",
   "doc.eventWarn": "A complete CV & Portfolio is required to apply as KOL / Photographer / Videographer.",
   "doc.completeNow": "Complete now →",
+  "doc.lockHint": "complete CV & Portfolio first",
   "doc.manage": "Manage documents",
   "doc.manageSub": "CV, portfolio & HYROX certificate",
   "doc.manageHyrox": "Upload your HYROX 360 certificate (optional)",
