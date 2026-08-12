@@ -3331,7 +3331,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
     bank_name: 'apply.bankName', bank_account: 'apply.bankAccount', bank_holder: 'apply.bankHolder',
   };
 
-  const cards = applications.map((a) => {
+  const renderCard = (a) => {
     const ans = a.answers || {};
     const answerRows = Object.keys(ans)
       .filter((k) => !k.startsWith('__') && ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
@@ -3435,18 +3435,32 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
         </div>
       </details>
     </div>`;
-  }).join('');
+  };
 
-  const attnHtml = (attendanceLinks && attendanceLinks.length) ? `
-  <div class="card" style="margin-top:12px;padding:12px 14px">
-    <div style="font-weight:700;font-size:13.5px">📋 ${t('mpr.attnHead')}</div>
-    <p class="muted" style="font-size:12px;margin:4px 0 2px">${t('mpr.attnSub')}</p>
-    ${attendanceLinks.map((a) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0 1px;border-top:1px solid var(--line);margin-top:8px">
-      <div style="min-width:0;flex:1;font-size:13px"><b>${esc(a.name)}</b> <span class="muted" style="font-size:12px">· ${t('mpr.attnPeople', { n: a.count })}</span></div>
-      <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(a.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
-      <a href="${esc(a.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>
-    </div>`).join('')}
-  </div>` : '';
+  // Group applications into per-event folders so different events don't mix. Each
+  // folder is a collapsible <details>; opening it reveals that event's applicants
+  // (and the event's on-site attendance link).
+  const attnByEvent = new Map((attendanceLinks || []).map((l) => [l.eventId, l]));
+  const groups = new Map();
+  applications.forEach((a) => {
+    const k = a.event_id || '—';
+    if (!groups.has(k)) groups.set(k, { name: a.event_name || '—', apps: [] });
+    groups.get(k).apps.push(a);
+  });
+  const folders = [...groups.entries()].map(([eid, g]) => {
+    const attn = attnByEvent.get(eid);
+    const attnBar = attn
+      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 2px 2px">
+          <span class="muted" style="font-size:12.5px;flex:1;min-width:0">📋 ${t('mpr.attnHead')}</span>
+          <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(attn.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
+          <a href="${esc(attn.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>
+        </div>`
+      : '';
+    return `<details class="ev-folder" style="margin-top:14px"${groups.size === 1 ? ' open' : ''}>
+      <summary style="cursor:pointer;font-weight:800;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px">📁 ${esc(g.name)} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr.count', { n: g.apps.length })}</span></summary>
+      ${attnBar}${g.apps.map(renderCard).join('')}
+    </details>`;
+  }).join('');
 
   const body = `<div class="wrap">
   ${staffHead(staff, t('mpr.title'), L)}
@@ -3460,8 +3474,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
-  ${attnHtml}
-  ${applications.length ? cards : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
+  ${applications.length ? folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
 </div>
 <script>
 (function(){
