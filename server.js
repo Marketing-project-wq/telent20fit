@@ -551,7 +551,7 @@ app.post('/kol/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
+app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); });
 
 app.get('/kol/data-diri', dataDiriGet('kol'));
 app.post('/kol/data-diri', dataDiriPost('kol'));
@@ -1105,7 +1105,7 @@ app.post('/main-power/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/login'); });
+app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); });
 
 app.get('/main-power/data-diri', dataDiriGet('main_power'));
 app.post('/main-power/data-diri', dataDiriPost('main_power'));
