@@ -1911,17 +1911,23 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [apps, events, talents, certs] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates()]);
+    const [apps, events, talents, certs, choicesAll, positions] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates(), st.listApplicationChoices(), st.listPositions()]);
     const eventName = new Map(events.map((e) => [e.id, e.name]));
     const eventById = new Map(events.map((e) => [e.id, e]));
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
     const certByKey = new Map(certs.map((c) => [c.talent_id + '|' + c.event_id, c]));
+    // Position-based applications store their picks in choices, not a single role.
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const choicesByApp = new Map();
+    (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
     const applications = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
       const ev = eventById.get(a.event_id) || {};
+      const choices = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
+        .map((c) => { const p = posById.get(c.position_id) || {}; return { priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, accepted: !!c.accepted }; });
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
-        event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null,
+        event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
       };
     });
     // Attendance links: one per event that has approved Man Power, for on-site PICs.
