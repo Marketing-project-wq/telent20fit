@@ -906,6 +906,7 @@ function talentRegister(type, opts = {}) {
   const v = opts.values || {};
   const action = unified ? '/register' : `/${p}/register`;
   const isCreator = (type === 'kol');
+  const req = ' <span style="color:var(--red)">*</span>';
   const optH = ` <span class="hint">${t('dd.optional')}</span>`;
   // Optional supporting documents, captured right at signup. CV + portfolio are
   // shown to creators (they're required later to apply as KOL/photog/videog).
@@ -931,26 +932,26 @@ function talentRegister(type, opts = {}) {
     </div>` : '';
   const form = `<form method="post" action="${action}"${isCreator ? ' enctype="multipart/form-data"' : ''}>
     <div class="field">
-      <label for="name">${t('common.fullname')}</label>
+      <label for="name">${t('common.fullname')}${req}</label>
       <input type="text" id="name" name="name" required maxlength="120" autocomplete="name" value="${esc(v.name || '')}">
     </div>
     <div class="field">
-      <label for="login">${t('common.email')}</label>
+      <label for="login">${t('common.email')}${req}</label>
       <input type="email" id="login" name="login" required autocomplete="email" value="${esc(v.login || '')}">
       <div class="hint" style="margin-top:6px">${t('hint.usedForLogin')}</div>
     </div>
     <div class="field">
-      <label for="phone">${t('dd.phone')}</label>
+      <label for="phone">${t('dd.phone')}${req}</label>
       <input type="tel" id="phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="08xxxxxxxxxx" value="${esc(v.phone || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.phoneHint')}</div>
     </div>
     <div class="field">
-      <label for="password">${t('common.password')}</label>
+      <label for="password">${t('common.password')}${req}</label>
       <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
       <div class="hint" style="margin-top:6px">${t('hint.min6')}</div>
     </div>
     <div class="field">
-      <label for="password2">${t('common.passwordConfirm')}</label>
+      <label for="password2">${t('common.passwordConfirm')}${req}</label>
       <input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password">
     </div>
     ${docsSection}
