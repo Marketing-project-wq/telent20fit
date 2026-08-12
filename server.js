@@ -1918,13 +1918,26 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     const certByKey = new Map(certs.map((c) => [c.talent_id + '|' + c.event_id, c]));
     // Position-based applications store their picks in choices, not a single role.
     const posById = new Map(positions.map((p) => [p.id, p]));
+    const appById = new Map(apps.map((a) => [a.id, a]));
     const choicesByApp = new Map();
     (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    // Quota per (event, position) + accepted counts, so the picker can flag full positions.
+    const posEventIds = [...new Set(apps.filter((a) => choicesByApp.has(a.id)).map((a) => a.event_id))];
+    const evPositions = new Map();
+    await Promise.all(posEventIds.map(async (eid) => evPositions.set(eid, await st.listEventPositions(eid))));
+    const acceptedCount = new Map();
+    (choicesAll || []).forEach((c) => { if (!c.accepted) return; const a = appById.get(c.application_id); if (!a) return; const k = a.event_id + '|' + c.position_id; acceptedCount.set(k, (acceptedCount.get(k) || 0) + 1); });
     const applications = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
       const ev = eventById.get(a.event_id) || {};
       const choices = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
-        .map((c) => { const p = posById.get(c.position_id) || {}; return { priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, accepted: !!c.accepted }; });
+        .map((c) => {
+          const p = posById.get(c.position_id) || {};
+          const evPos = (evPositions.get(a.event_id) || []).find((ep) => ep.position_id === c.position_id);
+          const quota = evPos ? evPos.quota : 0;
+          const full = quota > 0 && !c.accepted && (acceptedCount.get(a.event_id + '|' + c.position_id) || 0) >= quota;
+          return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, accepted: !!c.accepted, full };
+        });
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
@@ -1971,6 +1984,56 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     if (action === 'approve' && prior && !alreadyApproved) {
       notifyAcceptance(st, prior, patch).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
     }
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// Super Admin per-position review of position-based applications (mirrors the EO
+// flow so both roles can accept a talent into any of their ranked picks).
+app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const positionId = String(req.body.position_id || '');
+    const apps = await st.listApplications();
+    const app = apps.find((a) => a.id === req.params.id);
+    if (!app) return res.redirect('/admin/applications');
+    const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
+    if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return res.redirect('/admin/applications'); // not one of their picks
+    const pos = positions.find((p) => p.position_id === positionId);
+    const quota = pos ? pos.quota : 0;
+    const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+    const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
+    if (quota > 0 && acceptedElsewhere >= quota) return res.redirect('/admin/applications'); // position full
+    const wasApproved = app.status === 'approved';
+    await st.acceptApplicationChoice(app.id, positionId);
+    await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
+    if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app) return res.redirect('/admin/applications');
+    await st.clearApplicationAccepted(app.id);
+    await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    res.redirect('/admin/applications');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app) return res.redirect('/admin/applications');
+    await st.clearApplicationAccepted(app.id);
+    await st.updateApplication(app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
