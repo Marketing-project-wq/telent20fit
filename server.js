@@ -1951,7 +1951,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       if (a.status === 'approved') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
     }
     const attendanceLinks = [...mpCount.entries()].map(([eid, n]) => ({
-      name: eventName.get(eid) || '—', count: n,
+      eventId: eid, name: eventName.get(eid) || '—', count: n,
       path: '/absensi/' + encodeURIComponent(eid) + '?k=' + auth.attendanceToken(eid),
     })).sort((a, b) => a.name.localeCompare(b.name));
     res.send(V.adminApplications({ staff: staffCtx(req), applications, attendanceLinks, lang: req.lang, flash: String(req.query.mail || '') }));
