@@ -1945,10 +1945,10 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
       };
     });
-    // Attendance links: one per event that has approved Man Power, for on-site PICs.
+    // Attendance links: one per event that has any approved talent, for on-site PICs.
     const mpCount = new Map();
     for (const a of applications) {
-      if (a.status === 'approved' && a.talent_type === 'main_power') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
+      if (a.status === 'approved') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
     }
     const attendanceLinks = [...mpCount.entries()].map(([eid, n]) => ({
       name: eventName.get(eid) || '—', count: n,
@@ -2289,11 +2289,15 @@ function eventDays(ev) {
 
 // Approved Man Power for an event, sorted by name, with per-day + total attendance.
 async function attendanceRows(st, eventId, day) {
-  const [apps, talents] = await Promise.all([st.listApplications(), st.listTalents()]);
+  const [apps, talents, choices, positions] = await Promise.all([st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions()]);
   const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  const posById = new Map(positions.map((p) => [p.id, p]));
+  // For position-based apps the "station" is the accepted position (Man Power apps keep a.station).
+  const acceptedPos = new Map();
+  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_id || p.label_en || null); } });
   return apps
-    .filter((a) => a.event_id === eventId && a.status === 'approved' && a.talent_type === 'main_power')
-    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: a.station, station_loc: a.station_loc, count: dates.length, checked: day ? dates.includes(day) : false }; })
+    .filter((a) => a.event_id === eventId && a.status === 'approved')
+    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: acceptedPos.get(a.id) || a.station || null, station_loc: a.station_loc || null, count: dates.length, checked: day ? dates.includes(day) : false }; })
     .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
 }
 
@@ -2329,7 +2333,7 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
     const app0 = await st.getApplication(appId);
     // Guard: token is event-scoped and the day must be one of the event's days.
     let doneName = '';
-    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && app0.status === 'approved' && app0.talent_type === 'main_power') {
+    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && app0.status === 'approved') {
       const set = new Set(attDates(app0));
       if (attended) set.add(day); else set.delete(day);
       const arr = [...set].sort();
