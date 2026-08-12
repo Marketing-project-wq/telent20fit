@@ -3702,7 +3702,9 @@ function talentEventApply({ account, event, ctx, lang }) {
   const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
   const opt = (sel, allowNone) => {
     let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
-    (ctx.openPositions || []).forEach((p) => {
+    // Positions listed alphabetically by their (localized) label for a tidy dropdown.
+    const sorted = (ctx.openPositions || []).slice().sort((a, b) => posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
+    sorted.forEach((p) => {
       const lock = docsMissing && CREATOR_ROLES.includes(p.key) && sel !== p.position_id;
       o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}${lock ? ' disabled' : ''}>${esc(posLabel(p, L))}${lock ? ' — ' + esc(t('doc.lockHint')) : ''}</option>`;
     });
@@ -3724,18 +3726,22 @@ function talentEventApply({ account, event, ctx, lang }) {
   const jdPanel = (slot) => `<div class="jd-panel" data-jd="${slot}" style="display:none;margin-top:8px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><b style="font-size:11.5px">📋 ${t('ta.jobdesk')}</b><div class="jd-text" style="margin-top:3px;white-space:pre-wrap"></div></div>`;
   const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
   let formBlock = '';
-  if (editable) {
+  if (ctx.myApp) {
+    // Already applied: the choices show read-only above. No re-edit form; the
+    // talent can still withdraw (cancel) while registration is open.
+    if (editable) formBlock = `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:14px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
+  } else if (editable) {
+    // New application: position picker + submit.
     formBlock = `<form method="post" action="/event/${esc(e.slug || e.id)}/apply" class="card" style="margin-top:14px">
-      <div style="font-weight:700;margin-bottom:4px">${ctx.myApp ? t('ta.editChoices') : t('ta.pickChoices')}</div>
+      <div style="font-weight:700;margin-bottom:4px">${t('ta.pickChoices')}</div>
       <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
       <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select>${hasJd ? jdPanel('pos1') : ''}</div>
       <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select>${hasJd ? jdPanel('pos2') : ''}</div>
       <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select>${hasJd ? jdPanel('pos3') : ''}</div>
-      <button type="submit" class="btn btn-block">${ctx.myApp ? t('ta.update') : t('ta.submit')}</button>
+      <button type="submit" class="btn btn-block">${t('ta.submit')}</button>
     </form>`;
     if (hasJd) formBlock += `<script>(function(){var JD=${JSON.stringify(jdMap).replace(/</g, '\\u003c')};['pos1','pos2','pos3'].forEach(function(id){var sel=document.getElementById(id);if(!sel)return;var panel=sel.parentNode.querySelector('.jd-panel');if(!panel)return;var txt=panel.querySelector('.jd-text');function upd(){var v=sel.value,d=v&&JD[v];if(d){txt.textContent=d;panel.style.display='';}else{panel.style.display='none';txt.textContent='';}}sel.addEventListener('change',upd);upd();});})();</script>`;
-    if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
-  } else if (!ctx.myApp) {
+  } else {
     formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
   }
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
