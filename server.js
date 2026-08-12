@@ -912,11 +912,16 @@ app.get('/events', requireAnyTalentReady(), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Resolve a position-based event by its UUID id or a friendly slug (e.g. "iss").
+const findEventByRef = (events, ref) => (events || []).find((e) => e.id === ref || (e.slug && e.slug === ref));
+// Prefer the slug in outgoing URLs so friendly links (…/event/iss) stick.
+const eventRef = (ev) => (ev && ev.slug) || (ev && ev.id);
+
 app.get('/event/:id', requireAnyTalentReady(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
     if (!ev) return res.redirect('/events');
     const ctx = await positionApplyCtx(st, ev, req.talent.id);
     if (!ctx.positions.length) return res.redirect('/events'); // not a position-based event
@@ -951,7 +956,7 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
     if (!ev) return res.redirect('/events');
     const ctx = await positionApplyCtx(st, ev, req.talent.id);
     if (!ctx.positions.length) return res.redirect('/events');
@@ -975,7 +980,7 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
       await st.updateApplication(app.id, { status: 'applied' });
       await st.addApplicationChoices(app.id, chosen);
     }
-    res.redirect('/event/' + ev.id + '?lang=' + req.lang + '&saved=1');
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
 });
 
@@ -983,14 +988,14 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const ev = (await st.listEvents()).find((e) => e.id === req.params.id);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
     if (!ev) return res.redirect('/events');
     const myApp = await st.getApplicationForEvent(req.talent.id, ev.id);
     // BR-8: cancel only while pending + registration open.
     if (myApp && ['applied', 'pending', 'under_review'].includes(myApp.status) && eventRegOpen(ev)) {
       await st.deleteApplication(myApp.id);
     }
-    res.redirect('/event/' + ev.id + '?lang=' + req.lang);
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
   } catch (e) { next(e); }
 });
 
