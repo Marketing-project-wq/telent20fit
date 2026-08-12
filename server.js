@@ -458,43 +458,78 @@ app.get('/kol/register', (req, res) => {
 function talentRegisterPost(type, opts = {}) {
   const unified = !!opts.unified;
   const p = type.replace(/_/g, '-');
-  return async (req, res, next) => {
-    try {
-      const st = db();
-      if (!st) return needConfig(req, res);
-      const name = String(req.body.name || '').trim();
-      const login = String(req.body.login || '').trim().toLowerCase();
-      const phone = String(req.body.phone || '').trim();
-      const password = String(req.body.password || '');
-      const password2 = String(req.body.password2 || '');
-      const values = { name, login, phone };
-
-      const errors = [];
-      if (!name) errors.push(req.t('err.nameRequired'));
-      if (!login) errors.push(req.t('err.emailRequired'));
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
-      if (!phone) errors.push(req.t('dd.err.phone'));
-      else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
-      if (password.length < 6) errors.push(req.t('err.passwordMin6'));
-      else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
-      if (errors.length) return res.status(400).send(V.talentRegister(type, { unified, errors, values, lang: req.lang }));
-
-      // Email must be unique across all talent types (login resolves by email).
-      if (await st.findAccountByLogin(login)) {
-        return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
-      }
-
-      let account;
+  const isCreator = (type === 'kol');
+  return [
+    // Optional CV / HYROX uploads can ride along with the signup form (creators).
+    (req, res, next) => uploadDocs(req, res, (err) => {
+      if (err) return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('doc.err.size')], values: { name: req.body.name, login: req.body.login, phone: req.body.phone, portfolio_url: req.body.portfolio_url }, lang: req.lang }));
+      next();
+    }),
+    async (req, res, next) => {
       try {
-        account = await st.createAccount({ talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) });
-      } catch (e) {
-        if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
-        throw e;
-      }
-      auth.setSession(res, account);
-      res.redirect('/' + p + '/data-diri?lang=' + req.lang);
-    } catch (e) { next(e); }
-  };
+        const st = db();
+        if (!st) return needConfig(req, res);
+        const name = String(req.body.name || '').trim();
+        const login = String(req.body.login || '').trim().toLowerCase();
+        const phone = String(req.body.phone || '').trim();
+        const password = String(req.body.password || '');
+        const password2 = String(req.body.password2 || '');
+        const values = { name, login, phone, portfolio_url: req.body.portfolio_url };
+
+        // Optional supporting documents (all creator-side, all optional at signup).
+        const files = req.files || {};
+        const portfolioUrl = isCreator ? String(req.body.portfolio_url || '').trim().slice(0, 500) : '';
+        const cvFile = isCreator && files.cv && files.cv[0];
+        const hxFile = files.hyrox_cert && files.hyrox_cert[0];
+
+        const errors = [];
+        if (!name) errors.push(req.t('err.nameRequired'));
+        if (!login) errors.push(req.t('err.emailRequired'));
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
+        if (!phone) errors.push(req.t('dd.err.phone'));
+        else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
+        if (password.length < 6) errors.push(req.t('err.passwordMin6'));
+        else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
+        if (portfolioUrl && !/^https?:\/\/.+/i.test(portfolioUrl)) errors.push(req.t('doc.err.url'));
+        if (cvFile && !docTypeOk(cvFile)) errors.push(req.t('doc.err.type'));
+        if (hxFile && !docTypeOk(hxFile)) errors.push(req.t('doc.err.type'));
+        if (errors.length) return res.status(400).send(V.talentRegister(type, { unified, errors, values, lang: req.lang }));
+
+        // Email must be unique across all talent types (login resolves by email).
+        if (await st.findAccountByLogin(login)) {
+          return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+        }
+
+        let account;
+        try {
+          account = await st.createAccount({ talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) });
+        } catch (e) {
+          if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+          throw e;
+        }
+
+        // Persist any documents supplied at signup (files uploaded post-create so
+        // the storage key can include the new account id).
+        const patch = {};
+        if (portfolioUrl) patch.portfolio_url = portfolioUrl;
+        if (cvFile) {
+          const key = `docs/cv/${account.id}/${crypto.randomUUID()}${docExt(cvFile)}`;
+          await st.uploadImage(key, cvFile.buffer, cvFile.mimetype);
+          patch.cv_path = key;
+        }
+        if (hxFile) {
+          const key = `docs/hyrox/${account.id}/${crypto.randomUUID()}${docExt(hxFile)}`;
+          await st.uploadImage(key, hxFile.buffer, hxFile.mimetype);
+          patch.hyrox_cert_path = key;
+          patch.hyrox_cert_status = 'pending';
+        }
+        if (Object.keys(patch).length) await st.updateAccountProfile(account.id, patch);
+
+        auth.setSession(res, account);
+        res.redirect('/' + p + '/data-diri?lang=' + req.lang);
+      } catch (e) { next(e); }
+    },
+  ];
 }
 
 app.post('/kol/register', talentRegisterPost('kol'));
