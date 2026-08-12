@@ -73,6 +73,8 @@
   "auth.register.sub": "Buat akun untuk mulai submit hasil campaign.",
   "auth.account.registerTitle": "Buat Akun",
   "auth.account.registerSub": "Buat akun untuk gabung jadi talent 20FIT.",
+  "reg.docs.title": "Dokumen pendukung",
+  "reg.docs.creatorNote": "Semua opsional. Tapi kalau kamu mau daftar jadi KOL, Fotografer, atau Videografer, CV & Portfolio wajib dilengkapi — boleh sekarang atau nanti di profil.",
   "auth.account.loginTitle": "Masuk Talent",
   "auth.account.loginSub": "Masuk ke akunmu — untuk KOL, Man Power & Fotografer.",
   "auth.account.adminLink": "Masuk sebagai Admin / EO",

@@ -905,7 +905,31 @@ function talentRegister(type, opts = {}) {
   const p = talentPath(type);
   const v = opts.values || {};
   const action = unified ? '/register' : `/${p}/register`;
-  const form = `<form method="post" action="${action}">
+  const isCreator = (type === 'kol');
+  const optH = ` <span class="hint">${t('dd.optional')}</span>`;
+  // Optional supporting documents, captured right at signup. CV + portfolio are
+  // shown to creators (they're required later to apply as KOL/photog/videog).
+  const docsSection = isCreator ? `
+    <div class="field" style="border-top:1px solid var(--line);margin-top:22px;padding-top:18px">
+      <div style="font-weight:800;font-size:15px">${t('reg.docs.title')}</div>
+      <div class="hint" style="margin-top:4px">${t('reg.docs.creatorNote')}</div>
+    </div>
+    <div class="field">
+      <label>${t('doc.cv')}${optH}</label>
+      <input type="file" name="cv" accept=".pdf,image/*">
+      <div class="hint" style="margin-top:6px">${t('doc.fileHint')}</div>
+    </div>
+    <div class="field">
+      <label for="portfolio_url">${t('doc.portfolio')}${optH}</label>
+      <input type="url" id="portfolio_url" name="portfolio_url" maxlength="500" placeholder="https://…" value="${esc(v.portfolio_url || '')}">
+      <div class="hint" style="margin-top:6px">${t('doc.portfolioHint')}</div>
+    </div>
+    <div class="field">
+      <label>${t('doc.hyrox')}${optH}</label>
+      <input type="file" name="hyrox_cert" accept=".pdf,image/*">
+      <div class="hint" style="margin-top:6px">${t('doc.hyroxHint')}</div>
+    </div>` : '';
+  const form = `<form method="post" action="${action}"${isCreator ? ' enctype="multipart/form-data"' : ''}>
     <div class="field">
       <label for="name">${t('common.fullname')}</label>
       <input type="text" id="name" name="name" required maxlength="120" autocomplete="name" value="${esc(v.name || '')}">
@@ -929,6 +953,7 @@ function talentRegister(type, opts = {}) {
       <label for="password2">${t('common.passwordConfirm')}</label>
       <input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password">
     </div>
+    ${docsSection}
     <button type="submit" class="btn btn-block">${t('btn.register')}</button>
   </form>`;
   const loginHref = unified ? `/login?lang=${L}` : `/${p}/login?lang=${L}`;

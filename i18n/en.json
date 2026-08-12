@@ -73,6 +73,8 @@
   "auth.register.sub": "Create an account to start submitting campaign results.",
   "auth.account.registerTitle": "Create Account",
   "auth.account.registerSub": "Create an account to join as 20FIT talent.",
+  "reg.docs.title": "Supporting documents",
+  "reg.docs.creatorNote": "All optional. But if you want to join as a KOL, Photographer, or Videographer, a CV & Portfolio are required — now or later in your profile.",
   "auth.account.loginTitle": "Talent Login",
   "auth.account.loginSub": "Sign in to your account — for KOL, Man Power & Photographer.",
   "auth.account.adminLink": "Log in as Admin / EO",
