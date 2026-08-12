@@ -241,16 +241,12 @@ tr:last-child td{border-bottom:none}
 `;
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
-const THEME_HEAD = `<script>
-(function(){try{if(localStorage.getItem('theme')!=='dark')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();
-function setTheme(m){var el=document.documentElement;if(m==='light')el.setAttribute('data-theme','light');else el.removeAttribute('data-theme');try{localStorage.setItem('theme',m);}catch(e){}syncThemeBtns();}
-function syncThemeBtns(){var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';var bs=document.querySelectorAll('[data-theme-set]');for(var i=0;i<bs.length;i++){bs[i].classList.toggle('active',bs[i].getAttribute('data-theme-set')===cur);}}
-if(document.readyState!=='loading')syncThemeBtns();else document.addEventListener('DOMContentLoaded',syncThemeBtns);
-</script>`;
+// Dark mode removed — every page renders light (data-theme="light" on <html>).
+const THEME_HEAD = '';
 
-/** Theme toggle pill (light / dark), synced client-side. */
+/** Theme toggle removed — the app is light-only. */
 function themeToggle() {
-  return `<div class="theme-toggle" role="group" aria-label="Theme"><button type="button" data-theme-set="light" onclick="setTheme('light')" title="Light">☀️</button><button type="button" data-theme-set="dark" onclick="setTheme('dark')" title="Dark">🌙</button></div>`;
+  return '';
 }
 
 /** Language + theme toggles grouped together. */
@@ -265,7 +261,7 @@ function layout({ title, body, brand, home, lang, hideBrand }) {
   const topbar = hideBrand ? '' : `<div class="topbar"><div class="in">
   <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
 </div></div>`;
-  return `<!doctype html><html lang="${normLang(lang)}"><head>
+  return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body>
@@ -323,7 +319,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
-  return `<!doctype html><html lang="${L}"><head>
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body class="${isStaff ? '' : 'talent-app'}">
@@ -419,7 +415,7 @@ function landingPage(lang) {
   const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
 
-  return `<!doctype html><html lang="${L}"><head>
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
