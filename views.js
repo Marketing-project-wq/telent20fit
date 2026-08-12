@@ -3362,12 +3362,22 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
     const stationLine = (a.status === 'approved')
       ? `<div style="margin-top:8px;font-size:13px">📍 <b>${a.station ? esc(a.station) + (a.station_loc ? ' · ' + esc(a.station_loc) : '') : `<span class="muted" style="font-weight:400">${t('mpr.noStation')}</span>`}</b></div>` : '';
 
+    // Position-based apps: show the ranked position picks (P1/P2/P3) the talent chose.
+    const choices = a.choices || [];
+    const posBlock = choices.length
+      ? `<div style="margin-top:8px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.positionsTitle')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => `<span class="tag">P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}</span>`).join('')}</div>
+        </div>`
+      : '';
+
     return `<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
           <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
-          <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')} <span class="muted">·</span> <span class="tag">${esc(a.role || '—')}</span></div>
+          <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
+          ${posBlock}
         </div>
         ${mpStatusBadge(a.status, L)}
       </div>
