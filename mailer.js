@@ -26,9 +26,10 @@ function esc(s) {
 
 // Shared brand mark for every email. A white band keeps the logo (which sits on
 // a white background) clean across email clients, including dark mode.
-const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fti-hitam-putih.jpg';
+const LOGO_URL = 'https://media.20fit.id/wp-content/uploads/2026/07/Copy-of-new-logo-20fit-putih-3.png';
 function logoBar() {
-  return `<tr><td style="background:#ffffff;padding:22px 28px 18px;text-align:center;border-bottom:1px solid #eceff3"><img src="${LOGO_URL}" alt="20FIT" width="160" style="display:block;margin:0 auto;width:160px;max-width:60%;height:auto;border:0;outline:none;text-decoration:none"></td></tr>`;
+  // Dark bar so the white 20FIT logo stays visible across email clients.
+  return `<tr><td style="background:#17171d;padding:22px 28px 18px;text-align:center"><img src="${LOGO_URL}" alt="20FIT" width="160" style="display:block;margin:0 auto;width:160px;max-width:60%;height:auto;border:0;outline:none;text-decoration:none"></td></tr>`;
 }
 
 function resetEmailHtml({ name, link, lang }) {
@@ -139,7 +140,9 @@ async function sendVerifyEmail({ to, name, link, lang }) {
 function brandedEmailHtml(o) {
   const id = o.lang === 'id';
   const L = o.labels || {};
-  const icon = o.icon || '&#10003;';
+  // Banner color per outcome: green for approvals, red for rejections (default red).
+  const heroBg = o.heroBg || '#E4121F';
+  const heroGrad = o.heroGrad || 'linear-gradient(135deg,#ff3b47,#d10f1b)';
   const stationVal = o.station ? esc(o.station) + (o.stationLoc ? ' · ' + esc(o.stationLoc) : '')
     : '<span style="color:#8b8f97">' + esc(o.stnPending || '') + '</span>';
   const row = (label, value, accent) => value
@@ -169,9 +172,8 @@ function brandedEmailHtml(o) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
       ${logoBar()}
-      <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:30px 30px 30px;text-align:center">
-        <div style="width:62px;height:62px;border-radius:50%;background:#fffffe;font-size:30px;font-weight:900;color:#E4121F;line-height:62px;margin:0 auto">${icon}</div>
-        <div style="margin-top:16px;font-size:22px;font-weight:800;color:#fffffe">${esc(o.hero)}</div>
+      <tr><td bgcolor="${heroBg}" style="background:${heroBg};background:${heroGrad};padding:32px 30px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:#fffffe">${esc(o.hero)}</div>
       </td></tr>
       <tr><td style="padding:28px 30px 6px">
         <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">${esc(o.hi)}</p>
@@ -220,12 +222,66 @@ function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, categ
     pre: "You're approved — here are your assignment details.",
   };
   return brandedEmailHtml({
-    lang, pre: t.pre, hero: t.hero, heroSub: t.heroSub, icon: '&#10003;',
+    lang, pre: t.pre, hero: t.hero, heroSub: t.heroSub,
+    heroBg: '#178A54', heroGrad: 'linear-gradient(135deg,#22a866,#0f7a45)',
     hi: t.hi, bodyHtml: t.body,
     labels: { ev: t.ev, date: t.date, loc: t.loc, cat: t.cat, stn: t.stn }, stnPending: t.stnPending,
     eventName, eventDate, location, category, station, stationLoc,
     paras: [t.p1, t.p2, t.p3], regards: t.regards, team: t.team, foot: t.foot,
   });
+}
+
+function rejectionEmailHtml({ name, lang, eventName, eventDate, location, category }) {
+  const id = lang === 'id';
+  const t = id ? {
+    hi: ('Halo ' + (name || '')).trim() + ',',
+    body: 'Terima kasih sudah mendaftar untuk event di bawah ini. Mohon maaf, untuk kesempatan ini pendaftaran kamu <b>belum bisa kami setujui</b>.',
+    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori',
+    p1: 'Jangan berkecil hati — kesempatan lain akan terus dibuka. Kami harap kamu tetap semangat dan mendaftar lagi di event 20FIT berikutnya.',
+    p2: 'Terima kasih atas minat dan waktu kamu.',
+    regards: 'Salam hangat,', team: '20FIT Talent Team',
+    foot: 'Ini adalah email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
+    hero: 'Pendaftaran Belum Disetujui',
+    pre: 'Update status pendaftaran kamu.',
+  } : {
+    hi: ('Hello ' + (name || '')).trim() + ',',
+    body: 'Thank you for registering for the event below. Unfortunately, your registration <b>has not been approved</b> this time.',
+    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category',
+    p1: "Please don't be discouraged — more opportunities keep opening up. We hope you'll apply again for the next 20FIT event.",
+    p2: 'Thank you for your interest and your time.',
+    regards: 'Best regards,', team: '20FIT Talent Team',
+    foot: 'This is an automated email from 20FIT Talent. Please do not reply to this email.',
+    hero: 'Registration Not Approved',
+    pre: 'An update on your registration status.',
+  };
+  return brandedEmailHtml({
+    lang, pre: t.pre, hero: t.hero,
+    heroBg: '#E4121F', heroGrad: 'linear-gradient(135deg,#ff3b47,#d10f1b)',
+    hi: t.hi, bodyHtml: t.body,
+    labels: { ev: t.ev, date: t.date, loc: t.loc, cat: t.cat },
+    eventName, eventDate, location, category,
+    paras: [t.p1, t.p2], regards: t.regards, team: t.team, foot: t.foot,
+  });
+}
+
+async function sendRejectionEmail({ to, name, lang, eventName, eventDate, location, category }) {
+  const subject = lang === 'id'
+    ? 'Update Pendaftaran Event Kamu — 20FIT Talent'
+    : 'An Update on Your Event Registration';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — rejection for ' + to + ' (' + eventName + ')');
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: rejectionEmailHtml({ name, lang, eventName, eventDate, location, category }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
 }
 
 function reminderEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) {
@@ -306,4 +362,4 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendReminderEmail };
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml };

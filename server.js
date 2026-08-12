@@ -1742,8 +1742,10 @@ app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, 
     if (!st) return needConfig(req, res);
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
+    const wasRejected = found.app.status === 'rejected';
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    if (!wasRejected) notifyPositionRejection(st, found.app, found.ev).catch((e) => console.error('[mail] EO rejection email failed:', e && e.message));
     res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
   } catch (e) { next(e); }
 });
@@ -1968,6 +1970,7 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     // returns a live row reference that updateApplication() mutates in place, so
     // reading prior.status after the update would already show 'approved'.
     const alreadyApproved = !!(prior && prior.status === 'approved');
+    const alreadyRejected = !!(prior && prior.status === 'rejected');
     const patch = { reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() };
     const note = String(req.body.note || '').trim().slice(0, 300);
     patch.note = note || null;
@@ -1983,6 +1986,9 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     // Fire-and-forget: a mail hiccup must never block or fail the approval itself.
     if (action === 'approve' && prior && !alreadyApproved) {
       notifyAcceptance(st, prior, patch).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    } else if (action === 'reject' && prior && !alreadyRejected) {
+      const ev = (await st.listEvents()).find((e) => e.id === prior.event_id);
+      notifyPositionRejection(st, prior, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
     }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
@@ -2020,8 +2026,13 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
     if (!st) return needConfig(req, res);
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
+    const wasRejected = app.status === 'rejected';
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    if (!wasRejected) {
+      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
+      notifyPositionRejection(st, app, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
+    }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -2074,6 +2085,20 @@ async function notifyPositionAcceptance(st, app, ev, positionId) {
     location: ev.location || null,
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
     station: posLabel, stationLoc: null,
+  });
+}
+
+// Notify a talent their application was rejected (red email). Best-effort.
+async function notifyPositionRejection(st, app, ev) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) return; // no usable email on file
+  await mailer.sendRejectionEmail({
+    to, name: account.name, lang: 'id',
+    eventName: (ev && ev.name) || 'Event 20FIT',
+    eventDate: ev ? eventDateStr(ev) : null,
+    location: (ev && ev.location) || null,
+    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
   });
 }
 
