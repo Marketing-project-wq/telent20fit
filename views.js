@@ -3723,7 +3723,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
   let formBlock = '';
   if (editable) {
-    formBlock = `<form method="post" action="/event/${esc(e.id)}/apply" class="card" style="margin-top:14px">
+    formBlock = `<form method="post" action="/event/${esc(e.slug || e.id)}/apply" class="card" style="margin-top:14px">
       <div style="font-weight:700;margin-bottom:4px">${ctx.myApp ? t('ta.editChoices') : t('ta.pickChoices')}</div>
       <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
       <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select>${hasJd ? jdPanel('pos1') : ''}</div>
@@ -3732,7 +3732,7 @@ function talentEventApply({ account, event, ctx, lang }) {
       <button type="submit" class="btn btn-block">${ctx.myApp ? t('ta.update') : t('ta.submit')}</button>
     </form>`;
     if (hasJd) formBlock += `<script>(function(){var JD=${JSON.stringify(jdMap).replace(/</g, '\\u003c')};['pos1','pos2','pos3'].forEach(function(id){var sel=document.getElementById(id);if(!sel)return;var panel=sel.parentNode.querySelector('.jd-panel');if(!panel)return;var txt=panel.querySelector('.jd-text');function upd(){var v=sel.value,d=v&&JD[v];if(d){txt.textContent=d;panel.style.display='';}else{panel.style.display='none';txt.textContent='';}}sel.addEventListener('change',upd);upd();});})();</script>`;
-    if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
+    if (ctx.myApp) formBlock += `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
   } else if (!ctx.myApp) {
     formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
   }
