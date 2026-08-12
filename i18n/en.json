@@ -260,7 +260,7 @@
   "eo.ap.hyroxOk": "HYROX verified",
   "eo.ap.hyroxPending": "HYROX not verified yet",
   "eo.ap.rejectConfirm": "Reject this applicant?",
-  "eo.ap.undo": "Undo decision",
+  "eo.ap.undo": "Cancel",
   "eo.ap.acceptedAs": "Accepted: {pos}",
   "eo.ap.posFull": "full",
   "eo.ap.decide": "Accept for position:",
