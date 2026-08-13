@@ -542,7 +542,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .foot-bottom{max-width:1180px;margin:44px auto 0;padding:22px 28px 44px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
 .foot-bottom a{color:var(--lp-tx3)}
 @media(max-width:760px){.foot-main{padding-top:40px}}
-@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
+@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}.lp-float{max-width:300px}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
 <body>
