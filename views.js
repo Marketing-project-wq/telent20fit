@@ -420,11 +420,8 @@ function landingPage(lang, opts = {}) {
     ['https://www.youtube.com/@20fit.indonesia', SVG_YT, 'YouTube'],
   ].map(([href, svg, name]) => `<a href="${href}" target="_blank" rel="noopener" aria-label="${name}" title="${name}">${svg}</a>`).join('');
 
-  const langBtn = (code, label) => {
-    const on = code === L;
-    return `<a href="/?lang=${code}" style="padding:9px 16px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
-  };
-  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
+  const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
@@ -470,6 +467,9 @@ a{text-decoration:none}
 .lp-about{margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
 .lp-about:hover{color:var(--lp-tx)}
 .lp-about.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.lp-tog{display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
+.lp-tog-b{padding:9px 15px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx3)}
+.lp-tog-b.on{color:#fff;background:var(--red)}
 .lp-acct{position:relative;flex:0 0 auto}
 .lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
 .lp-acct>summary::-webkit-details-marker{display:none}
@@ -479,8 +479,8 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
-@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}}
+@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}.lp-tog-b{padding:6px 9px}}
 @media(max-width:350px){.lp-about span{display:none}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
@@ -599,11 +599,8 @@ function landingNav(lang, active) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
-  const langBtn = (code, label) => {
-    const on = code === L;
-    return `<a href="/?lang=${code}" style="padding:9px 16px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
-  };
-  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
+  const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const nIc = (p) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   return `<header class="lp-nav"><div class="lp-nav-in">
     <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
@@ -685,6 +682,9 @@ a{text-decoration:none}
 .lp-about{margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
 .lp-about:hover{color:var(--lp-tx)}
 .lp-about.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.lp-tog{display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
+.lp-tog-b{padding:9px 15px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx3)}
+.lp-tog-b.on{color:#fff;background:var(--red)}
 .lp-acct{position:relative;flex:0 0 auto}
 .lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
 .lp-acct>summary::-webkit-details-marker{display:none}
@@ -694,8 +694,8 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
-@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}}
+@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}.lp-tog-b{padding:6px 9px}}
 @media(max-width:350px){.lp-about span{display:none}}
 .ab-hero{background:var(--ink);color:#fff;padding:66px 28px 58px}
 .ab-hero-in{max-width:820px;margin:0 auto}
