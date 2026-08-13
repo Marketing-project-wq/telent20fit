@@ -3330,6 +3330,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   // Which review tab this is (Man Power crew / KOL / Fotografer-Videografer).
   const catTitle = cat === 'kol' ? t('mpr.titleKol') : cat === 'creative' ? t('mpr.titleCreative') : t('mpr.title');
   const catActive = cat === 'kol' ? 'applications-kol' : cat === 'creative' ? 'applications-creative' : 'applications';
+  const catEmpty = cat === 'kol' ? t('mpr.emptyKol') : cat === 'creative' ? t('mpr.emptyCreative') : t('mpr.empty');
   const okBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${msg}</div>`;
   const warnBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">⚠️ ${msg}</div>`;
   const errBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--err);background:var(--err-soft);font-size:14px">⚠️ ${msg}</div>`;
@@ -3490,7 +3491,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
-  ${applications.length ? folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr.empty')}</p></div>`}
+  ${applications.length ? folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
 </div>
 <script>
 (function(){
