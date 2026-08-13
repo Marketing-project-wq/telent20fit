@@ -515,7 +515,7 @@ a{text-decoration:none}
 .hero-in.d3{animation-delay:.54s}
 .accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
 /* Hero headline: "ONE PLATFORM." on line 1, red "ENDLESS EVENT OPPORTUNITIES." on line 2 (one line). */
-.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(24px,calc(3.2vw - 4px),36px)}
+.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(28px,calc(3.8vw - 3.5px),42px)}
 .hero-title .accent-shimmer{display:block}
 @media(max-width:860px){.hero-title{font-size:calc(5.6vw - 3px)}}
 @keyframes shimmer{to{background-position:-220% 0}}
@@ -523,7 +523,7 @@ a{text-decoration:none}
 .lp-float{animation:floaty 7s ease-in-out infinite;will-change:transform}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}.lp-float{animation:none}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
-.resp1{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}
+.resp1{display:grid;grid-template-columns:1.55fr .75fr;gap:40px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:26px 10px;font:800 18px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);text-align:center;display:flex;align-items:center;justify-content:center;min-height:92px}
