@@ -479,7 +479,9 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:520px){.lp-about span{display:none}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}}
+@media(max-width:350px){.lp-about span{display:none}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 /* Optional hero background photos + readability scrim; text goes light over them */
@@ -692,7 +694,9 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:520px){.lp-about span{display:none}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:26px}.lp-about{padding:9px 13px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}}
+@media(max-width:350px){.lp-about span{display:none}}
 .ab-hero{background:var(--ink);color:#fff;padding:66px 28px 58px}
 .ab-hero-in{max-width:820px;margin:0 auto}
 .ab-kick{color:#ff6b74;font:700 13px/1 Barlow,sans-serif;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
