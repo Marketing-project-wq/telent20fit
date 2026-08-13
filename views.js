@@ -458,7 +458,7 @@ a{text-decoration:none}
 .hero-bg .b3{width:64vw;height:48vw;left:22%;bottom:-36%;background:radial-gradient(closest-side,#c20e18,transparent);animation:flow3 66s ease-in-out infinite}
 .hero-bg .b4{width:24vw;height:24vw;left:52%;top:12%;opacity:.13;background:radial-gradient(closest-side,#fff,transparent);animation:flow2 52s ease-in-out infinite reverse}
 .hero-bg::after{content:"";position:absolute;inset:0;background:radial-gradient(130% 100% at 28% 42%,transparent 34%,rgba(9,9,12,.55) 100%)}
-:root[data-theme="light"] .hero-bg i{opacity:.18}
+:root[data-theme="light"] .hero-bg i{display:none}
 :root[data-theme="light"] .hero-bg .b4{opacity:0}
 :root[data-theme="light"] .hero-bg::after{background:radial-gradient(130% 100% at 28% 42%,transparent 42%,rgba(244,246,249,.6) 100%)}
 @keyframes flow1{0%,100%{transform:translate(0,0) scale(1)}20%{transform:translate(5%,7%) scale(1.06)}40%{transform:translate(11%,4%) scale(1.12)}60%{transform:translate(8%,10%) scale(1.15)}80%{transform:translate(4%,8%) scale(1.06)}}
