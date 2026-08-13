@@ -354,13 +354,16 @@ ${isStaff ? '' : `<nav class="tab-bar">${items}</nav>`}
 function landingPage(lang) {
   const L = (lang === 'en') ? 'en' : 'id';
   const t = (k, v) => tr(L, k, v);
-  // Feature cards: [icon badge, i18n key base] — title/desc resolved from the dictionary.
+  // Feature cards: [icon SVG, i18n key base] — title/description resolved from the dictionary.
+  // Icons are stroke-based (Lucide), inheriting the red badge color via currentColor.
+  const ic = (p) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const FEATS = [
-    ['ID', 'feat.identity'],
-    ['AI', 'feat.face'],
-    ['SOW', 'feat.job'],
-    ['3', 'feat.roles'],
-    ['★', 'feat.cert'],
+    [ic('<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>'), 'whyChoose.item1'], // income — banknote
+    [ic('<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'), 'whyChoose.item2'], // experience — briefcase
+    [ic('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>'), 'whyChoose.item3'], // portfolio — gallery
+    [ic('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>'), 'whyChoose.item4'], // benefits — gift
+    [ic('<path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/>'), 'whyChoose.item5'], // certificate — award
+    [ic('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'), 'whyChoose.item6'], // find project — target
   ];
   // Theme-swapped brand logos: *_DARK shows in dark mode (white artwork), *_LIGHT in light mode (black artwork).
   const SHOP_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/08-20FIT-SHOP-WHITE-1-scaled.png';
@@ -386,9 +389,9 @@ function landingPage(lang) {
   ];
 
   const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
-      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font:800 18px/1 'Barlow Condensed',sans-serif;color:var(--red);margin-bottom:16px">${esc(icon)}</div>
+      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--red);margin-bottom:16px">${icon}</div>
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
-      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.desc'))}</p>
+      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.description'))}</p>
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
@@ -541,7 +544,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 
   <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('land.featTitle'))}</h2>
+      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('whyChoose.title'))}</h2>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
