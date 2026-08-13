@@ -612,6 +612,8 @@
   "mpr.titleCreative": "Aplikasi Fotografer / Videografer",
   "mpr.sub": "Tinjau aplikasi Man Power, setujui atau tolak, lalu assign station.",
   "mpr.empty": "Belum ada aplikasi Man Power.",
+  "mpr.emptyKol": "Belum ada aplikasi KOL.",
+  "mpr.emptyCreative": "Belum ada aplikasi Fotografer / Videografer.",
   "mpr.count": "{n} aplikasi",
   "mpr.attnHead": "Link absensi lapangan",
   "mpr.attnSub": "Bagikan link ini ke PIC di lokasi untuk melakukan check-in kehadiran. PIC tidak perlu login.",

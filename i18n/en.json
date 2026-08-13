@@ -612,6 +612,8 @@
   "mpr.titleCreative": "Photographer / Videographer Applications",
   "mpr.sub": "Review Man Power applications, approve or reject, then assign a station.",
   "mpr.empty": "No Man Power applications yet.",
+  "mpr.emptyKol": "No KOL applications yet.",
+  "mpr.emptyCreative": "No Photographer / Videographer applications yet.",
   "mpr.count": "{n} applications",
   "mpr.attnHead": "On-site attendance link",
   "mpr.attnSub": "Share this link with an on-site PIC to check people in. No login required.",
