@@ -1138,13 +1138,13 @@ function talentDataDiri(type, opts = {}) {
       <div class="hint" style="margin-top:6px">${t('dd.ktpHint')}</div>
     </div>
     <div class="field">
-      <label for="instagram">${t('dd.instagram')}${req}</label>
-      <input type="text" id="instagram" name="instagram" maxlength="60" required placeholder="username" value="${esc(v.instagram || '')}">
+      <label for="instagram">${t('dd.instagram')}${opt}</label>
+      <input type="text" id="instagram" name="instagram" maxlength="60" placeholder="username" value="${esc(v.instagram || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.instagramHint')}</div>
     </div>
     <div class="field">
-      <label for="instagram_followers">${t('dd.followers')}${req}</label>
-      <input type="number" id="instagram_followers" name="instagram_followers" min="0" step="1" inputmode="numeric" required placeholder="0" value="${esc(v.instagram_followers || '')}">
+      <label for="instagram_followers">${t('dd.followers')}${opt}</label>
+      <input type="number" id="instagram_followers" name="instagram_followers" min="0" step="1" inputmode="numeric" placeholder="0" value="${esc(v.instagram_followers || '')}">
     </div>
     <div class="field">
       <label for="experience">${t('dd.experience')}${req}</label>
