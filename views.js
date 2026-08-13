@@ -489,7 +489,7 @@ a{text-decoration:none}
 .hero-photos .hp{position:absolute;inset:0;background-size:cover;background-position:center}
 .hero-photos.cross .hp{opacity:0;animation:heroCross 16s ease-in-out infinite}
 .hero-photos.cross .hp:nth-child(2){animation-delay:8s}
-.hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,rgba(9,9,12,.86) 0%,rgba(9,9,12,.64) 44%,rgba(9,9,12,.36) 100%)}
+.hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,rgba(9,9,12,.82) 0%,rgba(9,9,12,.72) 50%,rgba(9,9,12,.62) 100%)}
 @keyframes heroCross{0%{opacity:0}4%{opacity:1}46%{opacity:1}50%{opacity:0}100%{opacity:0}}
 .hero-stage.has-photos .hero-bg{display:none}
 .hero-stage.has-photos{--lp-tx2:#eaecf0;--lp-tx3:#d3d6db}
