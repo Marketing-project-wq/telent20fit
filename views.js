@@ -419,6 +419,35 @@ function landingPage(lang) {
   };
   const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
+  // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
+  // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
+  const nIc = (p, w) => `<svg viewBox="0 0 24 24" width="${w || 17}" height="${w || 17}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const navBar = `<header class="lp-nav"><div class="lp-nav-in">
+    <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
+      <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
+      <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
+    </a>
+    <form class="lp-search" action="/login" method="get" role="search">
+      ${nIc('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>', 18)}
+      <input type="text" name="q" placeholder="${esc(t('nav.search'))}" aria-label="${esc(t('nav.search'))}">
+      <input type="hidden" name="lang" value="${L}">
+    </form>
+    <nav class="lp-navlinks" aria-label="Primary">
+      <a href="/${q}" class="lp-navpill on" aria-current="page">${nIc('<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>')}<span>${esc(t('nav.home'))}</span></a>
+      <a href="/login${q}" class="lp-navpill">${nIc('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>')}<span>${esc(t('nav.events'))}</span></a>
+      <a href="/login${q}" class="lp-navpill">${nIc('<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="M13 5v14"/>')}<span>${esc(t('nav.tickets'))}</span></a>
+    </nav>
+    ${toggle}
+    <details class="lp-acct">
+      <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span><svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="lp-acct-menu">
+        <a href="/login${q}">${esc(t('nav.signin'))}</a>
+        <a href="/register${q}">${esc(t('nav.signup'))}</a>
+        <a href="/submit${q}">${esc(t('land.submit'))}</a>
+        <a href="/eo/login">${esc(t('nav.eoLogin'))}</a>
+      </div>
+    </details>
+  </div></header>`;
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -452,6 +481,31 @@ a{text-decoration:none}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
 @media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
+/* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
+.lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
+.lp-nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px}
+.lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
+.lp-nav-logo .lp-logo{height:32px}
+.lp-search{flex:1 1 240px;max-width:460px;min-width:0;display:flex;align-items:center;gap:9px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:999px;padding:10px 16px;color:var(--lp-tx3)}
+.lp-search svg{flex:0 0 auto;opacity:.7}
+.lp-search input{flex:1;min-width:0;border:0;background:transparent;outline:none;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-search input::placeholder{color:var(--lp-tx3)}
+.lp-navlinks{margin-left:auto;display:flex;align-items:center;gap:2px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:999px;padding:4px}
+.lp-navpill{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);white-space:nowrap}
+.lp-navpill.on{background:var(--ink);color:#fff}
+.lp-navpill:not(.on):hover{color:var(--lp-tx)}
+.lp-acct{position:relative;flex:0 0 auto}
+.lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
+.lp-acct>summary::-webkit-details-marker{display:none}
+.lp-acct>summary::marker{content:""}
+.lp-caret{transition:transform .2s}
+.lp-acct[open]>summary .lp-caret{transform:rotate(180deg)}
+.lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
+.lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-acct-menu a:hover{background:var(--lp-chip)}
+@media(max-width:1000px){.lp-nav-in{flex-wrap:wrap}.lp-search{order:5;flex:1 1 100%;max-width:none}}
+@media(max-width:680px){.lp-navpill span{display:none}.lp-navpill{padding:9px 12px}.lp-acct>summary span{display:none}}
+@media(max-width:460px){.lp-search{display:none}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 .hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
@@ -506,19 +560,9 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
+  ${navBar}
   <div class="hero-stage">
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
-  <header class="lp-head">
-    <span class="lp-logo-box">
-      <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
-      <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
-    </span>
-    <div class="lp-toggles">
-      <a href="/submit${q}" class="lp-submit">${esc(t('land.submit'))}</a>
-      ${toggle}
-      ${themeToggle()}
-    </div>
-  </header>
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
