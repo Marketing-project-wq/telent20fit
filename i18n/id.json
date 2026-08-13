@@ -604,7 +604,11 @@
   "mp.err.sowRequired": "Kamu harus menyetujui SOW untuk lanjut.",
 
   "nav.applications": "Man Power",
+  "nav.appKol": "KOL",
+  "nav.appCreative": "Fotografer / Videografer",
   "mpr.title": "Aplikasi Man Power",
+  "mpr.titleKol": "Aplikasi KOL",
+  "mpr.titleCreative": "Aplikasi Fotografer / Videografer",
   "mpr.sub": "Tinjau aplikasi Man Power, setujui atau tolak, lalu assign station.",
   "mpr.empty": "Belum ada aplikasi Man Power.",
   "mpr.count": "{n} aplikasi",

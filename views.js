@@ -313,6 +313,8 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
         + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
         + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
+        + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'proofs', t('nav.appKol'))
+        + navLink('/admin/applications?cat=creative', 'applications-creative', active, 'proofs', t('nav.appCreative'))
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
       : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
@@ -3307,10 +3309,13 @@ function adminEventEdit({ staff, event, lang }) {
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */
-function adminApplications({ staff, applications, attendanceLinks, lang, flash }) {
+function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
+  // Which review tab this is (Man Power crew / KOL / Fotografer-Videografer).
+  const catTitle = cat === 'kol' ? t('mpr.titleKol') : cat === 'creative' ? t('mpr.titleCreative') : t('mpr.title');
+  const catActive = cat === 'kol' ? 'applications-kol' : cat === 'creative' ? 'applications-creative' : 'applications';
   const okBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${msg}</div>`;
   const warnBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">⚠️ ${msg}</div>`;
   const errBanner = (msg) => `<div class="card" style="margin-top:14px;border:1px solid var(--err);background:var(--err-soft);font-size:14px">⚠️ ${msg}</div>`;
@@ -3463,7 +3468,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   }).join('');
 
   const body = `<div class="wrap">
-  ${staffHead(staff, t('mpr.title'), L)}
+  ${staffHead(staff, catTitle, L)}
   ${flashBanner}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
@@ -3497,7 +3502,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   });
 })();
 </script>`;
-  return appLayout({ title: t('mpr.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+  return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
 }
 
 /**
