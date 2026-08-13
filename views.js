@@ -317,6 +317,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/applications?cat=creative', 'applications-creative', active, 'proofs', t('nav.appCreative'))
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
+        + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
       : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
         + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
@@ -351,9 +352,15 @@ ${isStaff ? '' : `<nav class="tab-bar">${items}</nav>`}
  * Landing page at "/" (dark prototype hero) with an ID/EN language toggle.
  * CTAs lead to the talent-type picker for sign up (/register) and log in (/login).
  */
-function landingPage(lang) {
+function landingPage(lang, opts = {}) {
   const L = (lang === 'en') ? 'en' : 'id';
   const t = (k, v) => tr(L, k, v);
+  // Optional hero background photos (0-2). With 2 they crossfade; with 1 it's static.
+  const bgPhotos = Array.isArray(opts.bg) ? opts.bg.filter(Boolean) : [];
+  const hasPhotos = bgPhotos.length > 0;
+  const heroPhotos = hasPhotos
+    ? `<div class="hero-photos${bgPhotos.length > 1 ? ' cross' : ''}" aria-hidden="true">${bgPhotos.map((u) => `<div class="hp" style="background-image:url('${esc(u)}')"></div>`).join('')}</div>`
+    : '';
   // Feature cards: [icon SVG, i18n key base] — title/description resolved from the dictionary.
   // Icons are stroke-based (Lucide), inheriting the red badge color via currentColor.
   const ic = (p) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -508,6 +515,17 @@ a{text-decoration:none}
 @media(max-width:460px){.lp-search{display:none}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
+/* Optional hero background photos + readability scrim; text goes light over them */
+.hero-photos{position:absolute;inset:0;z-index:0;overflow:hidden}
+.hero-photos .hp{position:absolute;inset:0;background-size:cover;background-position:center}
+.hero-photos.cross .hp{opacity:0;animation:heroCross 16s ease-in-out infinite}
+.hero-photos.cross .hp:nth-child(2){animation-delay:8s}
+.hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,rgba(9,9,12,.86) 0%,rgba(9,9,12,.64) 44%,rgba(9,9,12,.36) 100%)}
+@keyframes heroCross{0%{opacity:0}4%{opacity:1}46%{opacity:1}50%{opacity:0}100%{opacity:0}}
+.hero-stage.has-photos .hero-bg{display:none}
+.hero-stage.has-photos{--lp-tx2:#eaecf0;--lp-tx3:#d3d6db}
+.hero-stage.has-photos h1{color:#fff}
+@media(prefers-reduced-motion:reduce){.hero-photos.cross .hp{animation:none;opacity:0}.hero-photos.cross .hp:first-child{opacity:1}}
 .hero-bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
 .hero-bg i{position:absolute;display:block;border-radius:45% 55% 58% 42%;filter:blur(90px);opacity:.5;will-change:transform}
 .hero-bg .b1{width:70vw;height:56vw;left:-18%;top:-32%;background:radial-gradient(closest-side,#E4121F,transparent);animation:flow1 48s ease-in-out infinite}
@@ -561,8 +579,9 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 <body>
 <div style="min-height:100vh">
   ${navBar}
-  <div class="hero-stage">
+  <div class="hero-stage${hasPhotos ? ' has-photos' : ''}">
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
+  ${heroPhotos}
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
@@ -604,6 +623,75 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
   </footer>
 </div>
 </body></html>`;
+}
+
+/** Super-admin uploader for the landing hero background photos (1-2, alternating). */
+function adminLanding({ staff, lang, urls, saved }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const u = urls || [];
+  const slot = (url, label) => `<div class="lbg-card">
+        <div class="lbg-cap">${esc(label)}</div>
+        <div class="lbg-thumb">${url ? `<img src="${esc(url)}" alt="">` : `<span class="lbg-empty">${esc(t('landing.none'))}</span>`}</div>
+      </div>`;
+  const body = `<div class="lbg-wrap">
+    <h1 class="lbg-h1">${esc(t('landing.title'))}</h1>
+    <p class="lbg-intro">${esc(t('landing.intro'))}</p>
+    ${saved ? `<div class="lbg-ok">✓ ${esc(t('landing.saved'))}</div>` : ''}
+    <div class="lbg-grid">${slot(u[0], t('landing.photo1'))}${slot(u[1], t('landing.photo2'))}</div>
+    <form id="lbgForm" class="lbg-form" method="post" action="/admin/landing" enctype="multipart/form-data">
+      <label class="lbg-file"><span>${esc(t('landing.photo1'))}</span><input id="lbg1" type="file" name="bg1" accept="image/*"></label>
+      <label class="lbg-file"><span>${esc(t('landing.photo2'))}</span><input id="lbg2" type="file" name="bg2" accept="image/*"></label>
+      <p class="lbg-hint">${esc(t('landing.hint'))}</p>
+      <button id="lbgBtn" type="submit" class="btn">${esc(t('landing.save'))}</button>
+    </form>
+  </div>
+  <style>
+    .lbg-wrap{max-width:760px;margin:0 auto}
+    .lbg-h1{font-size:24px;font-weight:800;margin:0 0 6px}
+    .lbg-intro{color:#5b6069;font-size:14px;line-height:1.55;margin:0 0 16px}
+    .lbg-ok{background:#e7f6ee;border:1px solid #b6e2c9;color:#137a49;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:16px}
+    .lbg-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+    .lbg-card{border:1px solid #e3e7ed;border-radius:12px;overflow:hidden;background:#fff}
+    .lbg-cap{padding:9px 12px;font-weight:700;font-size:13px;border-bottom:1px solid #eef1f5}
+    .lbg-thumb{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#f1f3f6}
+    .lbg-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+    .lbg-empty{color:#9aa0a8;font-size:13px}
+    .lbg-form{border:1px solid #e3e7ed;border-radius:14px;background:#fff;padding:20px}
+    .lbg-file{display:block;margin-bottom:16px}
+    .lbg-file span{display:block;font-weight:700;font-size:13px;margin-bottom:6px}
+    .lbg-file input{width:100%;font-size:14px}
+    .lbg-hint{color:#8b8f97;font-size:12.5px;margin:0 0 16px}
+    @media(max-width:560px){.lbg-grid{grid-template-columns:1fr}}
+  </style>
+  <script>
+  (function(){
+    var form=document.getElementById('lbgForm'), btn=document.getElementById('lbgBtn');
+    var save=${JSON.stringify(t('landing.save'))}, up=${JSON.stringify(t('landing.uploading'))}, pickOne=${JSON.stringify(t('landing.pickOne'))}, failed=${JSON.stringify(t('landing.failed'))};
+    function compress(file){
+      return createImageBitmap(file,{imageOrientation:'from-image'}).then(function(img){
+        var maxW=1920, scale=Math.min(1, maxW/img.width);
+        var w=Math.round(img.width*scale), h=Math.round(img.height*scale);
+        var c=document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        return new Promise(function(res){ c.toBlob(function(b){res(b);}, 'image/jpeg', 0.82); });
+      });
+    }
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var f1=document.getElementById('lbg1').files[0], f2=document.getElementById('lbg2').files[0];
+      if(!f1 && !f2){ alert(pickOne); return; }
+      btn.disabled=true; btn.textContent=up;
+      var fd=new FormData(), tasks=[];
+      if(f1) tasks.push(compress(f1).then(function(b){ fd.append('bg1', b, 'bg-1.jpg'); }));
+      if(f2) tasks.push(compress(f2).then(function(b){ fd.append('bg2', b, 'bg-2.jpg'); }));
+      Promise.all(tasks).then(function(){ return fetch('/admin/landing', { method:'POST', body:fd }); })
+        .then(function(r){ if(r.ok){ window.location.href='/admin/landing?saved=1'; } else { throw new Error('bad'); } })
+        .catch(function(){ alert(failed); btn.disabled=false; btn.textContent=save; });
+    });
+  })();
+  </script>`;
+  return appLayout({ title: t('landing.title'), body, role: staff.role, active: 'landing', user: staff.name, lang });
 }
 
 /** Talent-type picker shown for sign up (mode='register') and log in (mode='login'). */
@@ -3883,7 +3971,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
