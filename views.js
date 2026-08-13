@@ -562,10 +562,12 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
       </div>
     </div>
     <div style="position:relative">
-      <div class="lp-float" style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:22px">
-        <img src="https://media.20fit.id/wp-content/uploads/2026/08/WhatsApp-Image-2026-08-10-at-17.38.20.jpeg" alt="Indonesia Sports Summit 2026" style="width:100%;height:auto;border-radius:12px;display:block;margin-bottom:16px;background:var(--lp-chip)">
-        <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:10px">Indonesia Sports Summit 2026</div>
-        <div style="font-size:13px;color:var(--lp-tx3)">11–13 Sep 2026 · GBK Jakarta</div>
+      <div class="lp-float" style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:16px;overflow:hidden">
+        <img src="https://media.20fit.id/wp-content/uploads/2026/08/WhatsApp-Image-2026-08-10-at-17.38.20.jpeg" alt="Indonesia Sports Summit 2026" style="width:100%;height:auto;display:block;background:var(--lp-chip)">
+        <div style="padding:16px 20px 18px">
+          <div style="font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:10px">Indonesia Sports Summit 2026</div>
+          <div style="font-size:13px;color:var(--lp-tx3)">11–13 Sep 2026 · GBK Jakarta</div>
+        </div>
       </div>
     </div>
   </section>
