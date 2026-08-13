@@ -176,12 +176,10 @@ function dataDiriPost(type) {
       if (!bdOk) errors.push(req.t('dd.err.birthdate'));
       if (values.gender !== 'male' && values.gender !== 'female') errors.push(req.t('dd.err.gender'));
       if (!values.ktp) errors.push(req.t('dd.err.ktp')); // just collect the number, no verification
-      if (!values.instagram) errors.push(req.t('dd.err.instagram'));
       if (!values.experience) errors.push(req.t('dd.err.experience'));
+      // Instagram username + followers are optional — crew talents don't need them.
       let followers = null;
-      if (!values.instagram_followers) {
-        errors.push(req.t('dd.err.followersReq'));
-      } else {
+      if (values.instagram_followers) {
         const n = parseInt(values.instagram_followers.replace(/[.,\s]/g, ''), 10);
         if (Number.isNaN(n) || n < 0 || n > 1e9) errors.push(req.t('dd.err.followers'));
         else followers = n;
