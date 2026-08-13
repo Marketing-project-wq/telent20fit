@@ -2120,7 +2120,11 @@ async function runDueReminders(st) {
     .filter((e) => e.is_active && !e.completed_at && String(e.starts_at || '').slice(0, 10) === target)
     .map((e) => [e.id, e]));
   if (!dueEvents.size) return { due: 0, sent: 0 };
-  const apps = await st.listApplications();
+  const [apps, choices, positions] = await Promise.all([st.listApplications(), st.listApplicationChoices(), st.listPositions()]);
+  // Accepted position label per app, so position-based talents get an assignment line too.
+  const posById = new Map(positions.map((p) => [p.id, p]));
+  const acceptedPos = new Map();
+  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_en || p.label_id || null); } });
   const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
   let sent = 0;
   for (const a of due) {
@@ -2133,7 +2137,7 @@ async function runDueReminders(st) {
         to, name: account.name, lang: 'en',
         eventName: ev.name || 'Event 20FIT', eventDate: eventDateStrEn(ev),
         location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
-        station: a.station, stationLoc: a.station_loc,
+        station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
       });
       // Only mark as reminded once the email is genuinely delivered — so if the
       // mail service isn't configured yet, we retry on the next run instead of

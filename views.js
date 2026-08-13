@@ -3468,9 +3468,6 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash }
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <form method="post" action="/admin/reminders/run" class="inline-form">
-        <button class="btn btn-ghost btn-sm" title="${t('mpr.remRunHint')}">🔔 ${t('mpr.remRun')}</button>
-      </form>
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
