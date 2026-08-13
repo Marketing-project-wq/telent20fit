@@ -1964,6 +1964,7 @@ function kolProfilePage({ account, certs, lang }) {
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
   const body = `<div class="wrap narrow">
+  <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}</style>
   <div class="card" style="margin-top:0;padding:22px 20px">
     <div style="display:flex;gap:18px;align-items:center">
       <div style="width:84px;height:84px;border-radius:50%;background:${avatarBg};color:#fff;font:800 36px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.14)">${esc(initial)}</div>
@@ -1977,8 +1978,13 @@ function kolProfilePage({ account, certs, lang }) {
     <a href="/kol/data-diri?edit=1&lang=${L}" class="btn btn-block" style="margin-top:18px">✎ ${t('prof.edit')}</a>
   </div>
 
-  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">${t('prof.dataTitle')}</h2></div>
-  <div class="card" style="margin-top:12px">${talentProfileBlock(acc, L)}</div>
+  <details class="prof-details" style="margin-top:24px">
+    <summary style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:800;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 18px">
+      <span>${t('prof.dataTitle')}</span>
+      <span class="muted prof-caret" style="font-weight:600;font-size:13px">${t('prof.showDetail')}</span>
+    </summary>
+    <div class="card" style="margin-top:10px">${talentProfileBlock(acc, L)}</div>
+  </details>
 
   <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">🎖️ ${t('cert.myTitle')}</h2></div>
   ${certList}
