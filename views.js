@@ -1949,27 +1949,41 @@ function kolProfilePage({ account, certs, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
+  // Modern profile header bits: initial avatar (personalised colour), @handle, role, bio.
+  const initial = ((acc.name || '?').trim()[0] || '?').toUpperCase();
+  let hsum = 0; const nm = acc.name || '?'; for (let i = 0; i < nm.length; i++) hsum += nm.charCodeAt(i);
+  const hue = hsum % 360;
+  const avatarBg = `linear-gradient(135deg,hsl(${hue},70%,56%),hsl(${(hue + 30) % 360},68%,44%))`;
+  const handle = acc.instagram ? '@' + esc(acc.instagram) : (acc.login ? '@' + esc(String(acc.login).split('@')[0]) : '');
+  const roleLabel = talentLabel(L, acc.talent_type);
+  const bio = acc.experience || '';
   const certList = (certs && certs.length)
     ? `<div class="dl-list">${certs.map((c) => `<div class="dl-item" style="align-items:center">
         <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''}</div><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.cert_no)}</div></div>
         <a href="/kol/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
-  const body = `<div class="wrap">
-  <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:0">
-    <h1 style="margin:0">${t('nav.profile')}</h1>
-    <a href="/kol/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('prof.edit')}</a>
-  </div>
-  <div class="card" style="margin-top:14px">
-    <div style="font-size:20px;font-weight:800">${esc(acc.name || '')}</div>
-    <div class="muted" style="font-size:13px;margin-top:2px">${esc(acc.login || '')}</div>
-    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">${talentProfileBlock(acc, L)}</div>
+  const body = `<div class="wrap narrow">
+  <div class="card" style="margin-top:0;padding:22px 20px">
+    <div style="display:flex;gap:18px;align-items:center">
+      <div style="width:84px;height:84px;border-radius:50%;background:${avatarBg};color:#fff;font:800 36px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.14)">${esc(initial)}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:22px;font-weight:800;line-height:1.15;word-break:break-word">${esc(acc.name || '—')}</div>
+        <div class="muted" style="font-size:14px;margin-top:3px;word-break:break-word">${handle}</div>
+        <div style="margin-top:8px"><span class="tag">${esc(roleLabel)}</span></div>
+      </div>
+    </div>
+    ${bio ? `<p style="font-size:14px;line-height:1.6;margin:16px 0 0;color:var(--muted);white-space:pre-wrap">${esc(bio)}</p>` : ''}
+    <a href="/kol/data-diri?edit=1&lang=${L}" class="btn btn-block" style="margin-top:18px">✎ ${t('prof.edit')}</a>
   </div>
 
-  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">🎖️ ${t('cert.myTitle')}</h2></div>
+  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">${t('prof.dataTitle')}</h2></div>
+  <div class="card" style="margin-top:12px">${talentProfileBlock(acc, L)}</div>
+
+  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">🎖️ ${t('cert.myTitle')}</h2></div>
   ${certList}
 
-  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">📄 ${t('doc.title')}</h2></div>
+  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📄 ${t('doc.title')}</h2></div>
   <a href="/kol/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;text-decoration:none;color:inherit">
     <span style="min-width:0"><b>${t('doc.manage')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageSub')}</div></span>
     <span style="font-size:22px;flex-shrink:0">›</span>
