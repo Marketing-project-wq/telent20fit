@@ -355,6 +355,7 @@ app.get('/', async (req, res, next) => {
     res.send(V.landingPage(req.lang, { bg }));
   } catch (e) { next(e); }
 });
+app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 
 // Public sign-up / sign-in: a single account form, no talent-type picker.
 // New accounts default to KOL; login resolves the account by email across all
