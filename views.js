@@ -428,33 +428,7 @@ function landingPage(lang, opts = {}) {
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
-  const nIc = (p, w) => `<svg viewBox="0 0 24 24" width="${w || 17}" height="${w || 17}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
-  const navBar = `<header class="lp-nav"><div class="lp-nav-in">
-    <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
-      <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
-      <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
-    </a>
-    <form class="lp-search" action="/login" method="get" role="search">
-      ${nIc('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>', 18)}
-      <input type="text" name="q" placeholder="${esc(t('nav.search'))}" aria-label="${esc(t('nav.search'))}">
-      <input type="hidden" name="lang" value="${L}">
-    </form>
-    <nav class="lp-navlinks" aria-label="Primary">
-      <a href="/${q}" class="lp-navpill on" aria-current="page">${nIc('<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>')}<span>${esc(t('nav.home'))}</span></a>
-      <a href="/login${q}" class="lp-navpill">${nIc('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>')}<span>${esc(t('nav.events'))}</span></a>
-      <a href="/login${q}" class="lp-navpill">${nIc('<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="M13 5v14"/>')}<span>${esc(t('nav.tickets'))}</span></a>
-    </nav>
-    ${toggle}
-    <details class="lp-acct">
-      <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span><svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <div class="lp-acct-menu">
-        <a href="/login${q}">${esc(t('nav.signin'))}</a>
-        <a href="/register${q}">${esc(t('nav.signup'))}</a>
-        <a href="/submit${q}">${esc(t('land.submit'))}</a>
-        <a href="/eo/login">${esc(t('nav.eoLogin'))}</a>
-      </div>
-    </details>
-  </div></header>`;
+  const navBar = landingNav(L, 'home');
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -493,14 +467,9 @@ a{text-decoration:none}
 .lp-nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
 .lp-nav-logo .lp-logo{height:32px}
-.lp-search{flex:1 1 240px;max-width:460px;min-width:0;display:flex;align-items:center;gap:9px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:999px;padding:10px 16px;color:var(--lp-tx3)}
-.lp-search svg{flex:0 0 auto;opacity:.7}
-.lp-search input{flex:1;min-width:0;border:0;background:transparent;outline:none;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
-.lp-search input::placeholder{color:var(--lp-tx3)}
-.lp-navlinks{margin-left:auto;display:flex;align-items:center;gap:2px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:999px;padding:4px}
-.lp-navpill{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);white-space:nowrap}
-.lp-navpill.on{background:var(--ink);color:#fff}
-.lp-navpill:not(.on):hover{color:var(--lp-tx)}
+.lp-about{margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
+.lp-about:hover{color:var(--lp-tx)}
+.lp-about.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .lp-acct{position:relative;flex:0 0 auto}
 .lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
 .lp-acct>summary::-webkit-details-marker{display:none}
@@ -510,9 +479,7 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:1000px){.lp-nav-in{flex-wrap:wrap}.lp-search{order:5;flex:1 1 100%;max-width:none}}
-@media(max-width:680px){.lp-navpill span{display:none}.lp-navpill{padding:9px 12px}.lp-acct>summary span{display:none}}
-@media(max-width:460px){.lp-search{display:none}}
+@media(max-width:520px){.lp-about span{display:none}.lp-acct>summary span{display:none}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 /* Optional hero background photos + readability scrim; text goes light over them */
@@ -622,6 +589,140 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
   </footer>
 </div>
+</body></html>`;
+}
+
+/** Shared sticky top navbar for the public landing + About pages. */
+function landingNav(lang, active) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const q = `?lang=${L}`;
+  const langBtn = (code, label) => {
+    const on = code === L;
+    return `<a href="/?lang=${code}" style="padding:9px 16px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:${on ? '#fff' : 'var(--lp-tx3)'};background:${on ? 'var(--red)' : 'transparent'}">${label}</a>`;
+  };
+  const toggle = `<div style="display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
+  const nIc = (p) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  return `<header class="lp-nav"><div class="lp-nav-in">
+    <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
+      <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
+      <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
+    </a>
+    <a href="/about${q}" class="lp-about${active === 'about' ? ' on' : ''}">${nIc('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>')}<span>${esc(t('nav.about'))}</span></a>
+    ${toggle}
+    <details class="lp-acct">
+      <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span><svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="lp-acct-menu">
+        <a href="/login${q}">${esc(t('nav.signin'))}</a>
+        <a href="/register${q}">${esc(t('nav.signup'))}</a>
+        <a href="/submit${q}">${esc(t('land.submit'))}</a>
+        <a href="/eo/login">${esc(t('nav.eoLogin'))}</a>
+      </div>
+    </details>
+  </div></header>`;
+}
+
+/** Public "About 20FIT" story page. Bilingual content lives inline (id/en). */
+function aboutPage(lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const q = `?lang=${L}`;
+  const CONTENT = {
+    en: {
+      lede: 'From a 20-minute EMS workout to an integrated life system. This is the story of how we redefined what fitness can be.',
+      sections: [
+        { eyebrow: 'OUR ORIGIN', h: 'We Started With a Simple Question', p: "What if getting fit didn't have to take hours? In 2014, 20FIT was born from a simple idea: that even the busiest people deserve access to effective fitness. We introduced Indonesia's first micro-gym concept powered by EMS (Electro Muscle Stimulation) — a 20-minute workout designed to deliver real results. It was efficient. It was different. And it worked." },
+        { eyebrow: 'THE INSIGHT', h: 'Fitness Was Never the Real Problem', p: "People don't struggle because they don't exercise. They struggle because they don't understand their body, they don't have the right guidance, and they don't have a system they can sustain. And that insight changed everything.", list: ["They don't understand their body", "They don't have the right guidance", "They don't have a system they can sustain"] },
+        { eyebrow: 'THE EVOLUTION', h: 'From Gym to System', p: "20FIT began to evolve. From a single-service studio into something much more powerful: a structured system for improving how people live. We expanded beyond workouts — into training, coaching, and community. But we knew we weren't done." },
+        { eyebrow: 'THE TURNING POINT', h: 'Gym-as-a-Clinic', p: 'We saw a gap in the industry. Even active individuals get injured, plateau, and train without direction. So we redefined what a fitness company could be. We built Gym-as-a-Clinic — a model that combines fitness training, medical consultation, recovery & rehabilitation, and performance optimization. Because real progress starts with understanding your body.', list: ['Fitness training', 'Medical consultation', 'Recovery & rehabilitation', 'Performance optimization'] },
+        { eyebrow: 'THE ECOSYSTEM', h: 'Building an Ecosystem', p: 'Today, 20FIT is more than a gym. We are building an integrated wellness ecosystem where each part strengthens the other. Together, they create something bigger: a complete system for living better.', list: ['20FIT Gym & Sports Clinic — where training meets medical insight', '20FIT Events — where movement becomes culture', '20FIT Shop — where performance tools become accessible', '20FIT Media — where knowledge drives better decisions'] },
+        { eyebrow: 'TECHNOLOGY', h: 'Powered by Technology', p: "The future of health is personal. That's why we are building a platform that connects your workouts, your nutrition, your medical data, and your lifestyle habits. Using AI and data, we help you understand your body, make better decisions, and stay consistent — not just for weeks, but for life." },
+        { eyebrow: 'WHAT WE BELIEVE', h: 'Our Core Values', list: ['Health should be accessible', 'Progress should be measurable', 'Fitness should be guided, not guessed', 'Consistency beats intensity', 'Everyone deserves the opportunity to live stronger, healthier, and longer'] },
+        { eyebrow: 'THE FUTURE', h: "Where We're Going", p: '20FIT is building something beyond fitness. We are building a life system — where fitness, health, and performance come together. From 20-minute workouts to a fully integrated platform for human optimization.' },
+      ],
+    },
+    id: {
+      lede: 'Dari latihan EMS 20 menit menjadi sistem hidup yang terintegrasi. Ini kisah bagaimana kami mendefinisikan ulang arti kebugaran.',
+      sections: [
+        { eyebrow: 'AWAL MULA', h: 'Kami Mulai dari Satu Pertanyaan Sederhana', p: 'Bagaimana kalau menjadi bugar tidak harus makan waktu berjam-jam? Pada 2014, 20FIT lahir dari ide sederhana: bahwa orang tersibuk sekalipun berhak atas kebugaran yang efektif. Kami memperkenalkan konsep micro-gym pertama di Indonesia bertenaga EMS (Electro Muscle Stimulation) — latihan 20 menit yang dirancang memberi hasil nyata. Efisien. Berbeda. Dan terbukti berhasil.' },
+        { eyebrow: 'INSIGHT-NYA', h: 'Kebugaran Tidak Pernah Jadi Masalah Sebenarnya', p: 'Orang bukan gagal karena tidak berolahraga. Mereka kesulitan karena tidak memahami tubuhnya, tidak punya panduan yang tepat, dan tidak punya sistem yang bisa dijalankan konsisten. Dan insight itu mengubah segalanya.', list: ['Tidak memahami tubuhnya sendiri', 'Tidak punya panduan yang tepat', 'Tidak punya sistem yang bisa dijalankan konsisten'] },
+        { eyebrow: 'EVOLUSI', h: 'Dari Gym Menjadi Sistem', p: '20FIT mulai berkembang. Dari studio satu layanan menjadi sesuatu yang jauh lebih kuat: sistem terstruktur untuk memperbaiki cara orang hidup. Kami berkembang melampaui latihan — ke pelatihan, coaching, dan komunitas. Tapi kami tahu perjalanan belum selesai.' },
+        { eyebrow: 'TITIK BALIK', h: 'Gym-as-a-Clinic', p: 'Kami melihat celah di industri ini. Bahkan orang yang aktif pun bisa cedera, stagnan, dan berlatih tanpa arah. Maka kami mendefinisikan ulang apa itu perusahaan kebugaran. Kami membangun Gym-as-a-Clinic — model yang menggabungkan latihan kebugaran, konsultasi medis, pemulihan & rehabilitasi, serta optimasi performa. Karena kemajuan nyata dimulai dari memahami tubuhmu.', list: ['Latihan kebugaran', 'Konsultasi medis', 'Pemulihan & rehabilitasi', 'Optimasi performa'] },
+        { eyebrow: 'EKOSISTEM', h: 'Membangun Ekosistem', p: 'Hari ini, 20FIT lebih dari sekadar gym. Kami membangun ekosistem wellness terintegrasi di mana setiap bagian saling menguatkan. Bersama, mereka menciptakan sesuatu yang lebih besar: sistem lengkap untuk hidup lebih baik.', list: ['20FIT Gym & Sports Clinic — tempat latihan bertemu wawasan medis', '20FIT Events — tempat gerak menjadi budaya', '20FIT Shop — tempat perlengkapan performa mudah dijangkau', '20FIT Media — tempat pengetahuan mendorong keputusan lebih baik'] },
+        { eyebrow: 'TEKNOLOGI', h: 'Didukung Teknologi', p: 'Masa depan kesehatan itu personal. Karena itu kami membangun platform yang menghubungkan latihan, nutrisi, data medis, dan kebiasaan gaya hidupmu. Dengan AI dan data, kami membantumu memahami tubuh, mengambil keputusan lebih baik, dan tetap konsisten — bukan cuma beberapa minggu, tapi seumur hidup.' },
+        { eyebrow: 'YANG KAMI PERCAYA', h: 'Nilai Inti Kami', list: ['Kesehatan harus mudah diakses', 'Kemajuan harus bisa diukur', 'Kebugaran harus dipandu, bukan ditebak', 'Konsistensi mengalahkan intensitas', 'Semua orang berhak hidup lebih kuat, lebih sehat, dan lebih panjang'] },
+        { eyebrow: 'MASA DEPAN', h: 'Ke Mana Kami Melangkah', p: '20FIT sedang membangun sesuatu yang melampaui kebugaran. Kami membangun sistem hidup — tempat kebugaran, kesehatan, dan performa menyatu. Dari latihan 20 menit menuju platform terintegrasi penuh untuk optimasi manusia.' },
+      ],
+    },
+  };
+  const C = CONTENT[L] || CONTENT.en;
+  const sectionsHtml = C.sections.map((s) => `
+      <section class="ab-sec">
+        <div class="ab-eyebrow">${esc(s.eyebrow)}</div>
+        <h2 class="ab-h">${esc(s.h)}</h2>
+        ${s.p ? `<p class="ab-p">${esc(s.p)}</p>` : ''}
+        ${s.list ? `<ul class="ab-list">${s.list.map((li) => `<li>${esc(li)}</li>`).join('')}</ul>` : ''}
+      </section>`).join('');
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(t('nav.about'))} · 20FIT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E4121F;--ink:#101013;--ok:#178A54;--lp-bg:#f4f6f9;--lp-bg2:#e9edf2;--lp-card:#ffffff;--lp-chip:#eef1f5;--lp-line:#e3e7ed;--lp-line2:#d7dbe2;--lp-tx:#17171d;--lp-tx2:#41454d;--lp-tx3:#63676e;--lp-tx4:#8b8f97}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
+a{text-decoration:none}
+.lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
+.lp-nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px}
+.lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
+.lp-logo{display:block;width:auto}
+.lp-nav-logo .lp-logo{height:32px}
+.lp-logo-light{display:block}.lp-logo-dark{display:none}
+.lp-about{margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
+.lp-about:hover{color:var(--lp-tx)}
+.lp-about.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.lp-acct{position:relative;flex:0 0 auto}
+.lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
+.lp-acct>summary::-webkit-details-marker{display:none}
+.lp-acct>summary::marker{content:""}
+.lp-caret{transition:transform .2s}
+.lp-acct[open]>summary .lp-caret{transform:rotate(180deg)}
+.lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
+.lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-acct-menu a:hover{background:var(--lp-chip)}
+@media(max-width:520px){.lp-about span{display:none}.lp-acct>summary span{display:none}}
+.ab-hero{background:var(--ink);color:#fff;padding:66px 28px 58px}
+.ab-hero-in{max-width:820px;margin:0 auto}
+.ab-kick{color:#ff6b74;font:700 13px/1 Barlow,sans-serif;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
+.ab-title{font:800 clamp(52px,10vw,104px)/.88 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin-bottom:20px}
+.ab-title span{color:var(--red)}
+.ab-lede{font-size:19px;line-height:1.6;color:#c9cace;max-width:640px}
+.ab-body{max-width:820px;margin:0 auto;padding:6px 28px 8px}
+.ab-sec{padding:40px 0;border-bottom:1px solid var(--lp-line)}
+.ab-sec:last-child{border-bottom:0}
+.ab-eyebrow{color:var(--red);font:700 12.5px/1 Barlow,sans-serif;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
+.ab-h{font:800 clamp(26px,4.2vw,38px)/1.04 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin-bottom:16px}
+.ab-p{font-size:17px;line-height:1.7;color:var(--lp-tx2);max-width:660px}
+.ab-list{list-style:none;margin:18px 0 0;display:flex;flex-direction:column;gap:11px;max-width:660px}
+.ab-list li{position:relative;padding-left:26px;font-size:16px;line-height:1.55}
+.ab-list li::before{content:"";position:absolute;left:2px;top:7px;width:9px;height:9px;border-radius:3px;background:var(--red)}
+.ab-cta{padding:48px 28px 64px;text-align:center;background:var(--lp-bg2)}
+.ab-cta a{display:inline-block;padding:16px 32px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.35)}
+.ab-foot{border-top:1px solid var(--lp-line);padding:26px 28px;text-align:center;color:var(--lp-tx4);font-size:13px}
+.ab-foot a{color:var(--lp-tx3)}
+</style></head>
+<body>
+${landingNav(lang, 'about')}
+<section class="ab-hero"><div class="ab-hero-in">
+  <div class="ab-kick">${esc(t('nav.about'))}</div>
+  <h1 class="ab-title">20<span>FIT</span></h1>
+  <p class="ab-lede">${esc(C.lede)}</p>
+</div></section>
+<div class="ab-body">${sectionsHtml}</div>
+<section class="ab-cta"><a href="/register${q}">${esc(t('land.join'))}</a></section>
+<footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/eo/login">Login EO</a></footer>
 </body></html>`;
 }
 
@@ -3967,7 +4068,7 @@ function talentEventApply({ account, event, ctx, lang }) {
 
 module.exports = {
   talentStatusBadge, talentOpenEvents, talentEventApply,
-  esc, fmtDate, landingPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
+  esc, fmtDate, landingPage, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
