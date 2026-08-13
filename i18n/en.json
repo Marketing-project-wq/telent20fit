@@ -80,6 +80,7 @@
   "auth.account.adminLink": "Log in as Admin / EO",
   "prof.edit": "Edit",
   "prof.dataTitle": "Personal Details",
+  "prof.showDetail": "View details",
   "kol.eventsSub": "Ongoing & upcoming events.",
   "apply.homeSub": "Available events. Tap one to see what's needed and register.",
   "apply.noNeeds": "No talent needs for this event yet.",
