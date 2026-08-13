@@ -82,6 +82,10 @@ const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
 const uploadDocs = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_DOC_BYTES, files: 2 } })
   .fields([{ name: 'cv', maxCount: 1 }, { name: 'hyrox_cert', maxCount: 1 }]);
+// Landing background photos (super admin). Client compresses in-browser first,
+// so uploads land well under the image cap even for huge originals.
+const uploadLanding = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 2 } })
+  .fields([{ name: 'bg1', maxCount: 1 }, { name: 'bg2', maxCount: 1 }]);
 
 const db = () => store();
 const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
@@ -333,7 +337,24 @@ function readLang(req, res) {
   return lang;
 }
 
-app.get('/', (req, res) => res.send(V.landingPage(req.lang)));
+// Landing hero background photos live in storage; their signed URLs expire, so
+// cache them in-process (well under the 1h TTL) and refresh lazily. The admin
+// uploader resets this cache so a new photo shows up immediately.
+let _bgCache = { at: 0, urls: [] };
+function resetLandingBgCache() { _bgCache = { at: 0, urls: [] }; }
+async function landingBgUrls(st) {
+  if (!st) return [];
+  if (_bgCache.at && Date.now() - _bgCache.at < 50 * 60 * 1000) return _bgCache.urls;
+  try { const urls = await st.landingBgUrls(); _bgCache = { at: Date.now(), urls }; return urls; }
+  catch (_) { return _bgCache.urls || []; }
+}
+
+app.get('/', async (req, res, next) => {
+  try {
+    const bg = (await landingBgUrls(db())).filter(Boolean);
+    res.send(V.landingPage(req.lang, { bg }));
+  } catch (e) { next(e); }
+});
 
 // Public sign-up / sign-in: a single account form, no talent-type picker.
 // New accounts default to KOL; login resolves the account by email across all
@@ -1903,6 +1924,34 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
     ]);
     await attachMockups(st, events);
     res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
+  } catch (e) { next(e); }
+});
+
+// Super admin: manage the landing hero background photos (1-2, alternating).
+app.get('/admin/landing', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const urls = await st.landingBgUrls();
+    res.send(V.adminLanding({ staff: staffCtx(req), lang: req.lang, urls, saved: req.query.saved === '1' }));
+  } catch (e) { next(e); }
+});
+app.post('/admin/landing', auth.requireStaff(['super_admin']), uploadLanding, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const files = req.files || {};
+    const jobs = [];
+    [['bg1', 1], ['bg2', 2]].forEach(([field, slot]) => {
+      const f = files[field] && files[field][0];
+      if (f && f.buffer && f.buffer.length && /^image\//.test(f.mimetype || '')) {
+        jobs.push(st.putLandingBg(slot, f.buffer, f.mimetype));
+      }
+    });
+    if (!jobs.length) return res.status(400).json({ ok: false, error: 'no image' });
+    await Promise.all(jobs);
+    resetLandingBgCache();
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 
