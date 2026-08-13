@@ -604,7 +604,11 @@
   "mp.err.sowRequired": "You must agree to the SOW to continue.",
 
   "nav.applications": "Man Power",
+  "nav.appKol": "KOL",
+  "nav.appCreative": "Photographer / Videographer",
   "mpr.title": "Man Power Applications",
+  "mpr.titleKol": "KOL Applications",
+  "mpr.titleCreative": "Photographer / Videographer Applications",
   "mpr.sub": "Review Man Power applications, approve or reject, then assign a station.",
   "mpr.empty": "No Man Power applications yet.",
   "mpr.count": "{n} applications",

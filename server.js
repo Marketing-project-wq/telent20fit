@@ -1954,7 +1954,18 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       eventId: eid, name: eventName.get(eid) || '—', count: n,
       path: '/absensi/' + encodeURIComponent(eid) + '?k=' + auth.attendanceToken(eid),
     })).sort((a, b) => a.name.localeCompare(b.name));
-    res.send(V.adminApplications({ staff: staffCtx(req), applications, attendanceLinks, lang: req.lang, flash: String(req.query.mail || '') }));
+    // Separate the review by category so cert-required creators (KOL / photog /
+    // videog) don't get mixed with Man Power crew. Category = the primary (P1)
+    // position, falling back to talent_type for the older category-form apps.
+    const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
+    const catOf = (a) => {
+      const primary = (a.choices && a.choices[0] && a.choices[0].key) || a.talent_type;
+      if (primary === 'kol') return 'kol';
+      if (primary === 'fotografer' || primary === 'videografer') return 'creative';
+      return 'man_power';
+    };
+    const filtered = applications.filter((a) => catOf(a) === cat);
+    res.send(V.adminApplications({ staff: staffCtx(req), applications: filtered, attendanceLinks, cat, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -2134,8 +2145,8 @@ async function runDueReminders(st) {
       if (!to || !/@/.test(to)) continue;
       const ev = dueEvents.get(a.event_id);
       const r = await mailer.sendReminderEmail({
-        to, name: account.name, lang: 'en',
-        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStrEn(ev),
+        to, name: account.name, lang: 'id',
+        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
         location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
         station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
       });
