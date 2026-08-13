@@ -514,6 +514,10 @@ a{text-decoration:none}
 .hero-in.d2{animation-delay:.32s}
 .hero-in.d3{animation-delay:.54s}
 .accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
+/* Hero headline: "ONE PLATFORM." on line 1, red "ENDLESS EVENT OPPORTUNITIES." on line 2 (one line). */
+.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(24px,calc(3.2vw - 4px),36px)}
+.hero-title .accent-shimmer{display:block}
+@media(max-width:860px){.hero-title{font-size:calc(5.6vw - 3px)}}
 @keyframes shimmer{to{background-position:-220% 0}}
 @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
 .lp-float{animation:floaty 7s ease-in-out infinite;will-change:transform}
@@ -554,7 +558,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
     <div>
-      <h1 class="hero-in d1" style="font:800 clamp(40px,6vw,72px)/0.92 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer"> ${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
+      <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
       <div class="hero-in d3" style="display:flex;gap:12px;flex-wrap:wrap">
         <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))}</a>
