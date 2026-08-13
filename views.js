@@ -556,7 +556,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   ${heroPhotos}
 
-  <section class="resp1" style="max-width:1180px;margin:0 auto;padding:48px 28px 60px">
+  <section class="resp1" style="max-width:1180px;margin:0 auto;padding:52px 28px clamp(84px,10vw,150px)">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
