@@ -453,6 +453,15 @@ function landingPage(lang, opts = {}) {
     ['https://www.youtube.com/@20fit.indonesia', SVG_YT, 'YouTube'],
   ].map(([href, svg, name]) => `<a href="${href}" target="_blank" rel="noopener" aria-label="${name}" title="${name}">${svg}</a>`).join('');
 
+  // Footer "Ekosistem" column — mirrors the configured BRANDS grid above.
+  // Logo brands link to their Instagram; text-only brands render as plain labels.
+  const ecoLinksHtml = BRANDS.map((b) => {
+    const label = b.logoD ? b.name : `${b.name} ${b.accent}`;
+    return b.href
+      ? `<a href="${b.href}" target="_blank" rel="noopener">${esc(label)}</a>`
+      : `<span>${esc(label)}</span>`;
+  }).join('');
+
   const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
@@ -608,14 +617,25 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
 :root[data-theme="light"] .eco-logo-light{display:block}
-.foot-main{max-width:1180px;margin:0 auto;padding:52px 28px 0;display:flex;justify-content:center;align-items:center;gap:26px;flex-wrap:wrap}
-.foot-social{display:flex;flex-direction:row;gap:22px}
-.foot-social a{color:var(--lp-tx3);display:inline-flex}
-.foot-social a:hover{color:var(--red)}
-.foot-social svg{width:24px;height:24px;display:block}
-.foot-bottom{max-width:1180px;margin:44px auto 0;padding:22px 28px 44px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
-.foot-bottom a{color:var(--lp-tx3)}
-@media(max-width:760px){.foot-main{padding-top:40px}}
+.lp-foot{border-top:1px solid var(--lp-line);background:var(--lp-bg);margin-top:8px}
+.ft-top{max-width:1180px;margin:0 auto;padding:56px 28px 46px;display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr;gap:30px 26px}
+.ft-brand{max-width:360px}
+.ft-logo{display:inline-block;margin-bottom:18px}
+.ft-logo img{height:46px;width:auto;display:block}
+.ft-tag{color:var(--lp-tx3);font-size:15px;line-height:1.65;margin:0 0 20px}
+.ft-social{display:flex;gap:18px}
+.ft-social a{color:var(--lp-tx3);display:inline-flex}
+.ft-social a:hover{color:var(--red)}
+.ft-social svg{width:22px;height:22px;display:block}
+.ft-col{display:flex;flex-direction:column;gap:13px;min-width:0}
+.ft-h{font:700 12.5px/1 Barlow,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--lp-tx);margin-bottom:4px}
+.ft-col a,.ft-col span{color:var(--lp-tx3);font-size:15px;line-height:1.25}
+.ft-col a{transition:color .15s ease}
+.ft-col a:hover{color:var(--red)}
+.ft-bottom{max-width:1180px;margin:0 auto;padding:22px 28px 46px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
+.ft-bottom a{color:var(--lp-tx3)}
+.ft-bottom a:hover{color:var(--red)}
+@media(max-width:860px){.ft-top{grid-template-columns:1fr 1fr;gap:34px 24px}.ft-brand{grid-column:1/-1;max-width:none}}
 @media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 /* FAQ accordion (shared markup with the auth page via faqSection()) */
@@ -649,7 +669,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
 /* About story section (shared markup with the /about page via aboutContent) */
 html{scroll-behavior:smooth}
-#about{scroll-margin-top:90px}
+#about,#faq{scroll-margin-top:90px}
 .ab-body{max-width:820px;margin:0 auto;padding:0 28px}
 .ab-sec{padding:36px 0;border-bottom:1px solid var(--lp-line)}
 .ab-sec:last-child{border-bottom:0}
@@ -694,15 +714,36 @@ html{scroll-behavior:smooth}
     <div class="eco-grid">${ecoHtml}</div>
   </section>
 
-  ${faqSection(L)}
+  <div id="faq">${faqSection(L)}</div>
 
   ${aboutSection}
 
-  <footer>
-    <div class="foot-main">
-      <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
+  <footer class="lp-foot">
+    <div class="ft-top">
+      <div class="ft-brand">
+        <a href="/${q}" class="ft-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
+        <p class="ft-tag">${esc(t('foot.tagline'))}</p>
+        <div class="ft-social" role="group" aria-label="Social media">${socialHtml}</div>
+      </div>
+      <nav class="ft-col" aria-label="${esc(t('foot.eco'))}">
+        <div class="ft-h">${esc(t('foot.eco'))}</div>
+        ${ecoLinksHtml}
+      </nav>
+      <nav class="ft-col" aria-label="${esc(t('foot.menu'))}">
+        <div class="ft-h">${esc(t('foot.menu'))}</div>
+        <a href="/${q}#about">${esc(t('nav.about'))}</a>
+        <a href="/${q}#faq">FAQ</a>
+        <a href="/login${q}">${esc(t('btn.signin'))}</a>
+        <a href="/register${q}">${esc(t('auth.account.registerTitle'))}</a>
+      </nav>
+      <nav class="ft-col" aria-label="${esc(t('foot.contact'))}">
+        <div class="ft-h">${esc(t('foot.contact'))}</div>
+        <a href="mailto:marketing@20fit.id">marketing@20fit.id</a>
+        <a href="https://20fit.id" target="_blank" rel="noopener">20fit.id</a>
+        <a href="/eo/login">${esc(t('foot.eoLogin'))}</a>
+      </nav>
     </div>
-    <div class="foot-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">Login EO</a></div>
+    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a></div>
   </footer>
 </div>
 </body></html>`;
