@@ -186,6 +186,17 @@ tr:last-child td{border-bottom:none}
 .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:100px}
 .pill-ok{background:var(--ok-soft);color:var(--ok)}
 .pill-off{background:#26262e;color:var(--muted)}
+/* Application progress tracker: Applied → Under Review → Approved → Assigned */
+.trk{display:flex;margin:16px 0 2px}
+.trk-step{flex:1;text-align:center;position:relative;min-width:0}
+.trk-step::before{content:"";position:absolute;top:12px;right:50%;width:100%;height:3px;background:var(--line);z-index:0}
+.trk-step:first-child::before{display:none}
+.trk-step.fill::before{background:var(--red)}
+.trk-dot{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--card2);color:var(--muted);border:2px solid var(--line);font-weight:800;font-size:12px}
+.trk-step.done .trk-dot{background:var(--red);border-color:var(--red);color:#fff}
+.trk-step.active .trk-dot{background:var(--card);border-color:var(--red);color:var(--red);box-shadow:0 0 0 4px var(--red-soft)}
+.trk-lbl{display:block;margin-top:7px;font-size:11px;font-weight:700;color:var(--muted);line-height:1.25}
+.trk-step.done .trk-lbl,.trk-step.active .trk-lbl{color:var(--ink)}
 .rank{font-weight:800;color:var(--muted);width:34px}
 .rank-1{color:#e0b53a}.rank-2{color:#b9b9c2}.rank-3{color:#c98a54}
 .thumbs{display:flex;gap:6px;flex-wrap:wrap}
@@ -2410,9 +2421,12 @@ function kolProfilePage({ account, certs, events, lang }) {
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
   const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
   const evList = (events && events.length)
-    ? `<div class="dl-list">${events.map((e) => `<div class="dl-item" style="align-items:center">
-        <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
-        ${mpStatusBadge(e.status, L)}
+    ? `<div class="dl-list">${events.map((e) => `<div class="dl-item" style="display:block">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+          ${mpStatusBadge(e.status, L)}
+        </div>
+        ${applicationTracker(e.status, L)}
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('prof.eventsEmpty')}</p>`;
   const body = `<div class="wrap narrow">
@@ -4169,6 +4183,27 @@ function talentStatusBadge(status, lang) {
   return `<span class="pill" style="background:${c[1]};color:${c[0]}">${esc(t('ta.status.' + status) || status)}</span>`;
 }
 
+// Horizontal progress tracker the talent sees while the EO reviews their
+// application: Applied → Under Review → Approved → Assigned. Returns '' for a
+// rejected application (that's conveyed by the status badge instead).
+function applicationTracker(status, lang) {
+  const L = normLang(lang);
+  const t = (k) => tr(L, k);
+  if (status === 'rejected') return '';
+  const steps = ['applied', 'under_review', 'approved', 'assigned'];
+  const activeIdx = { applied: 0, pending: 0, under_review: 1, approved: 2, assigned: 3, completed: 3 };
+  const achieved = { approved: 1, assigned: 1, completed: 1 };
+  const cur = activeIdx[status] != null ? activeIdx[status] : 0;
+  const done = !!achieved[status];
+  const html = steps.map((s, i) => {
+    const cls = i < cur ? 'done' : (i === cur ? (done ? 'done' : 'active') : '');
+    const fill = i <= cur ? ' fill' : '';
+    const dot = cls === 'done' ? '✓' : String(i + 1);
+    return `<div class="trk-step ${cls}${fill}"><span class="trk-dot">${dot}</span><span class="trk-lbl">${esc(t('ta.status.' + s))}</span></div>`;
+  }).join('');
+  return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
+}
+
 function talentHomePath(account) { return '/' + ((account && account.talent_type) || 'kol').replace(/_/g, '-'); }
 
 // One card for a position-based EO event. filterable=true adds the search/
@@ -4237,6 +4272,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     const rows = ctx.myChoices.map((c) => { const p = ctx.posById.get(c.position_id) || {}; return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${c.accepted ? `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>` : ''}</div>`; }).join('');
     myBlock = `<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>${t('ta.yourApp')}</b>${talentStatusBadge(ctx.myApp.status, L)}</div>
+      ${applicationTracker(ctx.myApp.status, L)}
       <div class="dl-list" style="margin-top:8px">${rows}</div>
     </div>`;
   }
