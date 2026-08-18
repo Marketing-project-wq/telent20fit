@@ -339,15 +339,23 @@ function readLang(req, res) {
 }
 
 // Landing hero background photos live in storage; their signed URLs expire, so
-// cache them in-process (well under the 1h TTL) and refresh lazily. The admin
+// cache them in-process (well under the 2h TTL) and refresh lazily. The admin
 // uploader resets this cache so a new photo shows up immediately.
 let _bgCache = { at: 0, urls: [] };
 function resetLandingBgCache() { _bgCache = { at: 0, urls: [] }; }
 async function landingBgUrls(st) {
   if (!st) return [];
   if (_bgCache.at && Date.now() - _bgCache.at < 50 * 60 * 1000) return _bgCache.urls;
-  try { const urls = await st.landingBgUrls(); _bgCache = { at: Date.now(), urls }; return urls; }
-  catch (_) { return _bgCache.urls || []; }
+  let urls;
+  try { urls = await st.landingBgUrls(); }
+  catch (_) { urls = null; }
+  // A failed sign (null / thrown) must NOT be cached — otherwise one transient
+  // Supabase hiccup blanks the hero for the whole 50-min window. Keep the last
+  // known-good photos and retry on the next request instead.
+  if (!urls) return _bgCache.urls || [];
+  const clean = urls.filter(Boolean);
+  _bgCache = { at: Date.now(), urls: clean };
+  return clean;
 }
 
 app.get('/', async (req, res, next) => {
@@ -1968,7 +1976,7 @@ app.get('/admin/landing', auth.requireStaff(['super_admin']), async (req, res, n
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const urls = await st.landingBgUrls();
+    const urls = (await st.landingBgUrls()) || [];
     res.send(V.adminLanding({ staff: staffCtx(req), lang: req.lang, urls, saved: req.query.saved === '1' }));
   } catch (e) { next(e); }
 });

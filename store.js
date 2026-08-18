@@ -85,7 +85,8 @@ function supabaseStore() {
       return key;
     },
     async landingBgUrls() {
-      const { data } = await sb.storage.from(BUCKET).createSignedUrls(['landing/bg-1.jpg', 'landing/bg-2.jpg'], 3600);
+      const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(['landing/bg-1.jpg', 'landing/bg-2.jpg'], 7200);
+      if (error) return null; // signing failed (transient) — signal caller so it doesn't cache the miss
       return (data || []).map((d) => (d && d.signedUrl && !d.error) ? d.signedUrl : null);
     },
     async downloadImage(pathKey) {
