@@ -1243,18 +1243,12 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     <p class="au-faq-sub">${esc(t('faq.sub'))}</p>
     ${faqItems}
   </section>
-  <div class="au-sticky">
-    <b>${esc(t('authp.stickyQ'))}</b>
-    <button type="button" class="au-btn au-btn-red" data-goto="signup">${t('authp.cta')}</button>
-    <button type="button" class="au-x" aria-label="dismiss">×</button>
-  </div>
   <script>(function(){
     var tabs=[].slice.call(document.querySelectorAll('.au-tab')),panels=[].slice.call(document.querySelectorAll('.au-panel'));
     function show(w){tabs.forEach(function(t){t.classList.toggle('on',t.getAttribute('data-tab')===w);});panels.forEach(function(p){p.classList.toggle('on',p.getAttribute('data-panel')===w);});}
     tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab'));});});
     [].slice.call(document.querySelectorAll('[data-goto]')).forEach(function(el){el.addEventListener('click',function(){show(el.getAttribute('data-goto'));var c=document.getElementById('au-form');if(c&&window.innerWidth<900)c.scrollIntoView({behavior:'smooth'});});});
     [].slice.call(document.querySelectorAll('[data-eye]')).forEach(function(btn){btn.addEventListener('click',function(){var i=document.getElementById(btn.getAttribute('data-eye'));if(i)i.type=i.type==='password'?'text':'password';});});
-    var x=document.querySelector('.au-x'),s=document.querySelector('.au-sticky');if(x&&s)x.addEventListener('click',function(){s.style.display='none';});
   })();</script>`;
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
@@ -1311,11 +1305,7 @@ a{text-decoration:none;color:inherit}
 .au-forgot{display:block;text-align:right;margin-top:14px;color:var(--lp-tx3);font-size:13.5px}
 .au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
 .au-err ul{margin:6px 0 0 18px}
-.au-sticky{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--lp-line);box-shadow:0 -8px 24px rgba(20,20,30,.08);padding:14px 20px;display:flex;align-items:center;gap:16px;z-index:30}
-.au-sticky b{font:800 15px/1.2 Barlow,sans-serif;text-transform:uppercase;flex:1;min-width:0}
-.au-sticky .au-btn-red{padding:12px 20px}
-.au-x{background:none;border:0;cursor:pointer;color:var(--lp-tx3);font-size:24px;line-height:1;padding:2px 8px;flex:0 0 auto}
-.au-faq{max-width:1240px;margin:0 auto;padding:8px 28px 130px}
+.au-faq{max-width:1240px;margin:0 auto;padding:8px 28px 60px}
 .au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,46px);margin:0 0 8px}
 .au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
 .au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
@@ -1325,8 +1315,8 @@ a{text-decoration:none;color:inherit}
 .au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
 .au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
 @media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
-@media(max-width:560px){.au-faq{padding:8px 18px 120px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
-@media(max-width:560px){.au-top{padding:14px 18px}.au-sticky b{font-size:12.5px}.au-sticky{gap:10px;padding:12px 14px}.au-sticky .au-btn-red{padding:11px 15px;font-size:12px}}
+@media(max-width:560px){.au-faq{padding:8px 18px 60px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
+@media(max-width:560px){.au-top{padding:14px 18px}}
 </style>
 </head><body>${body}</body></html>`;
 }
