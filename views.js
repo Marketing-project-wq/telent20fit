@@ -1165,14 +1165,13 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
       <input class="au-in" type="email" id="su-email" name="login" required autocomplete="email" placeholder="${esc(t('authp.emailPh'))}" value="${esc(v.login || '')}"></div>
     <div class="au-f"><label for="su-phone">${t('dd.phone')}</label>
       <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
-    <div class="au-f"><label>${t('dd.gender')} <span class="au-opt">${t('dd.optional')}</span></label>
-      <div class="au-gender" data-gender>
-        <button type="button" data-val="male"${v.gender === 'male' ? ' class="on"' : ''}>${t('dd.gender.male')}</button>
-        <button type="button" data-val="female"${v.gender === 'female' ? ' class="on"' : ''}>${t('dd.gender.female')}</button>
-      </div>
-      <input type="hidden" name="gender" value="${esc(v.gender || '')}"></div>
-    <div class="au-f"><label for="su-dob">${t('dd.birthdate')} <span class="au-opt">${t('dd.optional')}</span></label>
-      <input class="au-in" type="date" id="su-dob" name="birthdate" value="${esc(v.birthdate || '')}"></div>
+    <div class="au-f"><label>${t('dd.gender')}</label>
+      <div class="au-gender">
+        <label class="au-gseg"><input type="radio" name="gender" value="male" required${v.gender === 'male' ? ' checked' : ''}><span>${t('dd.gender.male')}</span></label>
+        <label class="au-gseg"><input type="radio" name="gender" value="female" required${v.gender === 'female' ? ' checked' : ''}><span>${t('dd.gender.female')}</span></label>
+      </div></div>
+    <div class="au-f"><label for="su-dob">${t('dd.birthdate')}</label>
+      <input class="au-in" type="date" id="su-dob" name="birthdate" required value="${esc(v.birthdate || '')}"></div>
     <div class="au-f"><label for="su-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
         <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
@@ -1228,7 +1227,6 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     function show(w){tabs.forEach(function(t){t.classList.toggle('on',t.getAttribute('data-tab')===w);});panels.forEach(function(p){p.classList.toggle('on',p.getAttribute('data-panel')===w);});}
     tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab'));});});
     [].slice.call(document.querySelectorAll('[data-goto]')).forEach(function(el){el.addEventListener('click',function(){show(el.getAttribute('data-goto'));var c=document.getElementById('au-form');if(c&&window.innerWidth<900)c.scrollIntoView({behavior:'smooth'});});});
-    [].slice.call(document.querySelectorAll('[data-gender]')).forEach(function(g){var h=g.parentNode.querySelector('input[type=hidden]');[].slice.call(g.querySelectorAll('button')).forEach(function(b){b.addEventListener('click',function(){[].slice.call(g.querySelectorAll('button')).forEach(function(x){x.classList.remove('on');});b.classList.add('on');if(h)h.value=b.getAttribute('data-val');});});});
     [].slice.call(document.querySelectorAll('[data-eye]')).forEach(function(btn){btn.addEventListener('click',function(){var i=document.getElementById(btn.getAttribute('data-eye'));if(i)i.type=i.type==='password'?'text':'password';});});
     var x=document.querySelector('.au-x'),s=document.querySelector('.au-sticky');if(x&&s)x.addEventListener('click',function(){s.style.display='none';});
   })();</script>`;
@@ -1270,7 +1268,6 @@ a{text-decoration:none;color:inherit}
 .au-panel.on{display:block}
 .au-f{margin-bottom:16px}
 .au-f label{display:block;font:800 11.5px/1.3 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--lp-tx3);margin-bottom:8px}
-.au-opt{color:var(--lp-tx4);font-weight:600;letter-spacing:.02em;text-transform:none}
 .au-in{width:100%;background:var(--lp-chip);border:1px solid transparent;border-radius:12px;padding:14px 15px;font:500 15px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
 .au-in:focus{outline:none;border-color:var(--red);background:#fff}
 .au-in::placeholder{color:var(--lp-tx4)}
@@ -1279,8 +1276,11 @@ a{text-decoration:none;color:inherit}
 .au-pass .au-in{padding-right:46px}
 .au-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;color:var(--lp-tx3);padding:5px;display:flex}
 .au-gender{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.au-gender button{background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:12px;padding:14px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx2);cursor:pointer}
-.au-gender button.on{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.au-gseg{display:flex;margin:0}
+.au-gseg input{position:absolute;opacity:0;width:0;height:0}
+.au-gseg>span{flex:1;text-align:center;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:12px;padding:14px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx2);cursor:pointer}
+.au-gseg input:checked+span{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.au-gseg input:focus-visible+span{outline:2px solid var(--red);outline-offset:1px}
 .au-submit{width:100%;margin-top:6px;padding:16px;border-radius:12px;background:var(--red);color:#fff;border:0;cursor:pointer;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;box-shadow:0 10px 24px rgba(228,18,31,.28)}
 .au-forgot{display:block;text-align:right;margin-top:14px;color:var(--lp-tx3);font-size:13.5px}
 .au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
