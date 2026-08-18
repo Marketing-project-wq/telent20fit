@@ -1206,13 +1206,6 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
       <input class="au-in" type="email" id="su-email" name="login" required autocomplete="email" placeholder="${esc(t('authp.emailPh'))}" value="${esc(v.login || '')}"></div>
     <div class="au-f"><label for="su-phone">${t('dd.phone')}</label>
       <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
-    <div class="au-f"><label>${t('dd.gender')}</label>
-      <div class="au-gender">
-        <label class="au-gseg"><input type="radio" name="gender" value="male" required${v.gender === 'male' ? ' checked' : ''}><span>${t('dd.gender.male')}</span></label>
-        <label class="au-gseg"><input type="radio" name="gender" value="female" required${v.gender === 'female' ? ' checked' : ''}><span>${t('dd.gender.female')}</span></label>
-      </div></div>
-    <div class="au-f"><label for="su-dob">${t('dd.birthdate')}</label>
-      <input class="au-in" type="date" id="su-dob" name="birthdate" required value="${esc(v.birthdate || '')}"></div>
     <div class="au-f"><label for="su-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
         <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>

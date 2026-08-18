@@ -553,10 +553,6 @@ function talentRegisterPost(type, opts = {}) {
         else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login)) errors.push(req.t('err.emailInvalid'));
         if (!phone) errors.push(req.t('dd.err.phone'));
         else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
-        // Gender + date of birth are required on the unified signup form (the
-        // per-type forms don't collect them, so only enforce there).
-        if (unified && !gender) errors.push(req.t('dd.err.gender'));
-        if (unified && !birthdate) errors.push(req.t('dd.err.birthdate'));
         if (password.length < 6) errors.push(req.t('err.passwordMin6'));
         else if (password2 && password !== password2) errors.push(req.t('err.passwordMismatch'));
         if (portfolioUrl && !/^https?:\/\/.+/i.test(portfolioUrl)) errors.push(req.t('doc.err.url'));
