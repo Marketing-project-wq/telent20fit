@@ -1220,7 +1220,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
   <section class="au-faq">
     <h2>FAQ</h2>
     <p class="au-faq-sub">${esc(t('faq.sub'))}</p>
-    ${[1, 2, 3, 4, 5, 6].map((n) => `<details class="au-faq-item"><summary>${esc(t('faq.q' + n))}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(t('faq.a' + n))}</div></details>`).join('')}
+    ${[1, 2, 3, 4].map((n) => `<details class="au-faq-item"><summary>${esc(t('faq.q' + n))}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(t('faq.a' + n))}</div></details>`).join('')}
   </section>
   <div class="au-sticky">
     <b>${esc(t('authp.stickyQ'))}</b>
