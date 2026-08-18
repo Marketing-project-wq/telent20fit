@@ -1630,7 +1630,7 @@ const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from 
 async function eoOwnedEvent(st, staffId, eventId) {
   return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
 }
-function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = { quota: p.quota, jobdesk: p.jobdesk || '' }; }); return m; }
+function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = { quota: p.quota, jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' }; }); return m; }
 
 // Per-event view: opened positions with filled(accepted)/applicants/quota, apply count, display status.
 function eoEventView(ev, positions, apps, choices) {
@@ -1668,7 +1668,9 @@ function parseEventForm(req, positionsMaster) {
     if (!validIds.has(id) || seen.has(id)) return;
     const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
     const jobdesk = String(req.body['jobdesk_' + id] || '').trim().slice(0, 1000) || null;
-    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q, jobdesk }); }
+    const requirement = String(req.body['requirement_' + id] || '').trim().slice(0, 1000) || null;
+    const fee = String(req.body['fee_' + id] || '').trim().slice(0, 200) || null;
+    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q, jobdesk, requirement, fee }); }
   });
   return { data, positions, echo: Object.assign({}, data, { positions }) };
 }

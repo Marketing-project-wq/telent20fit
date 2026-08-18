@@ -292,14 +292,14 @@ function supabaseStore() {
     },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
-        .select('id,quota,closed_at,jobdesk,position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
+        .select('id,quota,closed_at,jobdesk,requirement,fee,position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
       if (error) throw new Error(error.message);
-      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, jobdesk: r.jobdesk || null, key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
         .sort((a, b) => a.sort - b.sort);
     },
     async setEventPositions(eventId, positions) {
       await sb.from('talent_event_positions').delete().eq('event_id', eventId);
-      const rows = (positions || []).filter((p) => p && p.position_id && p.quota > 0).map((p) => ({ event_id: eventId, position_id: p.position_id, quota: p.quota, jobdesk: p.jobdesk || null }));
+      const rows = (positions || []).filter((p) => p && p.position_id && p.quota > 0).map((p) => ({ event_id: eventId, position_id: p.position_id, quota: p.quota, jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null }));
       if (rows.length) { const r = await sb.from('talent_event_positions').insert(rows); if (r.error) throw new Error(r.error.message); }
     },
     async listApplicationChoices() {
@@ -519,8 +519,8 @@ function memoryStore() {
   const staffVerifications = [];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
-    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
-    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, location: 'Ubud, Bali', starts_at: dOff(14), ends_at: dOff(24), is_active: true, created_by: null, created_at: now(), mp_sow: null },
+    { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
+    { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, location: 'Ubud, Bali', starts_at: dOff(14), ends_at: dOff(24), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: null },
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
@@ -536,7 +536,13 @@ function memoryStore() {
     ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
     ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
   ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
-  const eventPositions = [];
+  const eventPositions = [
+    { id: 'ep-j-kol', event_id: 'ev-jakarta', position_id: 'pos-kol', quota: 2, closed_at: null, jobdesk: 'Buat 3 konten (reels/story) selama event & tag akun 20FIT. Hadir di lokasi hari-H.', requirement: 'Followers IG 5.000+, engagement bagus, terbiasa bikin konten olahraga.', fee: 'Rp750.000 + merchandise event' },
+    { id: 'ep-j-foto', event_id: 'ev-jakarta', position_id: 'pos-fotografer', quota: 2, closed_at: null, jobdesk: 'Dokumentasi foto di area start/finish & sepanjang rute. Deliver min. 150 foto terkurasi H+2.', requirement: 'Punya kamera mirrorless/DSLR sendiri, pengalaman foto event olahraga.', fee: 'Rp600.000/hari' },
+    { id: 'ep-j-judge', event_id: 'ev-jakarta', position_id: 'pos-judge', quota: 5, closed_at: null, jobdesk: 'Menilai peserta di station sesuai peraturan lomba. Briefing H-1, hari-H 05.00–14.00.', requirement: 'Paham peraturan lomba lari, teliti, disiplin waktu.', fee: 'Rp500.000/hari + konsumsi' },
+    { id: 'ep-b-judge', event_id: 'ev-bali', position_id: 'pos-judge', quota: 5, closed_at: null, jobdesk: 'Menilai peserta trail di checkpoint. Medan bukit, briefing H-1.', requirement: 'Fisik prima, paham peraturan trail run.', fee: 'Rp650.000/hari' },
+    { id: 'ep-b-runner', event_id: 'ev-bali', position_id: 'pos-runner', quota: 8, closed_at: null, jobdesk: 'Sweeper/pacer di rute trail memastikan keselamatan peserta.', requirement: 'Rutin lari trail, mampu 21K.', fee: 'Rp500.000/hari' },
+  ];
   const applicationChoices = [];
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
@@ -631,11 +637,11 @@ function memoryStore() {
     },
     async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
     async listEventPositions(eventId) {
-      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, jobdesk: ep.jobdesk || null, key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
     },
     async setEventPositions(eventId, poss) {
       for (let j = eventPositions.length - 1; j >= 0; j--) if (eventPositions[j].event_id === eventId) eventPositions.splice(j, 1);
-      (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null, jobdesk: p.jobdesk || null }));
+      (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null, jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null }));
     },
     async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },

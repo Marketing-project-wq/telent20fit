@@ -2105,13 +2105,19 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
     const cur = on ? sel[p.id] : null;
     const q = cur ? (typeof cur === 'object' ? cur.quota : cur) : '';
     const jd = cur && typeof cur === 'object' ? (cur.jobdesk || '') : '';
+    const reqv = cur && typeof cur === 'object' ? (cur.requirement || '') : '';
+    const feev = cur && typeof cur === 'object' ? (cur.fee || '') : '';
     return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
       <label style="display:flex;gap:10px;align-items:center">
         <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
         <input type="number" name="quota_${esc(p.id)}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
       </label>
-      <textarea name="jobdesk_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" class="posm-jd" style="width:100%;box-sizing:border-box;margin-top:8px;font-size:13px${on ? '' : ';display:none'}">${esc(jd)}</textarea>
+      <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
+        <textarea name="jobdesk_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px">${esc(jd)}</textarea>
+        <textarea name="requirement_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(reqv)}</textarea>
+        <input type="text" name="fee_${esc(p.id)}" maxlength="200" value="${esc(feev)}" placeholder="${t('eo.ev.feePh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">
+      </div>
     </div>`;
   }).join('');
   const body = `<div class="wrap">
@@ -2164,9 +2170,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
   [].slice.call(list.querySelectorAll('.posm-row')).forEach(function(r){
-    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q'), jd=r.querySelector('.posm-jd');
+    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q'), ex=r.querySelector('.posm-extra');
     if(!cb||!q) return;
-    function sync(){ if(jd) jd.style.display = cb.checked ? '' : 'none'; }
+    function sync(){ if(ex) ex.style.display = cb.checked ? '' : 'none'; }
     cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } sync(); });
     q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; sync(); });
   });
@@ -2228,9 +2234,14 @@ function eoApplicantsSection(e, view, aps, L) {
     <span class="muted" style="font-size:13px">${t('eo.ap.count', { n: aps.length })}</span></div>`;
   if (!aps.length) return `${header}<p class="muted" style="margin-top:12px">${t('eo.ap.none')}</p>`;
 
-  const choiceChips = (choices) => choices.map((c) => {
+  const choiceChips = (choices, status) => choices.map((c) => {
     const on = c.accepted;
-    return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : ''}" title="${on ? esc(t('eo.ap.acceptedHere')) : ''}">P${c.priority} · ${esc(posLbl(c.position_id))}${on ? ' ✓' : ''}</span>`;
+    // Once the talent is accepted somewhere, their other (lower-priority) choices
+    // are auto-closed — show them dimmed/struck so the EO sees they're not needed.
+    const closed = !on && status === 'approved';
+    const style = on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : (closed ? ';opacity:.5;text-decoration:line-through' : '');
+    const title = on ? esc(t('eo.ap.acceptedHere')) : (closed ? esc(t('ta.autoClosed')) : '');
+    return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}" title="${title}">P${c.priority} · ${esc(posLbl(c.position_id))}${on ? ' ✓' : ''}</span>`;
   }).join('');
   const contactLine = (a) => {
     const bits = [];
@@ -2285,7 +2296,7 @@ function eoApplicantsSection(e, view, aps, L) {
     </div>
     ${contactLine(a)}
     ${hyroxBadge(a)}
-    <div style="margin-top:10px">${choiceChips(a.choices)}</div>
+    <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
     ${decisionControls(a)}
   </div>`).join('');
 
@@ -4341,54 +4352,113 @@ function talentEventApply({ account, event, ctx, lang }) {
   const errors = ctx.errors || [];
   const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  // Work type derived from the event's duration (single day = daily; else N days).
+  let days = 1;
+  if (e.starts_at) { const s = String(e.starts_at).slice(0, 10); const en = e.ends_at ? String(e.ends_at).slice(0, 10) : s; const d = Math.round((new Date(en + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1; days = d > 0 ? d : 1; }
+  const workType = days <= 1 ? t('ta.workDaily') : (days + ' ' + t('ta.workDaysUnit'));
   // A KOL-type talent without CV + portfolio can't pick creator positions (kol/photog/videog).
   const docsMissing = !!(account && account.talent_type === 'kol' && !hasCreatorDocs(account));
-  const chosenSel = (pr) => (ctx.myChoices.find((c) => c.priority === pr) || {}).position_id || '';
-  const opt = (sel, allowNone) => {
-    let o = `<option value="">${allowNone ? t('ta.none') : t('ta.pick')}</option>`;
-    // Positions listed alphabetically by their (localized) label for a tidy dropdown.
-    const sorted = (ctx.openPositions || []).slice().sort((a, b) => posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
-    sorted.forEach((p) => {
-      const lock = docsMissing && CREATOR_ROLES.includes(p.key) && sel !== p.position_id;
-      o += `<option value="${esc(p.position_id)}"${sel === p.position_id ? ' selected' : ''}${lock ? ' disabled' : ''}>${esc(posLabel(p, L))}${lock ? ' — ' + esc(t('doc.lockHint')) : ''}</option>`;
-    });
-    if (sel && !(ctx.openPositions || []).some((p) => p.position_id === sel)) { const pp = ctx.posById.get(sel) || {}; o += `<option value="${esc(sel)}" selected>${esc(posLabel(pp, L))}</option>`; }
-    return o;
+  const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
+  const applyMode = !ctx.myApp && editable;
+
+  // Event-level info chips (shared by every position).
+  const chip = (icon, txt) => txt ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:999px;padding:5px 11px;margin:5px 6px 0 0">${icon} ${esc(txt)}</span>` : '';
+  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
+
+  // Per-position "job listing" cards.
+  const posSorted = (ctx.positions || []).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
+  const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
+  const sec = (icon, label, txt) => `<div style="margin-top:10px"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
+  const card = (p) => {
+    const left = Math.max(0, (p.quota || 0) - (p.filled || 0));
+    const isOpen = !p.closed_at && !p.full;
+    const lock = docsMissing && CREATOR_ROLES.includes(p.key);
+    const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
+      : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
+        : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
+    const btn = (applyMode && isOpen && !lock)
+      ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:12px">${t('ta.applyThis')}</button>`
+      : (applyMode && lock ? `<div class="muted" style="margin-top:10px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
+    return `<div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <b style="font-size:16px">${esc(posLabel(p, L))}</b>${badge}
+      </div>
+      <div style="font-size:12.5px;color:var(--muted,#6b6b70);margin-top:5px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>
+      ${p.jobdesk ? sec('📋', t('ta.jobdesk'), p.jobdesk) : ''}
+      ${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}
+      ${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}
+      ${btn}
+    </div>`;
   };
+  const cardsHtml = posSorted.map(card).join('');
+
+  // Already applied: show the ranked choices + status, with auto-closed labels
+  // for the lower-priority choices once the talent is accepted somewhere.
   let myBlock = '';
   if (ctx.myApp) {
-    const rows = ctx.myChoices.map((c) => { const p = ctx.posById.get(c.position_id) || {}; return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${c.accepted ? `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>` : ''}</div>`; }).join('');
+    const approved = ctx.myApp.status === 'approved';
+    const rows = ctx.myChoices.map((c) => {
+      const p = ctx.posById.get(c.position_id) || {};
+      let tag = '';
+      if (c.accepted) tag = `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>`;
+      else if (approved) tag = `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.autoClosed')}</span>`;
+      return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${tag}</div>`;
+    }).join('');
     myBlock = `<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>${t('ta.yourApp')}</b>${talentStatusBadge(ctx.myApp.status, L)}</div>
       ${applicationTracker(ctx.myApp.status, L)}
       <div class="dl-list" style="margin-top:8px">${rows}</div>
+      ${approved ? `<p class="muted" style="font-size:12px;margin:8px 0 0">${t('ta.autoClosedHint')}</p>` : ''}
     </div>`;
   }
-  // Jobdesk shown after the talent picks a position (per-slot, live).
-  const jdMap = {};
-  (ctx.positions || []).forEach((p) => { if (p.jobdesk) jdMap[p.position_id] = p.jobdesk; });
-  const hasJd = Object.keys(jdMap).length > 0;
-  const jdPanel = (slot) => `<div class="jd-panel" data-jd="${slot}" style="display:none;margin-top:8px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><b style="font-size:11.5px">📋 ${t('ta.jobdesk')}</b><div class="jd-text" style="margin-top:3px;white-space:pre-wrap"></div></div>`;
-  const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
-  let formBlock = '';
-  if (ctx.myApp) {
-    // Already applied: the choices show read-only above. No re-edit form; the
-    // talent can still withdraw (cancel) while registration is open.
-    if (editable) formBlock = `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:14px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`;
-  } else if (editable) {
-    // New application: position picker + submit.
-    formBlock = `<form method="post" action="/event/${esc(e.slug || e.id)}/apply" class="card" style="margin-top:14px">
-      <div style="font-weight:700;margin-bottom:4px">${t('ta.pickChoices')}</div>
-      <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('ta.rulesHint')}</p>
-      <div class="field"><label for="pos1">${t('ta.p1')} <span style="color:var(--red)">*</span></label><select id="pos1" name="pos1" required>${opt(chosenSel(1), false)}</select>${hasJd ? jdPanel('pos1') : ''}</div>
-      <div class="field"><label for="pos2">${t('ta.p2')}</label><select id="pos2" name="pos2">${opt(chosenSel(2), true)}</select>${hasJd ? jdPanel('pos2') : ''}</div>
-      <div class="field"><label for="pos3">${t('ta.p3')}</label><select id="pos3" name="pos3">${opt(chosenSel(3), true)}</select>${hasJd ? jdPanel('pos3') : ''}</div>
-      <button type="submit" class="btn btn-block">${t('ta.submit')}</button>
-    </form>`;
-    if (hasJd) formBlock += `<script>(function(){var JD=${JSON.stringify(jdMap).replace(/</g, '\\u003c')};['pos1','pos2','pos3'].forEach(function(id){var sel=document.getElementById(id);if(!sel)return;var panel=sel.parentNode.querySelector('.jd-panel');if(!panel)return;var txt=panel.querySelector('.jd-text');function upd(){var v=sel.value,d=v&&JD[v];if(d){txt.textContent=d;panel.style.display='';}else{panel.style.display='none';txt.textContent='';}}sel.addEventListener('change',upd);upd();});})();</script>`;
-  } else {
-    formBlock = `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>`;
+
+  // Priority ranking: the Lamar buttons on the cards populate P1/P2/P3 (max 3).
+  let rankingForm = '';
+  if (applyMode) {
+    const labels = {}; posSorted.forEach((p) => { labels[p.position_id] = posLabel(p, L); });
+    rankingForm = `<form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm" class="card" style="margin-top:16px">
+      <div style="font-weight:700">${t('ta.yourPriority')}</div>
+      <p class="muted" style="font-size:12.5px;margin:4px 0 10px">${t('ta.rankHint')}</p>
+      <ol id="rankList" style="margin:0;padding-left:0;list-style:none"></ol>
+      <p class="muted" id="rankEmpty" style="font-size:12.5px;margin:0 0 10px">${t('ta.rankEmpty')}</p>
+      <input type="hidden" name="pos1" id="hpos1"><input type="hidden" name="pos2" id="hpos2"><input type="hidden" name="pos3" id="hpos3">
+      <button type="submit" class="btn btn-block" id="applySubmit" disabled>${t('ta.submit')}</button>
+    </form>
+    <script>(function(){
+      var LBL=${JSON.stringify(labels).replace(/</g, '\\u003c')};
+      var ADD=${JSON.stringify(t('ta.applyThis'))},REM=${JSON.stringify(t('ta.rankRemove'))};
+      var MAX=3,sel=[];
+      var wrap=document.getElementById('posCards'),form=document.getElementById('applyForm');
+      if(!wrap||!form)return;
+      var h=[document.getElementById('hpos1'),document.getElementById('hpos2'),document.getElementById('hpos3')];
+      var sub=document.getElementById('applySubmit'),list=document.getElementById('rankList'),empty=document.getElementById('rankEmpty');
+      function render(){
+        [].slice.call(wrap.querySelectorAll('.pos-apply')).forEach(function(b){
+          var pid=b.getAttribute('data-pos'),i=sel.indexOf(pid);
+          if(i>=0){b.textContent='P'+(i+1)+' · '+REM;b.classList.add('on');b.disabled=false;}
+          else{b.textContent=ADD;b.classList.remove('on');b.disabled=sel.length>=MAX;}
+        });
+        for(var k=0;k<3;k++)h[k].value=sel[k]||'';
+        list.innerHTML='';
+        sel.forEach(function(pid,i){var li=document.createElement('li');li.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)';var s=document.createElement('span');s.textContent='P'+(i+1);s.style.cssText='font-weight:800;color:var(--red);min-width:26px';li.appendChild(s);li.appendChild(document.createTextNode(LBL[pid]||''));list.appendChild(li);});
+        empty.style.display=sel.length?'none':'';
+        sub.disabled=sel.length===0;
+      }
+      wrap.addEventListener('click',function(ev){
+        var b=ev.target&&ev.target.closest?ev.target.closest('.pos-apply'):null;
+        if(!b)return;ev.preventDefault();
+        var pid=b.getAttribute('data-pos'),i=sel.indexOf(pid);
+        if(i>=0)sel.splice(i,1);else if(sel.length<MAX)sel.push(pid);
+        render();
+      });
+      render();
+    })();</script>`;
   }
+  const cancelForm = (ctx.myApp && editable)
+    ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:14px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`
+    : '';
+  const regClosedBanner = (!editable && !ctx.myApp) ? `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>` : '';
+
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
   const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
   const docsWarn = (docsMissing && creatorOpen)
@@ -4399,10 +4469,11 @@ function talentEventApply({ account, event, ctx, lang }) {
     ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
     <h1 style="margin:0">${esc(e.name)}</h1>
     <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
-    ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
-    ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    ${chips}
     ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px;text-align:justify">${esc(e.description)}</p>` : ''}
-    ${eb}${docsWarn}${myBlock}${formBlock}
+    ${eb}${docsWarn}${myBlock}${cancelForm}
+    <div style="margin-top:22px"><div style="font-weight:800;font-size:18px">${t('ta.positionsTitle')}</div><div id="posCards">${cardsHtml}</div></div>
+    ${rankingForm}${regClosedBanner}
   </div>`;
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
