@@ -481,6 +481,18 @@ function landingPage(lang, opts = {}) {
     <div class="lp-ev-grid">${evCardHtml}${campCardHtml}</div>
   </section>` : '';
 
+  // "About 20FIT" story at the bottom of the landing (shared with the /about page).
+  const aboutC = aboutContent(L);
+  const aboutSection = `
+  <section id="about" style="background:var(--lp-bg2)">
+    <div class="ab-body" style="padding-top:56px;padding-bottom:8px">
+      <div class="ab-eyebrow" style="text-align:center">${esc(t('nav.about'))}</div>
+      <h2 class="ab-h" style="text-align:center;font-size:clamp(30px,4.8vw,46px);margin-bottom:14px">${esc(t('about.landTitle'))}</h2>
+      <p style="text-align:center;color:var(--lp-tx2);font-size:18px;line-height:1.6;max-width:660px;margin:0 auto">${esc(aboutC.lede)}</p>
+      ${aboutC.sectionsHtml}
+    </div>
+  </section>`;
+
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
@@ -638,6 +650,18 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
+/* About story section (shared markup with the /about page via aboutContent) */
+html{scroll-behavior:smooth}
+#about{scroll-margin-top:90px}
+.ab-body{max-width:820px;margin:0 auto;padding:0 28px}
+.ab-sec{padding:36px 0;border-bottom:1px solid var(--lp-line)}
+.ab-sec:last-child{border-bottom:0}
+.ab-eyebrow{color:var(--red);font:700 12.5px/1 Barlow,sans-serif;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
+.ab-h{font:800 clamp(24px,4vw,34px)/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin-bottom:14px}
+.ab-p{font-size:16.5px;line-height:1.7;color:var(--lp-tx2);max-width:660px}
+.ab-list{list-style:none;margin:16px 0 0;display:flex;flex-direction:column;gap:10px;max-width:660px}
+.ab-list li{position:relative;padding-left:26px;font-size:15.5px;line-height:1.55}
+.ab-list li::before{content:"";position:absolute;left:2px;top:7px;width:9px;height:9px;border-radius:3px;background:var(--red)}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
@@ -684,6 +708,8 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 
   ${faqSection(L)}
 
+  ${aboutSection}
+
   <footer>
     <div class="foot-main">
       <div class="foot-social" role="group" aria-label="Social media">${socialHtml}</div>
@@ -707,7 +733,7 @@ function landingNav(lang, active) {
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </a>
-    <a href="/about${q}" class="lp-about${active === 'about' ? ' on' : ''}">${nIc('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>')}<span>${esc(t('nav.about'))}</span></a>
+    <a href="/${q}#about" class="lp-about${active === 'about' ? ' on' : ''}">${nIc('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>')}<span>${esc(t('nav.about'))}</span></a>
     ${toggle}
     <details class="lp-acct">
       <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span><svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -720,10 +746,10 @@ function landingNav(lang, active) {
 }
 
 /** Public "About 20FIT" story page. Bilingual content lives inline (id/en). */
-function aboutPage(lang) {
+// Bilingual "About 20FIT" story content, shared by the /about page and the
+// About section at the bottom of the landing page.
+function aboutContent(lang) {
   const L = normLang(lang);
-  const t = (k, v) => tr(L, k, v);
-  const q = `?lang=${L}`;
   const CONTENT = {
     en: {
       lede: 'From a 20-minute EMS workout to an integrated life system. This is the story of how we redefined what fitness can be.',
@@ -760,6 +786,14 @@ function aboutPage(lang) {
         ${s.p ? `<p class="ab-p">${esc(s.p)}</p>` : ''}
         ${s.list ? `<ul class="ab-list">${s.list.map((li) => `<li>${esc(li)}</li>`).join('')}</ul>` : ''}
       </section>`).join('');
+  return { lede: C.lede, sectionsHtml };
+}
+
+function aboutPage(lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const q = `?lang=${L}`;
+  const { lede, sectionsHtml } = aboutContent(L);
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t('nav.about'))} · 20FIT</title>
@@ -820,7 +854,7 @@ ${landingNav(lang, 'about')}
 <section class="ab-hero"><div class="ab-hero-in">
   <div class="ab-kick">${esc(t('nav.about'))}</div>
   <h1 class="ab-title">20<span>FIT</span></h1>
-  <p class="ab-lede">${esc(C.lede)}</p>
+  <p class="ab-lede">${esc(lede)}</p>
 </div></section>
 <div class="ab-body">${sectionsHtml}</div>
 <section class="ab-cta"><a href="/register${q}">${esc(t('land.join'))}</a></section>
