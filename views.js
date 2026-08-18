@@ -1187,7 +1187,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
         <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
       <div class="au-hint">${t('hint.min6')}</div></div>
-    <button type="submit" class="au-submit">${t('authp.cta')}</button>
+    <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
 
   const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login">
