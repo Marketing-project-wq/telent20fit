@@ -1315,7 +1315,7 @@ a{text-decoration:none;color:inherit}
 .au-sticky b{font:800 15px/1.2 Barlow,sans-serif;text-transform:uppercase;flex:1;min-width:0}
 .au-sticky .au-btn-red{padding:12px 20px}
 .au-x{background:none;border:0;cursor:pointer;color:var(--lp-tx3);font-size:24px;line-height:1;padding:2px 8px;flex:0 0 auto}
-.au-faq{max-width:920px;margin:0 auto;padding:8px 28px 130px}
+.au-faq{max-width:1240px;margin:0 auto;padding:8px 28px 130px}
 .au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,46px);margin:0 0 8px}
 .au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
 .au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
