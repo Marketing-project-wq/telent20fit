@@ -4312,20 +4312,23 @@ function talentPositionCard(e, lang, filterable) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
-  const posLine = (e.openPositions || []).map((p) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(posLabel(p, L))}</span>`).join('');
+  // Each position chip deep-links to that position's jobdesk on the detail page.
+  // Chips sit above the whole-card "stretched" link (higher z-index) so they win the click.
+  const posLine = (e.openPositions || []).map((p) => `<a href="/event/${esc(e.id)}?lang=${L}#pos-${esc(p.position_id)}" class="tag" style="margin:0 6px 6px 0;display:inline-block;text-decoration:none;color:inherit">${esc(posLabel(p, L))}</a>`).join('');
   const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
   const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
   const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-search="${esc(hay)}"` : '';
-  return `<a href="/event/${esc(e.id)}?lang=${L}" class="${cls}"${hooks} style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+  return `<div class="${cls}"${hooks} style="position:relative;margin-top:12px">
+    <a href="/event/${esc(e.id)}?lang=${L}" aria-label="${esc(e.name)}" style="position:absolute;inset:0;z-index:1"></a>
     ${eventCover(e, L)}
     <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
     ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
     ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
     ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
     ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
-    <div style="margin-top:10px">${posLine}</div>
+    <div style="margin-top:10px;position:relative;z-index:2">${posLine}</div>
     ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
-  </a>`;
+  </div>`;
 }
 
 function talentOpenEvents({ account, events, lang }) {
@@ -4379,7 +4382,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     const btn = (applyMode && isOpen && !lock)
       ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:12px">${t('ta.applyThis')}</button>`
       : (applyMode && lock ? `<div class="muted" style="margin-top:10px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
-    return `<div class="card" style="margin-top:12px">
+    return `<div class="card" id="pos-${esc(p.position_id)}" style="margin-top:12px;scroll-margin-top:84px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
         <b style="font-size:16px">${esc(posLabel(p, L))}</b>${badge}
       </div>
