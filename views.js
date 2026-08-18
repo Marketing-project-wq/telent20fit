@@ -469,9 +469,8 @@ function landingPage(lang, opts = {}) {
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
   const navBar = landingNav(L, 'home');
 
-  // Live opportunities (events + active campaigns), rendered before "Why Choose".
+  // Live opportunities (active, not-yet-ended events), rendered before "Why Choose".
   const evList = Array.isArray(opts.events) ? opts.events : [];
-  const campList = Array.isArray(opts.campaigns) ? opts.campaigns : [];
   const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
   const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
   const evBadge = (status) => `<span class="lp-ev-badge lp-ev-${status === 'ongoing' ? 'on' : 'up'}">${esc(t(status === 'ongoing' ? 'ev.status.ongoing' : 'ev.status.upcoming'))}</span>`;
@@ -479,15 +478,11 @@ function landingPage(lang, opts = {}) {
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}${evBadge(e.status)}</div>
       <div class="lp-ev-body"><div class="lp-ev-name">${esc(e.name)}</div><div class="lp-ev-meta">${esc(evDate2(e))}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
     </a>`).join('');
-  const campCardHtml = campList.map((c) => `<a href="/register${q}" class="lp-ev-card">
-      <div class="lp-ev-cw">${gradCover(c.id || c.name, c.name, true)}<span class="lp-ev-badge lp-ev-camp">${esc(t('land.campaignTag'))}</span></div>
-      <div class="lp-ev-body"><div class="lp-ev-name">${esc(c.name)}</div><div class="lp-ev-meta">${esc(t('land.campaignMeta'))}</div></div>
-    </a>`).join('');
-  const eventsSection = (evList.length || campList.length) ? `
+  const eventsSection = (evList.length) ? `
   <section style="max-width:1180px;margin:0 auto;padding:60px 28px 8px">
     <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
-    <div class="lp-ev-grid">${evCardHtml}${campCardHtml}</div>
+    <div class="lp-ev-grid">${evCardHtml}</div>
   </section>` : '';
 
   // "About 20FIT" story at the bottom of the landing (shared with the /about page).
@@ -657,7 +652,6 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-badge{position:absolute;top:12px;left:12px;background:rgba(255,255,255,.94);font:700 11.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;padding:6px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
 .lp-ev-on{color:#0f9d6a}
 .lp-ev-up{color:var(--red)}
-.lp-ev-camp{color:#7c3aed}
 .lp-ev-body{padding:14px 16px 16px}
 .lp-ev-name{font:800 17px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);word-break:break-word}
 .lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}

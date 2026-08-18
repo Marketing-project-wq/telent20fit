@@ -379,10 +379,8 @@ app.get('/', async (req, res, next) => {
     const st = db();
     const bg = (await landingBgUrls(st)).filter(Boolean);
     // Live opportunities for the public landing: active, not-yet-ended events
-    // (ongoing first) plus active KOL campaigns. Best-effort — the landing must
-    // still render if these lookups fail.
+    // (ongoing first). Best-effort — the landing must still render if this fails.
     let events = [];
-    let campaigns = [];
     if (st) {
       try {
         const rank = { ongoing: 0, upcoming: 1 };
@@ -392,10 +390,9 @@ app.get('/', async (req, res, next) => {
           .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')))
           .slice(0, 6);
         await attachMockups(st, events);
-        campaigns = await st.listActiveCampaigns();
       } catch (_) { /* keep the landing up regardless */ }
     }
-    res.send(V.landingPage(req.lang, { bg, events, campaigns }));
+    res.send(V.landingPage(req.lang, { bg, events }));
   } catch (e) { next(e); }
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
