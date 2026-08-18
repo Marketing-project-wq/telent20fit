@@ -2444,8 +2444,20 @@ function kolProfilePage({ account, certs, events, lang }) {
     : `<p class="muted" style="margin-top:12px">${t('prof.eventsEmpty')}</p>`;
   const ddPath = '/' + (acc.talent_type || 'kol').replace(/_/g, '-') + '/data-diri?lang=' + L;
   const body = `<div class="wrap narrow">
-  <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}</style>
-  ${!acc.profile_completed_at ? `<a href="${ddPath}" class="banner banner-warn" style="display:flex;gap:10px;align-items:center;justify-content:space-between;text-decoration:none;margin:0 0 14px"><span>${esc(t('prof.completePrompt'))}</span><b style="white-space:nowrap">${esc(t('prof.completeCta'))} →</b></a>` : ''}
+  <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}
+  .pc-card{display:flex;align-items:center;gap:15px;background:linear-gradient(135deg,#ff2a37,#c00c17);color:#fff;border-radius:16px;padding:16px 18px;text-decoration:none;margin:0 0 16px;box-shadow:0 12px 28px rgba(228,18,31,.30);transition:transform .15s,box-shadow .15s}
+  .pc-card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(228,18,31,.36)}
+  .pc-ic{flex:0 0 auto;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#fff}
+  .pc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .pc-title{font-weight:800;font-size:16px;line-height:1.2}
+  .pc-sub{font-size:12.5px;line-height:1.4;color:rgba(255,255,255,.92)}
+  .pc-cta{flex:0 0 auto;background:#fff;color:var(--red);font-weight:800;font-size:13px;padding:11px 16px;border-radius:999px;white-space:nowrap}
+  @media(max-width:560px){.pc-card{flex-wrap:wrap;gap:12px}.pc-cta{width:100%;text-align:center;order:3}}</style>
+  ${!acc.profile_completed_at ? `<a href="${ddPath}" class="pc-card">
+    <span class="pc-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M19 8v4M17 10h4"/></svg></span>
+    <span class="pc-body"><span class="pc-title">${esc(t('prof.completeTitle'))}</span><span class="pc-sub">${esc(t('prof.completePrompt'))}</span></span>
+    <span class="pc-cta">${esc(t('prof.completeCta'))} →</span>
+  </a>` : ''}
   <div class="card" style="margin-top:0;padding:22px 20px">
     <div style="display:flex;gap:18px;align-items:center">
       <div style="width:84px;height:84px;border-radius:50%;background:${avatarBg};color:#fff;font:800 36px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.14)">${esc(initial)}</div>
