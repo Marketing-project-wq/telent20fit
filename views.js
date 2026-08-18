@@ -1200,6 +1200,16 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
 
+  // FAQ items are data-driven: add faq.q<N> / faq.a<N> to the i18n files and
+  // they appear automatically — no component change needed. `name="faq"` makes
+  // the <details> an exclusive accordion (only one open at a time) natively.
+  let faqItems = '';
+  for (let n = 1; n <= 50; n++) {
+    const q = tr(L, 'faq.q' + n);
+    if (q === 'faq.q' + n) break; // stop at the first undefined question
+    faqItems += `<details class="au-faq-item" name="faq"><summary>${esc(q)}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(tr(L, 'faq.a' + n))}</div></details>`;
+  }
+
   const body = `<div class="au-top">
     <a href="/?lang=${L}" class="au-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
     <div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>
@@ -1231,7 +1241,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
   <section class="au-faq">
     <h2>FAQ</h2>
     <p class="au-faq-sub">${esc(t('faq.sub'))}</p>
-    ${[1, 2, 3, 4].map((n) => `<details class="au-faq-item"><summary>${esc(t('faq.q' + n))}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(t('faq.a' + n))}</div></details>`).join('')}
+    ${faqItems}
   </section>
   <div class="au-sticky">
     <b>${esc(t('authp.stickyQ'))}</b>
