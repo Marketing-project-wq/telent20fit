@@ -675,8 +675,6 @@ function landingNav(lang, active) {
       <div class="lp-acct-menu">
         <a href="/login${q}">${esc(t('nav.signin'))}</a>
         <a href="/register${q}">${esc(t('nav.signup'))}</a>
-        <a href="/submit${q}">${esc(t('land.submit'))}</a>
-        <a href="/eo/login">${esc(t('nav.eoLogin'))}</a>
       </div>
     </details>
   </div></header>`;
