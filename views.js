@@ -2444,8 +2444,10 @@ function kolProfilePage({ account, certs, events, lang }) {
         ${applicationTracker(e.status, L)}
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('prof.eventsEmpty')}</p>`;
+  const ddPath = '/' + (acc.talent_type || 'kol').replace(/_/g, '-') + '/data-diri?lang=' + L;
   const body = `<div class="wrap narrow">
   <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}</style>
+  ${!acc.profile_completed_at ? `<a href="${ddPath}" class="banner banner-warn" style="display:flex;gap:10px;align-items:center;justify-content:space-between;text-decoration:none;margin:0 0 14px"><span>${esc(t('prof.completePrompt'))}</span><b style="white-space:nowrap">${esc(t('prof.completeCta'))} →</b></a>` : ''}
   <div class="card" style="margin-top:0;padding:22px 20px">
     <div style="display:flex;gap:18px;align-items:center">
       <div style="width:84px;height:84px;border-radius:50%;background:${avatarBg};color:#fff;font:800 36px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.14)">${esc(initial)}</div>

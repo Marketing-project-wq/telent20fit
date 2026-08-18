@@ -127,6 +127,8 @@
   "prof.dataTitle": "Personal Details",
   "prof.eventsTitle": "My Events",
   "prof.eventsEmpty": "You haven't applied to any events yet.",
+  "prof.completePrompt": "Complete your profile to apply for events.",
+  "prof.completeCta": "Complete now",
   "prof.showDetail": "View details",
   "kol.eventsSub": "Ongoing & upcoming events.",
   "apply.homeSub": "Available events. Tap one to see what's needed and register.",

@@ -127,6 +127,8 @@
   "prof.dataTitle": "Data Diri",
   "prof.eventsTitle": "Event Saya",
   "prof.eventsEmpty": "Belum ada event yang kamu lamar.",
+  "prof.completePrompt": "Lengkapi profil kamu untuk bisa melamar event.",
+  "prof.completeCta": "Lengkapi sekarang",
   "prof.showDetail": "Lihat detail",
   "kol.eventsSub": "Event yang sedang berjalan & akan datang.",
   "apply.homeSub": "Daftar event yang tersedia. Klik untuk lihat kebutuhan & mendaftar.",

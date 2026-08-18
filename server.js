@@ -132,6 +132,22 @@ function requireTalentReady(type) {
   }];
 }
 
+// Gate: logged-in talent of `type`, but WITHOUT the profile-complete requirement,
+// so a freshly registered talent can open their profile and browse events before
+// completing it. Applying still uses requireTalentReady. Attaches req.account.
+function requireTalentBrowse(type) {
+  return [auth.requireTalent(type), async (req, res, next) => {
+    try {
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(req.talent.id);
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
+      req.account = acc;
+      next();
+    } catch (e) { next(e); }
+  }];
+}
+
 // GET /{type}/data-diri — profile form (+ available-events teaser). Skips to the
 // dashboard if already complete, unless ?edit=1 (re-open to update).
 function dataDiriGet(type) {
@@ -594,7 +610,9 @@ function talentRegisterPost(type, opts = {}) {
         if (Object.keys(patch).length) await st.updateAccountProfile(account.id, patch);
 
         auth.setSession(res, account);
-        res.redirect('/' + p + '/data-diri?lang=' + req.lang);
+        // Land on the dashboard (profile + browse events); profile completion is
+        // prompted there and enforced only when applying to an event.
+        res.redirect('/' + p + '?lang=' + req.lang);
       } catch (e) { next(e); }
     },
   ];
@@ -671,7 +689,7 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 
 // KOL dashboard (sidebar app shell): Profil (home) · Event · Kirim Bukti.
 // req.account (full profile) is attached by requireTalentReady.
-app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/kol', requireTalentBrowse('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -809,7 +827,7 @@ async function saveMockup(st, eventId, file) {
 }
 
 // Talent Home: active events (ongoing + upcoming) with their category needs.
-app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/kol/event', requireTalentBrowse('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -836,7 +854,7 @@ app.get('/kol/event', requireTalentReady('kol'), async (req, res, next) => {
 });
 
 // Event detail: pick a category to register for (or see your registration).
-app.get('/kol/event/:id', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/kol/event/:id', requireTalentBrowse('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -921,6 +939,23 @@ function requireAnyTalentReady() {
   };
 }
 
+// Like requireAnyTalentReady but without the profile-complete gate — lets a new
+// talent browse the open events before completing their profile.
+function requireAnyTalentBrowse() {
+  return async (req, res, next) => {
+    try {
+      const t = auth.anySession(req, auth.TALENT_TYPES);
+      if (!t) return res.redirect('/login');
+      const st = db();
+      if (!st) return needConfig(req, res);
+      const acc = await st.getAccountById(t.id);
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login'); }
+      req.talent = t; req.account = acc;
+      next();
+    } catch (e) { next(e); }
+  };
+}
+
 // Is the event currently accepting applications? (published + within reg window)
 function eventRegOpen(ev) {
   if (!ev || ev.status !== 'published' || ev.reg_closed_at) return false;
@@ -974,7 +1009,7 @@ async function openPositionEvents(st, talentId) {
 }
 
 // Events open to talents: published, position-based, within reg window, with a free slot.
-app.get('/events', requireAnyTalentReady(), async (req, res, next) => {
+app.get('/events', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -988,7 +1023,7 @@ const findEventByRef = (events, ref) => (events || []).find((e) => e.id === ref 
 // Prefer the slug in outgoing URLs so friendly links (…/event/iss) stick.
 const eventRef = (ev) => (ev && ev.slug) || (ev && ev.id);
 
-app.get('/event/:id', requireAnyTalentReady(), async (req, res, next) => {
+app.get('/event/:id', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1184,7 +1219,7 @@ app.get('/main-power/dokumen', docsGet('main_power'));
 app.post('/main-power/dokumen', docsPost('main_power'));
 app.get('/main-power/dokumen/file/:kind', docFile('main_power'));
 
-app.get('/main-power', requireTalentReady('main_power'), async (req, res, next) => {
+app.get('/main-power', requireTalentBrowse('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
