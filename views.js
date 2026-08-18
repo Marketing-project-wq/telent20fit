@@ -485,18 +485,6 @@ function landingPage(lang, opts = {}) {
     <div class="lp-ev-grid">${evCardHtml}</div>
   </section>` : '';
 
-  // "About 20FIT" story at the bottom of the landing (shared with the /about page).
-  const aboutC = aboutContent(L);
-  const aboutSection = `
-  <section id="about" style="background:var(--lp-bg2)">
-    <div class="ab-body" style="padding-top:56px;padding-bottom:8px">
-      <div class="ab-eyebrow" style="text-align:center">${esc(t('nav.about'))}</div>
-      <h2 class="ab-h" style="text-align:center;font-size:clamp(30px,4.8vw,46px);margin-bottom:14px">${esc(t('about.landTitle'))}</h2>
-      <p style="text-align:center;color:var(--lp-tx2);font-size:18px;line-height:1.6;max-width:660px;margin:0 auto">${esc(aboutC.lede)}</p>
-      ${aboutC.sectionsHtml}
-    </div>
-  </section>`;
-
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
@@ -657,18 +645,8 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
-/* About story section (shared markup with the /about page via aboutContent) */
 html{scroll-behavior:smooth}
-#about,#faq{scroll-margin-top:90px}
-.ab-body{max-width:820px;margin:0 auto;padding:0 28px}
-.ab-sec{padding:36px 0;border-bottom:1px solid var(--lp-line)}
-.ab-sec:last-child{border-bottom:0}
-.ab-eyebrow{color:var(--red);font:700 12.5px/1 Barlow,sans-serif;letter-spacing:.2em;text-transform:uppercase;margin-bottom:12px}
-.ab-h{font:800 clamp(24px,4vw,34px)/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;margin-bottom:14px}
-.ab-p{font-size:16.5px;line-height:1.7;color:var(--lp-tx2);max-width:660px}
-.ab-list{list-style:none;margin:16px 0 0;display:flex;flex-direction:column;gap:10px;max-width:660px}
-.ab-list li{position:relative;padding-left:26px;font-size:15.5px;line-height:1.55}
-.ab-list li::before{content:"";position:absolute;left:2px;top:7px;width:9px;height:9px;border-radius:3px;background:var(--red)}
+#faq{scroll-margin-top:90px}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
@@ -706,8 +684,6 @@ html{scroll-behavior:smooth}
 
   <div id="faq">${faqSection(L)}</div>
 
-  ${aboutSection}
-
   <footer class="lp-foot">
     <div class="ft-top">
       <div class="ft-brand">
@@ -721,7 +697,7 @@ html{scroll-behavior:smooth}
       </nav>
       <nav class="ft-col" aria-label="${esc(t('foot.menu'))}">
         <div class="ft-h">${esc(t('foot.menu'))}</div>
-        <a href="/${q}#about">${esc(t('nav.about'))}</a>
+        <a href="/about${q}">${esc(t('nav.about'))}</a>
         <a href="/${q}#faq">FAQ</a>
         <a href="/login${q}">${esc(t('btn.signin'))}</a>
         <a href="/register${q}">${esc(t('auth.account.registerTitle'))}</a>
