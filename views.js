@@ -460,6 +460,27 @@ function landingPage(lang, opts = {}) {
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
   const navBar = landingNav(L, 'home');
 
+  // Live opportunities (events + active campaigns), rendered before "Why Choose".
+  const evList = Array.isArray(opts.events) ? opts.events : [];
+  const campList = Array.isArray(opts.campaigns) ? opts.campaigns : [];
+  const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
+  const evBadge = (status) => `<span class="lp-ev-badge lp-ev-${status === 'ongoing' ? 'on' : 'up'}">${esc(t(status === 'ongoing' ? 'ev.status.ongoing' : 'ev.status.upcoming'))}</span>`;
+  const evCardHtml = evList.map((e) => `<a href="/register${q}" class="lp-ev-card">
+      <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}${evBadge(e.status)}</div>
+      <div class="lp-ev-body"><div class="lp-ev-name">${esc(e.name)}</div><div class="lp-ev-meta">${esc(evDate2(e))}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
+    </a>`).join('');
+  const campCardHtml = campList.map((c) => `<a href="/register${q}" class="lp-ev-card">
+      <div class="lp-ev-cw">${gradCover(c.id || c.name, c.name, true)}<span class="lp-ev-badge lp-ev-camp">${esc(t('land.campaignTag'))}</span></div>
+      <div class="lp-ev-body"><div class="lp-ev-name">${esc(c.name)}</div><div class="lp-ev-meta">${esc(t('land.campaignMeta'))}</div></div>
+    </a>`).join('');
+  const eventsSection = (evList.length || campList.length) ? `
+  <section style="max-width:1180px;margin:0 auto;padding:60px 28px 8px">
+    <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
+    <div class="lp-ev-grid">${evCardHtml}${campCardHtml}</div>
+  </section>` : '';
+
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
@@ -599,6 +620,24 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
 .au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
 @media(max-width:560px){.au-faq{padding:16px 18px 56px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
+/* Live opportunities grid (events + campaigns) */
+.lp-ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.lp-ev-card{display:block;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:16px;overflow:hidden;text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s}
+.lp-ev-card:hover{transform:translateY(-3px);box-shadow:0 16px 36px rgba(20,20,30,.13)}
+.lp-ev-cw{position:relative}
+.lp-ev-cover{aspect-ratio:16/10;background-size:cover;background-position:center;background-color:var(--lp-chip)}
+.lp-ev-grad{display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;color:#fff}
+.lp-ev-word{font:800 clamp(22px,3.2vw,34px)/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;text-align:center;padding:0 16px;z-index:1;letter-spacing:.01em}
+.lp-ev-ico{position:absolute;right:12px;bottom:8px;font-size:34px;opacity:.45}
+.lp-ev-badge{position:absolute;top:12px;left:12px;background:rgba(255,255,255,.94);font:700 11.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;padding:6px 11px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+.lp-ev-on{color:#0f9d6a}
+.lp-ev-up{color:var(--red)}
+.lp-ev-camp{color:#7c3aed}
+.lp-ev-body{padding:14px 16px 16px}
+.lp-ev-name{font:800 17px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);word-break:break-word}
+.lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}
+@media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
@@ -623,7 +662,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     </div>
   </section>
   </div>
-
+  ${eventsSection}
   <section style="background:var(--lp-bg2);padding:56px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
       <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('whyChoose.title'))}</h2>
