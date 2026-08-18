@@ -1141,8 +1141,163 @@ function authShell(type, title, sub, formHtml, footHtml, errors, lang, brandOver
   return layout({ title: `${title} — ${titleSuffix}`, body, brand, home: '/?lang=' + L, lang: L });
 }
 
+/**
+ * Unified talent auth page: a two-column marketing + tabbed (Sign in / Create
+ * account) form, matching the 20FIT app style. Both /register and /login render
+ * this; `mode` picks the active tab and which panel a validation error lands on.
+ */
+function talentAuthPage({ mode, lang, errors, values } = {}) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const v = values || {};
+  const isLogin = mode === 'login';
+  const basePath = isLogin ? '/login' : '/register';
+  const langBtn = (code, label) => `<a href="${basePath}?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
+  const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3.2"/></svg>';
+  const errBanner = (errors && errors.length)
+    ? `<div class="au-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const forgotHref = `/kol/forgot-password?lang=${L}`;
+
+  const signup = `<form class="au-panel${isLogin ? '' : ' on'}" data-panel="signup" method="post" action="/register">
+    <div class="au-f"><label for="su-name">${t('common.fullname')}</label>
+      <input class="au-in" type="text" id="su-name" name="name" required maxlength="120" autocomplete="name" placeholder="${esc(t('authp.namePh'))}" value="${esc(v.name || '')}"></div>
+    <div class="au-f"><label for="su-email">${t('common.email')}</label>
+      <input class="au-in" type="email" id="su-email" name="login" required autocomplete="email" placeholder="${esc(t('authp.emailPh'))}" value="${esc(v.login || '')}"></div>
+    <div class="au-f"><label for="su-phone">${t('dd.phone')}</label>
+      <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
+    <div class="au-f"><label>${t('dd.gender')} <span class="au-opt">${t('dd.optional')}</span></label>
+      <div class="au-gender" data-gender>
+        <button type="button" data-val="male"${v.gender === 'male' ? ' class="on"' : ''}>${t('dd.gender.male')}</button>
+        <button type="button" data-val="female"${v.gender === 'female' ? ' class="on"' : ''}>${t('dd.gender.female')}</button>
+      </div>
+      <input type="hidden" name="gender" value="${esc(v.gender || '')}"></div>
+    <div class="au-f"><label for="su-dob">${t('dd.birthdate')} <span class="au-opt">${t('dd.optional')}</span></label>
+      <input class="au-in" type="date" id="su-dob" name="birthdate" value="${esc(v.birthdate || '')}"></div>
+    <div class="au-f"><label for="su-pass">${t('common.password')}</label>
+      <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
+        <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
+      <div class="au-hint">${t('hint.min6')}</div></div>
+    <button type="submit" class="au-submit">${t('authp.cta')}</button>
+  </form>`;
+
+  const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login">
+    <div class="au-f"><label for="si-email">${t('common.email')}</label>
+      <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
+    <div class="au-f"><label for="si-pass">${t('common.password')}</label>
+      <div class="au-pass"><input class="au-in" type="password" id="si-pass" name="password" required autocomplete="current-password" placeholder="••••••••">
+        <button type="button" class="au-eye" data-eye="si-pass" aria-label="show/hide password">${EYE}</button></div></div>
+    <button type="submit" class="au-submit">${t('btn.signin')}</button>
+    <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
+  </form>`;
+
+  const body = `<div class="au-top">
+    <a href="/?lang=${L}" class="au-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
+    <div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>
+  </div>
+  <div class="au-wrap">
+    <section class="au-hero">
+      <h1 class="au-title">${esc(t('authp.head1'))} ${esc(t('authp.head2'))}</h1>
+      <p class="au-sub">${esc(t('authp.sub'))}</p>
+      <div class="au-cta">
+        <button type="button" class="au-btn au-btn-red" data-goto="signup">${t('authp.cta')}</button>
+        <a class="au-btn au-btn-ghost" href="/about?lang=${L}">${t('authp.inside')}</a>
+      </div>
+      <ul class="au-checks">
+        <li><span class="ck">✓</span>${esc(t('authp.check1'))}</li>
+        <li><span class="ck">✓</span>${esc(t('authp.check2'))}</li>
+        <li><span class="ck">✓</span>${esc(t('authp.check3'))}</li>
+      </ul>
+    </section>
+    <section class="au-card" id="au-form">
+      <div class="au-tabs">
+        <button type="button" class="au-tab${isLogin ? ' on' : ''}" data-tab="signin">${t('btn.signin')}</button>
+        <button type="button" class="au-tab${isLogin ? '' : ' on'}" data-tab="signup">${t('auth.account.registerTitle')}</button>
+      </div>
+      ${errBanner}
+      ${signup}
+      ${signin}
+    </section>
+  </div>
+  <div class="au-sticky">
+    <b>${esc(t('authp.stickyQ'))}</b>
+    <button type="button" class="au-btn au-btn-red" data-goto="signup">${t('authp.cta')}</button>
+    <button type="button" class="au-x" aria-label="dismiss">×</button>
+  </div>
+  <script>(function(){
+    var tabs=[].slice.call(document.querySelectorAll('.au-tab')),panels=[].slice.call(document.querySelectorAll('.au-panel'));
+    function show(w){tabs.forEach(function(t){t.classList.toggle('on',t.getAttribute('data-tab')===w);});panels.forEach(function(p){p.classList.toggle('on',p.getAttribute('data-panel')===w);});}
+    tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('data-tab'));});});
+    [].slice.call(document.querySelectorAll('[data-goto]')).forEach(function(el){el.addEventListener('click',function(){show(el.getAttribute('data-goto'));var c=document.getElementById('au-form');if(c&&window.innerWidth<900)c.scrollIntoView({behavior:'smooth'});});});
+    [].slice.call(document.querySelectorAll('[data-gender]')).forEach(function(g){var h=g.parentNode.querySelector('input[type=hidden]');[].slice.call(g.querySelectorAll('button')).forEach(function(b){b.addEventListener('click',function(){[].slice.call(g.querySelectorAll('button')).forEach(function(x){x.classList.remove('on');});b.classList.add('on');if(h)h.value=b.getAttribute('data-val');});});});
+    [].slice.call(document.querySelectorAll('[data-eye]')).forEach(function(btn){btn.addEventListener('click',function(){var i=document.getElementById(btn.getAttribute('data-eye'));if(i)i.type=i.type==='password'?'text':'password';});});
+    var x=document.querySelector('.au-x'),s=document.querySelector('.au-sticky');if(x&&s)x.addEventListener('click',function(){s.style.display='none';});
+  })();</script>`;
+
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${t('auth.account.registerTitle')} — 20FIT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E4121F;--red-soft:rgba(228,18,31,.10);
+  --lp-bg:#f4f6f9;--lp-card:#ffffff;--lp-chip:#eef1f5;--lp-line:#e3e7ed;--lp-line2:#d7dbe2;
+  --lp-tx:#17171d;--lp-tx2:#41454d;--lp-tx3:#63676e;--lp-tx4:#8b8f97}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5;min-height:100vh}
+a{text-decoration:none;color:inherit}
+.au-top{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1240px;margin:0 auto;padding:18px 28px}
+.au-logo img{height:34px;width:auto;display:block}
+.lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
+.lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
+.lp-tog-b.on{color:#fff;background:var(--red)}
+.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 128px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
+.au-sub{margin:22px 0 26px;font-size:clamp(16px,1.6vw,19px);color:var(--lp-tx3);max-width:480px}
+.au-cta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:30px}
+.au-btn{display:inline-flex;align-items:center;justify-content:center;padding:15px 26px;border-radius:999px;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.au-btn-red{background:var(--red);color:#fff;box-shadow:0 10px 24px rgba(228,18,31,.28)}
+.au-btn-ghost{background:#fff;color:var(--lp-tx);border-color:var(--lp-line2)}
+.au-checks{list-style:none;display:flex;flex-direction:column;gap:13px}
+.au-checks li{display:flex;align-items:center;gap:12px;font-weight:600;font-size:15.5px;color:var(--lp-tx2)}
+.au-checks .ck{flex:0 0 auto;color:var(--red);font-weight:900;font-size:16px}
+.au-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(20,20,30,.10)}
+.au-tabs{display:flex;gap:28px;border-bottom:1px solid var(--lp-line);margin-bottom:22px}
+.au-tab{background:none;border:0;cursor:pointer;padding:0 0 14px;font:800 15px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;color:var(--lp-tx4);position:relative}
+.au-tab.on{color:var(--lp-tx)}
+.au-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--red);border-radius:3px}
+.au-panel{display:none}
+.au-panel.on{display:block}
+.au-f{margin-bottom:16px}
+.au-f label{display:block;font:800 11.5px/1.3 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--lp-tx3);margin-bottom:8px}
+.au-opt{color:var(--lp-tx4);font-weight:600;letter-spacing:.02em;text-transform:none}
+.au-in{width:100%;background:var(--lp-chip);border:1px solid transparent;border-radius:12px;padding:14px 15px;font:500 15px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
+.au-in:focus{outline:none;border-color:var(--red);background:#fff}
+.au-in::placeholder{color:var(--lp-tx4)}
+.au-hint{margin-top:6px;font-size:12.5px;color:var(--lp-tx4)}
+.au-pass{position:relative}
+.au-pass .au-in{padding-right:46px}
+.au-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;color:var(--lp-tx3);padding:5px;display:flex}
+.au-gender{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.au-gender button{background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:12px;padding:14px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx2);cursor:pointer}
+.au-gender button.on{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.au-submit{width:100%;margin-top:6px;padding:16px;border-radius:12px;background:var(--red);color:#fff;border:0;cursor:pointer;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;box-shadow:0 10px 24px rgba(228,18,31,.28)}
+.au-forgot{display:block;text-align:right;margin-top:14px;color:var(--lp-tx3);font-size:13.5px}
+.au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
+.au-err ul{margin:6px 0 0 18px}
+.au-sticky{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--lp-line);box-shadow:0 -8px 24px rgba(20,20,30,.08);padding:14px 20px;display:flex;align-items:center;gap:16px;z-index:30}
+.au-sticky b{font:800 15px/1.2 Barlow,sans-serif;text-transform:uppercase;flex:1;min-width:0}
+.au-sticky .au-btn-red{padding:12px 20px}
+.au-x{background:none;border:0;cursor:pointer;color:var(--lp-tx3);font-size:24px;line-height:1;padding:2px 8px;flex:0 0 auto}
+@media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 120px}.au-card{padding:24px}.au-hero{order:0}}
+@media(max-width:560px){.au-top{padding:14px 18px}.au-sticky b{font-size:12.5px}.au-sticky{gap:10px;padding:12px 14px}.au-sticky .au-btn-red{padding:11px 15px;font-size:12px}}
+</style>
+</head><body>${body}</body></html>`;
+}
+
 function talentLogin(type, opts = {}) {
   const L = normLang(opts.lang);
+  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
@@ -1172,6 +1327,7 @@ function talentLogin(type, opts = {}) {
 
 function talentRegister(type, opts = {}) {
   const L = normLang(opts.lang);
+  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);

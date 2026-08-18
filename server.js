@@ -534,7 +534,12 @@ function talentRegisterPost(type, opts = {}) {
         const phone = String(req.body.phone || '').trim();
         const password = String(req.body.password || '');
         const password2 = String(req.body.password2 || '');
-        const values = { name, login, phone, portfolio_url: req.body.portfolio_url };
+        // Optional profile fields captured on the redesigned unified signup form.
+        let gender = String(req.body.gender || '').trim().toLowerCase();
+        if (gender !== 'male' && gender !== 'female') gender = '';
+        let birthdate = String(req.body.birthdate || '').trim();
+        if (birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) birthdate = '';
+        const values = { name, login, phone, gender, birthdate, portfolio_url: req.body.portfolio_url };
 
         // Optional supporting documents (all creator-side, all optional at signup).
         const files = req.files || {};
@@ -549,7 +554,7 @@ function talentRegisterPost(type, opts = {}) {
         if (!phone) errors.push(req.t('dd.err.phone'));
         else if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) errors.push(req.t('dd.err.phoneBad'));
         if (password.length < 6) errors.push(req.t('err.passwordMin6'));
-        else if (password !== password2) errors.push(req.t('err.passwordMismatch'));
+        else if (password2 && password !== password2) errors.push(req.t('err.passwordMismatch'));
         if (portfolioUrl && !/^https?:\/\/.+/i.test(portfolioUrl)) errors.push(req.t('doc.err.url'));
         if (cvFile && !docTypeOk(cvFile)) errors.push(req.t('doc.err.type'));
         if (hxFile && !docTypeOk(hxFile)) errors.push(req.t('doc.err.type'));
@@ -562,7 +567,10 @@ function talentRegisterPost(type, opts = {}) {
 
         let account;
         try {
-          account = await st.createAccount({ talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) });
+          const acc = { talent_type: type, name, login, phone, password_hash: auth.hashPassword(password) };
+          if (gender) acc.gender = gender;
+          if (birthdate) acc.birthdate = birthdate;
+          account = await st.createAccount(acc);
         } catch (e) {
           if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
           throw e;
