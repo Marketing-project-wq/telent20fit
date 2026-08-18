@@ -365,11 +365,13 @@ async function landingBgUrls(st) {
   let urls;
   try { urls = await st.landingBgUrls(); }
   catch (_) { urls = null; }
-  // A failed sign (null / thrown) must NOT be cached — otherwise one transient
-  // Supabase hiccup blanks the hero for the whole 50-min window. Keep the last
-  // known-good photos and retry on the next request instead.
-  if (!urls) return _bgCache.urls || [];
-  const clean = urls.filter(Boolean);
+  const clean = Array.isArray(urls) ? urls.filter(Boolean) : [];
+  // A failed sign (null/thrown) OR a result with nothing usable must NOT be cached.
+  // Otherwise one transient Supabase hiccup — or a just-resumed project whose
+  // storage is still warming up and briefly can't sign the (existing) objects —
+  // blanks the hero for the whole 50-min window. Keep the last known-good photos
+  // and retry on the next request instead.
+  if (!clean.length) return _bgCache.urls || [];
   _bgCache = { at: Date.now(), urls: clean };
   return clean;
 }
