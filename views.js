@@ -2252,7 +2252,6 @@ function kolProfilePage({ account, certs, events, lang }) {
       <div style="min-width:0;flex:1">
         <div style="font-size:22px;font-weight:800;line-height:1.15;word-break:break-word">${esc(acc.name || '—')}</div>
         <div class="muted" style="font-size:14px;margin-top:3px;word-break:break-word">${handle}</div>
-        <div style="margin-top:8px"><span class="tag">${esc(roleLabel)}</span></div>
       </div>
     </div>
     ${bio ? `<p style="font-size:14px;line-height:1.6;margin:16px 0 0;color:var(--muted);white-space:pre-wrap">${esc(bio)}</p>` : ''}
