@@ -588,6 +588,17 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 @media(max-width:760px){.foot-main{padding-top:40px}}
 @media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
+/* FAQ accordion (shared markup with the auth page via faqSection()) */
+.au-faq{max-width:1180px;margin:0 auto;padding:24px 28px 72px}
+.au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,44px);margin:0 0 8px}
+.au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
+.au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.au-faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;font:700 16.5px/1.35 Barlow,sans-serif;color:var(--lp-tx)}
+.au-faq-item summary::-webkit-details-marker{display:none}
+.au-faq-ic{flex:0 0 auto;color:var(--red);font-size:28px;line-height:1;transition:transform .2s ease}
+.au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
+.au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
+@media(max-width:560px){.au-faq{padding:16px 18px 56px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
 </style>${THEME_HEAD}</head>
 <body>
 <div style="min-height:100vh">
@@ -631,6 +642,8 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px">${esc(t('land.ecoSub'))}</p>
     <div class="eco-grid">${ecoHtml}</div>
   </section>
+
+  ${faqSection(L)}
 
   <footer>
     <div class="foot-main">
@@ -1153,6 +1166,23 @@ function authShell(type, title, sub, formHtml, footHtml, errors, lang, brandOver
 }
 
 /**
+ * Reusable FAQ accordion (used on the auth page and the landing page). Items are
+ * data-driven: add faq.q<N> / faq.a<N> to the i18n files and they appear
+ * automatically. `name="faq"` makes it an exclusive (single-open) accordion.
+ * Styling lives in each host page's stylesheet under the `.au-faq*` classes.
+ */
+function faqSection(lang) {
+  const L = normLang(lang);
+  let items = '';
+  for (let n = 1; n <= 50; n++) {
+    const q = tr(L, 'faq.q' + n);
+    if (q === 'faq.q' + n) break; // stop at the first undefined question
+    items += `<details class="au-faq-item" name="faq"><summary>${esc(q)}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(tr(L, 'faq.a' + n))}</div></details>`;
+  }
+  return `<section class="au-faq"><h2>FAQ</h2><p class="au-faq-sub">${esc(tr(L, 'faq.sub'))}</p>${items}</section>`;
+}
+
+/**
  * Unified talent auth page: a two-column marketing + tabbed (Sign in / Create
  * account) form, matching the 20FIT app style. Both /register and /login render
  * this; `mode` picks the active tab and which panel a validation error lands on.
@@ -1200,16 +1230,6 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
 
-  // FAQ items are data-driven: add faq.q<N> / faq.a<N> to the i18n files and
-  // they appear automatically — no component change needed. `name="faq"` makes
-  // the <details> an exclusive accordion (only one open at a time) natively.
-  let faqItems = '';
-  for (let n = 1; n <= 50; n++) {
-    const q = tr(L, 'faq.q' + n);
-    if (q === 'faq.q' + n) break; // stop at the first undefined question
-    faqItems += `<details class="au-faq-item" name="faq"><summary>${esc(q)}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(tr(L, 'faq.a' + n))}</div></details>`;
-  }
-
   const body = `<div class="au-top">
     <div class="au-top-left">
       <a href="/?lang=${L}" class="au-back">${esc(t('common.back'))}</a>
@@ -1241,11 +1261,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
       ${signin}
     </section>
   </div>
-  <section class="au-faq">
-    <h2>FAQ</h2>
-    <p class="au-faq-sub">${esc(t('faq.sub'))}</p>
-    ${faqItems}
-  </section>
+  ${faqSection(L)}
   <script>(function(){
     var tabs=[].slice.call(document.querySelectorAll('.au-tab')),panels=[].slice.call(document.querySelectorAll('.au-panel'));
     function show(w){tabs.forEach(function(t){t.classList.toggle('on',t.getAttribute('data-tab')===w);});panels.forEach(function(p){p.classList.toggle('on',p.getAttribute('data-panel')===w);});}
@@ -1271,7 +1287,7 @@ a{text-decoration:none;color:inherit}
 .au-top-left{display:flex;align-items:center;gap:16px;min-width:0}
 .au-back{display:inline-flex;align-items:center;padding:9px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
 .au-back:hover{background:var(--lp-line);color:var(--lp-tx)}
-.au-logo img{height:48px;width:auto;display:block}
+.au-logo img{height:60px;width:auto;display:block}
 .lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
@@ -1322,7 +1338,7 @@ a{text-decoration:none;color:inherit}
 .au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
 @media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
 @media(max-width:560px){.au-faq{padding:8px 18px 60px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
-@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:38px}.au-back{padding:8px 13px;font-size:13px}}
+@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:46px}.au-back{padding:8px 13px;font-size:13px}}
 </style>
 </head><body>${body}</body></html>`;
 }
