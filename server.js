@@ -399,8 +399,10 @@ app.post('/login', async (req, res, next) => {
           await st.setTalentPassword(account.id, hash);
         } else {
           const name = (r.user && r.user.name) || login.split('@')[0];
+          const acc = { talent_type: 'kol', name, login, password_hash: hash };
+          if (r.user && r.user.phone) acc.phone = r.user.phone;
           try {
-            account = await st.createAccount({ talent_type: 'kol', name, login, password_hash: hash });
+            account = await st.createAccount(acc);
           } catch (e) {
             if (e && e.code === 'DUP') account = await st.findAccountByLogin(login);
             else throw e;

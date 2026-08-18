@@ -29,15 +29,21 @@ const LOGIN_PATH = '/api/v1/auth/login';
 
 function isConfigured() { return !!(BASE && TOKEN); }
 
-// Best-effort pull of a display name / email out of whatever shape the API
-// returns (user at the top level, under `user`, or under `data`). We only need
-// a name to seed the local talent account; everything is optional.
+// Best-effort pull of a display name / email / phone out of whatever shape the
+// API returns (fields at the top level, under `user`, or under `data` — the
+// 20FIT app puts them under `data`). We only need these to seed the local
+// talent account; everything is optional.
 function pickUser(body) {
   const u = (body && (body.user || (body.data && (body.data.user || body.data)) || body)) || {};
-  if (typeof u !== 'object') return { name: null, email: null };
+  if (typeof u !== 'object') return { name: null, email: null, phone: null };
   const name = u.name || u.full_name || u.fullname || u.display_name || u.username || null;
   const email = u.email || null;
-  return { name: name ? String(name).trim().slice(0, 200) : null, email: email ? String(email).trim() : null };
+  const phone = u.phone || u.phone_number || u.mobile || null;
+  return {
+    name: name ? String(name).trim().slice(0, 200) : null,
+    email: email ? String(email).trim() : null,
+    phone: (phone != null && String(phone).trim()) ? String(phone).trim().slice(0, 40) : null,
+  };
 }
 
 // A few APIs answer 200 with an explicit failure flag rather than a 4xx; treat
