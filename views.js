@@ -1275,7 +1275,7 @@ a{text-decoration:none;color:inherit}
 .lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
-.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start}
 .au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
 .au-sub{margin:22px 0 26px;font-size:clamp(16px,1.6vw,19px);color:var(--lp-tx3);max-width:480px}
 .au-cta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:30px}
