@@ -80,7 +80,7 @@ a{color:var(--red)}
 .side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:2.1em;width:auto;display:block;flex:0 0 auto}
+.brand .brand-img{height:2.8em;width:auto;max-width:100%;display:block;flex:0 0 auto}
 .brand .brand-dark{height:1.56em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
