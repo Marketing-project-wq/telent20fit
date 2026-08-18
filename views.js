@@ -1211,7 +1211,10 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
   }
 
   const body = `<div class="au-top">
-    <a href="/?lang=${L}" class="au-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
+    <div class="au-top-left">
+      <a href="/?lang=${L}" class="au-back">${esc(t('common.back'))}</a>
+      <a href="/?lang=${L}" class="au-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
+    </div>
     <div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>
   </div>
   <div class="au-wrap">
@@ -1265,7 +1268,10 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5;min-height:100vh}
 a{text-decoration:none;color:inherit}
 .au-top{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1240px;margin:0 auto;padding:18px 28px}
-.au-logo img{height:34px;width:auto;display:block}
+.au-top-left{display:flex;align-items:center;gap:16px;min-width:0}
+.au-back{display:inline-flex;align-items:center;padding:9px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
+.au-back:hover{background:var(--lp-line);color:var(--lp-tx)}
+.au-logo img{height:48px;width:auto;display:block}
 .lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
@@ -1316,7 +1322,7 @@ a{text-decoration:none;color:inherit}
 .au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
 @media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
 @media(max-width:560px){.au-faq{padding:8px 18px 60px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
-@media(max-width:560px){.au-top{padding:14px 18px}}
+@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:38px}.au-back{padding:8px 13px;font-size:13px}}
 </style>
 </head><body>${body}</body></html>`;
 }
