@@ -632,7 +632,10 @@ app.get('/kol', requireTalentReady('kol'), async (req, res, next) => {
     const eventById = new Map(events.map((e) => [e.id, e]));
     await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
     const certs = await st.listCertificatesForTalent(req.talent.id);
-    res.send(V.kolProfilePage({ account: req.account, certs, lang: req.lang }));
+    const appliedEvents = myApps
+      .map((a) => { const ev = eventById.get(a.event_id); return ev ? { name: ev.name, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null } : null; })
+      .filter(Boolean);
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, lang: req.lang }));
   } catch (e) { next(e); }
 });
 

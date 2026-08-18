@@ -100,6 +100,8 @@
   "auth.account.adminLink": "Log in as Admin / EO",
   "prof.edit": "Edit",
   "prof.dataTitle": "Personal Details",
+  "prof.eventsTitle": "My Events",
+  "prof.eventsEmpty": "You haven't applied to any events yet.",
   "prof.showDetail": "View details",
   "kol.eventsSub": "Ongoing & upcoming events.",
   "apply.homeSub": "Available events. Tap one to see what's needed and register.",
