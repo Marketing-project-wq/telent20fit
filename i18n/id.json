@@ -100,6 +100,8 @@
   "auth.account.adminLink": "Masuk sebagai Admin / EO",
   "prof.edit": "Ubah",
   "prof.dataTitle": "Data Diri",
+  "prof.eventsTitle": "Event Saya",
+  "prof.eventsEmpty": "Belum ada event yang kamu lamar.",
   "prof.showDetail": "Lihat detail",
   "kol.eventsSub": "Event yang sedang berjalan & akan datang.",
   "apply.homeSub": "Daftar event yang tersedia. Klik untuk lihat kebutuhan & mendaftar.",

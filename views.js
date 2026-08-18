@@ -2219,7 +2219,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
 }
 
 /** Talent's own profile (Data Diri) + earned certificates, in the app shell. */
-function kolProfilePage({ account, certs, lang }) {
+function kolProfilePage({ account, certs, events, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -2237,6 +2237,13 @@ function kolProfilePage({ account, certs, lang }) {
         <a href="/kol/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
+  const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const evList = (events && events.length)
+    ? `<div class="dl-list">${events.map((e) => `<div class="dl-item" style="align-items:center">
+        <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+        ${mpStatusBadge(e.status, L)}
+      </div>`).join('')}</div>`
+    : `<p class="muted" style="margin-top:12px">${t('prof.eventsEmpty')}</p>`;
   const body = `<div class="wrap narrow">
   <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}</style>
   <div class="card" style="margin-top:0;padding:22px 20px">
@@ -2259,6 +2266,9 @@ function kolProfilePage({ account, certs, lang }) {
     </summary>
     <div class="card" style="margin-top:10px">${talentProfileBlock(acc, L)}</div>
   </details>
+
+  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📅 ${t('prof.eventsTitle')}</h2></div>
+  ${evList}
 
   <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">🎖️ ${t('cert.myTitle')}</h2></div>
   ${certList}
