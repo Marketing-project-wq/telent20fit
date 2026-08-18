@@ -3709,10 +3709,6 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       ${stationLine}
       ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         ${a.attended ? `<span class="pill pill-ok">✓ ${t('mpr.attended')}</span>` : `<span class="pill pill-off">${t('mpr.notAttended')}</span>`}
-        <form method="post" action="/admin/applications/${esc(a.id)}/attend" class="inline-form">
-          <input type="hidden" name="attended" value="${a.attended ? '0' : '1'}">
-          <button class="btn btn-ghost btn-sm">${a.attended ? t('mpr.unattend') : t('mpr.attend')}</button>
-        </form>
         <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
           <button class="btn btn-ghost btn-sm" title="${t('mpr.resendHint')}">✉ ${t('mpr.resendEmail')}</button>
         </form>
