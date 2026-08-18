@@ -400,6 +400,28 @@ function landingPage(lang, opts = {}) {
       <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
       <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.description'))}</p>
     </div>`).join('');
+  // 20FIT coaches — photo grid. To show a coach, fill in their `photo` URL.
+  const COACHES = [
+    { name: 'Nando', group: 'arena', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Nando.jpg' },
+    { name: 'Rheza', group: 'arena', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Rheza.jpg' },
+    { name: 'Calysta', group: 'arena', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Calysta.jpg' },
+    { name: 'Elsen', group: 'arena', photo: null },
+    { name: 'Gilang', group: 'arena', photo: null },
+    { name: 'Mae', group: 'arena', photo: null },
+    { name: 'Brian', group: 'arena', photo: null },
+    { name: 'Sakha', group: 'arena', photo: null },
+    { name: 'Andrew', group: 'arena', photo: null },
+    { name: 'Asa', group: 'arena', photo: null },
+    { name: 'Ista', group: 'arena', photo: null },
+    { name: 'Kiki', group: 'arena', photo: null },
+    { name: 'Dhani', group: 'gym', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Dhani.jpg' },
+    { name: 'Andro', group: 'gym', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Andro.jpg' },
+  ];
+  const COACH_GROUP = { arena: '20FIT Arena', gym: '20FIT Gym' };
+  const coachHtml = COACHES.filter((c) => c.photo).map((c) => `<div class="coach-card">
+      <div class="coach-photo"><img src="${esc(c.photo)}" alt="Coach ${esc(c.name)}" loading="lazy" decoding="async"></div>
+      <div class="coach-body"><div class="coach-name">${esc(c.name)}</div><div class="coach-group">${esc(COACH_GROUP[c.group] || '20FIT')}</div></div>
+    </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
       const st = (b.mw || b.scale) ? ` style="${b.mw ? `max-width:${b.mw};` : ''}${b.scale ? `transform:scale(${b.scale});` : ''}"` : '';
@@ -526,6 +548,13 @@ a{text-decoration:none}
 .resp1{display:grid;grid-template-columns:1.8fr .68fr;gap:34px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.coach-grid{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
+.coach-card{flex:0 1 200px;min-width:148px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;overflow:hidden}
+.coach-photo{aspect-ratio:3/4;background:var(--lp-chip)}
+.coach-photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block}
+.coach-body{padding:13px 15px 15px}
+.coach-name{font:700 18px/1 'Barlow Condensed',sans-serif;text-transform:uppercase}
+.coach-group{font-size:12.5px;color:var(--lp-tx3);margin-top:6px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:26px 10px;font:800 18px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);text-align:center;display:flex;align-items:center;justify-content:center;min-height:92px}
 .eco-card b{color:var(--red);margin-left:.32em}
 .eco-card-logo{padding:14px 10px}
@@ -582,6 +611,12 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
       <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('whyChoose.title'))}</h2>
       <div class="resp3">${featHtml}</div>
     </div>
+  </section>
+
+  <section style="max-width:1180px;margin:0 auto;padding:64px 28px">
+    <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('coach.title'))}</h2>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:640px;text-align:center">${esc(t('coach.sub'))}</p>
+    <div class="coach-grid">${coachHtml}</div>
   </section>
 
   <section style="max-width:1180px;margin:0 auto;padding:64px 28px;text-align:center">
