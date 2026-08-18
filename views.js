@@ -1217,6 +1217,11 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
       ${signin}
     </section>
   </div>
+  <section class="au-faq">
+    <h2>FAQ</h2>
+    <p class="au-faq-sub">${esc(t('faq.sub'))}</p>
+    ${[1, 2, 3, 4, 5, 6].map((n) => `<details class="au-faq-item"><summary>${esc(t('faq.q' + n))}<span class="au-faq-ic" aria-hidden="true">+</span></summary><div class="au-faq-a">${esc(t('faq.a' + n))}</div></details>`).join('')}
+  </section>
   <div class="au-sticky">
     <b>${esc(t('authp.stickyQ'))}</b>
     <button type="button" class="au-btn au-btn-red" data-goto="signup">${t('authp.cta')}</button>
@@ -1249,7 +1254,7 @@ a{text-decoration:none;color:inherit}
 .lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
-.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 128px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
 .au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
 .au-sub{margin:22px 0 26px;font-size:clamp(16px,1.6vw,19px);color:var(--lp-tx3);max-width:480px}
 .au-cta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:30px}
@@ -1289,7 +1294,17 @@ a{text-decoration:none;color:inherit}
 .au-sticky b{font:800 15px/1.2 Barlow,sans-serif;text-transform:uppercase;flex:1;min-width:0}
 .au-sticky .au-btn-red{padding:12px 20px}
 .au-x{background:none;border:0;cursor:pointer;color:var(--lp-tx3);font-size:24px;line-height:1;padding:2px 8px;flex:0 0 auto}
-@media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 120px}.au-card{padding:24px}.au-hero{order:0}}
+.au-faq{max-width:920px;margin:0 auto;padding:8px 28px 130px}
+.au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,46px);margin:0 0 8px}
+.au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
+.au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.au-faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;font:700 16.5px/1.35 Barlow,sans-serif;color:var(--lp-tx)}
+.au-faq-item summary::-webkit-details-marker{display:none}
+.au-faq-ic{flex:0 0 auto;color:var(--red);font-size:28px;line-height:1;transition:transform .2s ease}
+.au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
+.au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
+@media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
+@media(max-width:560px){.au-faq{padding:8px 18px 120px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
 @media(max-width:560px){.au-top{padding:14px 18px}.au-sticky b{font-size:12.5px}.au-sticky{gap:10px;padding:12px 14px}.au-sticky .au-btn-red{padding:11px 15px;font-size:12px}}
 </style>
 </head><body>${body}</body></html>`;
