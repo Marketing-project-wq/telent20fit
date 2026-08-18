@@ -734,12 +734,10 @@ html{scroll-behavior:smooth}
       </nav>
       <nav class="ft-col" aria-label="${esc(t('foot.contact'))}">
         <div class="ft-h">${esc(t('foot.contact'))}</div>
-        <a href="mailto:marketing@20fit.id">marketing@20fit.id</a>
-        <a href="https://20fit.id" target="_blank" rel="noopener">20fit.id</a>
-        <a href="/eo/login">${esc(t('foot.eoLogin'))}</a>
+        <a href="https://www.instagram.com/20fit.id/" target="_blank" rel="noopener">Instagram @20fit.id</a>
       </nav>
     </div>
-    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a></div>
+    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">${esc(t('foot.eoLogin'))}</a></div>
   </footer>
 </div>
 </body></html>`;
