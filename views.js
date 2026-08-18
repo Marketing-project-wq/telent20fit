@@ -4101,7 +4101,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
     ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
     ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
-    ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px">${esc(e.description)}</p>` : ''}
+    ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px;text-align:justify">${esc(e.description)}</p>` : ''}
     ${eb}${docsWarn}${myBlock}${formBlock}
   </div>`;
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
