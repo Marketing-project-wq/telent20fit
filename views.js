@@ -537,7 +537,7 @@ a{text-decoration:none}
 .hero-in.d3{animation-delay:.54s}
 .accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
 /* Hero headline: "ONE PLATFORM." on line 1, red "ENDLESS EVENT OPPORTUNITIES." on line 2 (one line). */
-.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,calc(4.1vw - 3.5px),46px)}
+.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,calc(3.9vw - 3.5px),43px)}
 .hero-title .accent-shimmer{display:block}
 @media(max-width:860px){.hero-title{font-size:calc(5.6vw - 3px)}}
 @keyframes shimmer{to{background-position:-220% 0}}
@@ -545,7 +545,7 @@ a{text-decoration:none}
 .lp-float{animation:floaty 7s ease-in-out infinite;will-change:transform}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}.lp-float{animation:none}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
-.resp1{display:grid;grid-template-columns:1.8fr .68fr;gap:34px;align-items:center}
+.resp1{display:grid;grid-template-columns:1.6fr .78fr;gap:34px;align-items:center}
 .resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .coach-grid{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
@@ -575,7 +575,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .foot-bottom{max-width:1180px;margin:44px auto 0;padding:22px 28px 44px;border-top:1px solid var(--lp-line);color:var(--lp-tx4);font-size:13px;text-align:center}
 .foot-bottom a{color:var(--lp-tx3)}
 @media(max-width:760px){.foot-main{padding-top:40px}}
-@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}.lp-float{max-width:300px}}
+@media(max-width:860px){.resp1{grid-template-columns:1fr !important}.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
 @media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
 </style>${THEME_HEAD}</head>
 <body>
