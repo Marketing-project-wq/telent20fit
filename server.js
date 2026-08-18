@@ -32,6 +32,7 @@ const cookieParser = require('cookie-parser');
 const V = require('./views');
 const { store, MODE } = require('./store');
 const auth = require('./auth');
+const authApi = require('./authApi');
 const llm = require('./llm');
 const mailer = require('./mailer');
 const cert = require('./cert');
@@ -378,12 +379,41 @@ app.post('/login', async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
-    const account = await st.findAccountByLogin(login);
-    if (!account || !auth.verifyPassword(password, account.password_hash)) {
-      return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+
+    let account = await st.findAccountByLogin(login);
+    // 1) Local password — the existing path; fast and works even if the app API
+    //    is down. Auto-provisioned app users also land here on later logins.
+    if (account && auth.verifyPassword(password, account.password_hash)) {
+      auth.setSession(res, account);
+      return res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
     }
-    auth.setSession(res, account);
-    res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
+    // 2) Fall back to the 20FIT app account directory (only when configured).
+    //    On success we mirror the account locally so the rest of the site works,
+    //    and keep the local password in step with the app so it stays the source
+    //    of truth going forward.
+    if (authApi.isConfigured() && login && password) {
+      const r = await authApi.login(login, password);
+      if (r.ok) {
+        const hash = auth.hashPassword(password);
+        if (account) {
+          await st.setTalentPassword(account.id, hash);
+        } else {
+          const name = (r.user && r.user.name) || login.split('@')[0];
+          try {
+            account = await st.createAccount({ talent_type: 'kol', name, login, password_hash: hash });
+          } catch (e) {
+            if (e && e.code === 'DUP') account = await st.findAccountByLogin(login);
+            else throw e;
+          }
+        }
+        if (account) {
+          auth.setSession(res, account);
+          return res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
+        }
+      }
+    }
+    // 3) Neither the local password nor the app API accepted these credentials.
+    return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
