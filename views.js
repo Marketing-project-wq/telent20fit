@@ -588,11 +588,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
   <section class="resp1" style="max-width:1180px;margin:0 auto;padding:clamp(92px,11vw,155px) 28px clamp(84px,10vw,150px)">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
-      <p class="hero-in d2" style="font-size:18px;line-height:1.55;color:var(--lp-tx2);max-width:520px;margin:0 0 30px">${esc(tr(L, 'hero.subheadline'))}</p>
-      <div class="hero-in d3" style="display:flex;gap:12px;flex-wrap:wrap">
-        <a href="/register${q}" style="padding:16px 30px;background:var(--red);color:#fff;border-radius:10px;font:700 16px/1 Barlow,sans-serif;box-shadow:0 8px 24px rgba(228,18,31,.4)">${esc(t('land.join'))}</a>
-        <a href="/login${q}" style="padding:16px 30px;background:var(--lp-chip);color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 16px/1 Barlow,sans-serif">${esc(t('land.login'))}</a>
-      </div>
+      <p class="hero-in d2" style="font-size:clamp(18px,2.1vw,25px);line-height:1.5;color:var(--lp-tx2);max-width:600px;margin:0">${esc(tr(L, 'hero.subheadline'))}</p>
     </div>
     <div style="position:relative">
       <div class="lp-float" style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:16px;overflow:hidden">
