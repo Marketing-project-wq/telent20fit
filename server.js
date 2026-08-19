@@ -124,7 +124,7 @@ function requireTalentReady(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
@@ -141,7 +141,7 @@ function requireTalentBrowse(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -157,7 +157,7 @@ function dataDiriGet(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
       res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
@@ -173,7 +173,7 @@ function dataDiriPost(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       const values = {
         province: String(req.body.province || '').trim(),
         city: String(req.body.city || '').trim().slice(0, 80),
@@ -380,19 +380,14 @@ app.get('/', async (req, res, next) => {
   try {
     const st = db();
     const bg = (await landingBgUrls(st)).filter(Boolean);
-    // Live opportunities for the public landing: active, not-yet-ended events
-    // (ongoing first). Best-effort — the landing must still render if this fails.
+    // Events currently open for registration (within the reg window + at least
+    // one position whose quota isn't full), each with its still-open positions.
+    // Same live EO data the talent /events list uses — no dummy/static data.
+    // Best-effort — the landing must still render if this fails.
     let events = [];
     if (st) {
-      try {
-        const rank = { ongoing: 0, upcoming: 1 };
-        events = (await st.listEvents())
-          .filter((e) => e.is_active && eventStatusOf(e) !== 'ended')
-          .map((e) => ({ id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e) }))
-          .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')))
-          .slice(0, 6);
-        await attachMockups(st, events);
-      } catch (_) { /* keep the landing up regardless */ }
+      try { events = await openPositionEvents(st, null); }
+      catch (_) { /* keep the landing up regardless */ }
     }
     res.send(V.landingPage(req.lang, { bg, events }));
   } catch (e) { next(e); }
@@ -403,16 +398,21 @@ app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 // New accounts default to KOL; login resolves the account by email across all
 // talent types and lands each on the dashboard for their type. Admin & EO still
 // sign in via /admin/login and /eo/login (linked from the login page + footer).
+// A post-login/register redirect target must be a same-site absolute path
+// (guards against open redirects like //evil.com or javascript:).
+function safeNext(n) { n = String(n || ''); return (/^\/[A-Za-z0-9]/.test(n) && !n.startsWith('//')) ? n.slice(0, 512) : null; }
 app.get('/register', (req, res) => {
+  const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect('/' + tk.type.replace(/_/g, '-'));
-  res.send(V.talentRegister('kol', { unified: true, lang: req.lang }));
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || ('/' + tk.type.replace(/_/g, '-')));
+  res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt }));
 });
 app.post('/register', talentRegisterPost('kol', { unified: true }));
 app.get('/login', (req, res) => {
+  const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect('/' + tk.type.replace(/_/g, '-'));
-  res.send(V.talentLogin('kol', { unified: true, lang: req.lang }));
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || ('/' + tk.type.replace(/_/g, '-')));
+  res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt }));
 });
 app.post('/login', async (req, res, next) => {
   try {
@@ -420,13 +420,14 @@ app.post('/login', async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const login = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '');
+    const nxt = safeNext(req.body.next);
 
     let account = await st.findAccountByLogin(login);
     // 1) Local password — the existing path; fast and works even if the app API
     //    is down. Auto-provisioned app users also land here on later logins.
     if (account && auth.verifyPassword(password, account.password_hash)) {
       auth.setSession(res, account);
-      return res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
+      return res.redirect(nxt || ('/' + (account.talent_type || 'kol').replace(/_/g, '-')));
     }
     // 2) Fall back to the 20FIT app account directory (only when configured).
     //    On success we mirror the account locally so the rest of the site works,
@@ -451,12 +452,12 @@ app.post('/login', async (req, res, next) => {
         }
         if (account) {
           auth.setSession(res, account);
-          return res.redirect('/' + (account.talent_type || 'kol').replace(/_/g, '-'));
+          return res.redirect(nxt || ('/' + (account.talent_type || 'kol').replace(/_/g, '-')));
         }
       }
     }
     // 3) Neither the local password nor the app API accepted these credentials.
-    return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+    return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang, next: nxt }));
   } catch (e) { next(e); }
 });
 
@@ -555,7 +556,7 @@ function talentRegisterPost(type, opts = {}) {
   return [
     // Optional CV / HYROX uploads can ride along with the signup form (creators).
     (req, res, next) => uploadDocs(req, res, (err) => {
-      if (err) return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('doc.err.size')], values: { name: req.body.name, login: req.body.login, phone: req.body.phone, portfolio_url: req.body.portfolio_url }, lang: req.lang }));
+      if (err) return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('doc.err.size')], values: { name: req.body.name, login: req.body.login, phone: req.body.phone, portfolio_url: req.body.portfolio_url }, lang: req.lang, next: safeNext(req.body && req.body.next) }));
       next();
     }),
     async (req, res, next) => {
@@ -567,6 +568,7 @@ function talentRegisterPost(type, opts = {}) {
         const phone = String(req.body.phone || '').trim();
         const password = String(req.body.password || '');
         const password2 = String(req.body.password2 || '');
+        const nxt = safeNext(req.body.next);
         // Optional profile fields captured on the redesigned unified signup form.
         let gender = String(req.body.gender || '').trim().toLowerCase();
         if (gender !== 'male' && gender !== 'female') gender = '';
@@ -591,11 +593,11 @@ function talentRegisterPost(type, opts = {}) {
         if (portfolioUrl && !/^https?:\/\/.+/i.test(portfolioUrl)) errors.push(req.t('doc.err.url'));
         if (cvFile && !docTypeOk(cvFile)) errors.push(req.t('doc.err.type'));
         if (hxFile && !docTypeOk(hxFile)) errors.push(req.t('doc.err.type'));
-        if (errors.length) return res.status(400).send(V.talentRegister(type, { unified, errors, values, lang: req.lang }));
+        if (errors.length) return res.status(400).send(V.talentRegister(type, { unified, errors, values, lang: req.lang, next: nxt }));
 
         // Email must be unique across all talent types (login resolves by email).
         if (await st.findAccountByLogin(login)) {
-          return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+          return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang, next: nxt }));
         }
 
         let account;
@@ -605,7 +607,7 @@ function talentRegisterPost(type, opts = {}) {
           if (birthdate) acc.birthdate = birthdate;
           account = await st.createAccount(acc);
         } catch (e) {
-          if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang }));
+          if (e.code === 'DUP') return res.status(400).send(V.talentRegister(type, { unified, errors: [req.t('err.dupAccount')], values, lang: req.lang, next: nxt }));
           throw e;
         }
 
@@ -627,9 +629,10 @@ function talentRegisterPost(type, opts = {}) {
         if (Object.keys(patch).length) await st.updateAccountProfile(account.id, patch);
 
         auth.setSession(res, account);
-        // Land on the dashboard (profile + browse events); profile completion is
+        // Redirect back to the event the visitor came from (?next), otherwise land
+        // on the dashboard (profile + browse events); profile completion is
         // prompted there and enforced only when applying to an event.
-        res.redirect('/' + p + '?lang=' + req.lang);
+        res.redirect(nxt || ('/' + p + '?lang=' + req.lang));
       } catch (e) { next(e); }
     },
   ];
@@ -944,11 +947,11 @@ function requireAnyTalentReady() {
   return async (req, res, next) => {
     try {
       const t = auth.anySession(req, auth.TALENT_TYPES);
-      if (!t) return res.redirect('/login');
+      if (!t) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
-      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       if (!acc.profile_completed_at) return res.redirect('/' + t.type.replace(/_/g, '-') + '/data-diri?lang=' + req.lang);
       req.talent = t; req.account = acc;
       next();
@@ -962,11 +965,11 @@ function requireAnyTalentBrowse() {
   return async (req, res, next) => {
     try {
       const t = auth.anySession(req, auth.TALENT_TYPES);
-      if (!t) return res.redirect('/login');
+      if (!t) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
-      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login'); }
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }

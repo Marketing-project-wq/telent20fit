@@ -521,6 +521,7 @@ function memoryStore() {
   const events = [
     { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
     { id: 'ev-bali', name: 'Bali Trail Marathon 2026', description: null, location: 'Ubud, Bali', starts_at: dOff(14), ends_at: dOff(24), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: null },
+    { id: 'ev-sby', name: 'Surabaya Half Marathon 2026', description: null, location: 'Taman Bungkul, Surabaya', starts_at: dOff(20), ends_at: dOff(20), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: null },
   ];
   const eventNeeds = [
     { event_id: 'ev-jakarta', talent_type: 'kol', headcount: 2 },
@@ -542,6 +543,9 @@ function memoryStore() {
     { id: 'ep-j-judge', event_id: 'ev-jakarta', position_id: 'pos-judge', quota: 5, closed_at: null, jobdesk: 'Menilai peserta di station sesuai peraturan lomba. Briefing H-1, hari-H 05.00–14.00.', requirement: 'Paham peraturan lomba lari, teliti, disiplin waktu.', fee: 'Rp500.000/hari + konsumsi' },
     { id: 'ep-b-judge', event_id: 'ev-bali', position_id: 'pos-judge', quota: 5, closed_at: null, jobdesk: 'Menilai peserta trail di checkpoint. Medan bukit, briefing H-1.', requirement: 'Fisik prima, paham peraturan trail run.', fee: 'Rp650.000/hari' },
     { id: 'ep-b-runner', event_id: 'ev-bali', position_id: 'pos-runner', quota: 8, closed_at: null, jobdesk: 'Sweeper/pacer di rute trail memastikan keselamatan peserta.', requirement: 'Rutin lari trail, mampu 21K.', fee: 'Rp500.000/hari' },
+    { id: 'ep-s-kol', event_id: 'ev-sby', position_id: 'pos-kol', quota: 3, closed_at: null, jobdesk: 'Liputan & konten media sosial lomba, tag akun 20FIT.', requirement: 'Followers IG 5.000+, aktif bikin konten.', fee: 'Rp700.000 + merchandise' },
+    { id: 'ep-s-foto', event_id: 'ev-sby', position_id: 'pos-fotografer', quota: 2, closed_at: null, jobdesk: 'Dokumentasi foto peserta & suasana event.', requirement: 'Punya kamera mirrorless/DSLR.', fee: 'Rp600.000/hari' },
+    { id: 'ep-s-marshal', event_id: 'ev-sby', position_id: 'pos-marshal', quota: 6, closed_at: null, jobdesk: 'Pengarah & pengaman rute lari.', requirement: 'Fisik prima, sigap.', fee: 'Rp500.000/hari' },
   ];
   const applicationChoices = [];
   const applications = [

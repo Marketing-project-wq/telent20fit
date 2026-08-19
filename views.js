@@ -469,20 +469,42 @@ function landingPage(lang, opts = {}) {
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
   const navBar = landingNav(L, 'home');
 
-  // Live opportunities (active, not-yet-ended events), rendered before "Why Choose".
+  // Events currently open for registration (live EO data, with their still-open
+  // positions). Cards link to the event detail page; the /event/:id gate sends
+  // logged-out visitors through login/register and redirects them back.
   const evList = Array.isArray(opts.events) ? opts.events : [];
   const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
   const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
-  const evBadge = (status) => `<span class="lp-ev-badge lp-ev-${status === 'ongoing' ? 'on' : 'up'}">${esc(t(status === 'ongoing' ? 'ev.status.ongoing' : 'ev.status.upcoming'))}</span>`;
-  const evCardHtml = evList.map((e) => `<a href="/register${q}" class="lp-ev-card">
-      <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}${evBadge(e.status)}</div>
-      <div class="lp-ev-body"><div class="lp-ev-name">${esc(e.name)}</div><div class="lp-ev-meta">${esc(evDate2(e))}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
-    </a>`).join('');
+  // Group each still-open position into one of three public badge categories.
+  const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
+  const cityOf = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
+  const evCardHtml = evList.map((e) => {
+    const cats = Array.from(new Set((e.openPositions || []).map((p) => posCatKey(p.key))));
+    const catBadges = cats.map((ck) => `<span class="lp-ev-pos">${esc(t('land.openCat.' + ck))}</span>`).join('');
+    const city = cityOf(e.location);
+    return `<a href="/event/${esc(e.slug || e.id)}?lang=${L}" class="lp-ev-card" data-city="${esc(city.toLowerCase())}">
+      <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-open">${esc(t('land.openBadge'))}</span></div>
+      <div class="lp-ev-body">
+        <div class="lp-ev-name">${esc(e.name)}</div>
+        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
+        ${catBadges ? `<div class="lp-ev-pos-row">${catBadges}</div>` : ''}
+      </div>
+    </a>`;
+  }).join('');
+  // Client-side city filter over the distinct event cities.
+  const cities = Array.from(new Set(evList.map((e) => cityOf(e.location)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
+  const cityFilter = cities.length > 1 ? `<div class="lp-city-filter" role="group" aria-label="${esc(t('land.cityFilter'))}">
+    <button type="button" class="lp-city-chip on" data-city="">${esc(t('land.allCities'))}</button>
+    ${cities.map((c) => `<button type="button" class="lp-city-chip" data-city="${esc(c.toLowerCase())}">${esc(c)}</button>`).join('')}
+  </div>` : '';
   const eventsSection = (evList.length) ? `
   <section style="max-width:1180px;margin:0 auto;padding:60px 28px 8px">
     <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
-    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
+    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 24px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
+    ${cityFilter}
     <div class="lp-ev-grid">${evCardHtml}</div>
+    <script>(function(){var chips=[].slice.call(document.querySelectorAll('.lp-city-chip')),cards=[].slice.call(document.querySelectorAll('.lp-ev-grid .lp-ev-card'));if(!chips.length)return;chips.forEach(function(ch){ch.addEventListener('click',function(){var city=ch.getAttribute('data-city');chips.forEach(function(c){c.classList.toggle('on',c===ch);});cards.forEach(function(cd){cd.style.display=(!city||cd.getAttribute('data-city')===city)?'':'none';});});});})();</script>
   </section>` : '';
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
@@ -643,6 +665,13 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-body{padding:14px 16px 16px}
 .lp-ev-name{font:800 17px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);word-break:break-word}
 .lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}
+.lp-ev-open{color:#0f9d6a}
+.lp-ev-pos-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.lp-ev-pos{font:700 10.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.04em;color:var(--red);background:rgba(228,18,31,.1);border:1px solid rgba(228,18,31,.22);padding:4px 8px;border-radius:999px}
+.lp-city-filter{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 0 26px}
+.lp-city-chip{font:700 13px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:999px;padding:8px 15px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.lp-city-chip:hover{border-color:var(--red)}
+.lp-city-chip.on{background:var(--red);border-color:var(--red);color:#fff}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
 html{scroll-behavior:smooth}
@@ -1246,10 +1275,13 @@ function faqSection(lang) {
  * account) form, matching the 20FIT app style. Both /register and /login render
  * this; `mode` picks the active tab and which panel a validation error lands on.
  */
-function talentAuthPage({ mode, lang, errors, values } = {}) {
+function talentAuthPage({ mode, lang, errors, values, next } = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const v = values || {};
+  // Carry the post-auth redirect target (?next=/event/…) through both forms so a
+  // visitor who clicked an event while logged out lands back on it after auth.
+  const nextInput = next ? `<input type="hidden" name="next" value="${esc(next)}">` : '';
   const isLogin = mode === 'login';
   const basePath = isLogin ? '/login' : '/register';
   const langBtn = (code, label) => `<a href="${basePath}?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
@@ -1258,7 +1290,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     ? `<div class="au-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const forgotHref = `/kol/forgot-password?lang=${L}`;
 
-  const signup = `<form class="au-panel${isLogin ? '' : ' on'}" data-panel="signup" method="post" action="/register">
+  const signup = `<form class="au-panel${isLogin ? '' : ' on'}" data-panel="signup" method="post" action="/register">${nextInput}
     <div class="au-f"><label for="su-name">${t('common.fullname')}</label>
       <input class="au-in" type="text" id="su-name" name="name" required maxlength="120" autocomplete="name" placeholder="${esc(t('authp.namePh'))}" value="${esc(v.name || '')}"></div>
     <div class="au-f"><label for="su-email">${t('common.email')}</label>
@@ -1272,7 +1304,7 @@ function talentAuthPage({ mode, lang, errors, values } = {}) {
     <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
 
-  const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login">
+  const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login">${nextInput}
     <div class="au-f"><label for="si-email">${t('common.email')}</label>
       <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
     <div class="au-f"><label for="si-pass">${t('common.password')}</label>
@@ -1397,7 +1429,7 @@ a{text-decoration:none;color:inherit}
 
 function talentLogin(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values });
+  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values, next: opts.next });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
@@ -1427,7 +1459,7 @@ function talentLogin(type, opts = {}) {
 
 function talentRegister(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values });
+  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values, next: opts.next });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
