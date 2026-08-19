@@ -44,6 +44,43 @@ function brandMark() {
   return `<img src="${LOGO_DARK}" alt="20FIT" class="brand-img brand-dark"><img src="${LOGO_LIGHT}" alt="20FIT" class="brand-img brand-light">`;
 }
 
+/**
+ * Reusable "benefit card" — icon tile + uppercase title + muted description.
+ * Shared by the landing "Kenapa Pilih 20FIT Talent" grid and the event-detail
+ * "Posisi yang Dibutuhkan" (jobdesk) grid so both look identical. Both surfaces
+ * render in light theme, so the palette is hard-coded here for pixel-identical
+ * output across the two layouts (whose CSS vars/fonts otherwise differ).
+ * CARD_CSS is injected into both stylesheets; benefitCard() emits the markup.
+ *   icon   : inline <svg> string (tinted red via currentColor)
+ *   title  : heading text (caller pre-escapes)
+ *   desc   : description text (caller pre-escapes); optional
+ *   corner : HTML shown top-right beside the icon, e.g. a status badge; optional
+ *   foot   : extra HTML below the description, e.g. quota + apply button; optional
+ *   id     : element id for deep-linking / scroll-to a card; optional
+ */
+const CARD_CSS = `
+.bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:860px){.bgrid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.bgrid{grid-template-columns:1fr}}
+.bcard{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(16,16,19,.05)}
+.bcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.bcard-ico{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#E4121F;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.30);border-radius:10px}
+.bcard-ico svg{width:22px;height:22px}
+.bcard-h{font:700 19px/1.15 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.01em;margin-top:15px}
+.bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0}
+.bband{background:#eef1f5;border:1px solid #e6e9ef;border-radius:20px;padding:28px}
+.bband-h{font:800 clamp(23px,3vw,31px)/1 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.005em;margin:0 0 20px}
+@media(max-width:560px){.bband{padding:20px 15px}}
+`;
+function benefitCard({ icon, title, desc = '', corner = '', foot = '', id = '' }) {
+  return `<div class="bcard"${id ? ` id="${id}" style="scroll-margin-top:84px"` : ''}>
+    <div class="bcard-top"><div class="bcard-ico">${icon}</div>${corner}</div>
+    <div class="bcard-h">${title}</div>
+    ${desc ? `<p class="bcard-d">${desc}</p>` : ''}
+    ${foot}
+  </div>`;
+}
+
 const STYLE = `
 :root{--red:#E4121F;--red-hover:#ff2a37;--red-soft:rgba(228,18,31,.16);
   --bg:#0c0c0f;--panel:#141419;--card:#17171d;--card2:#20202a;--line:#2a2a33;
@@ -249,7 +286,7 @@ tr:last-child td{border-bottom:none}
   .rank{width:auto}
   .section-head{flex-wrap:wrap}
 }
-`;
+${CARD_CSS}`;
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 // Dark mode removed — every page renders light (data-theme="light" on <html>).
@@ -274,6 +311,7 @@ function layout({ title, body, brand, home, lang, hideBrand }) {
 </div></div>`;
   return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
 <body>
 ${topbar}
@@ -406,11 +444,7 @@ function landingPage(lang, opts = {}) {
     { name: '20FIT', accent: 'Sport Clinic' },
   ];
 
-  const featHtml = FEATS.map(([icon, key]) => `<div style="background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:24px">
-      <div style="width:44px;height:44px;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--red);margin-bottom:16px">${icon}</div>
-      <div style="font:700 19px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-bottom:8px">${esc(t(key + '.title'))}</div>
-      <p style="color:var(--lp-tx3);font-size:14px;line-height:1.5;margin:0">${esc(t(key + '.description'))}</p>
-    </div>`).join('');
+  const featHtml = FEATS.map(([icon, key]) => benefitCard({ icon, title: esc(t(key + '.title')), desc: esc(t(key + '.description')) })).join('');
   // 20FIT coaches — photo grid. To show a coach, fill in their `photo` URL.
   const COACHES = [
     { name: 'Nando', group: 'arena', photo: 'https://media.20fit.id/wp-content/uploads/2026/07/Coach-Nando.jpg' },
@@ -682,6 +716,7 @@ html{scroll-behavior:smooth}
 .reveal-on [data-rv].rv-in{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal-on [data-rv]{opacity:1;transform:none;transition:none}}
 #faq{scroll-margin-top:90px}
+${CARD_CSS}
 </style>${THEME_HEAD}</head>
 <body>
 <div id="lp-page" style="min-height:100vh">
@@ -4448,20 +4483,21 @@ function talentEventApply({ account, event, ctx, lang }) {
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
         : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
     const btn = (applyMode && isOpen && !lock)
-      ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:12px">${t('ta.applyThis')}</button>`
-      : (applyMode && lock ? `<div class="muted" style="margin-top:10px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
-    return `<div class="card" id="pos-${esc(p.position_id)}" style="margin-top:14px;scroll-margin-top:84px;box-shadow:0 6px 22px rgba(16,16,19,.06)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div style="width:50px;height:50px;background:var(--red-soft);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--red);flex:0 0 auto">${posIcon(p.key)}</div>
-        ${badge}
-      </div>
-      <div style="font-weight:800;text-transform:uppercase;letter-spacing:.02em;font-size:19px;line-height:1.15;margin-top:14px">${esc(posLabel(p, L))}</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:5px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>
-      ${p.jobdesk ? sec('📋', t('ta.jobdesk'), p.jobdesk) : ''}
-      ${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}
-      ${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}
-      ${btn}
-    </div>`;
+      ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`
+      : (applyMode && lock ? `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
+    // Jobdesk = the card's main description; requirement/fee/quota + apply button
+    // sit in the footer. Uses the shared benefitCard() so it matches the landing
+    // "Kenapa Pilih 20FIT Talent" grid exactly.
+    const quotaLine = `<div style="font-size:12.5px;color:#5b6069;margin-top:12px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>`;
+    const foot = `${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}${quotaLine}${btn}`;
+    return benefitCard({
+      icon: posIcon(p.key),
+      title: esc(posLabel(p, L)),
+      desc: p.jobdesk ? esc(p.jobdesk) : '',
+      corner: badge,
+      foot,
+      id: 'pos-' + esc(p.position_id),
+    });
   };
   const cardsHtml = posSorted.map(card).join('');
 
@@ -4537,16 +4573,23 @@ function talentEventApply({ account, event, ctx, lang }) {
   const docsWarn = (docsMissing && creatorOpen)
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
-  const body = `<div class="wrap narrow">
-    <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-    ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
-    <h1 style="margin:0">${esc(e.name)}</h1>
-    <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
-    ${chips}
-    ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px;text-align:justify">${esc(e.description)}</p>` : ''}
-    ${eb}${docsWarn}${myBlock}${cancelForm}
-    <div style="margin-top:22px"><div style="font-weight:800;font-size:18px">${t('ta.positionsTitle')}</div><div id="posCards">${cardsHtml}</div></div>
-    ${rankingForm}${regClosedBanner}
+  const body = `<div class="wrap" style="max-width:1080px">
+    <div style="max-width:680px">
+      <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+      ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
+      <h1 style="margin:0">${esc(e.name)}</h1>
+      <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
+      ${chips}
+      ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px;text-align:justify">${esc(e.description)}</p>` : ''}
+      ${eb}${docsWarn}${myBlock}${cancelForm}
+    </div>
+    <section class="bband" style="margin-top:24px">
+      <h2 class="bband-h">${t('ta.positionsTitle')}</h2>
+      <div id="posCards" class="bgrid">${cardsHtml}</div>
+    </section>
+    <div style="max-width:680px">
+      ${rankingForm}${regClosedBanner}
+    </div>
   </div>`;
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
