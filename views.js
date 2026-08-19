@@ -690,7 +690,7 @@ html{scroll-behavior:smooth}
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   ${heroPhotos}
 
-  <section style="max-width:1320px;margin:0 auto;padding:clamp(92px,11vw,155px) clamp(24px,3.4vw,52px) clamp(84px,10vw,150px)">
+  <section style="max-width:none;margin:0;padding:clamp(92px,11vw,155px) clamp(28px,4.5vw,88px) clamp(84px,10vw,150px)">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:clamp(19px,2.5vw,30px);line-height:1.5;color:var(--lp-tx2);max-width:640px;margin:0">${esc(tr(L, 'hero.subheadline'))}</p>
