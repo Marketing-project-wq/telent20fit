@@ -4371,7 +4371,17 @@ function talentEventApply({ account, event, ctx, lang }) {
   // Per-position "job listing" cards.
   const posSorted = (ctx.positions || []).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
   const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
-  const sec = (icon, label, txt) => `<div style="margin-top:10px"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
+  const sec = (icon, label, txt) => `<div style="margin-top:12px"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
+  // Soft-red line icon per position family (falls back to a clipboard), shown in
+  // the tile atop each card — mirrors the "Why Choose" benefit-card style.
+  const _svg = (d) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const POS_ICONS = {
+    fotografer: _svg('<path d="M3 8.5A1.5 1.5 0 0 1 4.5 7H7l1.2-2h7.6L17 7h2.5A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"/><circle cx="12" cy="13" r="3.2"/>'),
+    videografer: _svg('<rect x="3" y="6.5" width="12" height="11" rx="2"/><path d="M15 10.5l6-3v9l-6-3z"/>'),
+    kol: _svg('<path d="M4 10v4l3.2.5 2.4 3.8L11 18V6.2l-1.4-.5L7.2 9.5z"/><path d="M15 8.6a4 4 0 0 1 0 6.8"/>'),
+    water_station: _svg('<path d="M12 3.6s5.8 5.9 5.8 10.4a5.8 5.8 0 1 1-11.6 0C6.2 9.5 12 3.6 12 3.6z"/>'),
+  };
+  const posIcon = (key) => POS_ICONS[key] || _svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.4h6V7H9z"/><path d="M8.5 11h7M8.5 15h4.5"/>');
   const card = (p) => {
     const left = Math.max(0, (p.quota || 0) - (p.filled || 0));
     const isOpen = !p.closed_at && !p.full;
@@ -4382,11 +4392,13 @@ function talentEventApply({ account, event, ctx, lang }) {
     const btn = (applyMode && isOpen && !lock)
       ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:12px">${t('ta.applyThis')}</button>`
       : (applyMode && lock ? `<div class="muted" style="margin-top:10px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
-    return `<div class="card" id="pos-${esc(p.position_id)}" style="margin-top:12px;scroll-margin-top:84px">
+    return `<div class="card" id="pos-${esc(p.position_id)}" style="margin-top:14px;scroll-margin-top:84px;box-shadow:0 6px 22px rgba(16,16,19,.06)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <b style="font-size:16px">${esc(posLabel(p, L))}</b>${badge}
+        <div style="width:50px;height:50px;background:var(--red-soft);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--red);flex:0 0 auto">${posIcon(p.key)}</div>
+        ${badge}
       </div>
-      <div style="font-size:12.5px;color:var(--muted,#6b6b70);margin-top:5px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>
+      <div style="font-weight:800;text-transform:uppercase;letter-spacing:.02em;font-size:19px;line-height:1.15;margin-top:14px">${esc(posLabel(p, L))}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:5px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>
       ${p.jobdesk ? sec('📋', t('ta.jobdesk'), p.jobdesk) : ''}
       ${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}
       ${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}
