@@ -4574,20 +4574,20 @@ function talentEventApply({ account, event, ctx, lang }) {
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
   const body = `<div class="wrap" style="max-width:1080px">
-    <div style="max-width:680px">
-      <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-      ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
-      <h1 style="margin:0">${esc(e.name)}</h1>
-      <p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
-      ${chips}
-      ${e.description ? `<p style="white-space:pre-wrap;margin-top:12px;text-align:justify">${esc(e.description)}</p>` : ''}
+    <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
+    ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
+    <h1 style="margin:0;font-size:clamp(26px,3.2vw,38px);line-height:1.08">${esc(e.name)}</h1>
+    <p class="sub" style="margin:7px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
+    ${chips}
+    <div style="max-width:820px">
+      ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
       ${eb}${docsWarn}${myBlock}${cancelForm}
     </div>
-    <section class="bband" style="margin-top:24px">
+    <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>
       <div id="posCards" class="bgrid">${cardsHtml}</div>
     </section>
-    <div style="max-width:680px">
+    <div style="max-width:820px">
       ${rankingForm}${regClosedBanner}
     </div>
   </div>`;
