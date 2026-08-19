@@ -380,11 +380,16 @@ app.get('/', async (req, res, next) => {
   try {
     const st = db();
     const bg = (await landingBgUrls(st)).filter(Boolean);
-    // The public "open events" section is hidden on the landing for now (per
-    // request — it looked too plain here). The events still power /events and the
-    // event detail/apply pages. To show the section again, fetch the open events
-    // here — events = await openPositionEvents(st, null) — and pass them below.
-    res.send(V.landingPage(req.lang, { bg, events: [] }));
+    // Events currently open for registration (within the reg window + at least
+    // one position whose quota isn't full), each with its still-open positions.
+    // Same live EO data the talent /events list uses — no dummy/static data.
+    // Best-effort — the landing must still render if this fails.
+    let events = [];
+    if (st) {
+      try { events = await openPositionEvents(st, null); }
+      catch (_) { /* keep the landing up regardless */ }
+    }
+    res.send(V.landingPage(req.lang, { bg, events }));
   } catch (e) { next(e); }
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));

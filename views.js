@@ -558,7 +558,7 @@ a{text-decoration:none}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 @media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}.lp-tog-b{padding:6px 9px}}
-.hero-stage{position:relative;overflow:hidden;background:var(--lp-bg)}
+.hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 /* Optional hero background photos + readability scrim; text goes light over them */
 .hero-photos{position:absolute;inset:0;z-index:0;overflow:hidden}
