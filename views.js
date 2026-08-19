@@ -70,7 +70,7 @@ const CARD_CSS = `
 .bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0}
 .bband{background:#eef1f5;border:1px solid #e6e9ef;border-radius:20px;padding:28px}
 .bband-h{font:800 clamp(23px,3vw,31px)/1 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.005em;margin:0 0 20px}
-@media(max-width:560px){.bband{padding:20px 15px}}
+@media(max-width:560px){.bband{padding:20px 15px}.bcard{padding:16px}.bcard-ico{width:40px;height:40px}.bcard-ico svg{width:20px;height:20px}.bcard-h{font-size:16px;margin-top:12px}.bcard-d{font-size:13px;line-height:1.5}}
 `;
 function benefitCard({ icon, title, desc = '', corner = '', foot = '', id = '' }) {
   return `<div class="bcard"${id ? ` id="${id}" style="scroll-margin-top:84px"` : ''}>
@@ -677,7 +677,9 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-bottom a:hover{color:var(--red)}
 @media(max-width:860px){.ft-top{grid-template-columns:1fr 1fr;gap:34px 24px}.ft-brand{grid-column:1/-1;max-width:none}}
 @media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
-@media(max-width:560px){.resp3{grid-template-columns:1fr !important}}
+/* Mobile keeps the multi-column grid feel (2 columns) rather than a full
+   1-column stack — cards just scale down. Desktop (>860px) stays 3 columns. */
+@media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
 /* FAQ accordion (shared markup with the auth page via faqSection()) */
 .au-faq{max-width:1180px;margin:0 auto;padding:24px 28px 72px}
 .au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,44px);margin:0 0 8px}
@@ -712,7 +714,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-city-chip:hover{border-color:var(--red)}
 .lp-city-chip.on{background:var(--red);border-color:var(--red);color:#fff}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr 1fr;gap:12px}.lp-ev-body{padding:11px 12px 13px}.lp-ev-name{font-size:15px}.lp-ev-badge{font:700 10px/1 Barlow,sans-serif;padding:5px 8px;top:8px;left:8px}.lp-ev-pos{font-size:9.5px}}
 html{scroll-behavior:smooth}
 /* Scroll-reveal: sections & cards fade-up as they enter the viewport. Enabled by
    JS (adds .reveal-on + [data-rv]); a no-JS/no-IntersectionObserver visitor and
