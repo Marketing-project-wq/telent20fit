@@ -389,7 +389,8 @@ app.get('/', async (req, res, next) => {
       try { events = await openPositionEvents(st, null); }
       catch (_) { /* keep the landing up regardless */ }
     }
-    res.send(V.landingPage(req.lang, { bg, events }));
+    const account = auth.anySession(req, auth.TALENT_TYPES);
+    res.send(V.landingPage(req.lang, { bg, events, account }));
   } catch (e) { next(e); }
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));

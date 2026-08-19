@@ -501,7 +501,7 @@ function landingPage(lang, opts = {}) {
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
-  const navBar = landingNav(L, 'home');
+  const navBar = landingNav(L, 'home', opts.account);
 
   // Events currently open for registration (live EO data, with their still-open
   // positions). Cards link to the event detail page; the /event/:id gate sends
@@ -717,6 +717,13 @@ html{scroll-behavior:smooth}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal-on [data-rv]{opacity:1;transform:none;transition:none}}
 #faq{scroll-margin-top:90px}
 ${CARD_CSS}
+/* Account dropdown — logged-in state: initial avatar + name, plus the menu's logout button */
+.lp-acct-av{width:24px;height:24px;flex:0 0 auto;border-radius:50%;background:#fff;color:var(--red);font:800 12px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
+.lp-acct-name{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-acct-menu form{margin:0}
+.lp-acct-menu button{display:block;width:100%;text-align:left;padding:11px 13px;margin-top:4px;border:0;border-top:1px solid var(--lp-line);background:none;cursor:pointer;font:600 14px/1 Barlow,sans-serif;color:var(--red);border-radius:0 0 7px 7px}
+.lp-acct-menu button:hover{background:var(--lp-chip)}
+@media(max-width:600px){.lp-acct-name{display:none}.lp-acct-user>summary .lp-acct-av{display:flex}}
 </style>${THEME_HEAD}</head>
 <body>
 <div id="lp-page" style="min-height:100vh">
@@ -804,26 +811,47 @@ ${CARD_CSS}
 }
 
 /** Shared sticky top navbar for the public landing + About pages. */
-function landingNav(lang, active) {
+function landingNav(lang, active, account) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
   const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const nIc = (p) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const caret = '<svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  // Account control adapts to auth state. Logged-out visitors get Sign in /
+  // Create Account; a logged-in talent gets their name + initial avatar, with
+  // View Profile / Apply Event / Log out. (Talents have no photo field, so the
+  // avatar is always the name initial.) Rendered server-side, so it reflects the
+  // current session on every page load — login/logout redirect and re-render it.
+  let acct;
+  if (account && account.name) {
+    const home = account.type === 'main_power' ? '/main-power' : '/kol';
+    const initial = esc((String(account.name).trim().charAt(0) || '?').toUpperCase());
+    acct = `<details class="lp-acct lp-acct-user">
+      <summary><span class="lp-acct-av" aria-hidden="true">${initial}</span><span class="lp-acct-name">${esc(account.name)}</span>${caret}</summary>
+      <div class="lp-acct-menu">
+        <a href="${home}${q}">${esc(t('nav.viewProfile'))}</a>
+        <a href="/events${q}">${esc(t('nav.applyEvent'))}</a>
+        <form method="post" action="/kol/logout"><button type="submit" class="lp-acct-out">${esc(t('nav.logout'))}</button></form>
+      </div>
+    </details>`;
+  } else {
+    acct = `<details class="lp-acct">
+      <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span>${caret}</summary>
+      <div class="lp-acct-menu">
+        <a href="/login${q}">${esc(t('nav.signin'))}</a>
+        <a href="/register${q}">${esc(t('nav.signup'))}</a>
+      </div>
+    </details>`;
+  }
   return `<header class="lp-nav"><div class="lp-nav-in">
     <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </a>
     ${toggle}
-    <details class="lp-acct">
-      <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span><svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <div class="lp-acct-menu">
-        <a href="/login${q}">${esc(t('nav.signin'))}</a>
-        <a href="/register${q}">${esc(t('nav.signup'))}</a>
-      </div>
-    </details>
+    ${acct}
   </div></header>`;
 }
 

@@ -9,6 +9,8 @@
   "nav.search": "Search events",
   "nav.signin": "Sign in",
   "nav.signup": "Create Account",
+  "nav.viewProfile": "View Profile",
+  "nav.applyEvent": "Apply Event",
   "nav.eoLogin": "EO Login",
   "nav.proofs": "Post Proofs",
   "nav.manage": "Manage",
