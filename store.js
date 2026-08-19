@@ -660,7 +660,8 @@ function memoryStore() {
     async listAssignments() { return assignments.slice().reverse(); },
     async listAssignmentsForTalent(talentId) { return assignments.filter((a) => a.talent_id === talentId).slice().reverse(); },
     async createApplication({ event_id, talent_id, talent_type, role, answers }) {
-      if (applications.find((a) => a.event_id === event_id && a.talent_id === talent_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+      // New flow allows one application per (talent, event, position), so no
+      // (talent, event) uniqueness here — the apply handlers guard duplicates.
       const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() };
       applications.push(rec);
       return { id: rec.id };

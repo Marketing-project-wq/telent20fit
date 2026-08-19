@@ -719,8 +719,22 @@ app.get('/kol', requireTalentBrowse('kol'), async (req, res, next) => {
     const eventById = new Map(events.map((e) => [e.id, e]));
     await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
     const certs = await st.listCertificatesForTalent(req.talent.id);
+    // Per-position application history (one application = one position now):
+    // resolve each application's single chosen position label for the profile list.
+    const choices = await st.listApplicationChoices();
+    const choiceByApp = new Map(choices.map((c) => [c.application_id, c]));
+    const posLabelById = new Map();
+    for (const evId of [...new Set(myApps.map((a) => a.event_id))]) {
+      (await st.listEventPositions(evId)).forEach((p) => posLabelById.set(String(p.position_id), p));
+    }
     const appliedEvents = myApps
-      .map((a) => { const ev = eventById.get(a.event_id); return ev ? { name: ev.name, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null } : null; })
+      .map((a) => {
+        const ev = eventById.get(a.event_id);
+        if (!ev) return null;
+        const ch = choiceByApp.get(a.id);
+        const position = ch ? posLabelById.get(String(ch.position_id)) : null;
+        return { name: ev.name, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role };
+      })
       .filter(Boolean);
     res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, lang: req.lang }));
   } catch (e) { next(e); }
@@ -997,10 +1011,14 @@ async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
   const view = eoEventView(ev, positions, apps, choices);
   const openPositions = view.positions.filter((p) => !p.closed_at && !p.full);
-  const myApp = await st.getApplicationForEvent(talentId, ev.id);
-  const myChoices = myApp ? await st.listChoicesForApplication(myApp.id) : [];
   const posById = new Map(view.positions.map((p) => [p.position_id, p]));
-  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, regOpen: eventRegOpen(ev) };
+  // New apply flow: one application per (talent, event, position). Map each of
+  // this talent's applications for the event to its single chosen position so
+  // the UI can show per-position status and block duplicate applies.
+  const myApps = apps.filter((a) => a.talent_id === talentId && a.event_id === ev.id);
+  const myByPosition = new Map();
+  myApps.forEach((a) => { const ch = choices.find((c) => c.application_id === a.id); if (ch) myByPosition.set(String(ch.position_id), a); });
+  return { view, positions: view.positions, openPositions, posById, myApps, myByPosition, regOpen: eventRegOpen(ev) };
 }
 
 // Position-based EO events currently open to a talent: published, within the
@@ -1057,27 +1075,6 @@ app.get('/event/:id', requireAnyTalentBrowse(), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Parse + validate the 1..3 prioritised choices against BR-2/3/5/7.
-function parseApplyChoices(req, ctx) {
-  const openIds = new Set(ctx.openPositions.map((p) => p.position_id));
-  const inEvent = new Set(ctx.positions.map((p) => p.position_id));
-  const slots = [String(req.body.pos1 || ''), String(req.body.pos2 || ''), String(req.body.pos3 || '')];
-  const errors = [];
-  if (!slots[0]) errors.push(req.t('ta.err.p1required')); // BR-2 min 1 / BR-5 P1 first
-  if (!slots[1] && slots[2]) errors.push(req.t('ta.err.gap')); // BR-5 no gap
-  const chosen = [];
-  slots.forEach((pid, i) => {
-    if (!pid) return;
-    if (i > 0 && !slots[i - 1]) return; // gap already flagged
-    if (chosen.some((c) => c.position_id === pid)) { errors.push(req.t('ta.err.dup')); return; } // BR-3
-    if (!inEvent.has(pid)) { errors.push(req.t('ta.err.notOpen')); return; }
-    // BR-7: position must be open (unless it's one the talent already holds)
-    const heldPriority = (ctx.myChoices.find((c) => c.position_id === pid) || {}).priority;
-    if (!openIds.has(pid) && heldPriority === undefined) { errors.push(req.t('ta.err.notOpen')); return; }
-    chosen.push({ position_id: pid, priority: chosen.length + 1 });
-  });
-  return { chosen, errors };
-}
 
 app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => {
   try {
@@ -1087,26 +1084,23 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
     if (!ev) return res.redirect('/events');
     const ctx = await positionApplyCtx(st, ev, req.talent.id);
     if (!ctx.positions.length) return res.redirect('/events');
-    // BR-8: can only apply/edit while pending and registration is open.
-    const editable = !ctx.myApp || (['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
-    if (!ctx.regOpen || !editable) {
-      const ctx2 = Object.assign({}, ctx, { errors: [req.t('ta.err.closed')] });
-      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: ctx2, lang: req.lang }));
-    }
-    const { chosen, errors } = parseApplyChoices(req, ctx);
-    if (errors.length) {
-      return res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors }), lang: req.lang }));
-    }
+    // New flow: apply to exactly ONE position per action (position_id in body).
+    const positionId = String(req.body.position_id || '');
+    const pos = ctx.posById.get(positionId);
+    const fail = (key) => res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors: [req.t(key)] }), lang: req.lang }));
+    if (!pos) return fail('ta.err.notOpen');
+    // No duplicate: already applied to this exact position -> just show current state.
+    if (ctx.myByPosition.has(positionId)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    // Registration window + this specific position must be open.
+    if (!ctx.regOpen) return fail('ta.err.closed');
+    if (pos.closed_at || pos.full) return fail('ta.err.notOpen');
     // Creator positions (KOL / photographer / videographer) require CV + portfolio on file.
-    const picksCreator = chosen.some((c) => { const p = ctx.posById.get(c.position_id); return p && V.CREATOR_ROLES.includes(p.key); });
-    if (picksCreator && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
-    if (ctx.myApp) {
-      await st.replaceApplicationChoices(ctx.myApp.id, chosen);
-    } else {
-      const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
-      await st.updateApplication(app.id, { status: 'applied' });
-      await st.addApplicationChoices(app.id, chosen);
-    }
+    if (V.CREATOR_ROLES.includes(pos.key) && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
+    let app;
+    try { app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null }); }
+    catch (e) { if (e.code === 'DUP') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang); throw e; }
+    await st.updateApplication(app.id, { status: 'applied' });
+    await st.addApplicationChoices(app.id, [{ position_id: positionId, priority: 1 }]);
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
 });
@@ -1117,10 +1111,11 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
     if (!st) return needConfig(req, res);
     const ev = findEventByRef(await st.listEvents(), req.params.id);
     if (!ev) return res.redirect('/events');
-    const myApp = await st.getApplicationForEvent(req.talent.id, ev.id);
-    // BR-8: cancel only while pending + registration open.
-    if (myApp && ['applied', 'pending', 'under_review'].includes(myApp.status) && eventRegOpen(ev)) {
-      await st.deleteApplication(myApp.id);
+    const ctx = await positionApplyCtx(st, ev, req.talent.id);
+    const app = ctx.myByPosition.get(String(req.body.position_id || ''));
+    // Cancel one position's application while it's still pending + reg open.
+    if (app && ['applied', 'pending', 'under_review'].includes(app.status) && eventRegOpen(ev)) {
+      await st.deleteApplication(app.id);
     }
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
   } catch (e) { next(e); }
@@ -1291,12 +1286,11 @@ app.post('/main-power/apply/:eventId', requireTalentReady('main_power'), async (
     if (errors.length) {
       return res.status(400).send(V.mainPowerApply({ talent: req.talent, event: ev, customSow: ev.mp_sow, lang: req.lang, errors, values: { role, agree, ...answers } }));
     }
-    try {
-      await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
-    } catch (e) {
-      if (e.code === 'DUP') return res.redirect('/main-power?lang=' + req.lang); // already applied
-      throw e;
-    }
+    // Main Power keeps its "one SOW application per event" rule (role-based).
+    // Guard duplicates explicitly now that createApplication allows multiples.
+    const dupMp = (await st.listApplicationsForTalent(req.talent.id)).some((a) => a.event_id === ev.id && a.role);
+    if (dupMp) return res.redirect('/main-power?lang=' + req.lang);
+    await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
     res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
   } catch (e) { next(e); }
 });

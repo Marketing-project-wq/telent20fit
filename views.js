@@ -286,6 +286,13 @@ tr:last-child td{border-bottom:none}
   .rank{width:auto}
   .section-head{flex-wrap:wrap}
 }
+/* Confirmation modal (apply / general) */
+.tmodal{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(16,16,20,.55)}
+.tmodal[hidden]{display:none}
+.tmodal-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:400px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.tmodal-title{font-weight:800;font-size:18px;color:var(--ink)}
+.tmodal-text{color:var(--muted);font-size:14.5px;line-height:1.55;margin:8px 0 20px}
+.tmodal-actions{display:flex;gap:10px;justify-content:flex-end}
 ${CARD_CSS}`;
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
@@ -2633,15 +2640,24 @@ function kolProfilePage({ account, certs, events, lang }) {
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
   const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
-  const evList = (events && events.length)
-    ? `<div class="dl-list">${events.map((e) => `<div class="dl-item" style="display:block">
+  // Application history ("Riwayat Lamaran"): one row per position applied, newest
+  // first, with a colour-coded status badge. A status filter appears once long.
+  const histRows = (events || []).map((e) => {
+    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+    return `<div class="dl-item ta-hist" data-status="${esc(e.status || '')}" style="display:block">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-          <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
-          ${mpStatusBadge(e.status, L)}
+          <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${posLbl ? esc(posLbl) + ' · ' : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+          ${talentStatusBadge(e.status, L)}
         </div>
-        ${applicationTracker(e.status, L)}
-      </div>`).join('')}</div>`
-    : `<p class="muted" style="margin-top:12px">${t('prof.eventsEmpty')}</p>`;
+      </div>`;
+  }).join('');
+  const histStatuses = [...new Set((events || []).map((e) => e.status).filter(Boolean))];
+  const histFilter = (events && events.length > 3 && histStatuses.length > 1)
+    ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div><script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>`
+    : '';
+  const evList = (events && events.length)
+    ? `${histFilter}<div class="dl-list">${histRows}</div>`
+    : `<p class="muted" style="margin-top:12px">${t('ta.history.empty')}</p>`;
   const ddPath = '/' + (acc.talent_type || 'kol').replace(/_/g, '-') + '/data-diri?lang=' + L;
   const body = `<div class="wrap narrow">
   <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}
@@ -2678,7 +2694,7 @@ function kolProfilePage({ account, certs, events, lang }) {
     <div class="card" style="margin-top:10px">${talentProfileBlock(acc, L)}</div>
   </details>
 
-  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📅 ${t('prof.eventsTitle')}</h2></div>
+  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📋 ${t('ta.history.title')}</h2></div>
   ${evList}
 
   <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">🎖️ ${t('cert.myTitle')}</h2></div>
@@ -4490,8 +4506,10 @@ function talentEventApply({ account, event, ctx, lang }) {
   const workType = days <= 1 ? t('ta.workDaily') : (days + ' ' + t('ta.workDaysUnit'));
   // A KOL-type talent without CV + portfolio can't pick creator positions (kol/photog/videog).
   const docsMissing = !!(account && account.talent_type === 'kol' && !hasCreatorDocs(account));
-  const editable = ctx.regOpen && (!ctx.myApp || ['applied', 'pending', 'under_review'].includes(ctx.myApp.status));
-  const applyMode = !ctx.myApp && editable;
+  // New flow: apply one position at a time. Each position is independent — a
+  // talent can be "applied" to some and still open to apply to others.
+  const cancelable = (s) => ['applied', 'pending', 'under_review'].includes(s);
+  const anyApplyable = ctx.regOpen && (ctx.openPositions || []).length > 0;
 
   // Event-level info chips (shared by every position).
   const chip = (icon, txt) => txt ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:999px;padding:5px 11px;margin:5px 6px 0 0">${icon} ${esc(txt)}</span>` : '';
@@ -4518,14 +4536,25 @@ function talentEventApply({ account, event, ctx, lang }) {
     const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
         : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
-    const btn = (applyMode && isOpen && !lock)
-      ? `<button type="button" class="pos-apply btn btn-ghost btn-sm" data-pos="${esc(p.position_id)}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`
-      : (applyMode && lock ? `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>` : '');
-    // Jobdesk = the card's main description; requirement/fee/quota + apply button
-    // sit in the footer. Uses the shared benefitCard() so it matches the landing
-    // "Kenapa Pilih 20FIT Talent" grid exactly.
+    // Per-position action. If the talent already applied to THIS position, show
+    // its live status (+ cancel while still pending); otherwise the Lamar button
+    // that opens the confirmation modal; a docs-lock hint blocks creator roles.
+    const applied = ctx.myByPosition.get(String(p.position_id));
+    let action;
+    if (applied) {
+      const canCancel = ctx.regOpen && cancelable(applied.status);
+      action = `<div style="margin-top:14px">${talentStatusBadge(applied.status, L)}${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}</div>`;
+    } else if (lock) {
+      action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
+    } else if (ctx.regOpen && isOpen) {
+      action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
+    } else {
+      action = '';
+    }
+    // Jobdesk = the card's main description; requirement/fee/quota + action sit
+    // in the footer. Uses shared benefitCard() to match the landing benefit grid.
     const quotaLine = `<div style="font-size:12.5px;color:#5b6069;margin-top:12px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>`;
-    const foot = `${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}${quotaLine}${btn}`;
+    const foot = `${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}${quotaLine}${action}`;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
@@ -4537,72 +4566,35 @@ function talentEventApply({ account, event, ctx, lang }) {
   };
   const cardsHtml = posSorted.map(card).join('');
 
-  // Already applied: show the ranked choices + status, with auto-closed labels
-  // for the lower-priority choices once the talent is accepted somewhere.
-  let myBlock = '';
-  if (ctx.myApp) {
-    const approved = ctx.myApp.status === 'approved';
-    const rows = ctx.myChoices.map((c) => {
-      const p = ctx.posById.get(c.position_id) || {};
-      let tag = '';
-      if (c.accepted) tag = `<span class="pill pill-ok">${t('ta.acceptedHere')}</span>`;
-      else if (approved) tag = `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.autoClosed')}</span>`;
-      return `<div class="dl-item" style="align-items:center"><div><b>P${c.priority}</b> · ${esc(posLabel(p, L))}</div>${tag}</div>`;
-    }).join('');
-    myBlock = `<div class="card" style="margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>${t('ta.yourApp')}</b>${talentStatusBadge(ctx.myApp.status, L)}</div>
-      ${applicationTracker(ctx.myApp.status, L)}
-      <div class="dl-list" style="margin-top:8px">${rows}</div>
-      ${approved ? `<p class="muted" style="font-size:12px;margin:8px 0 0">${t('ta.autoClosedHint')}</p>` : ''}
-    </div>`;
-  }
-
-  // Priority ranking: the Lamar buttons on the cards populate P1/P2/P3 (max 3).
-  let rankingForm = '';
-  if (applyMode) {
-    const labels = {}; posSorted.forEach((p) => { labels[p.position_id] = posLabel(p, L); });
-    rankingForm = `<form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm" class="card" style="margin-top:16px">
-      <div style="font-weight:700">${t('ta.yourPriority')}</div>
-      <p class="muted" style="font-size:12.5px;margin:4px 0 10px">${t('ta.rankHint')}</p>
-      <ol id="rankList" style="margin:0;padding-left:0;list-style:none"></ol>
-      <p class="muted" id="rankEmpty" style="font-size:12.5px;margin:0 0 10px">${t('ta.rankEmpty')}</p>
-      <input type="hidden" name="pos1" id="hpos1"><input type="hidden" name="pos2" id="hpos2"><input type="hidden" name="pos3" id="hpos3">
-      <button type="submit" class="btn btn-block" id="applySubmit" disabled>${t('ta.submit')}</button>
-    </form>
+  // Shared confirmation modal for every per-position "Lamar" button. Clicking a
+  // Lamar button fills in the position + event name and asks to confirm; "Ya,
+  // Lamar" submits the single-position apply form.
+  const applyModal = anyApplyable ? `
+    <form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm"><input type="hidden" name="position_id" id="applyPos"></form>
+    <div id="applyModal" class="tmodal" hidden>
+      <div class="tmodal-card" role="dialog" aria-modal="true" aria-labelledby="applyModalTitle">
+        <div class="tmodal-title" id="applyModalTitle">${t('ta.applyConfirmTitle')}</div>
+        <p class="tmodal-text" id="applyModalText"></p>
+        <div class="tmodal-actions">
+          <button type="button" class="btn btn-ghost btn-sm" id="applyModalNo">${t('common.cancel')}</button>
+          <button type="button" class="btn btn-sm" id="applyModalYes">${t('ta.applyConfirmYes')}</button>
+        </div>
+      </div>
+    </div>
     <script>(function(){
-      var LBL=${JSON.stringify(labels).replace(/</g, '\\u003c')};
-      var ADD=${JSON.stringify(t('ta.applyThis'))},REM=${JSON.stringify(t('ta.rankRemove'))};
-      var MAX=3,sel=[];
-      var wrap=document.getElementById('posCards'),form=document.getElementById('applyForm');
-      if(!wrap||!form)return;
-      var h=[document.getElementById('hpos1'),document.getElementById('hpos2'),document.getElementById('hpos3')];
-      var sub=document.getElementById('applySubmit'),list=document.getElementById('rankList'),empty=document.getElementById('rankEmpty');
-      function render(){
-        [].slice.call(wrap.querySelectorAll('.pos-apply')).forEach(function(b){
-          var pid=b.getAttribute('data-pos'),i=sel.indexOf(pid);
-          if(i>=0){b.textContent='P'+(i+1)+' · '+REM;b.classList.add('on');b.disabled=false;}
-          else{b.textContent=ADD;b.classList.remove('on');b.disabled=sel.length>=MAX;}
-        });
-        for(var k=0;k<3;k++)h[k].value=sel[k]||'';
-        list.innerHTML='';
-        sel.forEach(function(pid,i){var li=document.createElement('li');li.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)';var s=document.createElement('span');s.textContent='P'+(i+1);s.style.cssText='font-weight:800;color:var(--red);min-width:26px';li.appendChild(s);li.appendChild(document.createTextNode(LBL[pid]||''));list.appendChild(li);});
-        empty.style.display=sel.length?'none':'';
-        sub.disabled=sel.length===0;
-      }
-      wrap.addEventListener('click',function(ev){
-        var b=ev.target&&ev.target.closest?ev.target.closest('.pos-apply'):null;
-        if(!b)return;ev.preventDefault();
-        var pid=b.getAttribute('data-pos'),i=sel.indexOf(pid);
-        if(i>=0)sel.splice(i,1);else if(sel.length<MAX)sel.push(pid);
-        render();
-      });
-      render();
-    })();</script>`;
-  }
-  const cancelForm = (ctx.myApp && editable)
-    ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:14px"><button type="submit" class="btn btn-ghost btn-block">${t('ta.cancel')}</button></form>`
-    : '';
-  const regClosedBanner = (!editable && !ctx.myApp) ? `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>` : '';
+      var wrap=document.getElementById('posCards'),modal=document.getElementById('applyModal'),form=document.getElementById('applyForm');
+      if(!wrap||!modal||!form)return;
+      var posInput=document.getElementById('applyPos'),txt=document.getElementById('applyModalText');
+      var QT=${JSON.stringify(t('ta.applyConfirmQ'))},EV=${JSON.stringify(e.name)};
+      function openM(pid,label){posInput.value=pid;txt.textContent=QT.replace('{pos}',label).replace('{event}',EV);modal.hidden=false;}
+      function closeM(){modal.hidden=true;}
+      wrap.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('.pos-apply'):null;if(!b)return;ev.preventDefault();openM(b.getAttribute('data-pos'),b.getAttribute('data-label')||'');});
+      document.getElementById('applyModalYes').addEventListener('click',function(){form.submit();});
+      document.getElementById('applyModalNo').addEventListener('click',closeM);
+      modal.addEventListener('click',function(ev){if(ev.target===modal)closeM();});
+      document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&!modal.hidden)closeM();});
+    })();</script>` : '';
+  const regClosedBanner = (!ctx.regOpen && !(ctx.myApps || []).length) ? `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>` : '';
 
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
   const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
@@ -4617,16 +4609,17 @@ function talentEventApply({ account, event, ctx, lang }) {
     ${chips}
     <div style="max-width:820px">
       ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
-      ${eb}${docsWarn}${myBlock}${cancelForm}
+      ${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>
       <div id="posCards" class="bgrid">${cardsHtml}</div>
     </section>
     <div style="max-width:820px">
-      ${rankingForm}${regClosedBanner}
+      ${regClosedBanner}
     </div>
-  </div>`;
+  </div>
+  ${applyModal}`;
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
 
