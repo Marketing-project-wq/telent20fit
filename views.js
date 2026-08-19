@@ -591,9 +591,9 @@ a{text-decoration:none}
 .hero-in.d3{animation-delay:.54s}
 .accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
 /* Hero headline: "ONE PLATFORM." on line 1, red "ENDLESS EVENT OPPORTUNITIES." on line 2 (one line). */
-.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(38px,calc(5vw - 6px),62px)}
+.hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(42px,calc(6vw - 8px),76px)}
 .hero-title .accent-shimmer{display:block}
-@media(max-width:860px){.hero-title{font-size:calc(7.4vw - 2px)}}
+@media(max-width:860px){.hero-title{font-size:calc(8.2vw - 2px)}}
 @keyframes shimmer{to{background-position:-220% 0}}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
@@ -690,7 +690,7 @@ html{scroll-behavior:smooth}
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   ${heroPhotos}
 
-  <section style="max-width:1180px;margin:0 auto;padding:clamp(92px,11vw,155px) 28px clamp(84px,10vw,150px)">
+  <section style="max-width:1320px;margin:0 auto;padding:clamp(92px,11vw,155px) clamp(24px,3.4vw,52px) clamp(84px,10vw,150px)">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:clamp(19px,2.5vw,30px);line-height:1.5;color:var(--lp-tx2);max-width:640px;margin:0">${esc(tr(L, 'hero.subheadline'))}</p>
