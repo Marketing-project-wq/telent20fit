@@ -599,8 +599,8 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-foot{border-top:1px solid var(--lp-line);background:var(--lp-bg);margin-top:8px}
 .ft-top{max-width:1180px;margin:0 auto;padding:56px 28px 46px;display:grid;grid-template-columns:2fr 1fr 1fr 1.15fr;gap:30px 26px;align-items:start}
 .ft-brand{max-width:430px}
-.ft-logo{display:block;margin-bottom:2px}
-.ft-logo img{height:28px;width:auto;display:block}
+.ft-logo{display:block;margin-top:-14px;margin-bottom:2px}
+.ft-logo img{height:42px;width:auto;display:block}
 .ft-tag{color:var(--lp-tx3);font-size:14px;line-height:1.6;margin:0 0 20px;text-align:justify}
 .ft-social{display:flex;gap:18px}
 .ft-social a{color:var(--lp-tx3);display:inline-flex}
