@@ -356,8 +356,8 @@ function appLayout({ title, body, role, active, user, lang }) {
   const isEo = role === 'eo';
   const isStaff = role === 'super_admin' || isEo;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/kol';
-  const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/kol/logout';
+  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/akun';
+  const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
@@ -374,9 +374,9 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
-      : navLink('/kol/event', 'event', active, 'event', t('nav.events'))
-        + navLink('/kol', 'profil', active, 'profile', t('nav.profile'))
-        + navLink('/kol/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
+      : navLink('/acara', 'event', active, 'event', t('nav.events'))
+        + navLink('/akun', 'profil', active, 'profile', t('nav.profile'))
+        + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -840,14 +840,13 @@ function landingNav(lang, active, account) {
   // current session on every page load — login/logout redirect and re-render it.
   let acct;
   if (account && account.name) {
-    const home = account.type === 'main_power' ? '/main-power' : '/kol';
     const initial = esc((String(account.name).trim().charAt(0) || '?').toUpperCase());
     acct = `<details class="lp-acct lp-acct-user">
       <summary><span class="lp-acct-av" aria-hidden="true">${initial}</span><span class="lp-acct-name">${esc(account.name)}</span>${caret}</summary>
       <div class="lp-acct-menu">
-        <a href="${home}${q}">${esc(t('nav.viewProfile'))}</a>
+        <a href="/akun${q}">${esc(t('nav.viewProfile'))}</a>
         <a href="/events${q}">${esc(t('nav.applyEvent'))}</a>
-        <form method="post" action="/kol/logout"><button type="submit" class="lp-acct-out">${esc(t('nav.logout'))}</button></form>
+        <form method="post" action="/logout"><button type="submit" class="lp-acct-out">${esc(t('nav.logout'))}</button></form>
       </div>
     </details>`;
   } else {
@@ -1070,7 +1069,7 @@ function talentPicker(mode, lang) {
       <div class="cat-name">${esc(c.name)}</div>
       <p class="cat-desc">${esc(L === 'en' ? c.en : c.id)}</p>
       ${c.active
-        ? `<a href="/${talentPath(c.type)}/${mode}${q}" class="btn btn-block">${esc(T.go)} →</a>`
+        ? `<a href="/${mode}${q}" class="btn btn-block">${esc(T.go)} →</a>`
         : `<span class="pill pill-off" style="align-self:flex-start">${esc(T.soon)}</span>`}
     </div>`).join('');
   const title = mode === 'register' ? T.reg : T.log;
@@ -1105,7 +1104,7 @@ function kolForm(campaigns, opts = {}) {
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
-    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Logout</button></form>
+    <form method="post" action="/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Logout</button></form>
   </div>
   <h1>Submit Hasil KOL</h1>
   <p class="sub">Halo <b>${esc(talent.name || '')}</b> — isi form ini setelah kamu selesai menjalankan event. Nama KOL otomatis dari akunmu.</p>
@@ -1391,7 +1390,7 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
   const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3.2"/></svg>';
   const errBanner = (errors && errors.length)
     ? `<div class="au-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
-  const forgotHref = `/kol/forgot-password?lang=${L}`;
+  const forgotHref = `/forgot-password?lang=${L}`;
 
   const signup = `<form class="au-panel${isLogin ? '' : ' on'}" data-panel="signup" method="post" action="/register">${nextInput}
     <div class="au-f"><label for="su-name">${t('common.fullname')}</label>
@@ -1631,29 +1630,27 @@ function talentRegister(type, opts = {}) {
 function forgotPassword(type, opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
-  const p = talentPath(type);
   const v = opts.values || {};
-  const form = `<form method="post" action="/${p}/forgot-password">
+  const form = `<form method="post" action="/forgot-password">
     <div class="field">
       <label for="login">${t('common.emailphone')}</label>
       <input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}">
     </div>
     <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
   </form>`;
-  const foot = `<a href="/${p}/login?lang=${L}">${t('auth.forgot.backToLogin')}</a>`;
+  const foot = `<a href="/login?lang=${L}">${t('auth.forgot.backToLogin')}</a>`;
   return authShell(type, t('auth.forgot.title'), t('auth.forgot.sub'), form, foot, opts.errors, L);
 }
 
 /** Neutral "we sent you an email" confirmation (no account enumeration). */
-function forgotPasswordSent({ type, lang }) {
+function forgotPasswordSent({ lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const p = talentPath(type || 'kol');
   const body = `<div class="wrap narrow"><div class="card success">
     <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
     <h1>${t('auth.forgot.sentTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
-    <a href="/${p}/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+    <a href="/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
   </div></div>`;
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -1749,7 +1746,6 @@ function talentProfileBlock(profile, lang) {
 function talentDataDiri(type, opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
-  const p = talentPath(type);
   const v = opts.values || {};
   const account = opts.account || {};
   const editing = !!(account.profile_completed_at);
@@ -1775,12 +1771,12 @@ function talentDataDiri(type, opts = {}) {
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/kol?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
+    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
   </div>
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
   ${errorBanner}
-  <form class="card" method="post" action="/${p}/data-diri?lang=${L}">
+  <form class="card" method="post" action="/data-diri?lang=${L}">
     <div class="field">
       <label for="province">${t('dd.province')}${req}</label>
       ${provinceSelect(v.province, L)}
@@ -1834,7 +1830,7 @@ function resetPassword({ token, valid, errors, lang }) {
       <div class="check" style="background:var(--err-soft);color:var(--err)">!</div>
       <h1>${t('auth.reset.invalidTitle')}</h1>
       <p class="sub" style="margin:10px auto 24px;max-width:420px">${t('auth.reset.invalidBody')}</p>
-      <a href="/kol/forgot-password?lang=${L}" class="btn btn-ghost">${t('auth.reset.requestAgain')}</a>
+      <a href="/forgot-password?lang=${L}" class="btn btn-ghost">${t('auth.reset.requestAgain')}</a>
     </div></div>`;
     return layout({ title: t('auth.reset.invalidTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
   }
@@ -1864,15 +1860,14 @@ function resetPassword({ token, valid, errors, lang }) {
 }
 
 /** Success after the password is changed. */
-function resetPasswordDone({ type, lang }) {
+function resetPasswordDone({ lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const p = talentPath(type || 'kol');
   const body = `<div class="wrap narrow"><div class="card success">
     <div class="check">✓</div>
     <h1>${t('auth.reset.doneTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
-    <a href="/${p}/login?lang=${L}" class="btn">${t('auth.reset.toLogin')} →</a>
+    <a href="/login?lang=${L}" class="btn">${t('auth.reset.toLogin')} →</a>
   </div></div>`;
   return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -2592,7 +2587,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   ${errorBanner}
   ${assignmentCards(assignments, L)}
   ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
-  <form class="card" method="post" action="/kol/proofs" enctype="multipart/form-data">
+  <form class="card" method="post" action="/kirim-bukti" enctype="multipart/form-data">
     <div class="field">
       <label for="event_id">${t('kol.eventLabel')}</label>
       <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}>
@@ -2636,7 +2631,7 @@ function kolProfilePage({ account, certs, events, lang }) {
   const certList = (certs && certs.length)
     ? `<div class="dl-list">${certs.map((c) => `<div class="dl-item" style="align-items:center">
         <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''}</div><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.cert_no)}</div></div>
-        <a href="/kol/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
+        <a href="/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
   const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
@@ -2658,7 +2653,7 @@ function kolProfilePage({ account, certs, events, lang }) {
   const evList = (events && events.length)
     ? `${histFilter}<div class="dl-list">${histRows}</div>`
     : `<p class="muted" style="margin-top:12px">${t('ta.history.empty')}</p>`;
-  const ddPath = '/' + (acc.talent_type || 'kol').replace(/_/g, '-') + '/data-diri?lang=' + L;
+  const ddPath = '/data-diri?lang=' + L;
   const body = `<div class="wrap narrow">
   <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}
   .pc-card{display:flex;align-items:center;gap:15px;background:linear-gradient(135deg,#ff2a37,#c00c17);color:#fff;border-radius:16px;padding:16px 18px;text-decoration:none;margin:0 0 16px;box-shadow:0 12px 28px rgba(228,18,31,.30);transition:transform .15s,box-shadow .15s}
@@ -2683,7 +2678,7 @@ function kolProfilePage({ account, certs, events, lang }) {
       </div>
     </div>
     ${bio ? `<p style="font-size:14px;line-height:1.6;margin:16px 0 0;color:var(--muted);white-space:pre-wrap">${esc(bio)}</p>` : ''}
-    <a href="/kol/data-diri?edit=1&lang=${L}" class="btn btn-block" style="margin-top:18px">✎ ${t('prof.edit')}</a>
+    <a href="/data-diri?edit=1&lang=${L}" class="btn btn-block" style="margin-top:18px">✎ ${t('prof.edit')}</a>
   </div>
 
   <details class="prof-details" style="margin-top:24px">
@@ -2701,12 +2696,12 @@ function kolProfilePage({ account, certs, events, lang }) {
   ${certList}
 
   <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📄 ${t('doc.title')}</h2></div>
-  <a href="/kol/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;text-decoration:none;color:inherit">
+  <a href="/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;text-decoration:none;color:inherit">
     <span style="min-width:0"><b>${t('doc.manage')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageSub')}</div></span>
     <span style="font-size:22px;flex-shrink:0">›</span>
   </a>
 
-  <form method="post" action="/kol/logout" style="margin-top:26px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
+  <form method="post" action="/logout" style="margin-top:26px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
 }
@@ -2720,7 +2715,6 @@ function kolProfilePage({ account, certs, events, lang }) {
 function talentDocuments(type, opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
-  const p = talentPath(type);
   const acc = opts.account || {};
   const v = opts.values || acc;
   const isCreator = (type === 'kol');
@@ -2732,7 +2726,7 @@ function talentDocuments(type, opts = {}) {
   const needBanner = opts.need ? `<div class="banner banner-warn">${t('doc.needBanner')}</div>` : '';
 
   const fileRow = (kind, stored) => stored
-    ? `<div style="font-size:13px;margin:6px 0"><a href="/${p}/dokumen/file/${kind}?lang=${L}" target="_blank" rel="noopener">📎 ${t('doc.view')}</a> <span class="muted">· ${t('doc.replaceHint')}</span></div>`
+    ? `<div style="font-size:13px;margin:6px 0"><a href="/dokumen/file/${kind}?lang=${L}" target="_blank" rel="noopener">📎 ${t('doc.view')}</a> <span class="muted">· ${t('doc.replaceHint')}</span></div>`
     : '';
 
   const hxStatus = acc.hyrox_cert_status || 'none';
@@ -2759,14 +2753,14 @@ function talentDocuments(type, opts = {}) {
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/${p}?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
+    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
   </div>
   <h1>${t('doc.title')}</h1>
   <p class="sub">${t('doc.sub')}</p>
   ${needBanner}
   ${flashBanner}
   ${errorBanner}
-  <form class="card" method="post" action="/${p}/dokumen?lang=${L}" enctype="multipart/form-data">
+  <form class="card" method="post" action="/dokumen?lang=${L}" enctype="multipart/form-data">
     ${creatorFields}
     <div class="field">
       <label>${t('doc.hyrox')}${opt} ${hxBadge}</label>
@@ -2781,7 +2775,7 @@ function talentDocuments(type, opts = {}) {
 
   return type === 'kol'
     ? appLayout({ title: t('doc.title') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L })
-    : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/main-power?lang=' + L, lang: L });
+    : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/akun?lang=' + L, lang: L });
 }
 
 /** Public certificate verification page (reached from the cert's QR/number). */
@@ -2857,7 +2851,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
       applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
     }
     const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
-    return `<a href="/kol/event/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+    return `<a href="/acara/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
       ${eventCover(e, L)}
       <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
       <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
@@ -2935,14 +2929,14 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
     </div>`;
   } else if (cats && cats.length) {
     const needDocs = !hasCreatorDocs(account) && cats.some((c) => CREATOR_ROLES.includes(c.type));
-    const warn = needDocs ? `<div class="banner banner-warn" style="margin-bottom:12px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>` : '';
-    const btns = cats.map((c) => `<a href="/kol/event/${esc(event.id)}/apply?cat=${esc(c.type)}&lang=${L}" class="btn" style="margin:0 8px 8px 0">${t('apply.applyAs', { cat: esc(c.label) })}</a>`).join('');
+    const warn = needDocs ? `<div class="banner banner-warn" style="margin-bottom:12px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>` : '';
+    const btns = cats.map((c) => `<a href="/acara/${esc(event.id)}/apply?cat=${esc(c.type)}&lang=${L}" class="btn" style="margin:0 8px 8px 0">${t('apply.applyAs', { cat: esc(c.label) })}</a>`).join('');
     action = `<div class="card" style="margin-top:16px"><div style="font-weight:700;margin-bottom:12px">${t('apply.pickCat')}</div>${warn}${btns}</div>`;
   } else {
     action = `<div class="banner banner-warn" style="margin-top:16px">${t('apply.noNeeds')}</div>`;
   }
   const body = `<div class="wrap narrow">
-  <a href="/kol/event?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <a href="/acara?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${event.mockup_url ? `<img src="${esc(event.mockup_url)}" alt="${esc(event.name)}" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <h1 style="margin-top:0">${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
@@ -2970,11 +2964,11 @@ function kolApplyForm({ account, event, cat, values, errors, lang }) {
       <input type="${f.type || 'text'}" id="f_${f.k}" name="${f.k}"${f.req ? ' required' : ''}${f.type === 'number' ? ' min="0" inputmode="numeric"' : ''} maxlength="200"${f.ph ? ` placeholder="${esc(t(f.ph))}"` : ''} value="${esc(v[f.k] || '')}">
     </div>`).join('');
   const body = `<div class="wrap narrow">
-  <a href="/kol/event/${esc(event.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <a href="/acara/${esc(event.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <h1 style="margin-top:0">${t('apply.formTitle', { cat: esc(CAT_LABEL[cat] || cat) })}</h1>
   <p class="sub">${esc(event.name)}</p>
   ${errorBanner}
-  <form class="card" method="post" action="/kol/event/${esc(event.id)}/apply">
+  <form class="card" method="post" action="/acara/${esc(event.id)}/apply">
     <input type="hidden" name="cat" value="${esc(cat)}">
     <div class="field"><label for="f_name">${t('common.fullname')}${req}</label>
       <input type="text" id="f_name" name="name" required maxlength="120" value="${pf('name', acc.name)}"></div>
@@ -2998,8 +2992,8 @@ function kolApplyDone({ account, event, lang }) {
     <h1>${t('apply.doneTitle')}</h1>
     <p class="sub" style="margin:10px 0 24px">${t('apply.doneSub')}</p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a href="/kol/event/${esc(event.id)}?lang=${L}" class="btn btn-ghost">${esc(event.name)}</a>
-      <a href="/kol/event?lang=${L}" class="btn">${t('nav.events')} →</a>
+      <a href="/acara/${esc(event.id)}?lang=${L}" class="btn btn-ghost">${esc(event.name)}</a>
+      <a href="/acara?lang=${L}" class="btn">${t('nav.events')} →</a>
     </div>
   </div></div>`;
   return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
@@ -3059,7 +3053,7 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
     const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
       <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}${slot}</div>
-      ${full ? '' : `<a href="/main-power/apply/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
+      ${full ? '' : `<a href="/lamar/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
     </div>`;
   }).join('') : '';
   const openCards = (eoCards || mpRows)
@@ -3080,13 +3074,13 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
+    <form method="post" action="/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
   </div>
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
 
-  <a href="/main-power/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
+  <a href="/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
     <span style="min-width:0"><b>📄 ${t('doc.title')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageHyrox')}</div></span>
     <span style="font-size:22px;flex-shrink:0">›</span>
   </a>
@@ -3153,13 +3147,13 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/main-power?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
   </div>
   <h1>${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
   ${stepBar}
   ${errorBanner}
-  <form method="post" action="/main-power/apply/${esc(event.id)}" id="mpForm">
+  <form method="post" action="/lamar/${esc(event.id)}" id="mpForm">
     <div class="card" id="mpStep1">
       <div class="field">
         <label for="role">${t('mp.apply.roleLabel')}</label>
@@ -3205,7 +3199,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
   if(back) back.onclick=function(){ s2.style.display='none'; s1.style.display=''; dot2(false); window.scrollTo(0,0); };
 })();
 </script>`;
-  return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
+  return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/akun?lang=' + L, lang: L });
 }
 
 /** Confirmation after a Man Power application is submitted. */
@@ -3217,10 +3211,10 @@ function mainPowerApplyDone({ event, lang }) {
     <h1>${t('mp.apply.doneTitle')}</h1>
     <p class="sub" style="margin:10px 0 24px">${t('mp.apply.doneSub')}</p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a href="/main-power?lang=${L}" class="btn">${t('mp.dash.title')} →</a>
+      <a href="/akun?lang=${L}" class="btn">${t('mp.dash.title')} →</a>
     </div>
   </div></div>`;
-  return layout({ title: t('mp.apply.doneTitle') + ' — 20FIT', body, home: '/main-power?lang=' + L, lang: L });
+  return layout({ title: t('mp.apply.doneTitle') + ' — 20FIT', body, home: '/akun?lang=' + L, lang: L });
 }
 
 /** Small badge for a proof's content type (feed / reels / story). */
@@ -4409,7 +4403,7 @@ function page500(msg) {
   const body = `<div class="wrap narrow"><div class="card">
     <h1>Terjadi kesalahan</h1>
     <div class="banner banner-err">${esc(msg || 'Unknown error')}</div>
-    <a href="/kol" class="btn btn-ghost" style="margin-top:16px">Kembali ke form</a>
+    <a href="/" class="btn btn-ghost" style="margin-top:16px">Kembali ke Beranda</a>
   </div></div>`;
   return layout({ title: 'Error — 20FIT KOL', body });
 }
@@ -4448,7 +4442,7 @@ function applicationTracker(status, lang) {
   return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
 }
 
-function talentHomePath(account) { return '/' + ((account && account.talent_type) || 'kol').replace(/_/g, '-'); }
+function talentHomePath(account) { return '/akun'; }
 
 // One card for a position-based EO event. filterable=true adds the search/
 // filter hooks (data-status/data-search + ev-item) so it works inside the
@@ -4545,7 +4539,7 @@ function talentEventApply({ account, event, ctx, lang }) {
       const canCancel = ctx.regOpen && cancelable(applied.status);
       action = `<div style="margin-top:14px">${talentStatusBadge(applied.status, L)}${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}</div>`;
     } else if (lock) {
-      action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
+      action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
     } else if (ctx.regOpen && isOpen) {
       action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
     } else {
@@ -4599,7 +4593,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
   const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
   const docsWarn = (docsMissing && creatorOpen)
-    ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/kol/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
+    ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
   const body = `<div class="wrap" style="max-width:1080px">
     <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>

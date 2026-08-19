@@ -8,12 +8,20 @@
  *     GET  /prototype        -> archived design prototype
  *     GET  /health           -> health check
  *
- *   KOL talent (self-service accounts, session cookie):
- *     GET/POST /kol/register -> create account
- *     GET/POST /kol/login    -> sign in
- *     POST     /kol/logout   -> sign out
- *     GET      /kol          -> submission form (requires login)
- *     POST     /kol/submit   -> create a submission (campaign, 1-5 images, 1+ links)
+ *   Talent (self-service accounts, session cookie). Pages live at plain,
+ *   role-agnostic paths — the talent type is read from the session, so a
+ *   talent only ever sees talent.20fit.id/… (no /kol or /main-power prefix):
+ *     GET/POST /register      -> create account
+ *     GET/POST /login         -> sign in
+ *     GET/POST /logout        -> sign out
+ *     GET      /akun          -> home (KOL profile / Man Power dashboard by type)
+ *     GET/POST /data-diri     -> profile form
+ *     GET/POST /dokumen       -> documents (CV / portfolio / HYROX cert)
+ *     GET/POST /kirim-bukti   -> KOL post-proof submission
+ *     GET      /acara[/:id]   -> browse category-need events + apply
+ *     GET/POST /lamar/:id     -> Man Power SOW application
+ *     GET      /events, /event/:id -> position-based events + apply
+ *   Old /kol/* and /main-power/* URLs 302-redirect to these for back-compat.
  *
  *   Admin (HTTP Basic auth, ADMIN_USER / ADMIN_PASSWORD):
  *     GET  /admin            -> dashboard (counts + campaign management)
@@ -118,14 +126,13 @@ function teaserEvents(events) {
 
 // Gate: logged-in talent of `type` AND profile complete. Attaches req.account.
 function requireTalentReady(type) {
-  const p = type.replace(/_/g, '-');
   return [auth.requireTalent(type), async (req, res, next) => {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
       if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
-      if (!acc.profile_completed_at) return res.redirect('/' + p + '/data-diri?lang=' + req.lang);
+      if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -148,32 +155,29 @@ function requireTalentBrowse(type) {
   }];
 }
 
-// GET /{type}/data-diri — profile form (+ available-events teaser). Skips to the
-// dashboard if already complete, unless ?edit=1 (re-open to update).
-function dataDiriGet(type) {
-  const p = type.replace(/_/g, '-');
-  return [auth.requireTalent(type), async (req, res, next) => {
+// GET /data-diri — profile form (+ available-events teaser). Talent type comes
+// from the session. Skips to the dashboard if already complete, unless ?edit=1.
+function dataDiriGet() {
+  return [requireAnyTalentBrowse(), async (req, res, next) => {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
-      const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
-      if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/' + p + '?lang=' + req.lang);
+      const acc = req.account;
+      if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/akun?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
-      res.send(V.talentDataDiri(type, { account: acc, events, values: acc, lang: req.lang }));
+      res.send(V.talentDataDiri(req.talent.type, { account: acc, events, values: acc, lang: req.lang }));
     } catch (e) { next(e); }
   }];
 }
 
-// POST /{type}/data-diri — validate + save profile, activating the account.
-function dataDiriPost(type) {
-  const p = type.replace(/_/g, '-');
-  return [auth.requireTalent(type), async (req, res, next) => {
+// POST /data-diri — validate + save profile, activating the account.
+function dataDiriPost() {
+  return [requireAnyTalentBrowse(), async (req, res, next) => {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
-      const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
+      const acc = req.account;
+      const type = req.talent.type;
       const values = {
         province: String(req.body.province || '').trim(),
         city: String(req.body.city || '').trim().slice(0, 80),
@@ -220,7 +224,7 @@ function dataDiriPost(type) {
         experience: values.experience || null,
         profile_completed_at: acc.profile_completed_at || new Date().toISOString(),
       });
-      res.redirect('/' + p + '?lang=' + req.lang);
+      res.redirect('/akun?lang=' + req.lang);
     } catch (e) { next(e); }
   }];
 }
@@ -234,34 +238,34 @@ const docExt = (f) => {
   return /pdf/i.test(f.mimetype || '') ? '.pdf' : '.jpg';
 };
 
-// GET /{type}/dokumen — the documents page (req.account carries current values).
-function docsGet(type) {
-  return [requireTalentReady(type), async (req, res, next) => {
+// GET /dokumen — the documents page (req.account carries current values).
+function docsGet() {
+  return [requireAnyTalentReady(), async (req, res, next) => {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
-      res.send(V.talentDocuments(type, { account: req.account, flash: String(req.query.saved || ''), need: req.query.need === '1', lang: req.lang }));
+      res.send(V.talentDocuments(req.talent.type, { account: req.account, flash: String(req.query.saved || ''), need: req.query.need === '1', lang: req.lang }));
     } catch (e) { next(e); }
   }];
 }
 
-// POST /{type}/dokumen — save portfolio link + optional CV / HYROX cert uploads.
-function docsPost(type) {
-  const p = type.replace(/_/g, '-');
+// POST /dokumen — save portfolio link + optional CV / HYROX cert uploads.
+function docsPost() {
   return [
-    requireTalentReady(type),
+    requireAnyTalentReady(),
     // Run multer manually so an oversized/invalid file becomes a friendly error
     // instead of crashing into the generic 500 handler.
     (req, res, next) => uploadDocs(req, res, (err) => {
-      if (err) return res.status(400).send(V.talentDocuments(type, { account: req.account, errors: [req.t('doc.err.size')], lang: req.lang }));
+      if (err) return res.status(400).send(V.talentDocuments(req.talent.type, { account: req.account, errors: [req.t('doc.err.size')], lang: req.lang }));
       next();
     }),
     async (req, res, next) => {
       try {
         const st = db();
         if (!st) return needConfig(req, res);
+        const type = req.talent.type;
         const acc = await st.getAccountById(req.talent.id);
-        if (!acc) { auth.clearSession(res); return res.redirect('/' + p + '/login'); }
+        if (!acc) { auth.clearSession(res); return res.redirect('/login'); }
         const isCreator = (type === 'kol');
         const files = req.files || {};
         const patch = {};
@@ -304,24 +308,23 @@ function docsPost(type) {
           return res.status(400).send(V.talentDocuments(type, { account: acc, values: { portfolio_url: req.body.portfolio_url }, errors, lang: req.lang }));
         }
         if (Object.keys(patch).length) await st.updateAccountProfile(acc.id, patch);
-        res.redirect('/' + p + '/dokumen?saved=1&lang=' + req.lang);
+        res.redirect('/dokumen?saved=1&lang=' + req.lang);
       } catch (e) { next(e); }
     },
   ];
 }
 
 // GET /{type}/dokumen/file/:kind — stream the talent's own CV / HYROX file.
-function docFile(type) {
-  const p = type.replace(/_/g, '-');
-  return [requireTalentReady(type), async (req, res, next) => {
+function docFile() {
+  return [requireAnyTalentReady(), async (req, res, next) => {
     try {
       const st = db();
       if (!st) return needConfig(req, res);
       const col = DOC_KINDS[req.params.kind];
       const key = col && req.account[col];
-      if (!key) return res.redirect('/' + p + '/dokumen?lang=' + req.lang);
+      if (!key) return res.redirect('/dokumen?lang=' + req.lang);
       const buf = await st.downloadImage(key);
-      if (!buf) return res.redirect('/' + p + '/dokumen?lang=' + req.lang);
+      if (!buf) return res.redirect('/dokumen?lang=' + req.lang);
       const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
       const ct = ext === '.pdf' ? 'application/pdf'
         : ext === '.png' ? 'image/png'
@@ -405,14 +408,14 @@ function safeNext(n) { n = String(n || ''); return (/^\/[A-Za-z0-9]/.test(n) && 
 app.get('/register', (req, res) => {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || ('/' + tk.type.replace(/_/g, '-')));
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/akun');
   res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt }));
 });
 app.post('/register', talentRegisterPost('kol', { unified: true }));
 app.get('/login', (req, res) => {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || ('/' + tk.type.replace(/_/g, '-')));
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/akun');
   res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt }));
 });
 app.post('/login', async (req, res, next) => {
@@ -428,7 +431,7 @@ app.post('/login', async (req, res, next) => {
     //    is down. Auto-provisioned app users also land here on later logins.
     if (account && auth.verifyPassword(password, account.password_hash)) {
       auth.setSession(res, account);
-      return res.redirect(nxt || ('/' + (account.talent_type || 'kol').replace(/_/g, '-')));
+      return res.redirect(nxt || '/akun');
     }
     // 2) Fall back to the 20FIT app account directory (only when configured).
     //    On success we mirror the account locally so the rest of the site works,
@@ -453,7 +456,7 @@ app.post('/login', async (req, res, next) => {
         }
         if (account) {
           auth.setSession(res, account);
-          return res.redirect(nxt || ('/' + (account.talent_type || 'kol').replace(/_/g, '-')));
+          return res.redirect(nxt || '/akun');
         }
       }
     }
@@ -541,18 +544,13 @@ app.get('/prototype', (req, res) => {
 
 // --------------------------------------------------------------- KOL auth ----
 
-app.get('/kol/register', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'kol') return res.redirect('/kol');
-  res.send(V.talentRegister('kol', { lang: req.lang }));
-});
+app.get('/kol/register', (req, res) => res.redirect('/register' + (req.query.lang ? '?lang=' + req.query.lang : '')));
 
 // Registration collects Full Name, Email, WhatsApp, Password + confirmation.
 // The account is created inactive; the talent completes Data Diri next. Shared
 // by both talent types (KOL + Man Power).
 function talentRegisterPost(type, opts = {}) {
   const unified = !!opts.unified;
-  const p = type.replace(/_/g, '-');
   const isCreator = (type === 'kol');
   return [
     // Optional CV / HYROX uploads can ride along with the signup form (creators).
@@ -633,13 +631,13 @@ function talentRegisterPost(type, opts = {}) {
         // Redirect back to the event the visitor came from (?next), otherwise land
         // on the dashboard (profile + browse events); profile completion is
         // prompted there and enforced only when applying to an event.
-        res.redirect(nxt || ('/' + p + '?lang=' + req.lang));
+        res.redirect(nxt || ('/akun?lang=' + req.lang));
       } catch (e) { next(e); }
     },
   ];
 }
 
-app.post('/kol/register', talentRegisterPost('kol'));
+app.post('/kol/register', talentRegisterPost('kol', { unified: true }));
 
 app.get('/kol/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
@@ -651,20 +649,45 @@ app.post('/kol/login', async (req, res, next) => {
     const password = String(req.body.password || '');
     const account = await st.findAccount('kol', login);
     if (!account || !auth.verifyPassword(password, account.password_hash)) {
-      return res.status(401).send(V.talentLogin('kol', { errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+      return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, account);
-    res.redirect('/kol');
+    res.redirect('/akun');
   } catch (e) { next(e); }
 });
 
-app.post('/kol/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); });
+// ---- Unified clean talent routes (talent type resolved from the session) ----
+// Talent-facing pages live at plain paths (no /kol or /main-power prefix) so a
+// talent only ever sees talent.20fit.id/…; the type is read from the session.
+app.get('/data-diri', dataDiriGet());
+app.post('/data-diri', dataDiriPost());
+app.get('/dokumen', docsGet());
+app.post('/dokumen', docsPost());
+app.get('/dokumen/file/:kind', docFile());
+app.get('/logout', talentLogout);
+app.post('/logout', talentLogout);
 
-app.get('/kol/data-diri', dataDiriGet('kol'));
-app.post('/kol/data-diri', dataDiriPost('kol'));
-app.get('/kol/dokumen', docsGet('kol'));
-app.post('/kol/dokumen', docsPost('kol'));
-app.get('/kol/dokumen/file/:kind', docFile('kol'));
+// ---- Back-compat: old role-prefixed URLs redirect to the clean paths --------
+// (bookmarks, links shared before the rename). Query string (lang) is carried.
+function talentLogout(req, res) { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); }
+const withLang = (req, p) => p + (req.query.lang ? (p.includes('?') ? '&' : '?') + 'lang=' + req.query.lang : '');
+[['/kol', '/akun'], ['/main-power', '/akun'],
+ ['/kol/data-diri', '/data-diri'], ['/main-power/data-diri', '/data-diri'],
+ ['/kol/dokumen', '/dokumen'], ['/main-power/dokumen', '/dokumen'],
+ ['/kol/kirim-bukti', '/kirim-bukti'], ['/kol/event', '/acara'],
+].forEach(([oldP, newP]) => app.get(oldP, (req, res) => res.redirect(withLang(req, newP))));
+app.get('/kol/dokumen/file/:kind', (req, res) => res.redirect(withLang(req, '/dokumen/file/' + encodeURIComponent(req.params.kind))));
+app.get('/main-power/dokumen/file/:kind', (req, res) => res.redirect(withLang(req, '/dokumen/file/' + encodeURIComponent(req.params.kind))));
+app.get('/kol/event/:id', (req, res) => res.redirect(withLang(req, '/acara/' + encodeURIComponent(req.params.id))));
+app.get('/kol/sertifikat/:id', (req, res) => res.redirect(withLang(req, '/sertifikat/' + encodeURIComponent(req.params.id))));
+app.get('/main-power/apply/:eventId', (req, res) => res.redirect(withLang(req, '/lamar/' + encodeURIComponent(req.params.eventId))));
+// Old POST endpoints kept as aliases so any stale open form still submits.
+app.post('/kol/logout', talentLogout);
+app.post('/main-power/logout', talentLogout);
+app.post('/kol/data-diri', dataDiriPost());
+app.post('/main-power/data-diri', dataDiriPost());
+app.post('/kol/dokumen', docsPost());
+app.post('/main-power/dokumen', docsPost());
 
 // ------------------------------------------------------------- KOL form ------
 
@@ -710,10 +733,13 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 
 // KOL dashboard (sidebar app shell): Profil (home) · Event · Kirim Bukti.
 // req.account (full profile) is attached by requireTalentReady.
-app.get('/kol', requireTalentBrowse('kol'), async (req, res, next) => {
+// Unified talent home. Dispatches by session type: Man Power sees the
+// self-apply dashboard; KOL / photographer see the profile + history page.
+app.get('/akun', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
+    if (req.talent.type === 'main_power') return await renderMpHome(req, res, st);
     // Lazily issue any certificates the talent has earned (attended + finished).
     const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
     const eventById = new Map(events.map((e) => [e.id, e]));
@@ -741,12 +767,12 @@ app.get('/kol', requireTalentBrowse('kol'), async (req, res, next) => {
 });
 
 // Talent downloads their own certificate PDF.
-app.get('/kol/sertifikat/:id', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
-    if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/kol?lang=' + req.lang);
+    if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/akun?lang=' + req.lang);
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
     const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
     res.setHeader('Content-Type', 'application/pdf');
@@ -862,7 +888,7 @@ async function saveMockup(st, eventId, file) {
 }
 
 // Talent Home: active events (ongoing + upcoming) with their category needs.
-app.get('/kol/event', requireTalentBrowse('kol'), async (req, res, next) => {
+app.get('/acara', requireTalentBrowse('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -889,13 +915,13 @@ app.get('/kol/event', requireTalentBrowse('kol'), async (req, res, next) => {
 });
 
 // Event detail: pick a category to register for (or see your registration).
-app.get('/kol/event/:id', requireTalentBrowse('kol'), async (req, res, next) => {
+app.get('/acara/:id', requireTalentBrowse('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const [allEvents, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
     const ev = allEvents.find((e) => e.id === req.params.id);
-    if (!ev || !ev.is_active) return res.redirect('/kol/event?lang=' + req.lang);
+    if (!ev || !ev.is_active) return res.redirect('/acara?lang=' + req.lang);
     const myApplication = myApps.find((a) => a.event_id === ev.id) || null;
     const event = await attachMockups(st, { ...ev, status: eventStatusOf(ev) });
     res.send(V.kolEventDetail({ account: req.account, event, cats: eventCats(ev), myApplication, lang: req.lang }));
@@ -903,7 +929,7 @@ app.get('/kol/event/:id', requireTalentBrowse('kol'), async (req, res, next) => 
 });
 
 // Dynamic registration form for one category.
-app.get('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/acara/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -911,15 +937,15 @@ app.get('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next
     const ev = allEvents.find((e) => e.id === req.params.id);
     const cat = String(req.query.cat || '');
     const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
-    if (!opensCat) return res.redirect('/kol/event/' + req.params.id + '?lang=' + req.lang);
-    if (myApps.some((a) => a.event_id === ev.id)) return res.redirect('/kol/event/' + ev.id + '?lang=' + req.lang);
+    if (!opensCat) return res.redirect('/acara/' + req.params.id + '?lang=' + req.lang);
+    if (myApps.some((a) => a.event_id === ev.id)) return res.redirect('/acara/' + ev.id + '?lang=' + req.lang);
     // Creator roles require a CV + portfolio on file before applying.
-    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
+    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
     res.send(V.kolApplyForm({ account: req.account, event: ev, cat, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
+app.post('/acara/:id/apply', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -927,9 +953,9 @@ app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, nex
     const ev = allEvents.find((e) => e.id === req.params.id);
     const cat = String(req.body.cat || '');
     const opensCat = ev && ev.is_active && V.CAT_LABEL[cat] && (ev.needs || []).some((n) => n.talent_type === cat);
-    if (!opensCat) return res.redirect('/kol/event?lang=' + req.lang);
+    if (!opensCat) return res.redirect('/acara?lang=' + req.lang);
     // Creator roles require a CV + portfolio on file before applying.
-    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
+    if (V.CREATOR_ROLES.includes(cat) && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
 
     const values = { name: String(req.body.name || '').trim(), phone: String(req.body.phone || '').trim() };
     if (cat === 'main_power') values.city = String(req.body.city || '').trim().slice(0, 80);
@@ -948,7 +974,7 @@ app.post('/kol/event/:id/apply', requireTalentReady('kol'), async (req, res, nex
     try {
       await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: cat, role: V.CAT_LABEL[cat], answers: values });
     } catch (e) {
-      if (e.code === 'DUP') return res.redirect('/kol/event/' + ev.id + '?lang=' + req.lang);
+      if (e.code === 'DUP') return res.redirect('/acara/' + ev.id + '?lang=' + req.lang);
       throw e;
     }
     res.send(V.kolApplyDone({ account: req.account, event: ev, lang: req.lang }));
@@ -967,7 +993,7 @@ function requireAnyTalentReady() {
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
       if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
-      if (!acc.profile_completed_at) return res.redirect('/' + t.type.replace(/_/g, '-') + '/data-diri?lang=' + req.lang);
+      if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -1095,7 +1121,7 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
     if (!ctx.regOpen) return fail('ta.err.closed');
     if (pos.closed_at || pos.full) return fail('ta.err.notOpen');
     // Creator positions (KOL / photographer / videographer) require CV + portfolio on file.
-    if (V.CREATOR_ROLES.includes(pos.key) && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/kol/dokumen?need=1&lang=' + req.lang);
+    if (V.CREATOR_ROLES.includes(pos.key) && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
     let app;
     try { app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null }); }
     catch (e) { if (e.code === 'DUP') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang); throw e; }
@@ -1121,7 +1147,7 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
-app.get('/kol/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
+app.get('/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1139,7 +1165,7 @@ app.get('/kol/kirim-bukti', requireTalentReady('kol'), async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
-app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), async (req, res, next) => {
+app.post('/kirim-bukti', requireTalentReady('kol'), upload.single('screenshot'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -1177,7 +1203,7 @@ app.post('/kol/proofs', requireTalentReady('kol'), upload.single('screenshot'), 
     });
 
     runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
-    res.redirect('/kol/kirim-bukti');
+    res.redirect('/kirim-bukti');
   } catch (e) { next(e); }
 });
 
@@ -1202,13 +1228,9 @@ function mpOpenEvents(events, allApps) {
     });
 }
 
-app.get('/main-power/register', (req, res) => {
-  const t = auth.currentTalent(req);
-  if (t && t.type === 'main_power') return res.redirect('/main-power');
-  res.send(V.talentRegister('main_power', { lang: req.lang }));
-});
+app.get('/main-power/register', (req, res) => res.redirect('/register' + (req.query.lang ? '?lang=' + req.query.lang : '')));
 
-app.post('/main-power/register', talentRegisterPost('main_power'));
+app.post('/main-power/register', talentRegisterPost('main_power', { unified: true }));
 
 app.get('/main-power/login', (req, res) => res.redirect('/login?lang=' + req.lang));
 
@@ -1220,57 +1242,46 @@ app.post('/main-power/login', async (req, res, next) => {
     const password = String(req.body.password || '');
     const account = await st.findAccount('main_power', login);
     if (!account || !auth.verifyPassword(password, account.password_hash)) {
-      return res.status(401).send(V.talentLogin('main_power', { errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
+      return res.status(401).send(V.talentLogin('main_power', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, account);
-    res.redirect('/main-power');
+    res.redirect('/akun');
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/logout', (req, res) => { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); });
+// Man Power home body (rendered from the unified /akun route).
+async function renderMpHome(req, res, st) {
+  const [events, allApps, myApps] = await Promise.all([
+    st.listEvents(), st.listApplications(), st.listApplicationsForTalent(req.talent.id),
+  ]);
+  const eventName = new Map(events.map((e) => [e.id, e.name]));
+  const appliedEventIds = new Set(myApps.map((a) => a.event_id));
+  const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
+  const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
+  const eoEvents = await openPositionEvents(st, req.talent.id);
+  res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+}
 
-app.get('/main-power/data-diri', dataDiriGet('main_power'));
-app.post('/main-power/data-diri', dataDiriPost('main_power'));
-app.get('/main-power/dokumen', docsGet('main_power'));
-app.post('/main-power/dokumen', docsPost('main_power'));
-app.get('/main-power/dokumen/file/:kind', docFile('main_power'));
-
-app.get('/main-power', requireTalentBrowse('main_power'), async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const [events, allApps, myApps] = await Promise.all([
-      st.listEvents(), st.listApplications(), st.listApplicationsForTalent(req.talent.id),
-    ]);
-    const eventName = new Map(events.map((e) => [e.id, e.name]));
-    const appliedEventIds = new Set(myApps.map((a) => a.event_id));
-    const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
-    const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
-    const eoEvents = await openPositionEvents(st, req.talent.id);
-    res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
-  } catch (e) { next(e); }
-});
-
-app.get('/main-power/apply/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
+app.get('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const [events, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
     const ev = events.find((e) => e.id === req.params.eventId);
     const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
-    if (!isOpen || myApps.some((a) => a.event_id === req.params.eventId)) return res.redirect('/main-power?lang=' + req.lang);
+    if (!isOpen || myApps.some((a) => a.event_id === req.params.eventId)) return res.redirect('/akun?lang=' + req.lang);
     res.send(V.mainPowerApply({ talent: req.talent, event: ev, customSow: ev.mp_sow, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-app.post('/main-power/apply/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
+app.post('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const events = await st.listEvents();
     const ev = events.find((e) => e.id === req.params.eventId);
     const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
-    if (!isOpen) return res.redirect('/main-power?lang=' + req.lang);
+    if (!isOpen) return res.redirect('/akun?lang=' + req.lang);
 
     const role = String(req.body.role || '').trim();
     const agree = req.body.agree === '1' || req.body.agree === 'on';
@@ -1289,7 +1300,7 @@ app.post('/main-power/apply/:eventId', requireTalentReady('main_power'), async (
     // Main Power keeps its "one SOW application per event" rule (role-based).
     // Guard duplicates explicitly now that createApplication allows multiples.
     const dupMp = (await st.listApplicationsForTalent(req.talent.id)).some((a) => a.event_id === ev.id && a.role);
-    if (dupMp) return res.redirect('/main-power?lang=' + req.lang);
+    if (dupMp) return res.redirect('/akun?lang=' + req.lang);
     await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
     res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
   } catch (e) { next(e); }
@@ -1300,36 +1311,36 @@ app.post('/main-power/apply/:eventId', requireTalentReady('main_power'), async (
 // set a new password via a one-time, 1-hour token delivered by email. The
 // request response is always the same (no account enumeration).
 
-function forgotGet(type) {
-  return (req, res) => res.send(V.forgotPassword(type, { lang: req.lang }));
-}
-function forgotPost(type) {
-  return async (req, res, next) => {
-    try {
-      const st = db();
-      if (!st) return needConfig(req, res);
-      const login = String(req.body.login || '').trim().toLowerCase();
-      if (login) {
-        const account = await st.findAccount(type, login);
-        if (account) {
-          const token = crypto.randomBytes(32).toString('hex');
-          const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-          const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-          await st.createPasswordReset({ talent_id: account.id, token_hash: tokenHash, expires_at: expiresAt });
-          const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-          const link = base + '/reset-password?token=' + token;
-          try { await mailer.sendResetEmail({ to: account.login, name: account.name, link, lang: req.lang }); }
-          catch (e) { console.error('[reset-mail]', (e && e.message) || e); }
-        }
+// Email is unique across talent types, so the reset request is type-agnostic:
+// look the account up by login and mail the link. Response is always identical.
+async function forgotPostAny(req, res, next) {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const login = String(req.body.login || '').trim().toLowerCase();
+    if (login) {
+      const account = await st.findAccountByLogin(login);
+      if (account && auth.TALENT_TYPES.includes(account.talent_type)) {
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        await st.createPasswordReset({ talent_id: account.id, token_hash: tokenHash, expires_at: expiresAt });
+        const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+        const link = base + '/reset-password?token=' + token;
+        try { await mailer.sendResetEmail({ to: account.login, name: account.name, link, lang: req.lang }); }
+        catch (e) { console.error('[reset-mail]', (e && e.message) || e); }
       }
-      res.send(V.forgotPasswordSent({ type, lang: req.lang }));
-    } catch (e) { next(e); }
-  };
+    }
+    res.send(V.forgotPasswordSent({ lang: req.lang }));
+  } catch (e) { next(e); }
 }
-app.get('/kol/forgot-password', forgotGet('kol'));
-app.post('/kol/forgot-password', forgotPost('kol'));
-app.get('/main-power/forgot-password', forgotGet('main_power'));
-app.post('/main-power/forgot-password', forgotPost('main_power'));
+app.get('/forgot-password', (req, res) => res.send(V.forgotPassword('kol', { lang: req.lang })));
+app.post('/forgot-password', forgotPostAny);
+// Back-compat: old role-prefixed forgot-password URLs.
+app.get('/kol/forgot-password', (req, res) => res.redirect('/forgot-password' + (req.query.lang ? '?lang=' + req.query.lang : '')));
+app.get('/main-power/forgot-password', (req, res) => res.redirect('/forgot-password' + (req.query.lang ? '?lang=' + req.query.lang : '')));
+app.post('/kol/forgot-password', forgotPostAny);
+app.post('/main-power/forgot-password', forgotPostAny);
 
 async function validResetToken(st, token) {
   if (!token || token.length < 32) return null;
