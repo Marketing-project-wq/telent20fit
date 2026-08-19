@@ -156,7 +156,7 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ev-cover-photo{height:190px;background:rgba(0,0,0,.04)}
 .ev-cover-photo-img{display:block;width:100%;height:100%;object-fit:cover}
-.ev-detail-hero{display:block;max-width:100%;max-height:clamp(300px,46vw,520px);width:auto;margin:0 auto 18px;border-radius:14px}
+.ev-detail-hero{display:block;width:100%;height:auto;margin:0 0 18px;border-radius:14px}
 .ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
 .ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
 .ev-chip:hover{border-color:var(--red)}
