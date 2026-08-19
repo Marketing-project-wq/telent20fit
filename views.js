@@ -478,11 +478,20 @@ function landingPage(lang, opts = {}) {
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}${evBadge(e.status)}</div>
       <div class="lp-ev-body"><div class="lp-ev-name">${esc(e.name)}</div><div class="lp-ev-meta">${esc(evDate2(e))}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
     </a>`).join('');
+  // Full-width dark background for the "Live Events" section (the block right
+  // below the hero): reuse the hero photo under a heavy dark overlay so it reads
+  // as a cohesive continuation, with a dark-gradient fallback when no photo.
+  const evBg = bgPhotos[0];
+  const evSecStyle = evBg
+    ? `background:linear-gradient(rgba(10,10,13,.9),rgba(10,10,13,.88)),url('${esc(evBg)}') center/cover;`
+    : 'background:linear-gradient(135deg,#141419,#0b0b0e);';
   const eventsSection = (evList.length) ? `
-  <section style="max-width:1180px;margin:0 auto;padding:60px 28px 8px">
-    <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
-    <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 34px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
-    <div class="lp-ev-grid">${evCardHtml}</div>
+  <section style="${evSecStyle}padding:60px 0 52px">
+    <div style="max-width:1180px;margin:0 auto;padding:0 28px">
+      <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center;color:#fff">${esc(t('land.eventsTitle'))}</h2>
+      <p style="color:#c9cace;font-size:16px;margin:0 auto 34px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
+      <div class="lp-ev-grid">${evCardHtml}</div>
+    </div>
   </section>` : '';
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
@@ -543,7 +552,7 @@ a{text-decoration:none}
 .hero-photos .hp{position:absolute;inset:0;background-size:cover;background-position:center}
 .hero-photos.cross .hp{opacity:0;animation:heroCross 16s ease-in-out infinite}
 .hero-photos.cross .hp:nth-child(2){animation-delay:8s}
-.hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,transparent 58%,var(--lp-bg) 100%),linear-gradient(100deg,rgba(9,9,12,.82) 0%,rgba(9,9,12,.72) 50%,rgba(9,9,12,.62) 100%)}
+.hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,rgba(9,9,12,.82) 0%,rgba(9,9,12,.72) 50%,rgba(9,9,12,.62) 100%)}
 @keyframes heroCross{0%{opacity:0}4%{opacity:1}46%{opacity:1}50%{opacity:0}100%{opacity:0}}
 .hero-stage.has-photos .hero-bg{display:none}
 .hero-stage.has-photos{--lp-tx2:#eaecf0;--lp-tx3:#d3d6db}
