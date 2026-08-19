@@ -675,10 +675,16 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr}}
 html{scroll-behavior:smooth}
+/* Scroll-reveal: sections & cards fade-up as they enter the viewport. Enabled by
+   JS (adds .reveal-on + [data-rv]); a no-JS/no-IntersectionObserver visitor and
+   anyone with reduced-motion just sees everything, no animation. */
+.reveal-on [data-rv]{opacity:0;transform:translateY(26px);transition:opacity .6s cubic-bezier(.16,.84,.44,1),transform .6s cubic-bezier(.16,.84,.44,1)}
+.reveal-on [data-rv].rv-in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal-on [data-rv]{opacity:1;transform:none;transition:none}}
 #faq{scroll-margin-top:90px}
 </style>${THEME_HEAD}</head>
 <body>
-<div style="min-height:100vh">
+<div id="lp-page" style="min-height:100vh">
   ${navBar}
   <div class="hero-stage${hasPhotos ? ' has-photos' : ''}">
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
@@ -739,6 +745,26 @@ html{scroll-behavior:smooth}
     <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">${esc(t('foot.eoLogin'))}</a></div>
   </footer>
 </div>
+<script>(function(){
+  var d=document;
+  if(!('IntersectionObserver' in window)||(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches))return;
+  var page=d.getElementById('lp-page');if(!page)return;
+  d.documentElement.classList.add('reveal-on');
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){(e.target.__rv||[]).forEach(function(u){u.classList.add('rv-in');});io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:0.05});
+  function unitsOf(b){
+    var grid=b.querySelector('.lp-ev-grid, .resp3, .eco-grid, .coach-grid'),faq=b.querySelector('.au-faq'),u=[],h;
+    if(grid){h=b.querySelector('h2');if(h)u.push(h);if(h&&h.nextElementSibling&&h.nextElementSibling.tagName==='P')u.push(h.nextElementSibling);[].push.apply(u,[].slice.call(grid.children));}
+    else if(faq){h=faq.querySelector('h2');if(h)u.push(h);var s=faq.querySelector('.au-faq-sub');if(s)u.push(s);[].push.apply(u,[].slice.call(faq.querySelectorAll('.au-faq-item')));}
+    else u=[b];
+    return u;
+  }
+  [].forEach.call(page.children,function(b){
+    if(b.matches('.lp-nav, .hero-stage'))return;
+    var u=unitsOf(b);
+    u.forEach(function(el,i){if(el){el.setAttribute('data-rv','');el.style.transitionDelay=Math.min(i*70,520)+'ms';}});
+    b.__rv=u;io.observe(b);
+  });
+})();</script>
 </body></html>`;
 }
 
