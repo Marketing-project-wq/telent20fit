@@ -27,6 +27,7 @@
   "landing.pickOne": "Choose at least one photo first.",
   "landing.failed": "Upload failed. Please try again.",
   "nav.logout": "Log out",
+  "nav.exit": "Exit",
   "common.back": "← Back",
   "role.super_admin": "Super Admin",
   "role.eo": "Event Organizer",

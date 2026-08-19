@@ -382,7 +382,9 @@ function appLayout({ title, body, role, active, user, lang }) {
   <div class="side-foot">
     ${isStaff ? `<div style="margin-bottom:12px">${toggles(L)}</div>` : ''}
     <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
-    <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>
+    ${isStaff
+      ? `<form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>`
+      : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm btn-block">${t('nav.exit')}</a>`}
   </div>
 </aside>
 <label for="nav-cb" class="nav-scrim"></label>
@@ -1091,7 +1093,7 @@ function kolForm(campaigns, opts = {}) {
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/" class="btn btn-ghost btn-sm">← Kembali</a>
-    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Keluar</button></form>
+    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">Logout</button></form>
   </div>
   <h1>Submit Hasil KOL</h1>
   <p class="sub">Halo <b>${esc(talent.name || '')}</b> — isi form ini setelah kamu selesai menjalankan event. Nama KOL otomatis dari akunmu.</p>
@@ -3057,6 +3059,7 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <form method="post" action="/kol/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
   </div>
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
