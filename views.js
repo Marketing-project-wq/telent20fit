@@ -630,6 +630,9 @@ a{text-decoration:none}
 .hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(42px,calc(6vw - 8px),76px)}
 .hero-title .accent-shimmer{display:block}
 @media(max-width:860px){.hero-title{font-size:calc(8.2vw - 2px)}}
+/* Mobile: shorten the hero so the centered headline isn't stranded in a tall
+   photo. Desktop (>600px) keeps the base clamp(560px,86vh,900px) untouched. */
+@media(max-width:600px){.hero-stage{min-height:clamp(420px,62vh,500px)}}
 @keyframes shimmer{to{background-position:-220% 0}}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
