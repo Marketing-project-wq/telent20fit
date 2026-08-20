@@ -111,8 +111,8 @@ a{color:var(--red)}
 /* App shell: sticky top bar + a bottom nav bar, the same on every screen size */
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:3.4em;width:auto;max-width:100%;display:block;flex:0 0 auto}
-.brand .brand-dark{height:2.1em}
+.brand .brand-img{height:4.2em;width:auto;max-width:100%;display:block;flex:0 0 auto}
+.brand .brand-dark{height:2.6em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 /* Top bar: brand logo (left), user + Exit/Logout (right) */
@@ -549,9 +549,9 @@ function landingPage(lang, opts = {}) {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
-.lp-logo-box{display:flex;align-items:center;height:96px;flex:0 0 auto}
-.lp-logo{display:block;height:96px;width:auto}
-.lp-logo-dark{height:72px}
+.lp-logo-box{display:flex;align-items:center;height:120px;flex:0 0 auto}
+.lp-logo{display:block;height:120px;width:auto}
+.lp-logo-dark{height:90px}
 .lp-logo-light{display:none}
 :root[data-theme="light"] .lp-logo-dark{display:none}
 :root[data-theme="light"] .lp-logo-light{display:block}
@@ -562,13 +562,13 @@ a{text-decoration:none}
 .theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
 .theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
 .theme-toggle button.active{background:var(--red);color:#fff}
-@media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
+@media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:90px}.lp-logo{height:90px}.lp-logo-dark{height:68px}.lp-toggles{width:100%;justify-content:flex-start}}
 /* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
 .lp-nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.82);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid rgba(0,0,0,0.06);box-shadow:0 4px 24px -2px rgba(0,0,0,0.04);transition:all .2s ease}
 :root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
-.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:6px 28px;display:flex;align-items:center;gap:14px}
+.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:54px;width:auto;display:block}
+.lp-nav-logo .lp-logo{height:68px;width:auto;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -613,7 +613,7 @@ a{text-decoration:none}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
-@media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
   /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}
@@ -696,7 +696,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-top{max-width:1180px;margin:0 auto;padding:56px 28px 46px;display:grid;grid-template-columns:2fr 1fr 1fr 1.15fr;gap:30px 26px;align-items:start}
 .ft-brand{max-width:430px}
 .ft-logo{display:block;margin-top:-14px;margin-bottom:2px}
-.ft-logo img{height:42px;width:auto;display:block}
+.ft-logo img{height:54px;width:auto;display:block}
 .ft-tag{color:var(--lp-tx3);font-size:14px;line-height:1.6;margin:0 0 20px;text-align:justify}
 .ft-social{display:flex;gap:18px}
 .ft-social a{color:var(--lp-tx3);display:inline-flex}
