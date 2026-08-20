@@ -1,0 +1,8 @@
+{
+  "name": "20FIT Talent",
+  "description": "KOL submission form, talent applications, admin/staff dashboards, and performance leaderboard for 20FIT.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

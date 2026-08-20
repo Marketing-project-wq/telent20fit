@@ -4,6 +4,9 @@
   "private": true,
   "description": "20FIT Talent — KOL submission form, admin dashboard, and performance leaderboard",
   "scripts": {
+    "dev": "node server.js",
+    "build": "node -c server.js views.js store.js auth.js authApi.js cert.js i18n.js llm.js mailer.js",
+    "lint": "node -c server.js views.js store.js auth.js authApi.js cert.js i18n.js llm.js mailer.js",
     "start": "node server.js"
   },
   "engines": {

@@ -2966,10 +2966,8 @@ app.get('/performance', auth.requireStaff(['super_admin']), async (req, res, nex
 });
 
 // In-memory dev mode serves placeholder thumbnails (Supabase mode uses signed URLs).
-if (MODE === 'memory') {
-  const PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
-  app.get('/__mockimg/*', (req, res) => { res.type('png').send(PX); });
-}
+const PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+app.get('/__mockimg/*', (req, res) => { res.type('png').send(PX); });
 
 // -------------------------------------------------------------- fallbacks ----
 

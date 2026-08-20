@@ -714,7 +714,13 @@ function memoryStore() {
 
 let impl;
 function store() {
-  if (impl === undefined) impl = (MODE === 'memory') ? memoryStore() : supabaseStore();
+  if (impl === undefined) {
+    if (MODE === 'memory') {
+      impl = memoryStore();
+    } else {
+      impl = supabaseStore() || memoryStore();
+    }
+  }
   return impl;
 }
 

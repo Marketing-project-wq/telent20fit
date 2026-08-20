@@ -1517,10 +1517,6 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
     <section class="au-hero">
       <h1 class="au-title">${esc(t('authp.head1'))} ${esc(t('authp.head2'))}</h1>
       <p class="au-sub">${esc(t('authp.sub'))}</p>
-      <div class="au-cta">
-        <button type="button" class="au-btn au-btn-red" data-goto="signup">${t('authp.cta')}</button>
-        <a class="au-btn au-btn-ghost" href="/about?lang=${L}">${t('authp.inside')}</a>
-      </div>
       <ul class="au-checks">
         <li><span class="ck">✓</span>${esc(t('authp.check1'))}</li>
         <li><span class="ck">✓</span>${esc(t('authp.check2'))}</li>
