@@ -76,6 +76,10 @@ async function sendResetEmail({ to, name, link, lang }) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
   }
   return { delivered: true };
@@ -126,6 +130,10 @@ async function sendVerifyEmail({ to, name, link, lang }) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; verify email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
   }
   return { delivered: true };
@@ -279,6 +287,10 @@ async function sendRejectionEmail({ to, name, lang, eventName, eventDate, locati
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; rejection email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
   }
   return { delivered: true };
@@ -336,6 +348,10 @@ async function sendReminderEmail({ to, name, lang, eventName, eventDate, locatio
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; reminder email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
   }
   return { delivered: true };
@@ -357,6 +373,10 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; acceptance email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
   }
   return { delivered: true };

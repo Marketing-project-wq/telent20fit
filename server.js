@@ -2408,39 +2408,51 @@ function jakartaHour(d) { return parseInt((d || new Date()).toLocaleString('en-G
 // safe to call repeatedly. Returns the number of reminders sent.
 async function runDueReminders(st) {
   if (!st) return { due: 0, sent: 0 };
-  const target = addDaysYMD(jakartaDateStr(), 1); // events starting tomorrow (WIB)
-  const events = await st.listEvents();
-  const dueEvents = new Map(events
-    .filter((e) => e.is_active && !e.completed_at && String(e.starts_at || '').slice(0, 10) === target)
-    .map((e) => [e.id, e]));
-  if (!dueEvents.size) return { due: 0, sent: 0 };
-  const [apps, choices, positions] = await Promise.all([st.listApplications(), st.listApplicationChoices(), st.listPositions()]);
-  // Accepted position label per app, so position-based talents get an assignment line too.
-  const posById = new Map(positions.map((p) => [p.id, p]));
-  const acceptedPos = new Map();
-  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_en || p.label_id || null); } });
-  const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
-  let sent = 0;
-  for (const a of due) {
-    try {
-      const account = await st.getAccountById(a.talent_id);
-      const to = account && account.login;
-      if (!to || !/@/.test(to)) continue;
-      const ev = dueEvents.get(a.event_id);
-      const r = await mailer.sendReminderEmail({
-        to, name: account.name, lang: 'id',
-        eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
-        location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
-        station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
-      });
-      // Only mark as reminded once the email is genuinely delivered — so if the
-      // mail service isn't configured yet, we retry on the next run instead of
-      // silently burning the reminder.
-      if (r && r.delivered) { await st.updateApplication(a.id, { reminder_sent_at: new Date().toISOString() }); sent++; }
-    } catch (e) { console.error('[mail] reminder failed for app ' + a.id + ':', e && e.message); }
+  try {
+    const target = addDaysYMD(jakartaDateStr(), 1); // events starting tomorrow (WIB)
+    const events = await st.listEvents().catch((err) => {
+      console.warn('[reminders] Could not fetch events:', err && err.message);
+      return [];
+    });
+    const dueEvents = new Map(events
+      .filter((e) => e.is_active && !e.completed_at && String(e.starts_at || '').slice(0, 10) === target)
+      .map((e) => [e.id, e]));
+    if (!dueEvents.size) return { due: 0, sent: 0 };
+    const [apps, choices, positions] = await Promise.all([
+      st.listApplications().catch(() => []),
+      st.listApplicationChoices().catch(() => []),
+      st.listPositions().catch(() => []),
+    ]);
+    // Accepted position label per app, so position-based talents get an assignment line too.
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const acceptedPos = new Map();
+    choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_en || p.label_id || null); } });
+    const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
+    let sent = 0;
+    for (const a of due) {
+      try {
+        const account = await st.getAccountById(a.talent_id);
+        const to = account && account.login;
+        if (!to || !/@/.test(to)) continue;
+        const ev = dueEvents.get(a.event_id);
+        const r = await mailer.sendReminderEmail({
+          to, name: account.name, lang: 'id',
+          eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
+          location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
+          station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
+        });
+        // Only mark as reminded once the email is genuinely delivered — so if the
+        // mail service isn't configured yet, we retry on the next run instead of
+        // silently burning the reminder.
+        if (r && r.delivered) { await st.updateApplication(a.id, { reminder_sent_at: new Date().toISOString() }); sent++; }
+      } catch (e) { console.error('[mail] reminder failed for app ' + a.id + ':', e && e.message); }
+    }
+    if (sent) console.log('[reminders] sent ' + sent + ' H-1 reminder(s) for events on ' + target);
+    return { due: due.length, sent };
+  } catch (err) {
+    console.warn('[reminders] check skipped:', err && err.message);
+    return { due: 0, sent: 0 };
   }
-  if (sent) console.log('[reminders] sent ' + sent + ' H-1 reminder(s) for events on ' + target);
-  return { due: due.length, sent };
 }
 
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
@@ -2452,7 +2464,7 @@ function startReminderScheduler() {
   const tick = () => {
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
-    runDueReminders(db()).catch((e) => console.error('[reminders] tick failed:', e && e.message));
+    runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
   };
   _remTimer = setInterval(tick, 60 * 60 * 1000); // hourly
   if (_remTimer.unref) _remTimer.unref();
