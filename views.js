@@ -542,7 +542,7 @@ function landingPage(lang, opts = {}) {
     ${cities.map((c) => `<button type="button" class="lp-city-chip" data-city="${esc(c.toLowerCase())}">${esc(c)}</button>`).join('')}
   </div>` : '';
   const eventsSection = (evList.length) ? `
-  <section style="max-width:1180px;margin:0 auto;padding:60px 28px 8px">
+  <section style="max-width:1180px;margin:0 auto;padding:64px 28px">
     <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 24px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
     ${cityFilter}
@@ -643,9 +643,9 @@ a{text-decoration:none}
 @keyframes shimmer{to{background-position:-220% 0}}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
-.resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.coach-grid{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
+.resp3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.eco-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.coach-grid{display:flex;flex-wrap:wrap;gap:20px;justify-content:center}
 .coach-card{flex:0 1 200px;min-width:148px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;overflow:hidden}
 .coach-photo{aspect-ratio:3/4;background:var(--lp-chip)}
 .coach-photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%;display:block}
@@ -746,7 +746,7 @@ ${CARD_CSS}
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   ${heroPhotos}
 
-  <section style="max-width:none;margin:0;padding:clamp(92px,11vw,155px) clamp(28px,4.5vw,88px) clamp(84px,10vw,150px)">
+  <section style="max-width:1180px;width:100%;margin:0 auto;padding:clamp(92px,11vw,155px) 28px clamp(84px,10vw,150px)">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:clamp(19px,2.5vw,30px);line-height:1.5;color:var(--lp-tx2);max-width:640px;margin:0">${esc(tr(L, 'hero.subheadline'))}</p>
@@ -754,9 +754,9 @@ ${CARD_CSS}
   </section>
   </div>
   ${eventsSection}
-  <section style="background:var(--lp-bg2);padding:56px 0">
+  <section style="background:var(--lp-bg2);padding:64px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
-      <h2 style="font:800 32px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 34px">${esc(t('whyChoose.title'))}</h2>
+      <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 32px;text-align:center">${esc(t('whyChoose.title'))}</h2>
       <div class="resp3">${featHtml}</div>
     </div>
   </section>
