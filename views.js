@@ -111,8 +111,8 @@ a{color:var(--red)}
 /* App shell: sticky top bar + a bottom nav bar, the same on every screen size */
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:2.8em;width:auto;max-width:100%;display:block;flex:0 0 auto}
-.brand .brand-dark{height:1.56em}
+.brand .brand-img{height:3.4em;width:auto;max-width:100%;display:block;flex:0 0 auto}
+.brand .brand-dark{height:2.1em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
 /* Top bar: brand logo (left), user + Exit/Logout (right) */
@@ -567,7 +567,7 @@ a{text-decoration:none}
 .lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:60px}
+.lp-nav-logo .lp-logo{height:80px}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -1556,10 +1556,10 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5;min-height:100vh}
 a{text-decoration:none;color:inherit}
 .au-top{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1240px;margin:0 auto;padding:18px 28px}
-.au-top-left{display:flex;align-items:center;gap:16px;min-width:0}
+.au-top-left{display:flex;align-items:center;gap:18px;min-width:0}
 .au-back{display:inline-flex;align-items:center;padding:9px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
 .au-back:hover{background:var(--lp-line);color:var(--lp-tx)}
-.au-logo img{height:60px;width:auto;display:block}
+.au-logo img{height:90px;width:auto;display:block;object-fit:contain}
 .lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
@@ -1610,7 +1610,7 @@ a{text-decoration:none;color:inherit}
 .au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
 @media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
 @media(max-width:560px){.au-faq{padding:8px 18px 60px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
-@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:46px}.au-back{padding:8px 13px;font-size:13px}}
+@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:68px}.au-back{padding:8px 13px;font-size:13px}}
 </style>
 </head><body>${body}</body></html>`;
 }
