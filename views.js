@@ -4670,9 +4670,11 @@ function talentEventApply({ account, event, ctx, lang }) {
     // number: "you'll work alongside N other talents in this position".
     const mates = Math.max(0, (p.quota || 0) - 1);
     const teamLine = mates > 0 ? `<div style="font-size:12.5px;color:var(--muted,#6b6b70);margin-top:12px">👥 ${t('ta.teamContext', { n: mates })}</div>` : '';
-    // Every EO-filled extra detail sits in an expandable "Lihat Detail" so the
-    // card stays compact; empty fields are skipped. Category fields only for the type.
+    // The full jobdesk + every EO-filled extra detail sit in ONE expandable
+    // "Lihat Detail" so the card stays compact; empty fields are skipped.
+    // Category-specific fields only for the matching type.
     const detailRows = [
+      ['📋', t('ta.jobdesk'), p.jobdesk],
       ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
       ['💰', t('ta.fee'), p.fee], ['✅', t('ta.requirement'), p.requirement],
       ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
@@ -4687,7 +4689,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
-      desc: p.jobdesk ? esc(p.jobdesk) : '',
+      desc: '', // jobdesk now lives inside the "Lihat Detail" dropdown
       corner: badge,
       foot,
       id: 'pos-' + esc(p.position_id),
