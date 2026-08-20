@@ -564,10 +564,11 @@ a{text-decoration:none}
 .theme-toggle button.active{background:var(--red);color:#fff}
 @media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
 /* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
-.lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
-.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
+.lp-nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.82);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid rgba(0,0,0,0.06);box-shadow:0 4px 24px -2px rgba(0,0,0,0.04);transition:all .2s ease}
+:root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
+.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:6px 28px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:80px}
+.lp-nav-logo .lp-logo{height:54px;width:auto;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
