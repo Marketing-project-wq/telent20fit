@@ -388,6 +388,54 @@ function appLayout({ title, body, role, active, user, lang }) {
 }
 
 /**
+ * Reusable landing page section: "Siap Jadi Bagian dari Event Seru?"
+ * Modern, clean, sporty 20FIT-branded component with 3 benefit cards and clear CTA.
+ */
+function joinEventSection(lang, opts = {}) {
+  const L = (lang === 'en') ? 'en' : 'id';
+  const t = (k, v) => tr(L, k, v);
+  const q = `?lang=${L}`;
+
+  const ic1 = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`;
+  const ic2 = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45.99-.99 1H7c-.55 0-1-.45-1-1v-2.34"/><path d="M14 14.66V17c0 .55.45.99.99 1H17c.55 0 1-.45 1-1v-2.34"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`;
+  const ic3 = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/></svg>`;
+
+  const benefits = [
+    { num: '01', icon: ic1, title: t('joinEvent.b1.title'), desc: t('joinEvent.b1.desc') },
+    { num: '02', icon: ic2, title: t('joinEvent.b2.title'), desc: t('joinEvent.b2.desc') },
+    { num: '03', icon: ic3, title: t('joinEvent.b3.title'), desc: t('joinEvent.b3.desc') },
+  ];
+
+  const cardsHtml = benefits.map((b) => `
+    <div class="join-card">
+      <span class="join-card-num">${b.num}</span>
+      <div class="join-card-ico">${b.icon}</div>
+      <h3 class="join-card-h">${esc(b.title)}</h3>
+      <p class="join-card-d">${esc(b.desc)}</p>
+    </div>
+  `).join('');
+
+  return `
+  <section class="join-section" id="join-event">
+    <div class="join-sec-in">
+      <div class="join-sec-tag">
+        <span class="join-sec-dot"></span>
+        20FIT Talent
+      </div>
+      <h2 class="join-sec-h">${esc(t('joinEvent.headline'))}</h2>
+      <p class="join-sec-d">${esc(t('joinEvent.description'))}</p>
+      <div class="join-grid">${cardsHtml}</div>
+      <div class="join-cta-wrap">
+        <a href="/register${q}" class="join-cta-btn">
+          <span>${esc(t('joinEvent.cta'))}</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>`;
+}
+
+/**
  * Landing page at "/" (dark prototype hero) with an ID/EN language toggle.
  * CTAs lead to sign up (/register) and log in (/login/talent).
  */
@@ -580,10 +628,11 @@ a{text-decoration:none}
 .lp-search-in::placeholder{color:var(--lp-tx4)}
 .lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
 .lp-search-x:hover{color:var(--red)}
-.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s}
 .lp-search-loc:focus-within{border-color:var(--red)}
 .lp-search-pin{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
 .lp-search-city{appearance:none;-webkit-appearance:none;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding-right:22px;max-width:150px;text-overflow:ellipsis}
+.lp-search-city option{background:var(--lp-card);color:var(--lp-tx);padding:8px 12px}
 .lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none}
 .lp-search-btn{flex:0 0 auto;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:12px 22px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.28)}
 .lp-search-btn:hover{background:var(--red-hover)}
@@ -751,6 +800,27 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 @media(max-width:860px){.lp-ev-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.lp-ev-grid{grid-template-columns:1fr 1fr;gap:12px}.lp-ev-body{padding:11px 12px 13px}.lp-ev-name{font-size:15px}.lp-ev-badge{font:700 10px/1 Barlow,sans-serif;padding:5px 8px;top:8px;left:8px}.lp-ev-pos{font-size:9.5px}}
 html{scroll-behavior:smooth}
+/* Standalone "Siap Jadi Bagian dari Event Seru?" Opportunity Section */
+.join-section{position:relative;padding:clamp(68px,8.5vw,104px) 28px;background:var(--lp-bg);overflow:hidden}
+.join-sec-in{max-width:1180px;margin:0 auto;position:relative;z-index:2;text-align:center}
+.join-sec-tag{display:inline-flex;align-items:center;gap:8px;padding:6px 15px;border-radius:999px;background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.22);color:var(--red);font:700 12.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.06em;margin-bottom:20px}
+.join-sec-dot{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;animation:pulseDot 2s infinite}
+@keyframes pulseDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.75}}
+.join-sec-h{font:800 clamp(32px,4.8vw,52px)/1.08 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:-.01em;color:var(--lp-tx);margin:0 auto 16px;max-width:880px}
+.join-sec-d{font:400 clamp(15.5px,1.7vw,18px)/1.65 Barlow,sans-serif;color:var(--lp-tx2);max-width:740px;margin:0 auto 46px}
+.join-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:46px;text-align:left}
+.join-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:18px;padding:32px 26px 28px;display:flex;flex-direction:column;position:relative;transition:transform .25s cubic-bezier(.16,.84,.44,1),border-color .25s ease,box-shadow .25s ease;box-shadow:0 6px 24px rgba(0,0,0,.03)}
+.join-card:hover{transform:translateY(-6px);border-color:rgba(228,18,31,.4);box-shadow:0 16px 36px rgba(228,18,31,.10)}
+.join-card-ico{width:52px;height:52px;flex:0 0 auto;border-radius:14px;background:rgba(228,18,31,.10);border:1px solid rgba(228,18,31,.24);display:flex;align-items:center;justify-content:center;color:var(--red);margin-bottom:20px;transition:transform .25s ease,background .25s ease,color .25s ease}
+.join-card:hover .join-card-ico{transform:scale(1.08);background:var(--red);color:#fff}
+.join-card-num{position:absolute;top:24px;right:24px;font:800 22px/1 'Barlow Condensed',sans-serif;color:var(--lp-tx4);opacity:.35}
+.join-card-h{font:800 21px/1.2 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);margin-bottom:10px}
+.join-card-d{font:500 15px/1.6 Barlow,sans-serif;color:var(--lp-tx2);margin:0}
+.join-cta-wrap{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap}
+.join-cta-btn{display:inline-flex;align-items:center;gap:10px;padding:15px 36px;border-radius:999px;background:var(--red);color:#fff;font:800 15.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.04em;text-decoration:none;box-shadow:0 8px 24px rgba(228,18,31,.32);transition:transform .2s ease,background .2s ease,box-shadow .2s ease}
+.join-cta-btn:hover{background:#ff2a37;transform:translateY(-2px);box-shadow:0 12px 28px rgba(228,18,31,.42);color:#fff}
+.join-cta-btn:active{transform:translateY(0)}
+@media(max-width:860px){.join-grid{grid-template-columns:1fr;gap:18px}.join-card{padding:24px 22px}.join-sec-h{font-size:clamp(28px,6vw,40px)}}
 /* Scroll-reveal: sections & cards fade-up as they enter the viewport. Enabled by
    JS (adds .reveal-on + [data-rv]); a no-JS/no-IntersectionObserver visitor and
    anyone with reduced-motion just sees everything, no animation. */
@@ -781,6 +851,7 @@ ${CARD_CSS}
     </div>
   </section>
   </div>
+  ${joinEventSection(L, opts)}
   ${eventsSection}
   <section style="background:var(--lp-bg2);padding:64px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
@@ -836,7 +907,7 @@ ${CARD_CSS}
   d.documentElement.classList.add('reveal-on');
   var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){(e.target.__rv||[]).forEach(function(u){u.classList.add('rv-in');});io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px',threshold:0.05});
   function unitsOf(b){
-    var grid=b.querySelector('.lp-ev-grid, .resp3, .eco-grid, .coach-grid'),faq=b.querySelector('.au-faq'),u=[],h;
+    var grid=b.querySelector('.join-grid, .lp-ev-grid, .resp3, .eco-grid, .coach-grid'),faq=b.querySelector('.au-faq'),u=[],h;
     if(grid){h=b.querySelector('h2');if(h)u.push(h);if(h&&h.nextElementSibling&&h.nextElementSibling.tagName==='P')u.push(h.nextElementSibling);[].push.apply(u,[].slice.call(grid.children));}
     else if(faq){h=faq.querySelector('h2');if(h)u.push(h);var s=faq.querySelector('.au-faq-sub');if(s)u.push(s);[].push.apply(u,[].slice.call(faq.querySelectorAll('.au-faq-item')));}
     else u=[b];
@@ -4867,7 +4938,7 @@ function talentEventApply({ account, event, ctx, lang }) {
 
 module.exports = {
   talentStatusBadge, talentOpenEvents, talentEventApply,
-  esc, fmtDate, landingPage, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
+  esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,

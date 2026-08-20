@@ -659,6 +659,17 @@
   "hero.headlineAccent": "ENDLESS EVENT OPPORTUNITIES.",
   "hero.subheadline": "Find projects that match your skills and be part of exciting sports events",
 
+  "joinEvent.headline": "Ready to Be Part of Exciting Events?",
+  "joinEvent.description": "Join 20FIT Talent and discover more opportunities to create in various sporting events. From KOL, Photographer, to Main Power, choose projects that match your skills and passion.",
+  "joinEvent.b1.title": "Projects Matching Your Skills",
+  "joinEvent.b1.desc": "Find projects that match your skills and passion",
+  "joinEvent.b2.title": "Sports Event Opportunities",
+  "joinEvent.b2.desc": "Unlock new opportunities across premier sporting events",
+  "joinEvent.b3.title": "Portfolio & Experience",
+  "joinEvent.b3.desc": "Build a stronger track record and professional portfolio",
+  "joinEvent.cta": "Register as Talent",
+  "joinEvent.ctaSub": "Join Now",
+
   "land.join": "Sign Up",
   "land.login": "Login",
   "land.submit": "Submit Post Proof",

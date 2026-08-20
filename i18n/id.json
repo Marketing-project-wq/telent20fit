@@ -659,6 +659,17 @@
   "hero.headlineAccent": "ENDLESS EVENT OPPORTUNITIES.",
   "hero.subheadline": "Find projects that match your skills and be part of exciting sports events",
 
+  "joinEvent.headline": "Siap Jadi Bagian dari Event Seru?",
+  "joinEvent.description": "Gabung di 20FIT Talent dan temukan lebih banyak kesempatan untuk berkarya di berbagai event olahraga. Dari KOL, Photographer, hingga Main Power, pilih project yang sesuai dengan skill dan passion kamu.",
+  "joinEvent.b1.title": "Project Sesuai Skill",
+  "joinEvent.b1.desc": "Temukan project yang sesuai dengan skill kamu",
+  "joinEvent.b2.title": "Peluang Event Olahraga",
+  "joinEvent.b2.desc": "Buka peluang baru di berbagai event olahraga",
+  "joinEvent.b3.title": "Portofolio & Pengalaman",
+  "joinEvent.b3.desc": "Bangun pengalaman dan portofolio yang lebih kuat",
+  "joinEvent.cta": "Daftar sebagai Talent",
+  "joinEvent.ctaSub": "Gabung Sekarang",
+
   "land.join": "Sign Up",
   "land.login": "Login",
   "land.submit": "Kirim Bukti Post",
