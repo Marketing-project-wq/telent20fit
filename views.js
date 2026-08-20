@@ -4492,6 +4492,9 @@ function talentEventApply({ account, event, ctx, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
+  // Public page: a logged-out visitor sees everything but gets a "log in to
+  // apply" link instead of the confirm-apply button on each open position.
+  const loggedIn = !!account;
   const errors = ctx.errors || [];
   const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
@@ -4542,7 +4545,16 @@ function talentEventApply({ account, event, ctx, lang }) {
     } else if (lock) {
       action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
     } else if (ctx.regOpen && isOpen) {
-      action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
+      if (loggedIn) {
+        action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
+      } else {
+        // Visitor not logged in: keep the button visible/active, but send them to
+        // login first, remembering the exact event + position to resume after auth
+        // (?apply=<id> auto-opens the confirm modal; #pos-<id> scrolls to the card).
+        const ref = e.slug || e.id;
+        const back = encodeURIComponent('/event/' + ref + '?apply=' + p.position_id + '#pos-' + p.position_id);
+        action = `<a href="/login/talent?next=${back}" class="btn btn-sm" style="margin-top:14px;width:100%;box-sizing:border-box">${t('ta.loginToApply')}</a>`;
+      }
     } else {
       action = '';
     }
@@ -4564,7 +4576,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   // Shared confirmation modal for every per-position "Lamar" button. Clicking a
   // Lamar button fills in the position + event name and asks to confirm; "Ya,
   // Lamar" submits the single-position apply form.
-  const applyModal = anyApplyable ? `
+  const applyModal = (loggedIn && anyApplyable) ? `
     <form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm"><input type="hidden" name="position_id" id="applyPos"></form>
     <div id="applyModal" class="tmodal" hidden>
       <div class="tmodal-card" role="dialog" aria-modal="true" aria-labelledby="applyModalTitle">
@@ -4588,6 +4600,9 @@ function talentEventApply({ account, event, ctx, lang }) {
       document.getElementById('applyModalNo').addEventListener('click',closeM);
       modal.addEventListener('click',function(ev){if(ev.target===modal)closeM();});
       document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&!modal.hidden)closeM();});
+      // Resume an apply the visitor started before logging in: ?apply=<posId>
+      // (set by the "log in to apply" link) re-opens the confirm modal for it.
+      try{var ap=new URLSearchParams(location.search).get('apply');if(ap){var b2=wrap.querySelector('.pos-apply[data-pos="'+ap.replace(/[^\\w-]/g,'')+'"]');if(b2){openM(b2.getAttribute('data-pos'),b2.getAttribute('data-label')||'');}}}catch(e){}
     })();</script>` : '';
   const regClosedBanner = (!ctx.regOpen && !(ctx.myApps || []).length) ? `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>` : '';
 
@@ -4597,7 +4612,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
   const body = `<div class="wrap" style="max-width:1080px">
-    <a href="/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
+    <a href="${loggedIn ? '/events' : '/'}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
     ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
     <h1 style="margin:0;font-size:clamp(26px,3.2vw,38px);line-height:1.08">${esc(e.name)}</h1>
     <p class="sub" style="margin:7px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
@@ -4615,7 +4630,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     </div>
   </div>
   ${applyModal}`;
-  return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+  return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: (loggedIn ? '/talent' : '/') + '?lang=' + L, lang: L });
 }
 
 module.exports = {

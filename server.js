@@ -1033,6 +1033,26 @@ function requireAnyTalentBrowse() {
   };
 }
 
+// Optional talent session: attaches req.talent + req.account when a talent is
+// logged in, but never redirects — public pages (event detail) render for
+// logged-out visitors too, who only hit the login wall when they try to apply.
+function optionalTalent() {
+  return async (req, res, next) => {
+    try {
+      const t = auth.anySession(req, auth.TALENT_TYPES);
+      if (t) {
+        const st = db();
+        if (st) {
+          const acc = await st.getAccountById(t.id);
+          if (acc) { req.talent = t; req.account = acc; }
+          else auth.clearSession(res, auth.TALENT_TYPES);
+        }
+      }
+      next();
+    } catch (e) { next(e); }
+  };
+}
+
 // Is the event currently accepting applications? (published + within reg window)
 function eventRegOpen(ev) {
   if (!ev || ev.status !== 'published' || ev.reg_closed_at) return false;
@@ -1104,16 +1124,20 @@ const findEventByRef = (events, ref) => (events || []).find((e) => e.id === ref 
 // Prefer the slug in outgoing URLs so friendly links (…/event/iss) stick.
 const eventRef = (ev) => (ev && ev.slug) || (ev && ev.id);
 
-app.get('/event/:id', requireAnyTalentBrowse(), async (req, res, next) => {
+// PUBLIC: anyone can view an event's detail (positions, jobdesk, Open/Closed).
+// Login is only required when they actually apply (POST /event/:id/apply).
+app.get('/event/:id', optionalTalent(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const ev = findEventByRef(await st.listEvents(), req.params.id);
-    if (!ev) return res.redirect('/events');
-    const ctx = await positionApplyCtx(st, ev, req.talent.id);
-    if (!ctx.positions.length) return res.redirect('/events'); // not a position-based event
+    // Logged-out visitors bounce to the public landing, not the login-gated catalog.
+    const fallback = req.talent ? '/events' : '/';
+    if (!ev) return res.redirect(fallback);
+    const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
+    if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account, event: ev, ctx, lang: req.lang }));
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
