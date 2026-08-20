@@ -356,7 +356,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   const isEo = role === 'eo';
   const isStaff = role === 'super_admin' || isEo;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/akun';
+  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/talent';
   const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
@@ -375,7 +375,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
       : navLink('/acara', 'event', active, 'event', t('nav.events'))
-        + navLink('/akun', 'profil', active, 'profile', t('nav.profile'))
+        + navLink('/talent', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
@@ -408,7 +408,7 @@ ${isStaff ? '' : `<nav class="tab-bar">${items}</nav>`}
 
 /**
  * Landing page at "/" (dark prototype hero) with an ID/EN language toggle.
- * CTAs lead to the talent-type picker for sign up (/register) and log in (/login).
+ * CTAs lead to sign up (/register) and log in (/login/talent).
  */
 function landingPage(lang, opts = {}) {
   const L = (lang === 'en') ? 'en' : 'id';
@@ -790,7 +790,7 @@ ${CARD_CSS}
         <div class="ft-h">${esc(t('foot.menu'))}</div>
         <a href="/about${q}">${esc(t('nav.about'))}</a>
         <a href="/${q}#faq">FAQ</a>
-        <a href="/login${q}">${esc(t('btn.signin'))}</a>
+        <a href="/login/talent${q}">${esc(t('btn.signin'))}</a>
         <a href="/register${q}">${esc(t('auth.account.registerTitle'))}</a>
       </nav>
       <nav class="ft-col" aria-label="${esc(t('foot.contact'))}">
@@ -798,7 +798,7 @@ ${CARD_CSS}
         <a href="https://www.instagram.com/20fit.id/" target="_blank" rel="noopener">Instagram @20fit.id</a>
       </nav>
     </div>
-    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/eo/login">${esc(t('foot.eoLogin'))}</a></div>
+    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/login/eo">${esc(t('foot.eoLogin'))}</a></div>
   </footer>
 </div>
 <script>(function(){
@@ -844,7 +844,7 @@ function landingNav(lang, active, account) {
     acct = `<details class="lp-acct lp-acct-user">
       <summary><span class="lp-acct-av" aria-hidden="true">${initial}</span><span class="lp-acct-name">${esc(account.name)}</span>${caret}</summary>
       <div class="lp-acct-menu">
-        <a href="/akun${q}">${esc(t('nav.viewProfile'))}</a>
+        <a href="/talent${q}">${esc(t('nav.viewProfile'))}</a>
         <a href="/events${q}">${esc(t('nav.applyEvent'))}</a>
         <form method="post" action="/logout"><button type="submit" class="lp-acct-out">${esc(t('nav.logout'))}</button></form>
       </div>
@@ -853,7 +853,7 @@ function landingNav(lang, active, account) {
     acct = `<details class="lp-acct">
       <summary>${nIc('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>')}<span>${esc(t('nav.account'))}</span>${caret}</summary>
       <div class="lp-acct-menu">
-        <a href="/login${q}">${esc(t('nav.signin'))}</a>
+        <a href="/login/talent${q}">${esc(t('nav.signin'))}</a>
         <a href="/register${q}">${esc(t('nav.signup'))}</a>
       </div>
     </details>`;
@@ -977,7 +977,7 @@ ${landingNav(lang, 'about')}
 </div></section>
 <div class="ab-body">${sectionsHtml}</div>
 <section class="ab-cta"><a href="/register${q}">${esc(t('land.join'))}</a></section>
-<footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/eo/login">Login EO</a></footer>
+<footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/login/eo">Login EO</a></footer>
 </body></html>`;
 }
 
@@ -1374,7 +1374,7 @@ function faqSection(lang) {
 
 /**
  * Unified talent auth page: a two-column marketing + tabbed (Sign in / Create
- * account) form, matching the 20FIT app style. Both /register and /login render
+ * account) form, matching the 20FIT app style. Both /register and /login/talent render
  * this; `mode` picks the active tab and which panel a validation error lands on.
  */
 function talentAuthPage({ mode, lang, errors, values, next } = {}) {
@@ -1385,7 +1385,7 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
   // visitor who clicked an event while logged out lands back on it after auth.
   const nextInput = next ? `<input type="hidden" name="next" value="${esc(next)}">` : '';
   const isLogin = mode === 'login';
-  const basePath = isLogin ? '/login' : '/register';
+  const basePath = isLogin ? '/login/talent' : '/register';
   const langBtn = (code, label) => `<a href="${basePath}?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3.2"/></svg>';
   const errBanner = (errors && errors.length)
@@ -1406,7 +1406,7 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
     <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
 
-  const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login">${nextInput}
+  const signin = `<form class="au-panel${isLogin ? ' on' : ''}" data-panel="signin" method="post" action="/login/talent">${nextInput}
     <div class="au-f"><label for="si-email">${t('common.email')}</label>
       <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
     <div class="au-f"><label for="si-pass">${t('common.password')}</label>
@@ -1536,7 +1536,7 @@ function talentLogin(type, opts = {}) {
   const unified = !!opts.unified;
   const p = talentPath(type);
   const v = opts.values || {};
-  const action = unified ? '/login' : `/${p}/login`;
+  const action = unified ? '/login/talent' : `/${p}/login`;
   const forgotHref = unified ? `/kol/forgot-password?lang=${L}` : `/${p}/forgot-password?lang=${L}`;
   const registerHref = unified ? `/register?lang=${L}` : `/${p}/register?lang=${L}`;
   const form = `<form method="post" action="${action}">
@@ -1619,7 +1619,7 @@ function talentRegister(type, opts = {}) {
     ${docsSection}
     <button type="submit" class="btn btn-block">${t('btn.register')}</button>
   </form>`;
-  const loginHref = unified ? `/login?lang=${L}` : `/${p}/login?lang=${L}`;
+  const loginHref = unified ? `/login/talent?lang=${L}` : `/${p}/login?lang=${L}`;
   const foot = t('auth.foot.toLogin', { href: loginHref });
   const title = unified ? t('auth.account.registerTitle') : t('auth.register.title', { role: talentLabel(L, type) });
   const sub = unified ? t('auth.account.registerSub') : t('auth.register.sub');
@@ -1638,7 +1638,7 @@ function forgotPassword(type, opts = {}) {
     </div>
     <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
   </form>`;
-  const foot = `<a href="/login?lang=${L}">${t('auth.forgot.backToLogin')}</a>`;
+  const foot = `<a href="/login/talent?lang=${L}">${t('auth.forgot.backToLogin')}</a>`;
   return authShell(type, t('auth.forgot.title'), t('auth.forgot.sub'), form, foot, opts.errors, L);
 }
 
@@ -1650,7 +1650,7 @@ function forgotPasswordSent({ lang }) {
     <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
     <h1>${t('auth.forgot.sentTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
-    <a href="/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+    <a href="/login/talent?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
   </div></div>`;
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -1771,7 +1771,7 @@ function talentDataDiri(type, opts = {}) {
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
+    <a href="/talent?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
   </div>
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
@@ -1867,7 +1867,7 @@ function resetPasswordDone({ lang }) {
     <div class="check">✓</div>
     <h1>${t('auth.reset.doneTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
-    <a href="/login?lang=${L}" class="btn">${t('auth.reset.toLogin')} →</a>
+    <a href="/login/talent?lang=${L}" class="btn">${t('auth.reset.toLogin')} →</a>
   </div></div>`;
   return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -1890,16 +1890,16 @@ function kolSuccess(name, campaign) {
 
 /** Staff (Super Admin / EO) login page. */
 // Staff login. Two separate entry points (variant 'admin' -> /admin/login,
-// 'eo' -> /eo/login) that authenticate against the same staff_accounts.
+// 'eo' -> /login/eo) that authenticate against the same staff_accounts.
 function staffLogin(opts = {}) {
   const L = normLang(opts.lang);
   const t = (k, v) => tr(L, k, v);
   const v = opts.values || {};
   const isEo = opts.variant === 'eo';
-  const action = isEo ? '/eo/login' : '/admin/login';
+  const action = isEo ? '/login/eo' : '/admin/login';
   const title = isEo ? t('staffLogin.titleEo') : t('staffLogin.titleAdmin');
   const sub = isEo ? t('staffLogin.subEo') : t('staffLogin.subAdmin');
-  const otherHref = (isEo ? '/admin/login' : '/eo/login') + '?lang=' + L;
+  const otherHref = (isEo ? '/admin/login' : '/login/eo') + '?lang=' + L;
   const otherText = isEo ? t('staffLogin.toAdmin') : t('staffLogin.toEo');
   const errorBanner = (opts.errors && opts.errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
@@ -1930,11 +1930,12 @@ function staffForgot({ variant, lang, errors, values }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const base = variant === 'eo' ? '/eo' : '/admin';
+  const loginHref = (variant === 'eo' ? '/login/eo' : '/admin/login') + '?lang=' + L;
   const eb = (errors && errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="${base}/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+    <a href="${loginHref}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
   </div>
   <h1>${t('auth.forgot.title')}</h1>
   <p class="sub">${t('auth.forgot.subStaff')}</p>
@@ -1944,7 +1945,7 @@ function staffForgot({ variant, lang, errors, values }) {
       <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc((values && values.login) || '')}"></div>
       <button type="submit" class="btn btn-block">${t('auth.forgot.btn')}</button>
     </form>
-    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${base}/login?lang=${L}">${t('auth.forgot.backToLogin')}</a></p>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${loginHref}">${t('auth.forgot.backToLogin')}</a></p>
   </div>
 </div>`;
   return layout({ title: t('auth.forgot.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
@@ -1957,7 +1958,7 @@ function staffForgotSent({ lang }) {
     <div class="check" style="background:var(--red-soft);color:var(--red)">✉</div>
     <h1>${t('auth.forgot.sentTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.forgot.sentBody')}</p>
-    <a href="/eo/login?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
+    <a href="/login/eo?lang=${L}" class="btn btn-ghost">${t('auth.forgot.backToLogin')}</a>
   </div></div>`;
   return layout({ title: t('auth.forgot.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -1999,7 +2000,7 @@ function staffResetDone({ lang }) {
     <div class="check" style="background:var(--ok-soft);color:var(--ok)">✓</div>
     <h1>${t('auth.reset.doneTitle')}</h1>
     <p class="sub" style="margin:10px auto 24px;max-width:400px">${t('auth.reset.doneBody')}</p>
-    <a href="/eo/login?lang=${L}" class="btn">${t('btn.signin')}</a>
+    <a href="/login/eo?lang=${L}" class="btn">${t('btn.signin')}</a>
   </div></div>`;
   return layout({ title: t('auth.reset.doneTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -2078,7 +2079,7 @@ function eoRegister({ lang, errors, values }) {
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/eo/login?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
+    <a href="/login/eo?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>${toggles(L)}
   </div>
   <h1>${t('eo.reg.title')}</h1>
   <p class="sub">${t('eo.reg.sub')}</p>
@@ -2102,7 +2103,7 @@ function eoRegister({ lang, errors, values }) {
       <div class="field"><label for="password2">${t('auth.reset.confirm')}</label><input type="password" id="password2" name="password2" required minlength="6" autocomplete="new-password"></div>
       <button type="submit" class="btn btn-block">${t('eo.reg.submit')}</button>
     </form>
-    <p style="text-align:center;margin:14px 0 0;font-size:14px">${t('eo.reg.haveAccount')} <a href="/eo/login?lang=${L}">${t('btn.signin')}</a></p>
+    <p style="text-align:center;margin:14px 0 0;font-size:14px">${t('eo.reg.haveAccount')} <a href="/login/eo?lang=${L}">${t('btn.signin')}</a></p>
   </div>
 </div>
 <script>(function(){
@@ -2133,7 +2134,7 @@ function eoVerifySent({ email, lang }) {
     <h1>${t('eo.verify.sentTitle')}</h1>
     <p class="sub" style="margin:10px auto 6px;max-width:400px">${t('eo.verify.sentBody', { email: esc(email || '') })}</p>
     ${eoResendForm(email, L, t)}
-    <p style="margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+    <p style="margin:16px 0 0"><a href="/login/eo?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
   </div></div>`;
   return layout({ title: t('eo.verify.sentTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -2146,7 +2147,7 @@ function eoVerifyResult({ ok, lang }) {
     <h1 style="text-align:center">${t('eo.verify.failTitle')}</h1>
     <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.failBody')}</p>
     ${eoResendForm('', L, t)}
-    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+    <p style="text-align:center;margin:16px 0 0"><a href="/login/eo?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
   </div></div>`;
   return layout({ title: t('eo.verify.failTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -2159,7 +2160,7 @@ function eoVerifyNeeded({ email, lang }) {
     <h1 style="text-align:center">${t('eo.verify.neededTitle')}</h1>
     <p class="sub" style="margin:10px auto 6px;max-width:400px;text-align:center">${t('eo.verify.neededBody', { email: esc(email || '') })}</p>
     ${eoResendForm(email, L, t)}
-    <p style="text-align:center;margin:16px 0 0"><a href="/eo/login?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
+    <p style="text-align:center;margin:16px 0 0"><a href="/login/eo?lang=${L}" style="font-size:14px">${t('eo.verify.backLogin')}</a></p>
   </div></div>`;
   return layout({ title: t('eo.verify.neededTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -2753,7 +2754,7 @@ function talentDocuments(type, opts = {}) {
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
+    <a href="/talent?lang=${L}" class="btn btn-ghost btn-sm" onclick="if(history.length>1){history.back();return false}">${t('common.back')}</a>
   </div>
   <h1>${t('doc.title')}</h1>
   <p class="sub">${t('doc.sub')}</p>
@@ -2775,7 +2776,7 @@ function talentDocuments(type, opts = {}) {
 
   return type === 'kol'
     ? appLayout({ title: t('doc.title') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L })
-    : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/akun?lang=' + L, lang: L });
+    : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/talent?lang=' + L, lang: L });
 }
 
 /** Public certificate verification page (reached from the cert's QR/number). */
@@ -3147,7 +3148,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/akun?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+    <a href="/talent?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
   </div>
   <h1>${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub">${esc(dateLine)}</p>` : ''}
@@ -3199,7 +3200,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
   if(back) back.onclick=function(){ s2.style.display='none'; s1.style.display=''; dot2(false); window.scrollTo(0,0); };
 })();
 </script>`;
-  return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/akun?lang=' + L, lang: L });
+  return layout({ title: t('mp.apply.title', { event: esc(event.name) }) + ' — 20FIT', body, home: '/talent?lang=' + L, lang: L });
 }
 
 /** Confirmation after a Man Power application is submitted. */
@@ -3211,10 +3212,10 @@ function mainPowerApplyDone({ event, lang }) {
     <h1>${t('mp.apply.doneTitle')}</h1>
     <p class="sub" style="margin:10px 0 24px">${t('mp.apply.doneSub')}</p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a href="/akun?lang=${L}" class="btn">${t('mp.dash.title')} →</a>
+      <a href="/talent?lang=${L}" class="btn">${t('mp.dash.title')} →</a>
     </div>
   </div></div>`;
-  return layout({ title: t('mp.apply.doneTitle') + ' — 20FIT', body, home: '/akun?lang=' + L, lang: L });
+  return layout({ title: t('mp.apply.doneTitle') + ' — 20FIT', body, home: '/talent?lang=' + L, lang: L });
 }
 
 /** Small badge for a proof's content type (feed / reels / story). */
@@ -4442,7 +4443,7 @@ function applicationTracker(status, lang) {
   return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
 }
 
-function talentHomePath(account) { return '/akun'; }
+function talentHomePath(account) { return '/talent'; }
 
 // One card for a position-based EO event. filterable=true adds the search/
 // filter hooks (data-status/data-search + ev-item) so it works inside the

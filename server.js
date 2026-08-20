@@ -11,17 +11,23 @@
  *   Talent (self-service accounts, session cookie). Pages live at plain,
  *   role-agnostic paths — the talent type is read from the session, so a
  *   talent only ever sees talent.20fit.id/… (no /kol or /main-power prefix):
- *     GET/POST /register      -> create account
- *     GET/POST /login         -> sign in
- *     GET/POST /logout        -> sign out
- *     GET      /akun          -> home (KOL profile / Man Power dashboard by type)
- *     GET/POST /data-diri     -> profile form
- *     GET/POST /dokumen       -> documents (CV / portfolio / HYROX cert)
- *     GET/POST /kirim-bukti   -> KOL post-proof submission
- *     GET      /acara[/:id]   -> browse category-need events + apply
- *     GET/POST /lamar/:id     -> Man Power SOW application
+ *     GET/POST /register        -> create account
+ *     GET/POST /login/talent    -> sign in  (/login redirects here)
+ *     GET/POST /logout          -> sign out
+ *     GET      /talent          -> home (KOL profile / Man Power dashboard by type)
+ *     GET/POST /data-diri       -> profile form
+ *     GET/POST /dokumen         -> documents (CV / portfolio / HYROX cert)
+ *     GET/POST /kirim-bukti     -> KOL post-proof submission
+ *     GET      /acara[/:id]     -> browse category-need events + apply
+ *     GET/POST /lamar/:id       -> Man Power SOW application
  *     GET      /events, /event/:id -> position-based events + apply
- *   Old /kol/* and /main-power/* URLs 302-redirect to these for back-compat.
+ *   Old /kol/*, /main-power/* and /akun URLs 302-redirect to these.
+ *
+ *   EO / Super Admin (staff_accounts):
+ *     GET/POST /login/eo        -> EO sign in  (/eo/login redirects here)
+ *     GET      /eo              -> EO dashboard (+ /eo/events, /eo/profile, …)
+ *     GET/POST /admin/login     -> Super Admin sign in
+ *     GET      /admin           -> Super Admin (+ /admin/… sub-routes)
  *
  *   Admin (HTTP Basic auth, ADMIN_USER / ADMIN_PASSWORD):
  *     GET  /admin            -> dashboard (counts + campaign management)
@@ -131,7 +137,7 @@ function requireTalentReady(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
       if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
       req.account = acc;
       next();
@@ -148,7 +154,7 @@ function requireTalentBrowse(type) {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
-      if (!acc) { auth.clearSession(res, type); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
+      if (!acc) { auth.clearSession(res, type); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
       req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -163,7 +169,7 @@ function dataDiriGet() {
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = req.account;
-      if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/akun?lang=' + req.lang);
+      if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/talent?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
       res.send(V.talentDataDiri(req.talent.type, { account: acc, events, values: acc, lang: req.lang }));
     } catch (e) { next(e); }
@@ -224,7 +230,7 @@ function dataDiriPost() {
         experience: values.experience || null,
         profile_completed_at: acc.profile_completed_at || new Date().toISOString(),
       });
-      res.redirect('/akun?lang=' + req.lang);
+      res.redirect('/talent?lang=' + req.lang);
     } catch (e) { next(e); }
   }];
 }
@@ -265,7 +271,7 @@ function docsPost() {
         if (!st) return needConfig(req, res);
         const type = req.talent.type;
         const acc = await st.getAccountById(req.talent.id);
-        if (!acc) { auth.clearSession(res); return res.redirect('/login'); }
+        if (!acc) { auth.clearSession(res); return res.redirect('/login/talent'); }
         const isCreator = (type === 'kol');
         const files = req.files || {};
         const patch = {};
@@ -401,24 +407,32 @@ app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 // Public sign-up / sign-in: a single account form, no talent-type picker.
 // New accounts default to KOL; login resolves the account by email across all
 // talent types and lands each on the dashboard for their type. Admin & EO still
-// sign in via /admin/login and /eo/login (linked from the login page + footer).
+// sign in via /admin/login and /login/eo (linked from the login page + footer).
 // A post-login/register redirect target must be a same-site absolute path
 // (guards against open redirects like //evil.com or javascript:).
 function safeNext(n) { n = String(n || ''); return (/^\/[A-Za-z0-9]/.test(n) && !n.startsWith('//')) ? n.slice(0, 512) : null; }
 app.get('/register', (req, res) => {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/akun');
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
   res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt }));
 });
 app.post('/register', talentRegisterPost('kol', { unified: true }));
-app.get('/login', (req, res) => {
+function talentLoginGet(req, res) {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/akun');
+  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
   res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt }));
+}
+app.get('/login/talent', talentLoginGet);
+// /login kept as an alias of the canonical /login/talent (preserve ?next/?lang).
+app.get('/login', (req, res) => {
+  const q = [];
+  if (req.query.next) q.push('next=' + encodeURIComponent(req.query.next));
+  if (req.query.lang) q.push('lang=' + req.query.lang);
+  res.redirect('/login/talent' + (q.length ? '?' + q.join('&') : ''));
 });
-app.post('/login', async (req, res, next) => {
+const talentLoginPost = async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -431,7 +445,7 @@ app.post('/login', async (req, res, next) => {
     //    is down. Auto-provisioned app users also land here on later logins.
     if (account && auth.verifyPassword(password, account.password_hash)) {
       auth.setSession(res, account);
-      return res.redirect(nxt || '/akun');
+      return res.redirect(nxt || '/talent');
     }
     // 2) Fall back to the 20FIT app account directory (only when configured).
     //    On success we mirror the account locally so the rest of the site works,
@@ -456,14 +470,16 @@ app.post('/login', async (req, res, next) => {
         }
         if (account) {
           auth.setSession(res, account);
-          return res.redirect(nxt || '/akun');
+          return res.redirect(nxt || '/talent');
         }
       }
     }
     // 3) Neither the local password nor the app API accepted these credentials.
     return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang, next: nxt }));
   } catch (e) { next(e); }
-});
+};
+app.post('/login/talent', talentLoginPost);
+app.post('/login', talentLoginPost); // alias so any stale form posting to /login still works
 
 // PUBLIC (no login) post-proof submission: name + social username + event, with
 // multiple feed screenshots and separate Reels / Story uploads. Every image is extracted.
@@ -631,7 +647,7 @@ function talentRegisterPost(type, opts = {}) {
         // Redirect back to the event the visitor came from (?next), otherwise land
         // on the dashboard (profile + browse events); profile completion is
         // prompted there and enforced only when applying to an event.
-        res.redirect(nxt || ('/akun?lang=' + req.lang));
+        res.redirect(nxt || ('/talent?lang=' + req.lang));
       } catch (e) { next(e); }
     },
   ];
@@ -639,7 +655,7 @@ function talentRegisterPost(type, opts = {}) {
 
 app.post('/kol/register', talentRegisterPost('kol', { unified: true }));
 
-app.get('/kol/login', (req, res) => res.redirect('/login?lang=' + req.lang));
+app.get('/kol/login', (req, res) => res.redirect('/login/talent?lang=' + req.lang));
 
 app.post('/kol/login', async (req, res, next) => {
   try {
@@ -652,7 +668,7 @@ app.post('/kol/login', async (req, res, next) => {
       return res.status(401).send(V.talentLogin('kol', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, account);
-    res.redirect('/akun');
+    res.redirect('/talent');
   } catch (e) { next(e); }
 });
 
@@ -671,7 +687,7 @@ app.post('/logout', talentLogout);
 // (bookmarks, links shared before the rename). Query string (lang) is carried.
 function talentLogout(req, res) { auth.clearSession(res, auth.TALENT_TYPES); res.redirect('/?lang=' + req.lang); }
 const withLang = (req, p) => p + (req.query.lang ? (p.includes('?') ? '&' : '?') + 'lang=' + req.query.lang : '');
-[['/kol', '/akun'], ['/main-power', '/akun'],
+[['/akun', '/talent'], ['/kol', '/talent'], ['/main-power', '/talent'],
  ['/kol/data-diri', '/data-diri'], ['/main-power/data-diri', '/data-diri'],
  ['/kol/dokumen', '/dokumen'], ['/main-power/dokumen', '/dokumen'],
  ['/kol/kirim-bukti', '/kirim-bukti'], ['/kol/event', '/acara'],
@@ -735,7 +751,7 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 // req.account (full profile) is attached by requireTalentReady.
 // Unified talent home. Dispatches by session type: Man Power sees the
 // self-apply dashboard; KOL / photographer see the profile + history page.
-app.get('/akun', requireAnyTalentBrowse(), async (req, res, next) => {
+app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -772,7 +788,7 @@ app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
-    if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/akun?lang=' + req.lang);
+    if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/talent?lang=' + req.lang);
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
     const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
     res.setHeader('Content-Type', 'application/pdf');
@@ -988,11 +1004,11 @@ function requireAnyTalentReady() {
   return async (req, res, next) => {
     try {
       const t = auth.anySession(req, auth.TALENT_TYPES);
-      if (!t) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+      if (!t) return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl));
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
-      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
       if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
       req.talent = t; req.account = acc;
       next();
@@ -1006,11 +1022,11 @@ function requireAnyTalentBrowse() {
   return async (req, res, next) => {
     try {
       const t = auth.anySession(req, auth.TALENT_TYPES);
-      if (!t) return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl));
+      if (!t) return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl));
       const st = db();
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
-      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login?next=' + encodeURIComponent(req.originalUrl)); }
+      if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -1232,7 +1248,7 @@ app.get('/main-power/register', (req, res) => res.redirect('/register' + (req.qu
 
 app.post('/main-power/register', talentRegisterPost('main_power', { unified: true }));
 
-app.get('/main-power/login', (req, res) => res.redirect('/login?lang=' + req.lang));
+app.get('/main-power/login', (req, res) => res.redirect('/login/talent?lang=' + req.lang));
 
 app.post('/main-power/login', async (req, res, next) => {
   try {
@@ -1245,11 +1261,11 @@ app.post('/main-power/login', async (req, res, next) => {
       return res.status(401).send(V.talentLogin('main_power', { unified: true, errors: [req.t('err.badTalentCreds')], values: { login }, lang: req.lang }));
     }
     auth.setSession(res, account);
-    res.redirect('/akun');
+    res.redirect('/talent');
   } catch (e) { next(e); }
 });
 
-// Man Power home body (rendered from the unified /akun route).
+// Man Power home body (rendered from the unified /talent route).
 async function renderMpHome(req, res, st) {
   const [events, allApps, myApps] = await Promise.all([
     st.listEvents(), st.listApplications(), st.listApplicationsForTalent(req.talent.id),
@@ -1269,7 +1285,7 @@ app.get('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, ne
     const [events, myApps] = await Promise.all([st.listEvents(), st.listApplicationsForTalent(req.talent.id)]);
     const ev = events.find((e) => e.id === req.params.eventId);
     const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
-    if (!isOpen || myApps.some((a) => a.event_id === req.params.eventId)) return res.redirect('/akun?lang=' + req.lang);
+    if (!isOpen || myApps.some((a) => a.event_id === req.params.eventId)) return res.redirect('/talent?lang=' + req.lang);
     res.send(V.mainPowerApply({ talent: req.talent, event: ev, customSow: ev.mp_sow, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -1281,7 +1297,7 @@ app.post('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, n
     const events = await st.listEvents();
     const ev = events.find((e) => e.id === req.params.eventId);
     const isOpen = ev && ev.is_active && (ev.needs || []).some((n) => n.talent_type === 'main_power');
-    if (!isOpen) return res.redirect('/akun?lang=' + req.lang);
+    if (!isOpen) return res.redirect('/talent?lang=' + req.lang);
 
     const role = String(req.body.role || '').trim();
     const agree = req.body.agree === '1' || req.body.agree === 'on';
@@ -1300,7 +1316,7 @@ app.post('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, n
     // Main Power keeps its "one SOW application per event" rule (role-based).
     // Guard duplicates explicitly now that createApplication allows multiples.
     const dupMp = (await st.listApplicationsForTalent(req.talent.id)).some((a) => a.event_id === ev.id && a.role);
-    if (dupMp) return res.redirect('/akun?lang=' + req.lang);
+    if (dupMp) return res.redirect('/talent?lang=' + req.lang);
     await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
     res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
   } catch (e) { next(e); }
@@ -1392,11 +1408,13 @@ app.get('/admin/login', (req, res) => {
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
-app.get('/eo/login', (req, res) => {
+app.get('/login/eo', (req, res) => {
   const t = auth.anySession(req, ['super_admin', 'eo']);
   if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
+// /eo/login kept as an alias of the canonical /login/eo.
+app.get('/eo/login', (req, res) => res.redirect('/login/eo' + (req.query.lang ? '?lang=' + req.query.lang : '')));
 
 // Both staff login links authenticate against the same staff_accounts. The
 // account's role (not which URL was used) decides permissions, so either link
@@ -1421,7 +1439,8 @@ function staffLoginHandler(variant) {
   };
 }
 app.post('/admin/login', staffLoginHandler('admin'));
-app.post('/eo/login', staffLoginHandler('eo'));
+app.post('/login/eo', staffLoginHandler('eo'));
+app.post('/eo/login', staffLoginHandler('eo')); // alias for stale forms
 
 // EO self-registration: an EO creates their own account, then completes their
 // profile before they can create events.
@@ -1544,7 +1563,7 @@ app.post('/staff/reset-password', async (req, res, next) => {
 // Each staff area logs out only its own session, so signing out of EO doesn't
 // touch a Super Admin session open in another tab (and vice versa).
 app.post('/admin/logout', (req, res) => { auth.clearSession(res, 'super_admin'); res.redirect('/admin/login'); });
-app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/eo/login'); });
+app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/login/eo'); });
 
 // ------------------------------------------------------------------- EO ----
 // Event Organizer area. EO staff see only their own data (events created_by
