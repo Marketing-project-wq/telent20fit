@@ -510,7 +510,7 @@ function landingPage(lang, opts = {}) {
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
-  const navBar = landingNav(L, 'home', opts.account);
+  const navBar = landingNav(L, 'home', opts.account, { search: true });
 
   // Events currently open for registration (live EO data, with their still-open
   // positions). Cards link to the event detail page; the /event/:id gate sends
@@ -584,9 +584,30 @@ a{text-decoration:none}
 @media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
 /* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
 .lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
-.lp-nav-in{max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
+.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
 .lp-nav-logo .lp-logo{height:60px}
+/* Header event search — pill input + live-results dropdown */
+.lp-search{position:relative;flex:1 1 auto;max-width:430px;min-width:0}
+.lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
+.lp-search-form{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 15px;box-shadow:0 2px 10px rgba(16,16,19,.07)}
+.lp-search-form:focus-within{border-color:var(--red);box-shadow:0 4px 18px rgba(228,18,31,.16)}
+.lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:none;color:var(--lp-tx3);cursor:pointer}
+.lp-search-ic:hover{color:var(--red)}
+.lp-search-in{flex:1;min-width:0;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-search-in::placeholder{color:var(--lp-tx4)}
+.lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
+.lp-search-x:hover{color:var(--red)}
+.lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
+.lp-search-menu.show{display:block}
+.lp-sr{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;color:var(--lp-tx)}
+.lp-sr:hover,.lp-sr.active{background:var(--lp-chip)}
+.lp-sr-thumb{width:48px;height:34px;flex:0 0 auto;border-radius:7px;object-fit:cover;background:var(--lp-chip);display:block}
+.lp-sr-tx{min-width:0}
+.lp-sr-name{display:block;font:700 14px/1.2 Barlow,sans-serif;color:var(--lp-tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-sr-city{display:block;font-size:12px;color:var(--lp-tx3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-search-empty{padding:16px 14px;color:var(--lp-tx3);font-size:13.5px;text-align:center}
+@media(max-width:900px){.lp-search{max-width:320px}}
 .lp-tog{margin-left:auto;display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:9px 15px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
@@ -602,6 +623,14 @@ a{text-decoration:none}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
 @media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){
+  /* Mobile: collapse the search pill to an icon; tapping expands it full-width over the header row. */
+  .lp-search{position:static;flex:0 0 auto;max-width:none}
+  .lp-search-form{display:none}
+  .lp-search-toggle{display:inline-flex}
+  .lp-search.lp-search--open{position:absolute;left:14px;right:14px;top:50%;transform:translateY(-50%);z-index:70}
+  .lp-search.lp-search--open .lp-search-form{display:flex}
+  .lp-search.lp-search--open .lp-search-toggle{display:none}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
@@ -828,7 +857,7 @@ ${CARD_CSS}
 }
 
 /** Shared sticky top navbar for the public landing + About pages. */
-function landingNav(lang, active, account) {
+function landingNav(lang, active, account, opts = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
@@ -861,11 +890,54 @@ function landingNav(lang, active, account) {
       </div>
     </details>`;
   }
+  // Optional header event search (opt-in via opts.search). A pill input sits
+  // next to the logo; typing shows a live results dropdown (fetched from the
+  // public /api/events/search). The <form> is a native GET to /events, so Enter
+  // / the search icon fall back to the catalog even without JS. On mobile the
+  // pill collapses to an icon that expands over the header row when tapped.
+  const searchSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>';
+  const searchScript = '<script>(function(){' +
+    "var box=document.getElementById('lpSearch');if(!box)return;" +
+    "var form=box.querySelector('.lp-search-form'),input=box.querySelector('.lp-search-in'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
+    "var lang=box.getAttribute('data-lang')||'id',none=box.getAttribute('data-none')||'',tm,ctrl,items=[],active=-1;" +
+    'function esc(s){return String(s).replace(/[&<>"\\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\x22":"&quot;","\\x27":"&#39;"}[c];});}' +
+    "function hide(){menu.classList.remove('show');menu.innerHTML='';items=[];active=-1;}" +
+    "function paint(){var e=menu.querySelectorAll('.lp-sr');for(var i=0;i<e.length;i++)e[i].classList.toggle('active',i===active);}" +
+    "function render(list){items=list;active=-1;if(!list.length){menu.innerHTML='<div class=\\x22lp-search-empty\\x22>'+esc(none)+'</div>';menu.classList.add('show');return;}" +
+    "var h='';for(var i=0;i<list.length;i++){var r=list[i];" +
+    "var th=r.thumb?'<img class=\\x22lp-sr-thumb\\x22 src=\\x22'+esc(r.thumb)+'\\x22 alt=\\x22\\x22>':'<span class=\\x22lp-sr-thumb\\x22></span>';" +
+    "h+='<a class=\\x22lp-sr\\x22 href=\\x22'+r.url+'\\x22>'+th+'<span class=\\x22lp-sr-tx\\x22><span class=\\x22lp-sr-name\\x22>'+esc(r.name)+'</span>'+(r.city?'<span class=\\x22lp-sr-city\\x22>\\uD83D\\uDCCD '+esc(r.city)+'</span>':'')+'</span></a>';}" +
+    "menu.innerHTML=h;menu.classList.add('show');}" +
+    "function run(){var q=input.value.trim();if(clr)clr.hidden=!q;if(!q){hide();return;}" +
+    "if(ctrl){try{ctrl.abort();}catch(e){}}ctrl=('AbortController'in window)?new AbortController():null;" +
+    "fetch('/api/events/search?lang='+lang+'&q='+encodeURIComponent(q),ctrl?{signal:ctrl.signal}:{}).then(function(r){return r.json();}).then(function(d){render(d.results||[]);}).catch(function(){});}" +
+    "input.addEventListener('input',function(){clearTimeout(tm);tm=setTimeout(run,300);});" +
+    "input.addEventListener('focus',function(){if(items.length||menu.innerHTML)menu.classList.add('show');});" +
+    "input.addEventListener('keydown',function(e){" +
+    "if(e.key==='ArrowDown'){e.preventDefault();if(items.length){active=(active+1)%items.length;paint();}}" +
+    "else if(e.key==='ArrowUp'){e.preventDefault();if(items.length){active=(active-1+items.length)%items.length;paint();}}" +
+    "else if(e.key==='Enter'){if(active>=0&&items[active]){e.preventDefault();location.href=items[active].url;}}" +
+    "else if(e.key==='Escape'){hide();box.classList.remove('lp-search--open');}});" +
+    "if(clr)clr.addEventListener('click',function(){input.value='';clr.hidden=true;hide();input.focus();});" +
+    "if(toggle)toggle.addEventListener('click',function(){box.classList.add('lp-search--open');setTimeout(function(){input.focus();},30);});" +
+    "document.addEventListener('click',function(e){if(!box.contains(e.target)){hide();box.classList.remove('lp-search--open');}});" +
+    '})();</script>';
+  const search = opts.search ? `<div class="lp-search" id="lpSearch" data-lang="${L}" data-none="${esc(t('search.none'))}">
+      <button type="button" class="lp-search-toggle" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
+      <form class="lp-search-form" action="/events" method="get" role="search" autocomplete="off">
+        <input type="hidden" name="lang" value="${L}">
+        <button type="submit" class="lp-search-ic" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
+        <input type="text" name="q" class="lp-search-in" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
+        <button type="button" class="lp-search-x" aria-label="clear" hidden>&times;</button>
+      </form>
+      <div class="lp-search-menu" role="listbox" aria-label="${esc(t('search.aria'))}"></div>
+    </div>${searchScript}` : '';
   return `<header class="lp-nav"><div class="lp-nav-in">
     <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </a>
+    ${search}
     ${toggle}
     ${acct}
   </div></header>`;
@@ -4579,18 +4651,28 @@ function talentPositionCard(e, lang, filterable) {
   </div>`;
 }
 
-function talentOpenEvents({ account, events, lang }) {
+function talentOpenEvents({ account, events, lang, q }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
+  const query = String(q || '').trim();
+  // Empty state depends on why the list is empty: a failed search vs no open events at all.
+  const empty = query ? t('search.none') : t('ta.noOpen');
   const cards = (events && events.length)
     ? events.map((e) => talentPositionCard(e, L, false)).join('')
-    : `<p class="muted" style="margin-top:14px">${t('ta.noOpen')}</p>`;
+    : `<p class="muted" style="margin-top:14px">${esc(empty)}</p>`;
+  // Refine box — same query the header search uses; a native GET keeps it working without JS.
+  const searchBox = `<form method="get" action="/events" role="search" style="display:flex;gap:9px;align-items:center;background:var(--card,#fff);border:1px solid var(--line,#e3e7ed);border-radius:999px;padding:9px 15px;margin:14px 0 6px;max-width:440px;box-shadow:0 2px 10px rgba(16,16,19,.05)">
+      <input type="hidden" name="lang" value="${L}">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" name="q" value="${esc(query)}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" maxlength="80" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14.5px;color:inherit">
+    </form>`;
   const body = `<div class="wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
       <h1 style="margin:0">${t('ta.openTitle')}</h1>
       <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     </div>
     <p class="sub">${t('ta.openSub')}</p>
+    ${searchBox}
     ${cards}
   </div>`;
   return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });

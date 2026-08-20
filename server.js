@@ -1118,13 +1118,50 @@ async function openPositionEvents(st, talentId) {
   return open;
 }
 
-// Events open to talents: published, position-based, within reg window, with a free slot.
+// Lowercase haystack for one open event: name + location + each open position's
+// key/labels — so a search matches by event name, city/location, or the kind of
+// role being hired (KOL, photographer, manpower…). Shared by the header search
+// API and the /events catalog filter.
+function eventSearchText(e) {
+  const pos = (e.openPositions || []).map((p) => `${p.key || ''} ${p.label_id || ''} ${p.label_en || ''}`).join(' ');
+  return `${e.name || ''} ${e.location || ''} ${pos}`.toLowerCase();
+}
+const eventCity = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
+
+// PUBLIC live event search (search-as-you-type for the landing header). Only
+// events currently open for registration appear — the same live data as the
+// landing "events open" section and the /events catalog. Returns a small JSON
+// list for the dropdown; each result links to the public /event/:id detail.
+app.get('/api/events/search', async (req, res) => {
+  try {
+    const st = db();
+    const L = req.lang;
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (!st || !q) return res.json({ results: [] });
+    const open = await openPositionEvents(st, null);
+    const results = open
+      .filter((e) => eventSearchText(e).includes(q))
+      .slice(0, 8)
+      .map((e) => ({
+        name: e.name,
+        city: eventCity(e.location),
+        url: '/event/' + (e.slug || e.id) + '?lang=' + L,
+        thumb: e.mockup_url || null,
+      }));
+    res.json({ results });
+  } catch (_) { res.json({ results: [] }); }
+});
+
+// Events open to talents: published, position-based, within reg window, with a
+// free slot. Accepts ?q= to filter by name/location/role (from the header search).
 app.get('/events', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const open = await openPositionEvents(st, req.talent.id);
-    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang }));
+    let open = await openPositionEvents(st, req.talent.id);
+    const q = String(req.query.q || '').trim();
+    if (q) { const ql = q.toLowerCase(); open = open.filter((e) => eventSearchText(e).includes(ql)); }
+    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang, q }));
   } catch (e) { next(e); }
 });
 
