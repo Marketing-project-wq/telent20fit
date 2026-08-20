@@ -62,7 +62,7 @@ const CARD_CSS = `
 .bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 @media(max-width:860px){.bgrid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.bgrid{grid-template-columns:1fr}}
-.bcard{background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(16,16,19,.05)}
+.bcard{min-width:0;background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(16,16,19,.05)}
 .bcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .bcard-ico{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#E4121F;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.30);border-radius:10px}
 .bcard-ico svg{width:22px;height:22px}
@@ -584,7 +584,7 @@ a{text-decoration:none}
 @media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:76px}.lp-logo{height:76px}.lp-logo-dark{height:56px}.lp-toggles{width:100%;justify-content:flex-start}}
 /* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
 .lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
-.lp-nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px}
+.lp-nav-in{max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
 .lp-nav-logo .lp-logo{height:60px}
 .lp-tog{margin-left:auto;display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
@@ -599,8 +599,11 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
-@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}.lp-tog-b{padding:6px 9px}}
+/* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
+@media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
+@media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 /* Optional hero background photos + readability scrim; text goes light over them */
@@ -929,7 +932,7 @@ function aboutPage(lang) {
 body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5}
 a{text-decoration:none}
 .lp-nav{position:sticky;top:0;z-index:50;background:var(--lp-card);border-bottom:1px solid var(--lp-line)}
-.lp-nav-in{max-width:1180px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px}
+.lp-nav-in{max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
 .lp-logo{display:block;width:auto}
 .lp-nav-logo .lp-logo{height:60px}
@@ -946,8 +949,11 @@ a{text-decoration:none}
 .lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
 .lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
-@media(max-width:600px){.lp-nav-in{padding:10px 14px;gap:9px}.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
-@media(max-width:380px){.lp-nav-in{padding:9px 11px;gap:7px}.lp-tog-b{padding:6px 9px}}
+/* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
+@media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
+@media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 .ab-hero{background:var(--ink);color:#fff;padding:66px 28px 58px}
 .ab-hero-in{max-width:820px;margin:0 auto}
 .ab-kick{color:#ff6b74;font:700 13px/1 Barlow,sans-serif;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
