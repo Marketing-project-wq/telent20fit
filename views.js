@@ -510,7 +510,7 @@ function landingPage(lang, opts = {}) {
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
   // actions (search, Event, Tiket Saya, Account) funnel logged-out visitors to login/register.
-  const navBar = landingNav(L, 'home', opts.account, { search: true });
+  const navBar = landingNav(L, 'home', opts.account, { search: true, cities: opts.cities });
 
   // Events currently open for registration (live EO data, with their still-open
   // positions). Cards link to the event detail page; the /event/:id gate sends
@@ -587,17 +587,24 @@ a{text-decoration:none}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;gap:14px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
 .lp-nav-logo .lp-logo{height:60px}
-/* Header event search — pill input + live-results dropdown */
-.lp-search{position:relative;flex:1 1 auto;max-width:430px;min-width:0}
+/* Header event search — job-board style: keyword field + Location dropdown + Search button */
+.lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
-.lp-search-form{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 15px;box-shadow:0 2px 10px rgba(16,16,19,.07)}
-.lp-search-form:focus-within{border-color:var(--red);box-shadow:0 4px 18px rgba(228,18,31,.16)}
-.lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:none;color:var(--lp-tx3);cursor:pointer}
-.lp-search-ic:hover{color:var(--red)}
+.lp-search-form{display:flex;align-items:center;gap:9px}
+.lp-search-key{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-key:focus-within{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.15)}
+.lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
 .lp-search-in{flex:1;min-width:0;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-search-in::placeholder{color:var(--lp-tx4)}
 .lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
 .lp-search-x:hover{color:var(--red)}
+.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-loc:focus-within{border-color:var(--red)}
+.lp-search-pin{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
+.lp-search-city{appearance:none;-webkit-appearance:none;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding-right:22px;max-width:150px;text-overflow:ellipsis}
+.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none}
+.lp-search-btn{flex:0 0 auto;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:12px 22px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.28)}
+.lp-search-btn:hover{background:var(--red-hover)}
 .lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
 .lp-search-menu.show{display:block}
 .lp-sr{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;color:var(--lp-tx)}
@@ -607,7 +614,9 @@ a{text-decoration:none}
 .lp-sr-name{display:block;font:700 14px/1.2 Barlow,sans-serif;color:var(--lp-tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lp-sr-city{display:block;font-size:12px;color:var(--lp-tx3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lp-search-empty{padding:16px 14px;color:var(--lp-tx3);font-size:13.5px;text-align:center}
-@media(max-width:900px){.lp-search{max-width:320px}}
+/* Tablet: shrink the keyword field; drop the Location segment when space gets tight. */
+@media(max-width:980px){.lp-search{max-width:460px}.lp-search-city{max-width:104px}}
+@media(max-width:820px){.lp-search-loc{display:none}.lp-search{max-width:360px}}
 .lp-tog{margin-left:auto;display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
 .lp-tog-b{padding:9px 15px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx3)}
 .lp-tog-b.on{color:#fff;background:var(--red)}
@@ -624,13 +633,18 @@ a{text-decoration:none}
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
 @media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
-  /* Mobile: collapse the search pill to an icon; tapping expands it full-width over the header row. */
+  /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}
   .lp-search-form{display:none}
   .lp-search-toggle{display:inline-flex}
-  .lp-search.lp-search--open{position:absolute;left:14px;right:14px;top:50%;transform:translateY(-50%);z-index:70}
-  .lp-search.lp-search--open .lp-search-form{display:flex}
-  .lp-search.lp-search--open .lp-search-toggle{display:none}}
+  .lp-search.lp-search--open{position:absolute;top:100%;left:0;right:0;z-index:70;background:var(--lp-card);border-bottom:1px solid var(--lp-line);box-shadow:0 20px 34px rgba(0,0,0,.14);padding:14px 16px}
+  .lp-search.lp-search--open .lp-search-toggle{display:none}
+  .lp-search.lp-search--open .lp-search-form{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  .lp-search.lp-search--open .lp-search-key{width:100%}
+  .lp-search.lp-search--open .lp-search-loc{display:flex;width:100%}
+  .lp-search.lp-search--open .lp-search-city{max-width:none;flex:1}
+  .lp-search.lp-search--open .lp-search-btn{width:100%;padding:13px}
+  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
@@ -890,15 +904,20 @@ function landingNav(lang, active, account, opts = {}) {
       </div>
     </details>`;
   }
-  // Optional header event search (opt-in via opts.search). A pill input sits
-  // next to the logo; typing shows a live results dropdown (fetched from the
-  // public /api/events/search). The <form> is a native GET to /events, so Enter
-  // / the search icon fall back to the catalog even without JS. On mobile the
-  // pill collapses to an icon that expands over the header row when tapped.
+  // Optional header event search (opt-in via opts.search). A job-board-style
+  // control sits next to the logo: a keyword field + a Location dropdown (the
+  // cities of currently-open events) + a Search button. Typing shows a live
+  // results dropdown (fetched from the public /api/events/search, filtered by
+  // keyword + location). The <form> is a native GET to /events, so the Search
+  // button / Enter fall back to the catalog even without JS. On mobile it
+  // collapses to a search icon that opens a panel below the header when tapped.
   const searchSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>';
+  const pinSvg = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+  const caretSvg = '<svg class="lp-search-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  const cityOpts = (opts.cities || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
   const searchScript = '<script>(function(){' +
     "var box=document.getElementById('lpSearch');if(!box)return;" +
-    "var form=box.querySelector('.lp-search-form'),input=box.querySelector('.lp-search-in'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
+    "var input=box.querySelector('.lp-search-in'),sel=box.querySelector('.lp-search-city'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
     "var lang=box.getAttribute('data-lang')||'id',none=box.getAttribute('data-none')||'',tm,ctrl,items=[],active=-1;" +
     'function esc(s){return String(s).replace(/[&<>"\\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\x22":"&quot;","\\x27":"&#39;"}[c];});}' +
     "function hide(){menu.classList.remove('show');menu.innerHTML='';items=[];active=-1;}" +
@@ -908,11 +927,12 @@ function landingNav(lang, active, account, opts = {}) {
     "var th=r.thumb?'<img class=\\x22lp-sr-thumb\\x22 src=\\x22'+esc(r.thumb)+'\\x22 alt=\\x22\\x22>':'<span class=\\x22lp-sr-thumb\\x22></span>';" +
     "h+='<a class=\\x22lp-sr\\x22 href=\\x22'+r.url+'\\x22>'+th+'<span class=\\x22lp-sr-tx\\x22><span class=\\x22lp-sr-name\\x22>'+esc(r.name)+'</span>'+(r.city?'<span class=\\x22lp-sr-city\\x22>\\uD83D\\uDCCD '+esc(r.city)+'</span>':'')+'</span></a>';}" +
     "menu.innerHTML=h;menu.classList.add('show');}" +
-    "function run(){var q=input.value.trim();if(clr)clr.hidden=!q;if(!q){hide();return;}" +
+    "function run(){var q=input.value.trim(),city=sel?sel.value:'';if(clr)clr.hidden=!q;if(!q&&!city){hide();return;}" +
     "if(ctrl){try{ctrl.abort();}catch(e){}}ctrl=('AbortController'in window)?new AbortController():null;" +
-    "fetch('/api/events/search?lang='+lang+'&q='+encodeURIComponent(q),ctrl?{signal:ctrl.signal}:{}).then(function(r){return r.json();}).then(function(d){render(d.results||[]);}).catch(function(){});}" +
+    "fetch('/api/events/search?lang='+lang+'&q='+encodeURIComponent(q)+'&city='+encodeURIComponent(city),ctrl?{signal:ctrl.signal}:{}).then(function(r){return r.json();}).then(function(d){render(d.results||[]);}).catch(function(){});}" +
     "input.addEventListener('input',function(){clearTimeout(tm);tm=setTimeout(run,300);});" +
     "input.addEventListener('focus',function(){if(items.length||menu.innerHTML)menu.classList.add('show');});" +
+    "if(sel)sel.addEventListener('change',run);" +
     "input.addEventListener('keydown',function(e){" +
     "if(e.key==='ArrowDown'){e.preventDefault();if(items.length){active=(active+1)%items.length;paint();}}" +
     "else if(e.key==='ArrowUp'){e.preventDefault();if(items.length){active=(active-1+items.length)%items.length;paint();}}" +
@@ -926,9 +946,20 @@ function landingNav(lang, active, account, opts = {}) {
       <button type="button" class="lp-search-toggle" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
       <form class="lp-search-form" action="/events" method="get" role="search" autocomplete="off">
         <input type="hidden" name="lang" value="${L}">
-        <button type="submit" class="lp-search-ic" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
-        <input type="text" name="q" class="lp-search-in" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
-        <button type="button" class="lp-search-x" aria-label="clear" hidden>&times;</button>
+        <div class="lp-search-key">
+          <span class="lp-search-ic" aria-hidden="true">${searchSvg}</span>
+          <input type="text" name="q" class="lp-search-in" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
+          <button type="button" class="lp-search-x" aria-label="clear" hidden>&times;</button>
+        </div>
+        <div class="lp-search-loc">
+          <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
+          <select name="city" class="lp-search-city" aria-label="${esc(t('search.location'))}">
+            <option value="">${esc(t('search.location'))}</option>
+            ${cityOpts}
+          </select>
+          ${caretSvg}
+        </div>
+        <button type="submit" class="lp-search-btn">${esc(t('search.btn'))}</button>
       </form>
       <div class="lp-search-menu" role="listbox" aria-label="${esc(t('search.aria'))}"></div>
     </div>${searchScript}` : '';
@@ -4651,20 +4682,30 @@ function talentPositionCard(e, lang, filterable) {
   </div>`;
 }
 
-function talentOpenEvents({ account, events, lang, q }) {
+function talentOpenEvents({ account, events, lang, q, city, cities }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const query = String(q || '').trim();
-  // Empty state depends on why the list is empty: a failed search vs no open events at all.
-  const empty = query ? t('search.none') : t('ta.noOpen');
+  const cityVal = String(city || '').trim();
+  // Empty state depends on why the list is empty: a failed search/filter vs no open events at all.
+  const empty = (query || cityVal) ? t('search.none') : t('ta.noOpen');
   const cards = (events && events.length)
     ? events.map((e) => talentPositionCard(e, L, false)).join('')
     : `<p class="muted" style="margin-top:14px">${esc(empty)}</p>`;
-  // Refine box — same query the header search uses; a native GET keeps it working without JS.
-  const searchBox = `<form method="get" action="/events" role="search" style="display:flex;gap:9px;align-items:center;background:var(--card,#fff);border:1px solid var(--line,#e3e7ed);border-radius:999px;padding:9px 15px;margin:14px 0 6px;max-width:440px;box-shadow:0 2px 10px rgba(16,16,19,.05)">
+  const cityOpts = (cities || []).map((c) => `<option value="${esc(c)}"${c === cityVal ? ' selected' : ''}>${esc(c)}</option>`).join('');
+  const pillStyle = 'display:flex;align-items:center;gap:9px;background:var(--card,#fff);border:1px solid var(--line,#e3e7ed);border-radius:999px;padding:9px 15px;box-shadow:0 2px 10px rgba(16,16,19,.05)';
+  // Refine box — mirrors the header search (keyword + Location + Search); a native GET keeps it working without JS.
+  const searchBox = `<form method="get" action="/events" role="search" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 6px">
       <input type="hidden" name="lang" value="${L}">
-      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
-      <input type="text" name="q" value="${esc(query)}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" maxlength="80" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14.5px;color:inherit">
+      <div style="${pillStyle};flex:1 1 240px;min-width:0">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" name="q" value="${esc(query)}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" maxlength="80" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14.5px;color:inherit">
+      </div>
+      ${(cities && cities.length) ? `<div style="${pillStyle}">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <select name="city" aria-label="${esc(t('search.location'))}" style="border:0;outline:0;background:transparent;font-size:14.5px;color:inherit;cursor:pointer;max-width:160px"><option value="">${esc(t('search.location'))}</option>${cityOpts}</select>
+      </div>` : ''}
+      <button type="submit" class="btn btn-sm" style="border-radius:999px;padding:11px 24px">${esc(t('search.btn'))}</button>
     </form>`;
   const body = `<div class="wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">

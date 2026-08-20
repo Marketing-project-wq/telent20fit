@@ -10,6 +10,8 @@
   "search.ph": "Cari event...",
   "search.none": "Tidak ditemukan event yang sesuai",
   "search.aria": "Cari event yang sedang dibuka",
+  "search.location": "Lokasi",
+  "search.btn": "Cari",
   "nav.signin": "Masuk",
   "nav.signup": "Buat Akun",
   "nav.viewProfile": "Lihat Profil",

@@ -399,7 +399,7 @@ app.get('/', async (req, res, next) => {
       catch (_) { /* keep the landing up regardless */ }
     }
     const account = auth.anySession(req, auth.TALENT_TYPES);
-    res.send(V.landingPage(req.lang, { bg, events, account }));
+    res.send(V.landingPage(req.lang, { bg, events, account, cities: eventCityList(events) }));
   } catch (e) { next(e); }
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
@@ -1118,29 +1118,35 @@ async function openPositionEvents(st, talentId) {
   return open;
 }
 
-// Lowercase haystack for one open event: name + location + each open position's
-// key/labels — so a search matches by event name, city/location, or the kind of
-// role being hired (KOL, photographer, manpower…). Shared by the header search
-// API and the /events catalog filter.
+// Lowercase haystack for one open event: name + location + EO name + each open
+// position's key/labels — so a search matches by event name, city/location, the
+// organizer, or the kind of role being hired (KOL, photographer, manpower…).
+// Shared by the header search API and the /events catalog filter.
 function eventSearchText(e) {
   const pos = (e.openPositions || []).map((p) => `${p.key || ''} ${p.label_id || ''} ${p.label_en || ''}`).join(' ');
-  return `${e.name || ''} ${e.location || ''} ${pos}`.toLowerCase();
+  return `${e.name || ''} ${e.location || ''} ${e.eoName || ''} ${pos}`.toLowerCase();
 }
 const eventCity = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
+// City filter: keep events whose location contains the chosen city (empty = all).
+const eventInCity = (e, city) => !city || String(e.location || '').toLowerCase().includes(String(city).toLowerCase());
+// Distinct cities of a set of events, for the Location dropdown.
+const eventCityList = (events) => Array.from(new Set((events || []).map((e) => eventCity(e.location)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
 
 // PUBLIC live event search (search-as-you-type for the landing header). Only
 // events currently open for registration appear — the same live data as the
-// landing "events open" section and the /events catalog. Returns a small JSON
-// list for the dropdown; each result links to the public /event/:id detail.
+// landing "events open" section and the /events catalog. Filters by keyword
+// (q) and/or Location (city). Returns a small JSON list for the dropdown; each
+// result links to the public /event/:id detail.
 app.get('/api/events/search', async (req, res) => {
   try {
     const st = db();
     const L = req.lang;
     const q = String(req.query.q || '').trim().toLowerCase();
-    if (!st || !q) return res.json({ results: [] });
+    const city = String(req.query.city || '').trim();
+    if (!st || (!q && !city)) return res.json({ results: [] });
     const open = await openPositionEvents(st, null);
     const results = open
-      .filter((e) => eventSearchText(e).includes(q))
+      .filter((e) => (!q || eventSearchText(e).includes(q)) && eventInCity(e, city))
       .slice(0, 8)
       .map((e) => ({
         name: e.name,
@@ -1153,15 +1159,18 @@ app.get('/api/events/search', async (req, res) => {
 });
 
 // Events open to talents: published, position-based, within reg window, with a
-// free slot. Accepts ?q= to filter by name/location/role (from the header search).
+// free slot. Accepts ?q= (keyword) and ?city= (Location) from the header search.
 app.get('/events', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     let open = await openPositionEvents(st, req.talent.id);
+    const cities = eventCityList(open); // all open-event cities, for the Location dropdown
     const q = String(req.query.q || '').trim();
+    const city = String(req.query.city || '').trim();
     if (q) { const ql = q.toLowerCase(); open = open.filter((e) => eventSearchText(e).includes(ql)); }
-    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang, q }));
+    if (city) { open = open.filter((e) => eventInCity(e, city)); }
+    res.send(V.talentOpenEvents({ account: req.account, events: open, lang: req.lang, q, city, cities }));
   } catch (e) { next(e); }
 });
 

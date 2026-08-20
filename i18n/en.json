@@ -10,6 +10,8 @@
   "search.ph": "Search events...",
   "search.none": "No matching events found",
   "search.aria": "Search open events",
+  "search.location": "Location",
+  "search.btn": "Search",
   "nav.signin": "Sign in",
   "nav.signup": "Create Account",
   "nav.viewProfile": "View Profile",
