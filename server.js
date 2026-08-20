@@ -760,7 +760,7 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
     const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
     const eventById = new Map(events.map((e) => [e.id, e]));
     await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
-    const certs = await st.listCertificatesForTalent(req.talent.id);
+    const [certs, proofs] = await Promise.all([st.listCertificatesForTalent(req.talent.id), st.listProofsForTalent(req.talent.id)]);
     // Per-position application history (one application = one position now):
     // resolve each application's single chosen position label for the profile list.
     const choices = await st.listApplicationChoices();
@@ -775,10 +775,19 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
         if (!ev) return null;
         const ch = choiceByApp.get(a.id);
         const position = ch ? posLabelById.get(String(ch.position_id)) : null;
-        return { name: ev.name, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role };
+        // `ref` links to the position-based detail page (only when the event has positions).
+        const ref = (position && (ev.slug || ev.id)) || null;
+        return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role };
       })
       .filter(Boolean);
-    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, lang: req.lang }));
+    // Real, countable profile stats (no fabricated ratings).
+    const stats = {
+      events: appliedEvents.length,
+      approved: appliedEvents.filter((e) => ['approved', 'assigned', 'completed'].includes(e.status)).length,
+      proofs: proofs.length,
+      certs: certs.length,
+    };
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang }));
   } catch (e) { next(e); }
 });
 

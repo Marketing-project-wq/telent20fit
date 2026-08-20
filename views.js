@@ -2623,92 +2623,183 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
 }
 
 /** Talent's own profile (Data Diri) + earned certificates, in the app shell. */
-function kolProfilePage({ account, certs, events, lang }) {
+const PROFILE_CSS = `
+.tp-wrap{max-width:1120px}
+.tp-card-kicker{font:800 11px/1 Barlow,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tp-hero{position:relative;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 26px 0;overflow:hidden}
+.tp-hero::before{content:"";position:absolute;inset:0 0 auto 0;height:170px;background:linear-gradient(160deg,var(--red-soft),transparent 72%);pointer-events:none}
+.tp-hero-main,.tp-stats{position:relative}
+.tp-hero-main{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+.tp-avatar{width:92px;height:92px;border-radius:22px;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font:800 40px/1 'Barlow Condensed',sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.16)}
+.tp-id{flex:1 1 260px;min-width:0}
+.tp-kicker{font:800 11px/1 Barlow,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
+.tp-nameline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.tp-name{font:800 clamp(28px,3.6vw,40px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0;word-break:break-word}
+.tp-pill-cat{background:var(--red);color:#fff;font:800 12px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;padding:6px 12px;border-radius:999px}
+.tp-pill-verified{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);color:var(--muted);font:700 11px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.05em;padding:5px 11px;border-radius:999px;background:var(--card)}
+.tp-meta{color:var(--muted);font-size:13.5px;margin-top:10px;word-break:break-word}
+.tp-bio{font-size:14px;line-height:1.6;margin:12px 0 0;max-width:640px;white-space:pre-wrap}
+.tp-hero-actions{display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap}
+.tp-stats{display:grid;grid-template-columns:repeat(4,1fr);margin:24px -26px 0;border-top:1px solid var(--line)}
+.tp-stat{padding:16px 26px;border-left:1px solid var(--line)}
+.tp-stat:first-child{border-left:0}
+.tp-stat-n{font:800 30px/1 'Barlow Condensed',sans-serif}
+.tp-stat-l{font:700 11px/1 Barlow,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.tp-grid{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(0,1fr);gap:22px;margin-top:24px;align-items:start}
+.tp-main,.tp-side{min-width:0}
+.tp-side{display:flex;flex-direction:column;gap:18px}
+.tp-side .card,.tp-main .card{margin-top:0}
+.tp-sec-head h2{font:800 19px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0}
+.tp-evcard{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:14px;padding:18px 20px;margin-top:12px}
+.tp-ev-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.tp-ev-kicker{font:700 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tp-ev-name{font:800 18px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-top:4px;word-break:break-word}
+.tp-ev-date{color:var(--muted);font-size:12.5px;margin-top:4px}
+.tp-ev-foot{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;padding-top:14px;border-top:1px solid var(--line)}
+.tp-strength-bar{height:8px;border-radius:999px;background:var(--card2);overflow:hidden;margin:12px 0 16px}
+.tp-strength-bar>i{display:block;height:100%;background:var(--red)}
+.tp-check{display:flex;flex-direction:column;gap:11px}
+.tp-check-item{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted)}
+.tp-check-item.done{color:var(--ink)}
+.tp-check-dot{width:15px;height:15px;border-radius:50%;flex:0 0 auto;border:2px solid var(--line);background:var(--card)}
+.tp-check-item.done .tp-check-dot{background:var(--red);border-color:var(--red)}
+.tp-details>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tp-details>summary::-webkit-details-marker{display:none}
+.tp-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}
+.tp-details[open] .tp-caret::after{transform:rotate(180deg)}
+.tp-docrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
+.tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
+@media(max-width:920px){.tp-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.tp-stats{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
+`;
+
+// Unified Talent Profile (KOL + Photographer). Man Power keeps its own dashboard.
+// Two-column: header band + real stat counts, then My events (with the shared
+// application tracker) + Certificates on the left, and Profile strength +
+// Personal details (collapsible) + My documents on the right. All values come
+// from the talent's real record — no fabricated ratings/skills.
+function kolProfilePage({ account, certs, events, stats, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
-  // Modern profile header bits: initial avatar (personalised colour), @handle, role, bio.
+  const sc = stats || { events: 0, approved: 0, proofs: 0, certs: 0 };
+  const isCreator = acc.talent_type === 'kol';
+  // Avatar: personalised-colour initial (talents have no photo field yet).
   const initial = ((acc.name || '?').trim()[0] || '?').toUpperCase();
   let hsum = 0; const nm = acc.name || '?'; for (let i = 0; i < nm.length; i++) hsum += nm.charCodeAt(i);
   const hue = hsum % 360;
-  const avatarBg = `linear-gradient(135deg,hsl(${hue},70%,56%),hsl(${(hue + 30) % 360},68%,44%))`;
+  const avatarBg = `linear-gradient(135deg,hsl(${hue},70%,54%),hsl(${(hue + 32) % 360},66%,42%))`;
   const handle = acc.instagram ? '@' + esc(acc.instagram) : (acc.login ? '@' + esc(String(acc.login).split('@')[0]) : '');
   const roleLabel = talentLabel(L, acc.talent_type);
+  const verified = acc.hyrox_cert_status === 'verified';
+  const cityLine = acc.city ? esc(acc.city) + ', ID' : '';
+  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at)) }) : '';
+  const metaBits = [handle, cityLine, joined].filter(Boolean).join(' · ');
   const bio = acc.experience || '';
-  const certList = (certs && certs.length)
-    ? `<div class="dl-list">${certs.map((c) => `<div class="dl-item" style="align-items:center">
-        <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''}</div><div class="muted" style="font-size:11.5px;margin-top:2px">${esc(c.cert_no)}</div></div>
-        <a href="/sertifikat/${esc(c.id)}" class="btn btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a>
-      </div>`).join('')}</div>`
-    : `<p class="muted" style="margin-top:12px">${t('cert.empty')}</p>`;
+
+  // Stats row — real counts only.
+  const statCells = [[sc.events, t('tp.stat.events')], [sc.approved, t('tp.stat.approved')], [sc.proofs, t('tp.stat.proofs')], [sc.certs, t('tp.stat.certs')]]
+    .map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
+
+  // My events (application history) — one card per application, newest first.
   const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
-  // Application history ("Riwayat Lamaran"): one row per position applied, newest
-  // first, with a colour-coded status badge. A status filter appears once long.
-  const histRows = (events || []).map((e) => {
-    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
-    return `<div class="dl-item ta-hist" data-status="${esc(e.status || '')}" style="display:block">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-          <div style="min-width:0"><b>${esc(e.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${posLbl ? esc(posLbl) + ' · ' : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
-          ${talentStatusBadge(e.status, L)}
-        </div>
-      </div>`;
-  }).join('');
   const histStatuses = [...new Set((events || []).map((e) => e.status).filter(Boolean))];
   const histFilter = (events && events.length > 3 && histStatuses.length > 1)
-    ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div><script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>`
+    ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div>`
     : '';
-  const evList = (events && events.length)
-    ? `${histFilter}<div class="dl-list">${histRows}</div>`
-    : `<p class="muted" style="margin-top:12px">${t('ta.history.empty')}</p>`;
-  const ddPath = '/data-diri?lang=' + L;
-  const body = `<div class="wrap narrow">
-  <style>.prof-details>summary{list-style:none}.prof-details>summary::-webkit-details-marker{display:none}.prof-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}.prof-details[open] .prof-caret::after{transform:rotate(180deg)}
-  .pc-card{display:flex;align-items:center;gap:15px;background:linear-gradient(135deg,#ff2a37,#c00c17);color:#fff;border-radius:16px;padding:16px 18px;text-decoration:none;margin:0 0 16px;box-shadow:0 12px 28px rgba(228,18,31,.30);transition:transform .15s,box-shadow .15s}
-  .pc-card:hover{transform:translateY(-2px);box-shadow:0 16px 34px rgba(228,18,31,.36)}
-  .pc-ic{flex:0 0 auto;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:#fff}
-  .pc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-  .pc-title{font-weight:800;font-size:16px;line-height:1.2}
-  .pc-sub{font-size:12.5px;line-height:1.4;color:rgba(255,255,255,.92)}
-  .pc-cta{flex:0 0 auto;background:#fff;color:var(--red);font-weight:800;font-size:13px;padding:11px 16px;border-radius:999px;white-space:nowrap}
-  @media(max-width:560px){.pc-card{flex-wrap:wrap;gap:12px}.pc-cta{width:100%;text-align:center;order:3}}</style>
-  ${!acc.profile_completed_at ? `<a href="${ddPath}" class="pc-card">
-    <span class="pc-ic"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M19 8v4M17 10h4"/></svg></span>
-    <span class="pc-body"><span class="pc-title">${esc(t('prof.completeTitle'))}</span><span class="pc-sub">${esc(t('prof.completePrompt'))}</span></span>
-    <span class="pc-cta">${esc(t('prof.completeCta'))} →</span>
-  </a>` : ''}
-  <div class="card" style="margin-top:0;padding:22px 20px">
-    <div style="display:flex;gap:18px;align-items:center">
-      <div style="width:84px;height:84px;border-radius:50%;background:${avatarBg};color:#fff;font:800 36px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.14)">${esc(initial)}</div>
-      <div style="min-width:0;flex:1">
-        <div style="font-size:22px;font-weight:800;line-height:1.15;word-break:break-word">${esc(acc.name || '—')}</div>
-        <div class="muted" style="font-size:14px;margin-top:3px;word-break:break-word">${handle}</div>
+  const histCards = (events || []).map((e) => {
+    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+    const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
+    const canProof = isCreator && ['approved', 'assigned', 'completed'].includes(e.status);
+    const foot = [
+      e.ref ? `<a href="/event/${esc(e.ref)}?lang=${L}" class="btn btn-ghost btn-sm">${t('tp.eventBrief')}</a>` : '',
+      canProof ? `<a href="/kirim-bukti?lang=${L}" class="btn btn-ghost btn-sm">${t('tp.uploadProof')}</a>` : '',
+    ].filter(Boolean).join('');
+    return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
+      <div class="tp-ev-top">
+        <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? esc(posLbl) + ' · ' : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+        ${talentStatusBadge(e.status, L)}
       </div>
+      ${applicationTracker(e.status, L)}
+      ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
+    </div>`;
+  }).join('');
+  const histBlock = (events && events.length)
+    ? `${histFilter}${histCards}<script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.tp-evcard.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>`
+    : `<div class="card" style="margin-top:12px"><p class="muted" style="margin:0">${t('ta.history.empty')}</p></div>`;
+
+  // Certificates — real list, or the "auto-issued" placeholder.
+  const certBlock = (certs && certs.length)
+    ? certs.map((c, i) => `<div class="tp-docrow"${i ? ' style="border-top:1px solid var(--line)"' : ''}>
+        <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''} · ${esc(c.cert_no)}</div></div>
+        <a href="/sertifikat/${esc(c.id)}" class="btn btn-ghost btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a></div>`).join('')
+    : `<div style="display:flex;gap:14px;align-items:center;padding:4px 0"><div style="width:44px;height:44px;border-radius:50%;border:2px dashed var(--line);flex:0 0 auto"></div><div style="min-width:0"><b style="font-size:14px">${t('cert.emptyTitle')}</b><div class="muted" style="font-size:12.5px;margin-top:3px">${t('cert.empty')}</div></div></div>`;
+
+  // Profile strength — derived from real completeness only.
+  const chk = [
+    { on: !!acc.profile_completed_at, label: t('tp.check.basic') },
+    { on: !!acc.instagram, label: t('tp.check.social') },
+    { on: !!acc.ktp, label: t('tp.check.id') },
+    { on: !!(acc.cv_path || acc.hyrox_cert_path || acc.portfolio_url), label: t('tp.check.docs') },
+  ];
+  const strengthPct = Math.round((chk.filter((c) => c.on).length / chk.length) * 100);
+  const chkHtml = chk.map((c) => `<div class="tp-check-item${c.on ? ' done' : ''}"><span class="tp-check-dot"></span><span>${esc(c.label)}</span></div>`).join('');
+
+  // My documents — real status per document.
+  const docState = (ok, path, kind) => ok
+    ? (path ? `<a href="/dokumen/file/${kind}?lang=${L}" target="_blank" rel="noopener" class="tp-doc-ok">${t('tp.doc.view')}</a>` : `<span class="tp-doc-ok">${t('tp.doc.done')}</span>`)
+    : `<span class="muted" style="font-size:12.5px">${t('tp.doc.missing')}</span>`;
+  const hxLabel = { verified: t('doc.hx.verified'), pending: t('doc.hx.pending'), rejected: t('doc.hx.rejected') }[acc.hyrox_cert_status] || t('tp.doc.missing');
+  const docRows = `<div class="tp-docrow"><span>${t('tp.doc.ktp')}</span>${docState(!!acc.ktp, null)}</div>
+    ${isCreator ? `<div class="tp-docrow" style="border-top:1px solid var(--line)"><span>${t('doc.cv')}</span>${docState(!!acc.cv_path, acc.cv_path, 'cv')}</div>` : ''}
+    <div class="tp-docrow" style="border-top:1px solid var(--line)"><span>${t('doc.hyrox')}</span><span class="muted" style="font-size:12.5px">${esc(hxLabel)}</span></div>`;
+
+  const body = `<div class="wrap tp-wrap">
+  <style>${PROFILE_CSS}</style>
+
+  <div class="tp-hero">
+    <div class="tp-hero-main">
+      <div class="tp-avatar" style="background:${avatarBg}">${esc(initial)}</div>
+      <div class="tp-id">
+        <div class="tp-kicker">${t('tp.kicker')}</div>
+        <div class="tp-nameline"><h1 class="tp-name">${esc(acc.name || '—')}</h1><span class="tp-pill-cat">${esc(roleLabel)}</span>${verified ? `<span class="tp-pill-verified">✓ ${t('tp.verified')}</span>` : ''}</div>
+        ${metaBits ? `<div class="tp-meta">${metaBits}</div>` : ''}
+        ${bio ? `<p class="tp-bio">${esc(bio)}</p>` : ''}
+      </div>
+      <div class="tp-hero-actions"><a href="/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('tp.editProfile')}</a></div>
     </div>
-    ${bio ? `<p style="font-size:14px;line-height:1.6;margin:16px 0 0;color:var(--muted);white-space:pre-wrap">${esc(bio)}</p>` : ''}
-    <a href="/data-diri?edit=1&lang=${L}" class="btn btn-block" style="margin-top:18px">✎ ${t('prof.edit')}</a>
+    <div class="tp-stats">${statCells}</div>
   </div>
 
-  <details class="prof-details" style="margin-top:24px">
-    <summary style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:800;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 18px">
-      <span>${t('prof.dataTitle')}</span>
-      <span class="muted prof-caret" style="font-weight:600;font-size:13px">${t('prof.showDetail')}</span>
-    </summary>
-    <div class="card" style="margin-top:10px">${talentProfileBlock(acc, L)}</div>
-  </details>
+  <div class="tp-grid">
+    <div class="tp-main">
+      <div class="tp-sec-head"><h2>${t('ta.history.title')}</h2></div>
+      ${histBlock}
+      <div class="tp-sec-head" style="margin-top:26px"><h2>${t('cert.myTitle')}</h2></div>
+      <div class="card" style="margin-top:12px">${certBlock}</div>
+    </div>
+    <aside class="tp-side">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="tp-card-kicker">${t('tp.strength')}</span><b style="color:var(--red)">${strengthPct}%</b></div>
+        <div class="tp-strength-bar"><i style="width:${strengthPct}%"></i></div>
+        <div class="tp-check">${chkHtml}</div>
+        ${strengthPct < 100 ? `<a href="/data-diri?lang=${L}" class="btn btn-sm btn-block" style="margin-top:16px">${t('prof.completeCta')}</a>` : ''}
+      </div>
 
-  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📋 ${t('ta.history.title')}</h2></div>
-  ${evList}
+      <details class="card tp-details">
+        <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
+        <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
+      </details>
 
-  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">🎖️ ${t('cert.myTitle')}</h2></div>
-  ${certList}
+      <div class="card">
+        <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
+        ${docRows}
+        <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
+      </div>
+    </aside>
+  </div>
 
-  <div class="section-head" style="margin-top:24px"><h2 style="margin:0;font-size:16px">📄 ${t('doc.title')}</h2></div>
-  <a href="/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;text-decoration:none;color:inherit">
-    <span style="min-width:0"><b>${t('doc.manage')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageSub')}</div></span>
-    <span style="font-size:22px;flex-shrink:0">›</span>
-  </a>
-
-  <form method="post" action="/logout" style="margin-top:26px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
+  <form method="post" action="/logout" style="margin-top:26px;max-width:340px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
 }
