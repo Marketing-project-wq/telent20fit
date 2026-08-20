@@ -1691,7 +1691,16 @@ const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from 
 async function eoOwnedEvent(st, staffId, eventId) {
   return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
 }
-function eoSelMap(positions) { const m = {}; (positions || []).forEach((p) => { m[p.position_id] = { quota: p.quota, jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' }; }); return m; }
+const POS_DETAIL_KEYS = ['work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
+function eoSelMap(positions) {
+  const m = {};
+  (positions || []).forEach((p) => {
+    const o = { quota: p.quota, jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' };
+    POS_DETAIL_KEYS.forEach((k) => { o[k] = p[k] || ''; });
+    m[p.position_id] = o;
+  });
+  return m;
+}
 
 // Per-event view: opened positions with filled(accepted)/applicants/quota, apply count, display status.
 function eoEventView(ev, positions, apps, choices) {
@@ -1722,16 +1731,30 @@ function parseEventForm(req, positionsMaster) {
     status: EO_STATUSES.includes(st) ? st : 'draft',
   };
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
+  const keyById = new Map((positionsMaster || []).map((p) => [String(p.id), p.key]));
   const chosen = [].concat(req.body.pos || []);
   const seen = new Set(); const positions = [];
   chosen.forEach((id) => {
     id = String(id);
     if (!validIds.has(id) || seen.has(id)) return;
     const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
-    const jobdesk = String(req.body['jobdesk_' + id] || '').trim().slice(0, 1000) || null;
-    const requirement = String(req.body['requirement_' + id] || '').trim().slice(0, 1000) || null;
-    const fee = String(req.body['fee_' + id] || '').trim().slice(0, 200) || null;
-    if (q > 0) { seen.add(id); positions.push({ position_id: id, quota: q, jobdesk, requirement, fee }); }
+    if (q <= 0) return;
+    // Per-field getter (trim + cap length; empty -> null).
+    const g = (f, max) => String(req.body[f + '_' + id] || '').trim().slice(0, max) || null;
+    const key = keyById.get(id);
+    const pos = {
+      position_id: id, quota: q,
+      jobdesk: g('jobdesk', 1000), requirement: g('requirement', 1000), fee: g('fee', 200),
+      // General extra fields (all categories).
+      work_hours: g('work_hours', 120), venue_detail: g('venue_detail', 200),
+      dresscode: g('dresscode', 400), meeting_point: g('meeting_point', 400),
+      // Category-specific fields are only stored for the matching position type.
+      kol_content: null, kol_deadline: null, kol_min_followers: null, kol_hashtags: null,
+      photo_output: null, photo_deadline: null, photo_equipment: null,
+    };
+    if (key === 'kol') { pos.kol_content = g('kol_content', 200); pos.kol_deadline = g('kol_deadline', 120); pos.kol_min_followers = g('kol_min_followers', 120); pos.kol_hashtags = g('kol_hashtags', 400); }
+    if (key === 'fotografer') { pos.photo_output = g('photo_output', 300); pos.photo_deadline = g('photo_deadline', 120); pos.photo_equipment = g('photo_equipment', 400); }
+    seen.add(id); positions.push(pos);
   });
   return { data, positions, echo: Object.assign({}, data, { positions }) };
 }

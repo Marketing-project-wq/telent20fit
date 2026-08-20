@@ -2241,19 +2241,30 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
     const on = Object.prototype.hasOwnProperty.call(sel, p.id);
     const cur = on ? sel[p.id] : null;
     const q = cur ? (typeof cur === 'object' ? cur.quota : cur) : '';
-    const jd = cur && typeof cur === 'object' ? (cur.jobdesk || '') : '';
-    const reqv = cur && typeof cur === 'object' ? (cur.requirement || '') : '';
-    const feev = cur && typeof cur === 'object' ? (cur.fee || '') : '';
+    const pid = esc(p.id);
+    // Current value for a per-position field (from the selected/edit map).
+    const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
+    const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
+    const grp = (txt) => `<div class="muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:12px">${txt}</div>`;
+    // Category-specific fields only render (and only save) for the matching type.
+    const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
+    const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
     return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
       <label style="display:flex;gap:10px;align-items:center">
-        <input type="checkbox" name="pos" value="${esc(p.id)}" ${on ? 'checked' : ''} class="posm-cb">
+        <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
-        <input type="number" name="quota_${esc(p.id)}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
+        <input type="number" name="quota_${pid}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
-        <textarea name="jobdesk_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px">${esc(jd)}</textarea>
-        <textarea name="requirement_${esc(p.id)}" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(reqv)}</textarea>
-        <input type="text" name="fee_${esc(p.id)}" maxlength="200" value="${esc(feev)}" placeholder="${t('eo.ev.feePh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">
+        <textarea name="jobdesk_${pid}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px">${esc(cv('jobdesk'))}</textarea>
+        ${grp(t('eo.pos.detailGroup'))}
+        ${inp('work_hours', 'eo.pos.workHoursPh', 120)}
+        ${inp('venue_detail', 'eo.pos.venuePh', 200)}
+        <input type="text" name="fee_${pid}" maxlength="200" value="${esc(cv('fee'))}" placeholder="${t('eo.ev.feePh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">
+        <textarea name="requirement_${pid}" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('requirement'))}</textarea>
+        ${inp('dresscode', 'eo.pos.dresscodePh', 400)}
+        ${inp('meeting_point', 'eo.pos.meetingPh', 400)}
+        ${kolFields}${photoFields}
       </div>
     </div>`;
   }).join('');
@@ -4655,10 +4666,24 @@ function talentEventApply({ account, event, ctx, lang }) {
     } else {
       action = '';
     }
-    // Jobdesk = the card's main description; requirement/fee/quota + action sit
-    // in the footer. Uses shared benefitCard() to match the landing benefit grid.
-    const quotaLine = `<div style="font-size:12.5px;color:#5b6069;margin-top:12px">${t('ta.quota')}: ${p.filled || 0}/${p.quota || 0}${isOpen && left > 0 ? ` · ${t('ta.slotsLeft')}: <b style="color:var(--red)">${left}</b>` : ''}</div>`;
-    const foot = `${p.requirement ? sec('✅', t('ta.requirement'), p.requirement) : ''}${p.fee ? sec('💰', t('ta.fee'), p.fee) : ''}${quotaLine}${action}`;
+    // Team-context line — derived from quota but never shown as a slot/quota
+    // number: "you'll work alongside N other talents in this position".
+    const mates = Math.max(0, (p.quota || 0) - 1);
+    const teamLine = mates > 0 ? `<div style="font-size:12.5px;color:var(--muted,#6b6b70);margin-top:12px">👥 ${t('ta.teamContext', { n: mates })}</div>` : '';
+    // Every EO-filled extra detail sits in an expandable "Lihat Detail" so the
+    // card stays compact; empty fields are skipped. Category fields only for the type.
+    const detailRows = [
+      ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
+      ['💰', t('ta.fee'), p.fee], ['✅', t('ta.requirement'), p.requirement],
+      ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
+    ];
+    if (p.key === 'kol') detailRows.push(['🎬', t('ta.d.kolContent'), p.kol_content], ['⏰', t('ta.d.kolDeadline'), p.kol_deadline], ['📈', t('ta.d.kolFollowers'), p.kol_min_followers], ['#️⃣', t('ta.d.kolHashtags'), p.kol_hashtags]);
+    if (p.key === 'fotografer') detailRows.push(['🖼️', t('ta.d.photoOutput'), p.photo_output], ['⏰', t('ta.d.photoDeadline'), p.photo_deadline], ['📷', t('ta.d.photoEquip'), p.photo_equipment]);
+    const filledRows = detailRows.filter(([, , v]) => v && String(v).trim());
+    const detailHtml = filledRows.length
+      ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div>${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
+      : '';
+    const foot = `${teamLine}${detailHtml}${action}`;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
@@ -4708,7 +4733,14 @@ function talentEventApply({ account, event, ctx, lang }) {
   const docsWarn = (docsMissing && creatorOpen)
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
-  const body = `<div class="wrap" style="max-width:1080px">
+  const body = `<style>
+    .pos-detail>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:700;color:var(--red,#e11d48);display:inline-flex;align-items:center;gap:6px;user-select:none}
+    .pos-detail>summary::-webkit-details-marker{display:none}
+    .pos-detail>summary::after{content:"\\203A";font-weight:800;font-size:15px;line-height:1;transition:transform .2s;display:inline-block}
+    .pos-detail[open]>summary::after{transform:rotate(90deg)}
+    .pos-detail[open]>summary{margin-bottom:2px}
+  </style>
+  <div class="wrap" style="max-width:1080px">
     <a href="${loggedIn ? '/events' : '/'}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
     ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
     <h1 style="margin:0;font-size:clamp(26px,3.2vw,38px);line-height:1.08">${esc(e.name)}</h1>
