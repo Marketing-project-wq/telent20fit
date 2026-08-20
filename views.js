@@ -94,9 +94,6 @@ const STYLE = `
   --warn:#a86a00;--warn-soft:rgba(168,106,0,.12);--err:#d32f2f;--err-soft:rgba(211,47,47,.10);}
 :root[data-theme="light"] .brand .brand-dark{display:none}
 :root[data-theme="light"] .brand .brand-light{display:block}
-:root[data-theme="light"] .sidebar{box-shadow:0 0 0 1px var(--line)}
-:root[data-theme="light"] .side-nav a.active{color:var(--red)}
-:root[data-theme="light"] .hamburger{color:var(--ink)}
 :root[data-theme="light"] .topbar{color:var(--ink)}
 :root[data-theme="light"] .pill-off{background:var(--card2)}
 :root[data-theme="light"] input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:none}
@@ -111,37 +108,33 @@ a{color:var(--red)}
 .topbar{background:var(--panel);color:#fff;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--line)}
 .topbar .in{max-width:1000px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;justify-content:center;gap:18px}
 .logo{font-size:21px;line-height:1;text-decoration:none}
-/* Left sidebar app shell */
-.nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
-.sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
-.side-logo{padding:22px 22px 18px;font-size:26px;line-height:1;text-decoration:none}
+/* App shell: sticky top bar + a bottom nav bar, the same on every screen size */
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
 .brand .brand-img{height:2.8em;width:auto;max-width:100%;display:block;flex:0 0 auto}
 .brand .brand-dark{height:1.56em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
-/* Center the brand logo in the sidebar */
-.side-logo{display:flex;justify-content:center}
-.side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
-.side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
-.side-nav a svg{width:20px;height:20px;flex-shrink:0}
-.side-nav a:hover{background:var(--card2);color:var(--ink)}
-.side-nav a.active{background:var(--red-soft);color:#fff;box-shadow:inset 3px 0 0 var(--red)}
-.side-nav a.active svg{color:var(--red)}
-.side-foot{border-top:1px solid var(--line);padding:14px 16px}
-.side-user{font-size:12.5px;color:var(--muted);margin-bottom:11px;line-height:1.35}
-.side-user b{color:var(--ink);font-size:14px;display:block}
-.nav-scrim{display:none}
-.app-main{margin-left:236px;min-height:100vh}
-.app-top{display:none}
-.tab-bar{display:none}
-.wrap{max-width:1000px;margin:0 auto;padding:30px 20px 70px}
+/* Top bar: brand logo (left), user + Exit/Logout (right) */
+.app-top{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:11px 20px}
+.app-top-logo{font-size:20px;line-height:1;text-decoration:none;flex:0 0 auto}
+.app-top-right{display:flex;align-items:center;gap:12px;min-width:0}
+.app-user{font-size:12px;color:var(--muted);line-height:1.3;text-align:right;min-width:0}
+.app-user b{color:var(--ink);font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.app-top-right form{margin:0}
+/* Main content spans the full width now that the sidebar is gone; leave room for the fixed bottom nav */
+.app-main{min-height:100vh;padding-bottom:88px}
+.wrap{max-width:1000px;margin:0 auto;padding:30px 20px 40px}
 .wrap.narrow{max-width:640px}
-/* Talent pages sit next to the sidebar — left-align the content so narrow
-   pages hug the sidebar instead of floating awkwardly centered. */
-.talent-app .wrap{margin-left:0;margin-right:auto}
-@media(min-width:900px){.talent-app .wrap{padding-left:34px}}
+/* Bottom nav bar — replaces the old left sidebar; horizontal, scrolls if the items overflow */
+.tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none;padding-bottom:env(safe-area-inset-bottom,0px)}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-inner{display:flex;justify-content:center;gap:4px;margin:0 auto;min-width:min-content;padding:7px 12px}
+.tab-bar a{flex:0 0 auto;min-width:66px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 12px;border-radius:12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px;white-space:nowrap}
+.tab-bar a svg{width:22px;height:22px;flex-shrink:0}
+.tab-bar a:hover{background:var(--card2);color:var(--ink)}
+.tab-bar a.active{background:var(--red-soft);color:var(--red)}
+.tab-bar a.active svg{color:var(--red)}
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .sub{color:var(--muted);font-size:15px;margin-top:5px}
@@ -256,24 +249,16 @@ tr:last-child td{border-bottom:none}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
-@media(max-width:899px){
-  /* Sidebar becomes an off-canvas drawer toggled by the hamburger */
-  .sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 44px rgba(0,0,0,.6);width:252px}
-  .nav-cb:checked ~ .sidebar{transform:none}
-  .nav-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
-  .nav-cb:checked ~ .nav-scrim{display:block}
-  .app-main{margin-left:0}
-  .app-top{display:flex;align-items:center;justify-content:center;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
-  .hamburger{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
-  .app-top-logo{font-size:20px;line-height:1;text-decoration:none}
-  /* Talent app: bottom tab bar (mobile-app style) replaces the drawer nav */
-  .talent-app .tab-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
-  .talent-app .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px}
-  .talent-app .tab-bar a svg{width:22px;height:22px}
-  .talent-app .tab-bar a.active,.talent-app .tab-bar a.active svg{color:var(--red)}
-  .talent-app .hamburger{display:none}
-  .talent-app .app-main{padding-bottom:74px}
+@media(max-width:640px){
+  /* Phones: tighten the top bar and the bottom-nav items */
+  .app-top{padding:10px 14px}
+  .app-top-right{gap:9px}
+  .app-user{font-size:11px}
+  .app-user b{font-size:12.5px;max-width:108px}
+  .tab-bar a{min-width:60px;padding:6px 9px;font-size:10.5px}
 }
+/* Very small phones: drop the name/role text so the logo, toggle and Exit/Logout never crowd */
+@media(max-width:520px){.app-user{display:none}}
 @media(max-width:600px){
   /* Reflow wide tables into stacked cards on phones */
   table{min-width:0 !important}
@@ -344,11 +329,9 @@ function navLink(href, key, active, icon, label) {
 }
 
 /**
- * Sidebar app shell for authenticated pages. Menu adapts to role:
- *   kol         -> Bukti Post
- *   eo          -> Dashboard, Bukti Post
- *   super_admin -> Dashboard, Bukti Post, Kelola
- * Fixed sidebar on desktop; off-canvas drawer with a hamburger on mobile.
+ * App shell for authenticated pages. Menu adapts to role (talent / eo /
+ * super_admin). Navigation is a bottom bar on every screen size (the old left
+ * sidebar); the brand, the signed-in user and Exit/Logout sit in the top bar.
  */
 function appLayout({ title, body, role, active, user, lang }) {
   const L = normLang(lang);
@@ -378,31 +361,29 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/talent', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
+  // Top bar carries the brand + the user/logout that used to sit in the sidebar
+  // foot; navigation itself lives in the bottom bar. Exit/Logout and (for staff)
+  // the language toggle move up here since the bottom is now for nav only.
+  const acctBtn = isStaff
+    ? `<form method="post" action="${logoutAction}"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>`
+    : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('nav.exit')}</a>`;
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
-<body class="${isStaff ? '' : 'talent-app'}">
-<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
-<aside class="sidebar">
-  <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
-  <nav class="side-nav">${items}</nav>
-  <div class="side-foot">
-    ${isStaff ? `<div style="margin-bottom:12px">${toggles(L)}</div>` : ''}
-    <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
-    ${isStaff
-      ? `<form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>`
-      : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm btn-block">${t('nav.exit')}</a>`}
+<body class="app-body ${isStaff ? 'staff-app' : 'talent-app'}">
+<header class="app-top">
+  <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
+  <div class="app-top-right">
+    ${isStaff ? toggles(L) : ''}
+    <div class="app-user"><b>${esc(user || '')}</b><span>${roleLabel}</span></div>
+    ${acctBtn}
   </div>
-</aside>
-<label for="nav-cb" class="nav-scrim"></label>
+</header>
 <div class="app-main">
-  <div class="app-top">
-    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
-    <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
-  </div>
   ${body}
 </div>
-${isStaff ? '' : `<nav class="tab-bar">${items}</nav>`}
+<nav class="tab-bar"><div class="tab-inner">${items}</div></nav>
+<script>(function(){var b=document.querySelector('.tab-bar'),a=b&&b.querySelector('a.active');if(b&&a){b.scrollLeft=Math.max(0,a.offsetLeft-(b.clientWidth-a.offsetWidth)/2);}})();</script>
 </body></html>`;
 }
 
