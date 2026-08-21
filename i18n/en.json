@@ -78,6 +78,8 @@
   "ta.status.assigned": "Assigned",
   "ta.status.completed": "Completed",
   "ta.status.rejected": "Rejected",
+  "ta.status.not_selected": "Not Selected",
+  "ta.status.not_continued": "Not Continued",
   "ta.applyConfirmTitle": "Confirm Application",
   "ta.applyConfirmQ": "Are you sure you want to apply as {pos} for {event}?",
   "ta.applyConfirmYes": "Yes, Apply",

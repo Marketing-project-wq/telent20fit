@@ -398,6 +398,24 @@ function supabaseStore() {
       const { error } = await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
       if (error) throw new Error(error.message);
     },
+    // Accept a talent into one position as ONE transaction (quota check + accept +
+    // auto-decline their other picks for the event + status-history rows), via the
+    // talent_accept_choice RPC. Returns 'ok' | 'full' | 'skip'.
+    async acceptApplicationTxn(applicationId, positionId, reviewerId) {
+      const { data, error } = await sb.rpc('talent_accept_choice', { p_app_id: applicationId, p_position_id: positionId, p_reviewer: reviewerId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
+    // Append a status-history row (kapan, dari apa ke apa, oleh siapa).
+    async logStatusChange(applicationId, fromStatus, toStatus, changedBy) {
+      const { error } = await sb.from('talent_application_status_log')
+        .insert({ application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null });
+      if (error) throw new Error(error.message);
+    },
+    async listApplicationStatusLog(applicationId) {
+      const { data } = await sb.from('talent_application_status_log').select('*').eq('application_id', applicationId).order('changed_at');
+      return data || [];
+    },
     async deleteApplication(id) {
       // No FK cascade on talent_application_choices, so remove choices first to
       // avoid leaving orphaned rows behind.
@@ -560,6 +578,7 @@ function memoryStore() {
   const passwordResets = [];
   const certificates = [];
   const proofs = [];
+  const statusLog = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
 
@@ -682,6 +701,29 @@ function memoryStore() {
     async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
     async acceptApplicationChoice(applicationId, positionId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); }); },
     async clearApplicationAccepted(applicationId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = false; }); },
+    async acceptApplicationTxn(applicationId, positionId, reviewerId) {
+      const app = applications.find((a) => a.id === applicationId);
+      if (!app) return 'skip';
+      const myChoices = applicationChoices.filter((c) => c.application_id === applicationId);
+      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip';
+      const ep = eventPositions.find((p) => p.event_id === app.event_id && p.position_id === positionId);
+      const quota = ep ? ep.quota : 0;
+      const appIds = new Set(applications.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+      const taken = applicationChoices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== applicationId && appIds.has(c.application_id)).length;
+      if (quota > 0 && taken >= quota) return 'full';
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = (c.position_id === positionId); c.outcome = c.position_id === positionId ? 'accepted' : null; } });
+      if (app.status !== 'approved') statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: app.status || null, to_status: 'approved', changed_by: reviewerId || null, changed_at: now() });
+      Object.assign(app, { status: 'approved', reviewed_by: reviewerId || null, reviewed_at: now() });
+      const others = applications.filter((a) => a.event_id === app.event_id && a.talent_id === app.talent_id && a.id !== applicationId && !['approved', 'not_selected', 'not_continued', 'rejected'].includes(a.status));
+      for (const o of others) {
+        applicationChoices.forEach((c) => { if (c.application_id === o.id) { c.accepted = false; c.outcome = 'not_continued'; } });
+        statusLog.push({ id: 'sl-' + (++seq), application_id: o.id, from_status: o.status || null, to_status: 'not_continued', changed_by: reviewerId || null, changed_at: now() });
+        Object.assign(o, { status: 'not_continued', reviewed_by: reviewerId || null, reviewed_at: now(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
+      }
+      return 'ok';
+    },
+    async logStatusChange(applicationId, fromStatus, toStatus, changedBy) { statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, changed_at: now() }); },
+    async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }

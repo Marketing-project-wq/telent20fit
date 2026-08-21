@@ -78,6 +78,8 @@
   "ta.status.assigned": "Assigned",
   "ta.status.completed": "Completed",
   "ta.status.rejected": "Rejected",
+  "ta.status.not_selected": "Tidak Terpilih",
+  "ta.status.not_continued": "Tidak Dilanjutkan",
   "ta.applyConfirmTitle": "Konfirmasi Lamaran",
   "ta.applyConfirmQ": "Apakah kamu yakin ingin melamar sebagai {pos} di event {event}?",
   "ta.applyConfirmYes": "Ya, Lamar",

@@ -2631,7 +2631,7 @@ function eoApplicantsSection(e, view, aps, L) {
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
-    if (a.status === 'rejected') {
+    if (['rejected', 'not_selected', 'not_continued'].includes(a.status)) {
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
@@ -2974,7 +2974,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       ${applicationTracker(e.status, L)}
       ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
       ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
-      ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
+      ${['rejected', 'not_selected', 'not_continued'].includes(e.status) && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
       ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
     </div>`;
   }).join('');
@@ -3277,7 +3277,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
     action = `<div class="card" style="margin-top:16px">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('apply.yourApp')}</div>
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge(myApplication.status, L)} <b>${esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type)}</b></div>
-      ${myApplication.status === 'rejected' && myApplication.note ? `<div class="muted" style="font-size:13px;margin-top:8px">${esc(myApplication.note)}</div>` : ''}
+      ${['rejected', 'not_selected', 'not_continued'].includes(myApplication.status) && myApplication.note ? `<div class="muted" style="font-size:13px;margin-top:8px">${esc(myApplication.note)}</div>` : ''}
     </div>`;
   } else if (cats && cats.length) {
     const needDocs = !hasCreatorDocs(account) && cats.some((c) => CREATOR_ROLES.includes(c.type));
@@ -3415,7 +3415,7 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
   const appCards = (myApps && myApps.length) ? myApps.map((a) => {
     const station = (a.status === 'approved' && a.station)
       ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${t('mp.station')}: <b style="color:var(--ink)">${esc(a.station)}${a.station_loc ? ' · ' + esc(a.station_loc) : ''}</b></div>` : '';
-    const note = (a.status === 'rejected' && a.note) ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(a.note)}</div>` : '';
+    const note = (['rejected', 'not_selected', 'not_continued'].includes(a.status) && a.note) ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(a.note)}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
       <div style="min-width:0"><b>${esc(a.event_name || '—')}</b>
         <div class="muted" style="font-size:12.5px;margin-top:3px">${t('mp.role')}: ${esc(a.role || '—')}</div>${station}${note}</div>
@@ -4440,7 +4440,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
         <input type="hidden" name="note" value="${esc(a.note || '')}">
         ${saveBtn}
-        ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
+        ${!['rejected', 'not_selected', 'not_continued'].includes(a.status) ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
       </form>`;
 
     const stationLine = (a.status === 'approved' && !(a.choices && a.choices.length))
@@ -4465,7 +4465,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
           <form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
         </div>`;
       }
-      if (a.status === 'rejected') {
+      if (['rejected', 'not_selected', 'not_continued'].includes(a.status)) {
         return `<div style="margin-top:12px"><form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form></div>`;
       }
       const btns = choices.map((c) => c.full
@@ -4768,6 +4768,7 @@ function talentStatusBadge(status, lang) {
     applied: ['#1d4ed8', '#dbeafe'], pending: ['#1d4ed8', '#dbeafe'],
     under_review: ['#b45309', '#fef3c7'], approved: ['#0f9d6a', '#d1fae5'],
     assigned: ['#0e7490', '#cffafe'], completed: ['#374151', '#e5e7eb'], rejected: ['#b91c1c', '#fee2e2'],
+    not_selected: ['#b91c1c', '#fee2e2'], not_continued: ['#6b6b70', '#eceae5'],
   };
   const c = map[status] || map.applied;
   return `<span class="pill" style="background:${c[1]};color:${c[0]}">${esc(t('ta.status.' + status) || status)}</span>`;
@@ -4779,7 +4780,7 @@ function talentStatusBadge(status, lang) {
 function applicationTracker(status, lang) {
   const L = normLang(lang);
   const t = (k) => tr(L, k);
-  if (status === 'rejected') return '';
+  if (['rejected', 'not_selected', 'not_continued'].includes(status)) return '';
   const steps = ['applied', 'under_review', 'approved', 'assigned'];
   const activeIdx = { applied: 0, pending: 0, under_review: 1, approved: 2, assigned: 3, completed: 3 };
   const achieved = { approved: 1, assigned: 1, completed: 1 };

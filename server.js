@@ -2004,30 +2004,10 @@ async function eoOwnedApplication(st, staffId, eventId, appId) {
   return { ev, app };
 }
 
-// Accept an applicant into one of their chosen positions (respects quota BR-9;
-// the DB enforces one accepted position per application).
-// #4: serialize accept operations per event so the quota read-then-write cannot
-// race two simultaneous accepts into over-filling a position. Single-process
-// guard (matches this app's single-instance deployment); for multi-node this
-// should be paired with a DB-level quota constraint.
-const _eventAcceptLocks = new Map();
-function withEventLock(eventId, fn) {
-  const prev = _eventAcceptLocks.get(eventId) || Promise.resolve();
-  const run = prev.then(fn, fn); // run regardless of the previous op's outcome
-  _eventAcceptLocks.set(eventId, run.then(() => {}, () => {}));
-  return run;
-}
-// #5 (Option A): one accepted position per talent per event. When a talent is
-// accepted into a position, decline their other still-open applications for the
-// same event (their other position picks lapse). Returns how many were declined.
-async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, reviewerId) {
-  const others = (apps || []).filter((a) => a.event_id === eventId && a.talent_id === talentId && a.id !== keepAppId && !['approved', 'rejected'].includes(a.status));
-  for (const o of others) {
-    await st.clearApplicationAccepted(o.id);
-    await st.updateApplication(o.id, { status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
-  }
-  return others.length;
-}
+// Accept an applicant into one of their chosen positions. The quota check, the
+// acceptance, the auto-decline of the talent's other picks for the event, and the
+// status-history rows all run inside st.acceptApplicationTxn as ONE transaction
+// (#4 quota race + #5 one accepted position per talent/event).
 app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2036,27 +2016,15 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     if (!found) return res.redirect('/eo/events');
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
     const positionId = String(req.body.position_id || '');
-    const outcome = await withEventLock(found.ev.id, async () => {
-      const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
-      const myChoices = choices.filter((c) => c.application_id === found.app.id);
-      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip'; // not one of their choices
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      // Quota check: accepted choices for this position across the event, excluding this application.
-      const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return 'full';
-      const wasApproved = found.app.status === 'approved';
-      await st.acceptApplicationChoice(found.app.id, positionId);
-      await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
-      // Email the talent their acceptance only on the first approval (mirrors the
-      // admin path's no-spam rule; re-accepting a different position won't resend).
-      if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
-      return 'ok';
-    });
+    const wasApproved = found.app.status === 'approved';
+    // One transaction (#4): quota check + accept + auto-decline the talent's other
+    // picks for this event + status-history rows, all inside acceptApplicationTxn.
+    const outcome = await st.acceptApplicationTxn(found.app.id, positionId, req.staff.id);
     if (outcome === 'full') return res.redirect(backTo + '&err=full');
     if (outcome === 'skip') return res.redirect(backTo);
+    // Email the talent their acceptance only on the first approval (re-accepting a
+    // different position won't resend).
+    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
     res.redirect(backTo + '&ok=accepted');
   } catch (e) { next(e); }
 });
@@ -2068,9 +2036,12 @@ app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, 
     if (!st) return needConfig(req, res);
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
-    const wasRejected = found.app.status === 'rejected';
+    // 'not_selected' = the EO decided against this talent (vs 'not_continued',
+    // which is set automatically when they're accepted into another position).
+    const wasRejected = ['not_selected', 'rejected'].includes(found.app.status);
     await st.clearApplicationAccepted(found.app.id);
-    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.logStatusChange(found.app.id, found.app.status, 'not_selected', req.staff.id);
+    await st.updateApplication(found.app.id, { status: 'not_selected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     if (!wasRejected) notifyPositionRejection(st, found.app, found.ev).catch((e) => console.error('[mail] EO rejection email failed:', e && e.message));
     res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
   } catch (e) { next(e); }
@@ -2084,6 +2055,7 @@ app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, n
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
     await st.clearApplicationAccepted(found.app.id);
+    await st.logStatusChange(found.app.id, found.app.status, 'applied', req.staff.id);
     await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang);
   } catch (e) { next(e); }
@@ -2346,6 +2318,7 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     } else {
       patch.status = 'rejected';
     }
+    if (prior && prior.status !== patch.status) await st.logStatusChange(req.params.id, prior.status, patch.status, req.staff.id);
     await st.updateApplication(req.params.id, patch);
     // On the first approval (transition into approved), email the talent their placement.
     // Fire-and-forget: a mail hiccup must never block or fail the approval itself.
@@ -2368,24 +2341,13 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
     const positionId = String(req.body.position_id || '');
     const app0 = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app0) return res.redirect('/admin/applications');
-    await withEventLock(app0.event_id, async () => {
-      const apps = await st.listApplications();
-      const app = apps.find((a) => a.id === req.params.id);
-      if (!app) return;
-      const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return; // not one of their picks
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
-      const wasApproved = app.status === 'approved';
-      await st.acceptApplicationChoice(app.id, positionId);
-      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
-      if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
-    });
+    const wasApproved = app0.status === 'approved';
+    // One transaction (#4): mirrors the EO accept path.
+    const outcome = await st.acceptApplicationTxn(app0.id, positionId, req.staff.id);
+    if (outcome === 'ok' && !wasApproved) {
+      const ev = (await st.listEvents()).find((e) => e.id === app0.event_id);
+      if (ev) notifyPositionAcceptance(st, app0, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -2396,9 +2358,10 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
     if (!st) return needConfig(req, res);
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
-    const wasRejected = app.status === 'rejected';
+    const wasRejected = ['not_selected', 'rejected'].includes(app.status);
     await st.clearApplicationAccepted(app.id);
-    await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.logStatusChange(app.id, app.status, 'not_selected', req.staff.id);
+    await st.updateApplication(app.id, { status: 'not_selected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     if (!wasRejected) {
       const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
       notifyPositionRejection(st, app, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
@@ -2414,6 +2377,7 @@ app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_adm
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
     await st.clearApplicationAccepted(app.id);
+    await st.logStatusChange(app.id, app.status, 'applied', req.staff.id);
     await st.updateApplication(app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
