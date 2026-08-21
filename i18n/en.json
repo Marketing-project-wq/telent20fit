@@ -340,6 +340,8 @@
   "ta.positionsTitle": "Available positions",
   "ta.applyThis": "Apply",
   "ta.loginToApply": "Log in to apply",
+  "ta.signupToApply": "Sign up to apply",
+  "auth.applyCtx": "You're applying for: {event}",
   "ta.viewDetail": "View details",
   "ta.teamContext": "You'll work alongside {n} other talents in this position",
   "ta.d.workHours": "Working hours",

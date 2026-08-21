@@ -1594,10 +1594,15 @@ function faqSection(lang) {
  * account) form, matching the 20FIT app style. Both /register and /login/talent render
  * this; `mode` picks the active tab and which panel a validation error lands on.
  */
-function talentAuthPage({ mode, lang, errors, values, next } = {}) {
+function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const v = values || {};
+  // When the visitor arrived from an event's Apply button, show which event they
+  // are in the middle of applying to, so the sign-up request makes sense.
+  const ctxBanner = eventName
+    ? `<div role="status" style="background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.25);color:#17171d;border-radius:10px;padding:11px 14px;font-size:13.5px;line-height:1.45;margin-bottom:14px">${esc(t('auth.applyCtx', { event: eventName }))}</div>`
+    : '';
   // Carry the post-auth redirect target (?next=/event/…) through both forms so a
   // visitor who clicked an event while logged out lands back on it after auth.
   const nextInput = next ? `<input type="hidden" name="next" value="${esc(next)}">` : '';
@@ -1651,6 +1656,7 @@ function talentAuthPage({ mode, lang, errors, values, next } = {}) {
       </ul>
     </section>
     <section class="au-card" id="au-form">
+      ${ctxBanner}
       <div class="au-tabs">
         <button type="button" class="au-tab${isLogin ? ' on' : ''}" data-tab="signin">${t('btn.signin')}</button>
         <button type="button" class="au-tab${isLogin ? '' : ' on'}" data-tab="signup">${t('auth.account.registerTitle')}</button>
@@ -1744,7 +1750,7 @@ a{text-decoration:none;color:inherit}
 
 function talentLogin(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values, next: opts.next });
+  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
@@ -1774,7 +1780,7 @@ function talentLogin(type, opts = {}) {
 
 function talentRegister(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values, next: opts.next });
+  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
@@ -1989,7 +1995,7 @@ function talentDataDiri(type, opts = {}) {
   <h1>${editing ? t('dd.editTitle') : t('dd.title')}</h1>
   <p class="sub">${editing ? t('dd.editSub') : t('dd.sub', { name: esc(account.name || '') })}</p>
   ${errorBanner}
-  <form class="card" method="post" action="/data-diri?lang=${L}">
+  <form class="card" method="post" action="/data-diri?lang=${L}">${opts.next ? `<input type="hidden" name="next" value="${esc(opts.next)}">` : ''}
     <div class="field">
       <label for="province">${t('dd.province')}${req}</label>
       ${provinceSelect(v.province, L)}
@@ -4894,12 +4900,13 @@ function talentEventApply({ account, event, ctx, lang }) {
       if (loggedIn) {
         action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
       } else {
-        // Visitor not logged in: keep the button visible/active, but send them to
-        // login first, remembering the exact event + position to resume after auth
-        // (?apply=<id> auto-opens the confirm modal; #pos-<id> scrolls to the card).
+        // Visitor not logged in: send them to create an account first, remembering
+        // the exact event + position to resume after auth (?apply=<id> auto-opens the
+        // confirm modal; #pos-<id> scrolls to the card). The auth page also has a
+        // "sign in" tab carrying the same next, for people who already have an account.
         const ref = e.slug || e.id;
         const back = encodeURIComponent('/event/' + ref + '?apply=' + p.position_id + '#pos-' + p.position_id);
-        action = `<a href="/login/talent?next=${back}" class="btn btn-sm" style="margin-top:14px;width:100%;box-sizing:border-box">${t('ta.loginToApply')}</a>`;
+        action = `<a href="/register?next=${back}" class="btn btn-sm" style="margin-top:14px;width:100%;box-sizing:border-box">${t('ta.signupToApply')}</a>`;
       }
     } else {
       action = '';
@@ -4939,7 +4946,7 @@ function talentEventApply({ account, event, ctx, lang }) {
   // Lamar button fills in the position + event name and asks to confirm; "Ya,
   // Lamar" submits the single-position apply form.
   const applyModal = (loggedIn && anyApplyable) ? `
-    <form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm"><input type="hidden" name="position_id" id="applyPos"></form>
+    <form method="post" action="/event/${esc(e.slug || e.id)}/apply" id="applyForm"><input type="hidden" name="position_id" id="applyPos"><input type="hidden" name="next" value="/event/${esc(e.slug || e.id)}"></form>
     <div id="applyModal" class="tmodal" hidden>
       <div class="tmodal-card" role="dialog" aria-modal="true" aria-labelledby="applyModalTitle">
         <div class="tmodal-title" id="applyModalTitle">${t('ta.applyConfirmTitle')}</div>
