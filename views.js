@@ -2927,7 +2927,11 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   const histCards = (events || []).map((e) => {
     const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
     const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
-    const canProof = isCreator && ['approved', 'assigned', 'completed'].includes(e.status);
+    // Upload proof is a KOL-only feature (social-media post proof via OCR+LLM),
+    // so only offer it for applications whose position category is KOL — not for
+    // Man Power / Photographer positions.
+    const catIsKol = e.position ? (e.position.key === 'kol') : (String(e.role || '').trim().toLowerCase() === 'kol');
+    const canProof = isCreator && catIsKol && ['approved', 'assigned', 'completed'].includes(e.status);
     // "View event" only shows while the application is still at the initial
     // "Applied" stage. Once it moves past that (under review / approved /
     // assigned / completed / rejected), the card shows just the status-relevant
