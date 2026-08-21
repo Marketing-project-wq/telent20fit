@@ -1277,6 +1277,20 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
+// K4: an accepted talent confirms (v=1) or clears (v=0) their availability for the
+// position they were accepted into. Records confirmed_at; does not change quota.
+app.post('/event/:id/confirm', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (app && app.status === 'approved') await st.setApplicationConfirmed(app.id, String(req.body.v || '1') === '1');
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
 app.get('/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
@@ -1984,7 +1998,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           id: a.id, talentId: a.talent_id, name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
           hyroxStatus: tt.hyrox_cert_status || 'none',
-          status: a.status || 'applied', createdAt: a.created_at, choices: ch,
+          status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));

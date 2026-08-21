@@ -2626,8 +2626,12 @@ function eoApplicantsSection(e, view, aps, L) {
     const base = `/eo/events/${esc(e.id)}/applicants/${esc(a.id)}`;
     const acceptedChoice = a.choices.find((c) => c.accepted);
     if (a.status === 'approved' && acceptedChoice) {
+      const confirmTag = a.confirmedAt
+        ? `<span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${esc(t('eo.ap.availConfirmed'))}</span>`
+        : `<span class="pill" style="background:#fdeccd;color:#8a5a00">${esc(t('eo.ap.availPending'))}</span>`;
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
         <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        ${confirmTag}
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
@@ -4922,8 +4926,21 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
       const state = myChoice.accepted
         ? `<span class="pill pill-ok">✓ ${t('ta.acceptedHere')}</span>`
         : (appStatus === 'approved' ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.notContinued')}</span>` : talentStatusBadge(appStatus, L));
+      // K4: once accepted, the talent confirms they're available for the position.
+      const confirmUi = myChoice.accepted ? (
+        (ctx.myApp && ctx.myApp.confirmed_at)
+          ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${t('ta.availConfirmed')}</span>
+              <form method="post" action="/event/${esc(e.slug || e.id)}/confirm"><input type="hidden" name="v" value="0"><button type="submit" class="btn btn-ghost btn-sm">${t('ta.availUndo')}</button></form>
+            </div>`
+          : `<div>
+              <form method="post" action="/event/${esc(e.slug || e.id)}/confirm"><input type="hidden" name="v" value="1"><button type="submit" class="btn btn-sm" style="width:100%">${t('ta.confirmAvail')}</button></form>
+              <div class="muted" style="font-size:12px;margin-top:6px">${t('ta.confirmAvailHint')}</div>
+            </div>`
+      ) : '';
       action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${rankChip}${state}</div>
+        ${confirmUi}
         ${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))}><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}
       </div>`;
     } else if (appStatus === 'approved') {

@@ -412,6 +412,13 @@ function supabaseStore() {
         .insert({ application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null });
       if (error) throw new Error(error.message);
     },
+    // K4: talent confirms (or clears) that they're available for the position they
+    // were accepted into. Records a timestamp; does not change the quota count.
+    async setApplicationConfirmed(applicationId, on) {
+      const { error } = await sb.from('talent_applications')
+        .update({ confirmed_at: on ? new Date().toISOString() : null }).eq('id', applicationId);
+      if (error) throw new Error(error.message);
+    },
     async listApplicationStatusLog(applicationId) {
       const { data } = await sb.from('talent_application_status_log').select('*').eq('application_id', applicationId).order('changed_at');
       return data || [];
@@ -687,7 +694,7 @@ function memoryStore() {
     async createApplication({ event_id, talent_id, talent_type, role, answers }) {
       // New flow allows one application per (talent, event, position), so no
       // (talent, event) uniqueness here — the apply handlers guard duplicates.
-      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() };
+      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, confirmed_at: null, created_at: now() };
       applications.push(rec);
       return { id: rec.id };
     },
@@ -723,6 +730,7 @@ function memoryStore() {
       return 'ok';
     },
     async logStatusChange(applicationId, fromStatus, toStatus, changedBy) { statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, changed_at: now() }); },
+    async setApplicationConfirmed(applicationId, on) { const a = applications.find((a) => a.id === applicationId); if (a) a.confirmed_at = on ? now() : null; },
     async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
