@@ -147,7 +147,7 @@ a{color:var(--red)}
 /* Bottom nav bar (talent only); horizontal, scrolls if the items overflow */
 .talent-app .tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none;padding-bottom:env(safe-area-inset-bottom,0px)}
 .tab-bar::-webkit-scrollbar{display:none}
-.tab-inner{display:flex;justify-content:center;gap:28px;margin:0 auto;min-width:min-content;padding:7px 16px}
+.tab-inner{display:flex;justify-content:center;gap:56px;margin:0 auto;min-width:min-content;padding:7px 16px}
 .tab-bar a{flex:0 0 auto;min-width:66px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 12px;border-radius:12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px;white-space:nowrap}
 .tab-bar a svg{width:22px;height:22px;flex-shrink:0}
 .tab-bar a:hover{background:var(--card2);color:var(--ink)}
@@ -284,6 +284,7 @@ tr:last-child td{border-bottom:none}
   .app-user{font-size:11px}
   .app-user b{font-size:12.5px;max-width:108px}
   .tab-bar a{min-width:60px;padding:6px 9px;font-size:10.5px}
+  .tab-inner{gap:32px}
 }
 /* Very small phones: drop the name/role text so the logo, toggle and Exit/Logout never crowd */
 @media(max-width:520px){.app-user{display:none}}
