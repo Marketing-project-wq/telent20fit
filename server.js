@@ -791,7 +791,7 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
         const position = ch ? posLabelById.get(String(ch.position_id)) : null;
         // `ref` links to the position-based detail page (only when the event has positions).
         const ref = (position && (ev.slug || ev.id)) || null;
-        return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role };
+        return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null };
       })
       .filter(Boolean);
     // Real, countable profile stats (no fabricated ratings).
@@ -1950,6 +1950,14 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
     const choicesByApp = new Map();
     choices.forEach((c) => { const a = choicesByApp.get(c.application_id) || []; a.push(c); choicesByApp.set(c.application_id, a); });
+    // #7: as soon as the owning EO opens the applicant list, move this event's
+    // still-new applications to "under_review" so the talent's tracker lights up
+    // the Review stage. Idempotent — only touches applied/pending rows.
+    for (const a of apps) {
+      if (a.event_id === ev.id && (a.status === 'applied' || a.status === 'pending') && (choicesByApp.get(a.id) || []).length) {
+        await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review';
+      }
+    }
     const applicants = apps
       .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
       .map((a) => {
@@ -1982,6 +1990,17 @@ async function eoOwnedApplication(st, staffId, eventId, appId) {
 
 // Accept an applicant into one of their chosen positions (respects quota BR-9;
 // the DB enforces one accepted position per application).
+// #5 (Option A): one accepted position per talent per event. When a talent is
+// accepted into a position, decline their other still-open applications for the
+// same event (their other position picks lapse). Returns how many were declined.
+async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, reviewerId) {
+  const others = (apps || []).filter((a) => a.event_id === eventId && a.talent_id === talentId && a.id !== keepAppId && !['approved', 'rejected'].includes(a.status));
+  for (const o of others) {
+    await st.clearApplicationAccepted(o.id);
+    await st.updateApplication(o.id, { status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
+  }
+  return others.length;
+}
 app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2002,6 +2021,7 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     const wasApproved = found.app.status === 'approved';
     await st.acceptApplicationChoice(found.app.id, positionId);
     await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
     // Email the talent their acceptance only on the first approval (mirrors the
     // admin path's no-spam rule; re-accepting a different position won't resend).
     if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
@@ -2327,6 +2347,7 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
     const wasApproved = app.status === 'approved';
     await st.acceptApplicationChoice(app.id, positionId);
     await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
     const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
     if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
     res.redirect('/admin/applications');

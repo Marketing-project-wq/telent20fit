@@ -2956,6 +2956,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
         ${talentStatusBadge(e.status, L)}
       </div>
       ${applicationTracker(e.status, L)}
+      ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
       ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
     </div>`;
   }).join('');
