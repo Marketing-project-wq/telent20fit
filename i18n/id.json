@@ -340,6 +340,8 @@
   "ta.positionsTitle": "Posisi yang Dibutuhkan",
   "ta.applyThis": "Lamar",
   "ta.loginToApply": "Login untuk melamar",
+  "ta.signupToApply": "Buat akun untuk melamar",
+  "auth.applyCtx": "Kamu sedang melamar untuk: {event}",
   "ta.viewDetail": "Lihat Detail",
   "ta.teamContext": "Kamu akan bertugas bersama {n} talent lain di posisi ini",
   "ta.d.workHours": "Jam kerja",

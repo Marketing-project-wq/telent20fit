@@ -171,7 +171,7 @@ function dataDiriGet() {
       const acc = req.account;
       if (acc.profile_completed_at && req.query.edit !== '1') return res.redirect('/talent?lang=' + req.lang);
       const events = teaserEvents(await st.listEvents());
-      res.send(V.talentDataDiri(req.talent.type, { account: acc, events, values: acc, lang: req.lang }));
+      res.send(V.talentDataDiri(req.talent.type, { account: acc, events, values: acc, lang: req.lang, next: safeNext(req.query.next) }));
     } catch (e) { next(e); }
   }];
 }
@@ -217,7 +217,7 @@ function dataDiriPost() {
       }
       if (errors.length) {
         const events = teaserEvents(await st.listEvents());
-        return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang }));
+        return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang, next: safeNext(req.body.next) }));
       }
       await st.updateAccountProfile(acc.id, {
         province: values.province,
@@ -230,7 +230,8 @@ function dataDiriPost() {
         experience: values.experience || null,
         profile_completed_at: acc.profile_completed_at || new Date().toISOString(),
       });
-      res.redirect('/talent?lang=' + req.lang);
+      // Resume where the talent came from (e.g. the event they were applying to).
+      res.redirect(safeNext(req.body.next) || ('/talent?lang=' + req.lang));
     } catch (e) { next(e); }
   }];
 }
@@ -411,18 +412,31 @@ app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 // A post-login/register redirect target must be a same-site absolute path
 // (guards against open redirects like //evil.com or javascript:).
 function safeNext(n) { n = String(n || ''); return (/^\/[A-Za-z0-9]/.test(n) && !n.startsWith('//')) ? n.slice(0, 512) : null; }
-app.get('/register', (req, res) => {
-  const nxt = safeNext(req.query.next);
-  const tk = auth.currentTalent(req);
-  if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
-  res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt }));
+// Resolve the event name behind a `next=/event/<ref>…` target so the auth page
+// can show "you're applying to <event>". Best-effort, read-only.
+async function eventNameFromNext(st, nxt) {
+  const m = /^\/event\/([^/?#]+)/.exec(String(nxt || ''));
+  if (!m || !st) return null;
+  try { const ev = findEventByRef(await st.listEvents(), decodeURIComponent(m[1])); return ev ? ev.name : null; }
+  catch (_) { return null; }
+}
+app.get('/register', async (req, res, nextFn) => {
+  try {
+    const nxt = safeNext(req.query.next);
+    const tk = auth.currentTalent(req);
+    if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
+    const eventName = nxt ? await eventNameFromNext(db(), nxt) : null;
+    res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt, eventName }));
+  } catch (e) { nextFn(e); }
 });
 app.post('/register', talentRegisterPost('kol', { unified: true }));
-function talentLoginGet(req, res) {
+async function talentLoginGet(req, res) {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
   if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
-  res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt }));
+  let eventName = null;
+  try { if (nxt) eventName = await eventNameFromNext(db(), nxt); } catch (_) { /* best-effort */ }
+  res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt, eventName }));
 }
 app.get('/login/talent', talentLoginGet);
 // /login kept as an alias of the canonical /login/talent (preserve ?next/?lang).
@@ -1018,7 +1032,12 @@ function requireAnyTalentReady() {
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
       if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
-      if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
+      if (!acc.profile_completed_at) {
+        // Carry the resume target (e.g. the event being applied to) through the
+        // profile-completion step so the talent lands back where they started.
+        const rn = safeNext(req.query.next) || safeNext(req.body && req.body.next);
+        return res.redirect('/data-diri?lang=' + req.lang + (rn ? '&next=' + encodeURIComponent(rn) : ''));
+      }
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }
