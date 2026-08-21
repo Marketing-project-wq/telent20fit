@@ -33,6 +33,8 @@
   "landing.failed": "Gagal mengunggah. Coba lagi.",
   "nav.logout": "Logout",
   "nav.exit": "Keluar",
+  "sidebar.back": "Kembali",
+  "nav.langAria": "Pilih bahasa",
   "common.back": "← Kembali",
   "role.super_admin": "Super Admin",
   "role.eo": "Event Organizer",

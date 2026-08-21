@@ -33,6 +33,8 @@
   "landing.failed": "Upload failed. Please try again.",
   "nav.logout": "Log out",
   "nav.exit": "Exit",
+  "sidebar.back": "Back",
+  "nav.langAria": "Select language",
   "common.back": "← Back",
   "role.super_admin": "Super Admin",
   "role.eo": "Event Organizer",
