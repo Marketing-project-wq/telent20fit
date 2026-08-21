@@ -103,6 +103,8 @@
   "tp.doc.done": "Terisi",
   "tp.doc.missing": "Belum",
   "tp.doc.ktp": "KTP",
+  "tp.yourPicks": "Pilihanmu",
+  "tp.acceptedExplain": "Kamu diterima sebagai {pos}, jadi lamaran untuk {others} tidak dilanjutkan.",
   "role.kol": "KOL",
   "talent.kol": "KOL",
   "talent.main_power": "Man Power",

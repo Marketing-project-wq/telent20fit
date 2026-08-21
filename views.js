@@ -2956,6 +2956,8 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
         ${talentStatusBadge(e.status, L)}
       </div>
       ${applicationTracker(e.status, L)}
+      ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
+      ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
       ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
       ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
     </div>`;
