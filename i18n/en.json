@@ -103,6 +103,8 @@
   "tp.doc.done": "Provided",
   "tp.doc.missing": "Not yet",
   "tp.doc.ktp": "ID card (KTP)",
+  "tp.yourPicks": "Your picks",
+  "tp.acceptedExplain": "You were accepted as {pos}, so your application for {others} won't continue.",
   "role.kol": "KOL",
   "talent.kol": "KOL",
   "talent.main_power": "Man Power",
