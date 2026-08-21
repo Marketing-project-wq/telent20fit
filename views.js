@@ -2661,16 +2661,32 @@ function eoApplicantsSection(e, view, aps, L) {
     ${decisionControls(a)}
   </div>`).join('');
 
-  // Per-position groups
+  // Per-position groups. Sorted by each applicant's rank for THIS position;
+  // shows the two quota numbers, the rank breakdown, an availability-risk
+  // warning, each applicant's other picks, and an "already taken elsewhere" tag.
   const posGroups = (view.positions || []).map((p) => {
     const rows = aps.map((a) => { const c = a.choices.find((x) => x.position_id === p.position_id); return c ? { a, c } : null; })
       .filter(Boolean).sort((x, y) => x.c.priority - y.c.priority);
-    const list = rows.length ? rows.map(({ a, c }) => `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
-      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">· ${esc(talentLabel(L, a.type))}</span>` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
+    const total = rows.length;
+    const byRank = [1, 2, 3].map((r) => rows.filter(({ c }) => c.priority === r).length);
+    // Warn when most applicants ranked this position 2nd/3rd (>=60%): they will
+    // likely be taken by a higher pick, so this position risks being short-staffed.
+    const warn = total >= 3 && (byRank[1] + byRank[2]) / total >= 0.6
+      ? `<div style="margin-top:8px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00;border-radius:8px;padding:8px 11px;font-size:12px">⚠️ ${t('eo.ap.shortageWarn')}</div>` : '';
+    const fractions = total ? `<div class="muted" style="font-size:12px;margin-top:4px">${esc(t('eo.ap.fracN', { n: total }))}: ${byRank[0]} (${esc(t('ta.choiceRank', { n: 1 }))}) · ${byRank[1]} (${esc(t('ta.choiceRank', { n: 2 }))}) · ${byRank[2]} (${esc(t('ta.choiceRank', { n: 3 }))})</div>` : '';
+    const list = rows.length ? rows.map(({ a, c }) => {
+      const others = a.choices.filter((x) => x.position_id !== p.position_id).sort((x, y) => x.priority - y.priority)
+        .map((x) => esc(t('eo.ap.alsoApplied', { pos: posLbl(x.position_id), n: x.priority })));
+      const acceptedElse = a.choices.find((x) => x.accepted && x.position_id !== p.position_id);
+      const elseTag = acceptedElse ? ` <span class="pill" style="background:#eceae5;color:#6b6b70">${esc(t('eo.ap.takenAs', { pos: posLbl(acceptedElse.position_id) }))}</span>` : '';
+      return `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:flex-start">
+      <div style="min-width:0"><span class="tag" style="margin-right:8px">${esc(t('ta.choiceRank', { n: c.priority }))}</span><b>${esc(a.name)}</b>${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}${elseTag}${others.length ? `<div class="muted" style="font-size:12px;margin-top:3px">${others.join(' · ')}</div>` : ''}</div>
       ${talentStatusBadge(a.status, L)}
-    </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
+    </div>`;
+    }).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
     return `<div class="card" style="margin-top:12px;padding:14px 16px">
-      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.filled} / ${p.quota})</span></div>
+      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">— ${t('eo.ap.filledLabel')} ${p.filled}/${p.quota} · ${esc(t('eo.ap.fracN', { n: p.applicants || total }))}</span></div>
+      ${fractions}${warn}
       <div class="dl-list" style="margin-top:8px">${list}</div>
     </div>`;
   }).join('');
