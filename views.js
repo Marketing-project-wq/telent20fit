@@ -115,19 +115,37 @@ a{color:var(--red)}
 .brand .brand-dark{height:2.6em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
-/* Top bar: brand logo (left), user + Exit/Logout (right) */
-.app-top{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:11px 20px}
+/* Staff (admin/EO) shell: fixed left sidebar (off-canvas drawer on mobile) */
+.nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
+.side-logo{padding:22px 22px 18px;line-height:1;text-decoration:none;display:flex;justify-content:center}
+.side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
+.side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
+.side-nav a svg{width:20px;height:20px;flex-shrink:0}
+.side-nav a:hover{background:var(--card2);color:var(--ink)}
+.side-nav a.active{background:var(--red-soft);color:#fff;box-shadow:inset 3px 0 0 var(--red)}
+.side-nav a.active svg{color:var(--red)}
+.side-foot{border-top:1px solid var(--line);padding:14px 16px}
+.side-user{font-size:12.5px;color:var(--muted);margin-bottom:11px;line-height:1.35}
+.side-user b{color:var(--ink);font-size:14px;display:block}
+.nav-scrim{display:none}
+.staff-app .app-main{margin-left:236px;min-height:100vh}
+.staff-app .app-top{display:none}
+:root[data-theme="light"] .sidebar{box-shadow:0 0 0 1px var(--line)}
+:root[data-theme="light"] .side-nav a.active{color:var(--red)}
+:root[data-theme="light"] .hamburger{color:var(--ink)}
+/* Talent shell: sticky top bar (brand + user/Exit) + bottom nav bar */
+.talent-app .app-top{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:11px 20px}
 .app-top-logo{font-size:20px;line-height:1;text-decoration:none;flex:0 0 auto}
 .app-top-right{display:flex;align-items:center;gap:12px;min-width:0}
 .app-user{font-size:12px;color:var(--muted);line-height:1.3;text-align:right;min-width:0}
 .app-user b{color:var(--ink);font-size:13.5px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
 .app-top-right form{margin:0}
-/* Main content spans the full width now that the sidebar is gone; leave room for the fixed bottom nav */
-.app-main{min-height:100vh;padding-bottom:88px}
+.talent-app .app-main{min-height:100vh;padding-bottom:88px}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 40px}
 .wrap.narrow{max-width:640px}
-/* Bottom nav bar — replaces the old left sidebar; horizontal, scrolls if the items overflow */
-.tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none;padding-bottom:env(safe-area-inset-bottom,0px)}
+/* Bottom nav bar (talent only); horizontal, scrolls if the items overflow */
+.talent-app .tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none;padding-bottom:env(safe-area-inset-bottom,0px)}
 .tab-bar::-webkit-scrollbar{display:none}
 .tab-inner{display:flex;justify-content:center;gap:4px;margin:0 auto;min-width:min-content;padding:7px 12px}
 .tab-bar a{flex:0 0 auto;min-width:66px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 12px;border-radius:12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px;white-space:nowrap}
@@ -249,6 +267,16 @@ tr:last-child td{border-bottom:none}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
+@media(max-width:899px){
+  /* Staff (admin/EO) only: the sidebar collapses into an off-canvas drawer with a hamburger top bar */
+  .sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 44px rgba(0,0,0,.6);width:252px}
+  .nav-cb:checked ~ .sidebar{transform:none}
+  .nav-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
+  .nav-cb:checked ~ .nav-scrim{display:block}
+  .staff-app .app-main{margin-left:0}
+  .staff-app .app-top{display:flex;align-items:center;justify-content:center;position:sticky;top:0;z-index:100;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
+  .hamburger{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:23px;color:#fff;cursor:pointer;line-height:1;user-select:none;padding:2px 4px}
+}
 @media(max-width:640px){
   /* Phones: tighten the top bar and the bottom-nav items */
   .app-top{padding:10px 14px}
@@ -367,14 +395,39 @@ function appLayout({ title, body, role, active, user, lang }) {
   const acctBtn = isStaff
     ? `<form method="post" action="${logoutAction}"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>`
     : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('nav.exit')}</a>`;
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+  const head = `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
-<body class="app-body ${isStaff ? 'staff-app' : 'talent-app'}">
+<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>`;
+  if (isStaff) {
+    // Admin / EO keep the original left sidebar (off-canvas drawer on mobile).
+    return `${head}
+<body class="app-body staff-app">
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
+<aside class="sidebar">
+  <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
+  <nav class="side-nav">${items}</nav>
+  <div class="side-foot">
+    <div style="margin-bottom:12px">${toggles(L)}</div>
+    <div class="side-user"><b>${esc(user || '')}</b>${roleLabel}</div>
+    <form method="post" action="${logoutAction}" style="margin:0"><button class="btn btn-ghost btn-sm btn-block">${t('nav.logout')}</button></form>
+  </div>
+</aside>
+<label for="nav-cb" class="nav-scrim"></label>
+<div class="app-main">
+  <div class="app-top">
+    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
+    <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
+  </div>
+  ${body}
+</div>
+</body></html>`;
+  }
+  // Talent: sticky top bar + bottom nav bar (mobile-app style).
+  return `${head}
+<body class="app-body talent-app">
 <header class="app-top">
   <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   <div class="app-top-right">
-    ${isStaff ? toggles(L) : ''}
     <div class="app-user"><b>${esc(user || '')}</b><span>${roleLabel}</span></div>
     ${acctBtn}
   </div>
