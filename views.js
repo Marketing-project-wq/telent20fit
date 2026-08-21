@@ -2928,10 +2928,17 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
     const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
     const canProof = isCreator && ['approved', 'assigned', 'completed'].includes(e.status);
-    const foot = [
-      e.ref ? `<a href="/event/${esc(e.ref)}?lang=${L}" class="btn btn-ghost btn-sm">${t('tp.eventBrief')}</a>` : '',
-      canProof ? `<a href="/kirim-bukti?lang=${L}" class="btn btn-ghost btn-sm">${t('tp.uploadProof')}</a>` : '',
-    ].filter(Boolean).join('');
+    // "View event" only shows while the application is still at the initial
+    // "Applied" stage. Once it moves past that (under review / approved /
+    // assigned / completed / rejected), the card shows just the status-relevant
+    // action (e.g. Upload proof) — or nothing if none applies yet.
+    const isApplied = !e.status || ['applied', 'pending'].includes(e.status);
+    const footBtns = [];
+    if (e.ref && isApplied) footBtns.push([`/event/${esc(e.ref)}?lang=${L}`, t('tp.eventBrief')]);
+    if (canProof) footBtns.push([`/kirim-bukti?lang=${L}`, t('tp.uploadProof')]);
+    const foot = footBtns
+      .map(([href, label]) => `<a href="${href}" class="btn btn-ghost btn-sm${footBtns.length === 1 ? ' btn-block' : ''}">${label}</a>`)
+      .join('');
     return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
       <div class="tp-ev-top">
         <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? esc(posLbl) + ' · ' : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
