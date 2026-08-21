@@ -1990,6 +1990,17 @@ async function eoOwnedApplication(st, staffId, eventId, appId) {
 
 // Accept an applicant into one of their chosen positions (respects quota BR-9;
 // the DB enforces one accepted position per application).
+// #4: serialize accept operations per event so the quota read-then-write cannot
+// race two simultaneous accepts into over-filling a position. Single-process
+// guard (matches this app's single-instance deployment); for multi-node this
+// should be paired with a DB-level quota constraint.
+const _eventAcceptLocks = new Map();
+function withEventLock(eventId, fn) {
+  const prev = _eventAcceptLocks.get(eventId) || Promise.resolve();
+  const run = prev.then(fn, fn); // run regardless of the previous op's outcome
+  _eventAcceptLocks.set(eventId, run.then(() => {}, () => {}));
+  return run;
+}
 // #5 (Option A): one accepted position per talent per event. When a talent is
 // accepted into a position, decline their other still-open applications for the
 // same event (their other position picks lapse). Returns how many were declined.
@@ -2009,22 +2020,27 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     if (!found) return res.redirect('/eo/events');
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
     const positionId = String(req.body.position_id || '');
-    const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
-    const myChoices = choices.filter((c) => c.application_id === found.app.id);
-    if (!myChoices.some((c) => c.position_id === positionId)) return res.redirect(backTo); // not one of their choices
-    const pos = positions.find((p) => p.position_id === positionId);
-    const quota = pos ? pos.quota : 0;
-    // Quota check: accepted choices for this position across the event, excluding this application.
-    const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
-    const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
-    if (quota > 0 && acceptedElsewhere >= quota) return res.redirect(backTo + '&err=full');
-    const wasApproved = found.app.status === 'approved';
-    await st.acceptApplicationChoice(found.app.id, positionId);
-    await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-    await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
-    // Email the talent their acceptance only on the first approval (mirrors the
-    // admin path's no-spam rule; re-accepting a different position won't resend).
-    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
+    const outcome = await withEventLock(found.ev.id, async () => {
+      const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
+      const myChoices = choices.filter((c) => c.application_id === found.app.id);
+      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip'; // not one of their choices
+      const pos = positions.find((p) => p.position_id === positionId);
+      const quota = pos ? pos.quota : 0;
+      // Quota check: accepted choices for this position across the event, excluding this application.
+      const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
+      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
+      if (quota > 0 && acceptedElsewhere >= quota) return 'full';
+      const wasApproved = found.app.status === 'approved';
+      await st.acceptApplicationChoice(found.app.id, positionId);
+      await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+      await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
+      // Email the talent their acceptance only on the first approval (mirrors the
+      // admin path's no-spam rule; re-accepting a different position won't resend).
+      if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
+      return 'ok';
+    });
+    if (outcome === 'full') return res.redirect(backTo + '&err=full');
+    if (outcome === 'skip') return res.redirect(backTo);
     res.redirect(backTo + '&ok=accepted');
   } catch (e) { next(e); }
 });
@@ -2334,22 +2350,26 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
     const st = db();
     if (!st) return needConfig(req, res);
     const positionId = String(req.body.position_id || '');
-    const apps = await st.listApplications();
-    const app = apps.find((a) => a.id === req.params.id);
-    if (!app) return res.redirect('/admin/applications');
-    const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-    if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return res.redirect('/admin/applications'); // not one of their picks
-    const pos = positions.find((p) => p.position_id === positionId);
-    const quota = pos ? pos.quota : 0;
-    const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-    const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-    if (quota > 0 && acceptedElsewhere >= quota) return res.redirect('/admin/applications'); // position full
-    const wasApproved = app.status === 'approved';
-    await st.acceptApplicationChoice(app.id, positionId);
-    await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-    await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-    const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
-    if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    const app0 = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app0) return res.redirect('/admin/applications');
+    await withEventLock(app0.event_id, async () => {
+      const apps = await st.listApplications();
+      const app = apps.find((a) => a.id === req.params.id);
+      if (!app) return;
+      const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
+      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return; // not one of their picks
+      const pos = positions.find((p) => p.position_id === positionId);
+      const quota = pos ? pos.quota : 0;
+      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
+      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
+      const wasApproved = app.status === 'approved';
+      await st.acceptApplicationChoice(app.id, positionId);
+      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
+      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
+      if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    });
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
