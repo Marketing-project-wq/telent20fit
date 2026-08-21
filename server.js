@@ -1102,13 +1102,13 @@ async function positionApplyCtx(st, ev, talentId) {
   const view = eoEventView(ev, positions, apps, choices);
   const openPositions = view.positions.filter((p) => !p.closed_at && !p.full);
   const posById = new Map(view.positions.map((p) => [p.position_id, p]));
-  // New apply flow: one application per (talent, event, position). Map each of
-  // this talent's applications for the event to its single chosen position so
-  // the UI can show per-position status and block duplicate applies.
-  const myApps = apps.filter((a) => a.talent_id === talentId && a.event_id === ev.id);
-  const myByPosition = new Map();
-  myApps.forEach((a) => { const ch = choices.find((c) => c.application_id === a.id); if (ch) myByPosition.set(String(ch.position_id), a); });
-  return { view, positions: view.positions, openPositions, posById, myApps, myByPosition, regOpen: eventRegOpen(ev) };
+  // Option B: ONE application per (talent, event) holding 1-3 ranked choices.
+  // Map each chosen position to its choice row so the UI can show the rank +
+  // status and block duplicate/over-limit applies.
+  const myApp = talentId ? (apps.find((a) => a.talent_id === talentId && a.event_id === ev.id) || null) : null;
+  const myChoices = myApp ? choices.filter((c) => c.application_id === myApp.id).slice().sort((a, b) => a.priority - b.priority) : [];
+  const myByPosition = new Map(myChoices.map((c) => [String(c.position_id), c]));
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev) };
 }
 
 // Position-based EO events currently open to a talent: published, within the
@@ -1224,23 +1224,25 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
     if (!ev) return res.redirect('/events');
     const ctx = await positionApplyCtx(st, ev, req.talent.id);
     if (!ctx.positions.length) return res.redirect('/events');
-    // New flow: apply to exactly ONE position per action (position_id in body).
+    // Option B: ONE application per (talent, event) holding 1-3 RANKED choices.
+    // Rank = order of applying (1st position picked = choice 1, ...). Max 3.
     const positionId = String(req.body.position_id || '');
     const pos = ctx.posById.get(positionId);
     const fail = (key) => res.status(400).send(V.talentEventApply({ account: req.account, event: ev, ctx: Object.assign({}, ctx, { errors: [req.t(key)] }), lang: req.lang }));
     if (!pos) return fail('ta.err.notOpen');
-    // No duplicate: already applied to this exact position -> just show current state.
-    if (ctx.myByPosition.has(positionId)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
-    // Registration window + this specific position must be open.
+    if (ctx.myByPosition.has(positionId)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang); // already picked this position
     if (!ctx.regOpen) return fail('ta.err.closed');
     if (pos.closed_at || pos.full) return fail('ta.err.notOpen');
+    if ((ctx.myChoices || []).length >= 3) return fail('ta.err.max3'); // max 3 ranked picks per event
     // Creator positions (KOL / photographer / videographer) require CV + portfolio on file.
     if (V.CREATOR_ROLES.includes(pos.key) && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
-    let app;
-    try { app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null }); }
-    catch (e) { if (e.code === 'DUP') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang); throw e; }
-    await st.updateApplication(app.id, { status: 'applied' });
-    await st.addApplicationChoices(app.id, [{ position_id: positionId, priority: 1 }]);
+    let appId = ctx.myApp ? ctx.myApp.id : null;
+    if (!appId) {
+      const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
+      await st.updateApplication(app.id, { status: 'applied' });
+      appId = app.id;
+    }
+    await st.addApplicationChoices(appId, [{ position_id: positionId, priority: (ctx.myChoices || []).length + 1 }]);
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
 });
@@ -1252,10 +1254,16 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
     const ev = findEventByRef(await st.listEvents(), req.params.id);
     if (!ev) return res.redirect('/events');
     const ctx = await positionApplyCtx(st, ev, req.talent.id);
-    const app = ctx.myByPosition.get(String(req.body.position_id || ''));
-    // Cancel one position's application while it's still pending + reg open.
-    if (app && ['applied', 'pending', 'under_review'].includes(app.status) && eventRegOpen(ev)) {
-      await st.deleteApplication(app.id);
+    const posId = String(req.body.position_id || '');
+    const choice = ctx.myByPosition.get(posId);
+    const app = ctx.myApp;
+    // Cancel one ranked pick while the application is still pending + reg open.
+    // Remaining picks keep contiguous priorities; drop the whole application if none left.
+    if (choice && app && ['applied', 'pending', 'under_review'].includes(app.status) && eventRegOpen(ev)) {
+      const remaining = (ctx.myChoices || []).filter((c) => String(c.position_id) !== posId)
+        .map((c, i) => ({ position_id: c.position_id, priority: i + 1 }));
+      if (!remaining.length) await st.deleteApplication(app.id);
+      else await st.replaceApplicationChoices(app.id, remaining);
     }
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
   } catch (e) { next(e); }
