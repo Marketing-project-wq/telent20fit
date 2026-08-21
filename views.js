@@ -395,7 +395,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   // the language toggle move up here since the bottom is now for nav only.
   const acctBtn = isStaff
     ? `<form method="post" action="${logoutAction}"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>`
-    : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('nav.exit')}</a>`;
+    : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm" aria-label="${t('sidebar.back')}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>${t('sidebar.back')}</a>`;
   const head = `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>`;
@@ -429,6 +429,7 @@ function appLayout({ title, body, role, active, user, lang }) {
 <header class="app-top">
   <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   <div class="app-top-right">
+    ${langToggle(L)}
     <div class="app-user"><b>${esc(user || '')}</b><span>${roleLabel}</span></div>
     ${acctBtn}
   </div>
@@ -1432,8 +1433,8 @@ function talentPath(type) { return type.replace(/_/g, '-'); }
 /** EN/ID language switch — links hit /lang/:code (sets cookie, redirects back). */
 function langToggle(lang) {
   const L = normLang(lang);
-  const item = (code, label) => `<a href="/lang/${code}" style="padding:5px 11px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;${code === L ? 'background:var(--red);color:#fff' : 'color:var(--muted)'}">${label}</a>`;
-  return `<div style="display:inline-flex;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px">${item('id', 'ID')}${item('en', 'EN')}</div>`;
+  const item = (code, label) => `<a href="/lang/${code}"${code === L ? ' aria-current="true"' : ''} style="padding:5px 11px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;${code === L ? 'background:var(--red);color:#fff' : 'color:var(--muted)'}">${label}</a>`;
+  return `<div role="group" aria-label="${tr(L, 'nav.langAria')}" style="display:inline-flex;gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:3px">${item('id', 'ID')}${item('en', 'EN')}</div>`;
 }
 
 /** onsubmit="confirm(...)" attribute for delete forms (JS-string safe). */
