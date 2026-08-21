@@ -4840,10 +4840,12 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
   return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
 
-function talentEventApply({ account, event, ctx, lang }) {
+function talentEventApply({ account, event, ctx, lang, saved }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
+  // Success confirmation after an application is submitted (redirect ?saved=1).
+  const savedBanner = saved ? `<div class="banner banner-ok" style="margin-top:14px">${t('ta.applySaved')}</div>` : '';
   // Public page: a logged-out visitor sees everything but gets a "log in to
   // apply" link instead of the confirm-apply button on each open position.
   const loggedIn = !!account;
@@ -4995,7 +4997,7 @@ function talentEventApply({ account, event, ctx, lang }) {
     ${chips}
     <div style="max-width:820px">
       ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
-      ${eb}${docsWarn}
+      ${savedBanner}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>

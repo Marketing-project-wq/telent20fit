@@ -340,6 +340,7 @@
   "ta.positionsTitle": "Posisi yang Dibutuhkan",
   "ta.applyThis": "Lamar",
   "ta.loginToApply": "Login untuk melamar",
+  "ta.applySaved": "Lamaran kamu berhasil dikirim. Kami akan mengabari perkembangannya lewat email dan halaman ini.",
   "ta.signupToApply": "Buat akun untuk melamar",
   "auth.applyCtx": "Kamu sedang melamar untuk: {event}",
   "ta.viewDetail": "Lihat Detail",
