@@ -4892,16 +4892,30 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
     // Per-position action. If the talent already applied to THIS position, show
     // its live status (+ cancel while still pending); otherwise the Lamar button
     // that opens the confirmation modal; a docs-lock hint blocks creator roles.
-    const applied = ctx.myByPosition.get(String(p.position_id));
+    const myChoice = ctx.myByPosition.get(String(p.position_id));
+    const appStatus = ctx.myApp ? ctx.myApp.status : null;
+    const numChoices = (ctx.myChoices || []).length;
     let action;
-    if (applied) {
-      const canCancel = ctx.regOpen && cancelable(applied.status);
-      action = `<div style="margin-top:14px">${talentStatusBadge(applied.status, L)}${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))} style="margin-top:10px"><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}</div>`;
+    if (myChoice) {
+      // Talent already ranked this position. Show the rank + its state.
+      const canCancel = ctx.regOpen && !myChoice.accepted && ['applied', 'pending', 'under_review'].includes(appStatus);
+      const rankChip = `<span style="${bstyle};background:#eef1f6;color:#41454d">${esc(t('ta.choiceRank', { n: myChoice.priority }))}</span>`;
+      const state = myChoice.accepted
+        ? `<span class="pill pill-ok">✓ ${t('ta.acceptedHere')}</span>`
+        : (appStatus === 'approved' ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.notContinued')}</span>` : talentStatusBadge(appStatus, L));
+      action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${rankChip}${state}</div>
+        ${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))}><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}
+      </div>`;
+    } else if (appStatus === 'approved') {
+      action = ''; // talent already secured a position in this event — no more applying
     } else if (lock) {
       action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
     } else if (ctx.regOpen && isOpen) {
-      if (loggedIn) {
-        action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')}</button>`;
+      if (numChoices >= 3) {
+        action = `<div class="muted" style="margin-top:12px;font-size:12px">${t('ta.max3reached')}</div>`;
+      } else if (loggedIn) {
+        action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')} · ${esc(t('ta.asChoice', { n: numChoices + 1 }))}</button>`;
       } else {
         // Visitor not logged in: send them to create an account first, remembering
         // the exact event + position to resume after auth (?apply=<id> auto-opens the
