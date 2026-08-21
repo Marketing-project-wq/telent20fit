@@ -340,6 +340,7 @@
   "ta.positionsTitle": "Available positions",
   "ta.applyThis": "Apply",
   "ta.loginToApply": "Log in to apply",
+  "ta.applySaved": "Your application has been submitted. We'll keep you posted by email and on this page.",
   "ta.signupToApply": "Sign up to apply",
   "auth.applyCtx": "You're applying for: {event}",
   "ta.viewDetail": "View details",

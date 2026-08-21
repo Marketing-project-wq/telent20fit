@@ -1211,7 +1211,7 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang }));
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1' }));
   } catch (e) { next(e); }
 });
 
@@ -2509,13 +2509,22 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
 // Talents upload a HYROX 360 certificate on their Dokumen page; staff review it
 // here. Verification is global (once verified it counts for every event).
 
+// EO scope for the shared HYROX / certificate review pool: the set of talent
+// ids who applied to at least one event this EO owns. Super admins are never
+// restricted; an EO may only review talents connected to their own events.
+async function eoApplicantTalentIds(st, staffId) {
+  const [events, apps] = await Promise.all([st.listEvents(), st.listApplications()]);
+  const myEvents = new Set(events.filter((e) => e.created_by === staffId).map((e) => e.id));
+  return new Set(apps.filter((a) => myEvents.has(a.event_id)).map((a) => a.talent_id));
+}
 app.get('/admin/hyrox', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const rk = (s) => (s === 'pending' ? 0 : s === 'rejected' ? 1 : 2); // pending first
-    const certs = (await st.listHyroxCerts()).slice()
-      .sort((a, b) => rk(a.hyrox_cert_status) - rk(b.hyrox_cert_status) || String(a.name || '').localeCompare(String(b.name || '')));
+    let certs = (await st.listHyroxCerts()).slice();
+    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); certs = certs.filter((c) => mine.has(c.id)); }
+    certs = certs.sort((a, b) => rk(a.hyrox_cert_status) - rk(b.hyrox_cert_status) || String(a.name || '').localeCompare(String(b.name || '')));
     res.send(V.adminHyroxCerts({ staff: staffCtx(req), certs, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -2525,6 +2534,7 @@ app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin', 'eo']),
   try {
     const st = db();
     if (!st) return needConfig(req, res);
+    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); if (!mine.has(req.params.talentId)) return res.redirect('/admin/hyrox'); }
     const acc = await st.getAccountById(req.params.talentId);
     const key = acc && acc.hyrox_cert_path;
     if (!key) return res.redirect('/admin/hyrox');
@@ -2548,6 +2558,7 @@ app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin', 'eo'
     if (!st) return needConfig(req, res);
     const action = String(req.body.action || '');
     if (action !== 'verify' && action !== 'reject') return res.redirect('/admin/hyrox');
+    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); if (!mine.has(req.params.talentId)) return res.redirect('/admin/hyrox'); }
     const acc = await st.getAccountById(req.params.talentId);
     if (!acc || !acc.hyrox_cert_path) return res.redirect('/admin/hyrox');
     const note = String(req.body.note || '').trim().slice(0, 300);
@@ -2761,6 +2772,7 @@ app.get('/admin/certificates/:id', auth.requireStaff(['super_admin', 'eo']), asy
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
     if (!c) return res.redirect('/admin/applications');
+    if (req.staff.type === 'eo' && !(await eoOwnedEvent(st, req.staff.id, c.event_id))) return res.redirect('/admin/applications');
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
     const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
     res.setHeader('Content-Type', 'application/pdf');
