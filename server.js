@@ -809,7 +809,7 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
       proofs: proofs.length,
       certs: certs.length,
     };
-    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang }));
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang, cancelFlash: String(req.query.cancel || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1104,6 +1104,24 @@ function eventRegOpen(ev) {
   return true;
 }
 
+// Event start as an epoch (ms), interpreting starts_at (date) + start_time
+// ("HH:MM", default 00:00) as Asia/Jakarta / WIB (UTC+7, no DST). Returns null if
+// no date is stored. All H-1 day / H-12 hour math flows through here so the cutoff
+// is computed one way, in WIB, on the server — never from the UI or server clock TZ.
+function eventStartMs(ev) {
+  if (!ev || !ev.starts_at) return null;
+  const d = String(ev.starts_at).slice(0, 10);
+  const t = (ev.start_time && /^\d{2}:\d{2}/.test(String(ev.start_time))) ? String(ev.start_time).slice(0, 5) : '00:00';
+  const ms = Date.parse(d + 'T' + t + ':00+07:00');
+  return Number.isNaN(ms) ? null : ms;
+}
+function hoursUntilEvent(ev) { const ms = eventStartMs(ev); return ms == null ? null : (ms - Date.now()) / 3600000; }
+// Talent may self-cancel until H-1 day (24h before start). Unknown start = leave
+// open (never close the exit early — the spec's rationale).
+function cancelWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 24; }
+// Standby list stays callable until H-12 hours before start.
+function standbyWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 12; }
+
 // Build the apply context for one event + talent (positions, open slots, my application).
 async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -1116,7 +1134,7 @@ async function positionApplyCtx(st, ev, talentId) {
   const myApp = talentId ? (apps.find((a) => a.talent_id === talentId && a.event_id === ev.id) || null) : null;
   const myChoices = myApp ? choices.filter((c) => c.application_id === myApp.id).slice().sort((a, b) => a.priority - b.priority) : [];
   const myByPosition = new Map(myChoices.map((c) => [String(c.position_id), c]));
-  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev) };
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev), cancelOpen: cancelWindowOpen(ev) };
 }
 
 // Position-based EO events currently open to a talent: published, within the
@@ -1219,7 +1237,7 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1' }));
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1288,6 +1306,30 @@ app.post('/event/:id/confirm', requireAnyTalentReady(), async (req, res, next) =
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
     if (app && app.status === 'approved') await st.setApplicationConfirmed(app.id, String(req.body.v || '1') === '1');
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// Allowed cancellation reasons (talent-facing). 'other' pairs with a free-text note.
+const CANCEL_REASONS = ['schedule_conflict', 'sick', 'family', 'changed_mind', 'other'];
+
+// B: an accepted talent cancels their participation. Allowed only until H-1 day
+// (24h before start), re-checked on the SERVER here AND inside the RPC. Runs as one
+// transaction: free the slot, log the status change, notify the EO.
+app.post('/event/:id/withdraw', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app || app.status !== 'approved') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    // Server-side window guard (rule 5): closed within H-1 day → must contact EO.
+    if (!cancelWindowOpen(ev)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&cancel=closed');
+    const reason = CANCEL_REASONS.includes(String(req.body.reason || '')) ? String(req.body.reason) : 'other';
+    const note = String(req.body.note || '').trim().slice(0, 300) || null;
+    const outcome = await st.cancelApplicationTxn(app.id, reason, note, req.talent.id);
+    if (outcome === 'closed') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&cancel=closed');
+    return res.redirect('/talent?lang=' + req.lang + '&cancel=done');
   } catch (e) { next(e); }
 });
 
@@ -1859,6 +1901,8 @@ function validateEventForm(f, req) {
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
   if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
+  // Start time (WIB) is now required — the H-1 day / H-12 hour cutoffs depend on it.
+  if (!f.data.start_time || !/^\d{2}:\d{2}$/.test(String(f.data.start_time))) e.push(req.t('eo.ev.err.startTime'));
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   return e;
 }

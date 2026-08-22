@@ -406,6 +406,14 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || 'skip';
     },
+    // An accepted talent cancels, as ONE transaction (free slot + status history +
+    // EO notification), via the talent_cancel_application RPC (also re-checks the
+    // H-1 window in-DB). Returns 'ok' | 'skip' | 'closed'.
+    async cancelApplicationTxn(applicationId, reason, note, actorId) {
+      const { data, error } = await sb.rpc('talent_cancel_application', { p_app_id: applicationId, p_reason: reason || null, p_note: note || null, p_actor: actorId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
     // Append a status-history row (kapan, dari apa ke apa, oleh siapa).
     async logStatusChange(applicationId, fromStatus, toStatus, changedBy) {
       const { error } = await sb.from('talent_application_status_log')
@@ -779,6 +787,18 @@ function memoryStore() {
       return 'ok';
     },
     async logStatusChange(applicationId, fromStatus, toStatus, changedBy) { statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, changed_at: now() }); },
+    async cancelApplicationTxn(applicationId, reason, note, actorId) {
+      const app = applications.find((a) => a.id === applicationId);
+      if (!app || app.status !== 'approved') return 'skip';
+      const acc = applicationChoices.find((c) => c.application_id === applicationId && c.accepted);
+      const pos = acc ? acc.position_id : null;
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = false; c.outcome = 'cancelled'; } });
+      statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: app.status, to_status: 'cancelled', changed_by: actorId || null, changed_at: now() });
+      const ev = events.find((e) => e.id === app.event_id);
+      Object.assign(app, { status: 'cancelled', cancelled_at: now(), cancel_reason: reason || null, cancel_reason_note: note || null, cancelled_by: actorId || null });
+      eoNotifications.push({ id: 'eon-' + (++seq), event_id: app.event_id, staff_id: ev ? ev.created_by : null, kind: 'cancellation', application_id: applicationId, position_id: pos, data: { reason: reason || null, note: note || null }, read_at: null, created_at: now() });
+      return 'ok';
+    },
     async setApplicationConfirmed(applicationId, on) { const a = applications.find((a) => a.id === applicationId); if (a) a.confirmed_at = on ? now() : null; },
     async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
     // ---- Standby list (cadangan/siaga) ----

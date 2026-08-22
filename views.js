@@ -2922,7 +2922,7 @@ const PROFILE_CSS = `
 // application tracker) + Certificates on the left, and Profile strength +
 // Personal details (collapsible) + My documents on the right. All values come
 // from the talent's real record — no fabricated ratings/skills.
-function kolProfilePage({ account, certs, events, stats, lang }) {
+function kolProfilePage({ account, certs, events, stats, lang, cancelFlash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -3014,6 +3014,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
 
   const body = `<div class="wrap tp-wrap">
   <style>${PROFILE_CSS}</style>
+  ${cancelFlash === 'done' ? `<div class="banner banner-ok" style="margin-bottom:14px">${t('ta.cancelDone')}</div>` : ''}
 
   <div class="tp-hero">
     <div class="tp-hero-main">
@@ -4773,6 +4774,7 @@ function talentStatusBadge(status, lang) {
     under_review: ['#b45309', '#fef3c7'], approved: ['#0f9d6a', '#d1fae5'],
     assigned: ['#0e7490', '#cffafe'], completed: ['#374151', '#e5e7eb'], rejected: ['#b91c1c', '#fee2e2'],
     not_selected: ['#b91c1c', '#fee2e2'], not_continued: ['#6b6b70', '#eceae5'],
+    cancelled: ['#92400e', '#fde68a'],
   };
   const c = map[status] || map.applied;
   return `<span class="pill" style="background:${c[1]};color:${c[0]}">${esc(t('ta.status.' + status) || status)}</span>`;
@@ -4784,7 +4786,7 @@ function talentStatusBadge(status, lang) {
 function applicationTracker(status, lang) {
   const L = normLang(lang);
   const t = (k) => tr(L, k);
-  if (['rejected', 'not_selected', 'not_continued'].includes(status)) return '';
+  if (['rejected', 'not_selected', 'not_continued', 'cancelled'].includes(status)) return '';
   const steps = ['applied', 'under_review', 'approved', 'assigned'];
   const activeIdx = { applied: 0, pending: 0, under_review: 1, approved: 2, assigned: 3, completed: 3 };
   const achieved = { approved: 1, assigned: 1, completed: 1 };
@@ -4864,12 +4866,14 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
   return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
 
-function talentEventApply({ account, event, ctx, lang, saved }) {
+function talentEventApply({ account, event, ctx, lang, saved, cancelFlash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
   // Success confirmation after an application is submitted (redirect ?saved=1).
   const savedBanner = saved ? `<div class="banner banner-ok" style="margin-top:14px">${t('ta.applySaved')}</div>` : '';
+  const cancelBanner = cancelFlash === 'closed'
+    ? `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.cancelClosedMsg')}</div>` : '';
   // Public page: a logged-out visitor sees everything but gets a "log in to
   // apply" link instead of the confirm-apply button on each open position.
   const loggedIn = !!account;
@@ -4938,9 +4942,25 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
               <div class="muted" style="font-size:12px;margin-top:6px">${t('ta.confirmAvailHint')}</div>
             </div>`
       ) : '';
+      // B: an accepted talent may cancel until H-1 day; after that, contact the EO.
+      const withdrawUi = myChoice.accepted ? (
+        ctx.cancelOpen
+          ? `<details class="withdraw-box" style="margin-top:2px">
+              <summary class="btn btn-ghost btn-sm" style="width:100%;color:var(--red);cursor:pointer">${t('ta.withdraw')}</summary>
+              <form method="post" action="/event/${esc(e.slug || e.id)}/withdraw" style="margin-top:10px;display:flex;flex-direction:column;gap:9px" ${jsConfirm(t('ta.withdrawConfirm'))}>
+                <div style="background:#fdecec;border:1px solid #f0b3b3;color:#8a1c1c;border-radius:8px;padding:9px 11px;font-size:12.5px">${t('ta.withdrawWarn')}</div>
+                <div style="font-size:12.5px;font-weight:600">${t('ta.withdrawReason')}</div>
+                ${['schedule_conflict', 'sick', 'family', 'changed_mind', 'other'].map((rk, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="radio" name="reason" value="${rk}"${i === 0 ? ' checked' : ''}> ${t('ta.reason.' + rk)}</label>`).join('')}
+                <textarea name="note" rows="2" maxlength="300" placeholder="${esc(t('ta.withdrawNotePh'))}" style="width:100%;box-sizing:border-box"></textarea>
+                <button type="submit" class="btn btn-sm" style="background:var(--red);color:#fff">${t('ta.withdrawSubmit')}</button>
+              </form>
+            </details>`
+          : `<div class="muted" style="font-size:12px;background:#f4f4f5;border-radius:8px;padding:9px 11px">${t('ta.withdrawClosed')}</div>`
+      ) : '';
       action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${rankChip}${state}</div>
         ${confirmUi}
+        ${withdrawUi}
         ${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))}><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}
       </div>`;
     } else if (appStatus === 'approved') {
@@ -5048,7 +5068,7 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
     ${chips}
     <div style="max-width:820px">
       ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
-      ${savedBanner}${eb}${docsWarn}
+      ${savedBanner}${cancelBanner}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>
