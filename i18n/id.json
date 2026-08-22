@@ -476,6 +476,7 @@
   "eo.att.open2": "Buka",
   "eo.att.share": "Bagikan link ini hanya ke leader/PIC yang bertanggung jawab menandai kehadiran.",
   "eo.att.window": "Aktif {open} s/d {close}",
+  "eo.att.recap": "Lihat rekap absensi",
   "eo.rel.events": "{n} event diikuti",
   "eo.rel.cancels": "{n} batal (H-{h})",
   "eo.rel.cancels0": "0 batal",

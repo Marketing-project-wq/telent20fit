@@ -2621,7 +2621,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
       <a href="${esc(a.url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('eo.att.open2')}</a>
     </div>
     ${attWindow ? `<div class="muted" style="font-size:12px;margin-top:8px">🕒 ${attWindow}</div>` : ''}
-    <div class="muted" style="font-size:12px;margin-top:6px">${t('eo.att.share')}</div>`
+    <div class="muted" style="font-size:12px;margin-top:6px">${t('eo.att.share')}</div>
+    <div style="margin-top:12px"><a href="/eo/events/${esc(e.id)}/absensi?lang=${L}" class="btn btn-sm">${t('eo.att.recap')}</a></div>`
     : `<form method="post" action="/eo/events/${esc(e.id)}/attendance-link" style="margin-top:12px">
         <button class="btn btn-sm">${t('eo.att.generate')}</button>
       </form>
@@ -5012,6 +5013,117 @@ function leaderAttendancePage(o) {
   return shell(inner);
 }
 
+// === Tahap 3: EO attendance recap dashboard ================================
+function eoAttendancePage(o) {
+  const { staff, event, eventDate, recap, day, lang, active, locked, closeMs, linkUrl, flash } = o || {};
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const meta = attStatusMeta(L);
+  const e = event || {};
+  const f = flash || {};
+  const s = id ? {
+    title: 'Rekap Absensi', back: 'Kembali ke event',
+    active: 'Absensi aktif', lockedT: 'Terkunci (lewat masa koreksi)', notYet: 'Belum dibuka',
+    closeAt: (w) => 'Batas koreksi: ' + w,
+    lockedNote: 'Masa koreksi sudah lewat. Hanya Super Admin yang bisa mengubah.',
+    present: meta.present.label, notified: meta.absent_notified.label, nonotice: meta.absent_no_notice.label, unmarked: 'Belum ditandai',
+    dayN: (n) => 'Hari ' + n, csv: '⬇ Ekspor CSV', leaderLink: 'Link leader', copy: 'Salin', copied: 'Tersalin ✓',
+    warnUnmarked: (n, w) => '⚠️ ' + n + ' penandaan masih kosong. Lengkapi sebelum batas koreksi (' + w + ').',
+    markedBy: (n, w) => 'oleh ' + n + (w ? ' · ' + w : ''),
+    empty: 'Belum ada talent diterima untuk acara ini.', okMarked: 'Status tersimpan ✓',
+    errLocked: 'Sudah lewat masa koreksi — tidak bisa diubah.', errBad: 'Gagal menyimpan.',
+    editHint: 'Anda bisa menandai/mengoreksi langsung di sini selama masa absensi.', notePh: 'Keterangan (opsional)',
+    total: 'total', ofDay: 'hari ini',
+  } : {
+    title: 'Attendance Recap', back: 'Back to event',
+    active: 'Attendance active', lockedT: 'Locked (past correction window)', notYet: 'Not open yet',
+    closeAt: (w) => 'Correction deadline: ' + w,
+    lockedNote: 'The correction window has passed. Only a Super Admin can change this.',
+    present: meta.present.label, notified: meta.absent_notified.label, nonotice: meta.absent_no_notice.label, unmarked: 'Not marked',
+    dayN: (n) => 'Day ' + n, csv: '⬇ Export CSV', leaderLink: 'Leader link', copy: 'Copy', copied: 'Copied ✓',
+    warnUnmarked: (n, w) => '⚠️ ' + n + ' marks still empty. Complete before the correction deadline (' + w + ').',
+    markedBy: (n, w) => 'by ' + n + (w ? ' · ' + w : ''),
+    empty: 'No accepted talent for this event yet.', okMarked: 'Status saved ✓',
+    errLocked: 'Past the correction window — cannot change.', errBad: 'Could not save.',
+    editHint: 'You can mark/correct directly here during the attendance window.', notePh: 'Note (optional)',
+    total: 'total', ofDay: 'this day',
+  };
+  const days = recap.days || [];
+  const cur = recap.countsByDay[day] || { present: 0, absent_notified: 0, absent_no_notice: 0, unmarked: 0 };
+  const closeW = closeMs != null ? fmtWhenWib(closeMs, L) : '';
+  const nearDeadline = active && recap.unmarkedTotal > 0 && closeMs != null && (closeMs - Date.now()) < 3 * 86400000;
+  const flashBanner = f.ok === 'marked' ? `<div class="banner banner-ok">${esc(s.okMarked)}</div>`
+    : f.err === 'locked' ? `<div class="banner banner-err">${esc(s.errLocked)}</div>`
+    : f.err === 'bad' ? `<div class="banner banner-err">${esc(s.errBad)}</div>` : '';
+  const stateBadge = locked ? `<span class="pill pill-off">${esc(s.lockedT)}</span>`
+    : active ? `<span class="pill pill-ok">${esc(s.active)}</span>`
+    : `<span class="pill pill-off">${esc(s.notYet)}</span>`;
+  const daySel = (days.length > 1) ? `<div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch">
+    ${days.map((d, i) => `<a href="/eo/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+  </div>` : '';
+  const countPill = (cls, label, n) => `<div class="card" style="margin:0;padding:10px 12px;text-align:center;border-top:3px solid ${cls}">
+    <div style="font-size:24px;font-weight:800">${n}</div><div class="muted" style="font-size:11.5px">${esc(label)}</div></div>`;
+  const counts = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 4px">
+    ${countPill('#0f7a45', s.present, cur.present)}
+    ${countPill('#b45309', s.notified, cur.absent_notified)}
+    ${countPill('#b91c1c', s.nonotice, cur.absent_no_notice)}
+    ${countPill('var(--line)', s.unmarked, cur.unmarked)}
+  </div>`;
+  const editBtns = (tt, status) => meta && active ? `<div class="asrow" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${['present', 'absent_notified', 'absent_no_notice'].map((k) => `<button type="submit" name="status" value="${k}" class="asbtn ${meta[k].cls}${status === k ? ' on' : ''}">${meta[k].label}</button>`).join('')}
+    </div>
+    <div class="lrow-note" style="margin-top:8px;display:${status === 'absent_notified' ? 'block' : 'none'}"><input type="text" name="note" maxlength="500" placeholder="${esc(s.notePh)}" value="${esc((tt.byDay[day] && tt.byDay[day].status === 'absent_notified' && tt.byDay[day].note) || '')}" style="width:100%;font-size:13px"></div>` : '';
+  const statusTag = (status) => {
+    if (!status) return `<span class="pill pill-off">${esc(s.unmarked)}</span>`;
+    return `<span class="pill" style="background:${status === 'present' ? '#d8f3e3' : status === 'absent_notified' ? '#fdeccd' : '#fde2e2'};color:${status === 'present' ? '#0f7a45' : status === 'absent_notified' ? '#8a5a00' : '#b91c1c'}">${esc(meta[status].label)}</span>`;
+  };
+  const talentRow = (tt) => {
+    const row = tt.byDay[day] || null; const status = row && row.status ? row.status : null;
+    const metaLine = (row && row.status && row.marked_by_name)
+      ? `<div class="muted" style="font-size:11.5px;margin-top:4px">${esc(s.markedBy(row.marked_by_name, row.marked_at ? fmtWhenWib(row.marked_at, L) : ''))}</div>` : '';
+    const noteLine = (row && row.status === 'absent_notified' && row.note) ? `<div class="muted" style="font-size:12px;margin-top:3px">📝 ${esc(row.note)}</div>` : '';
+    const inner = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <b style="font-size:14.5px">${esc(tt.name)}</b>${statusTag(status)}</div>${noteLine}${metaLine}${editBtns(tt, status)}`;
+    return active
+      ? `<form method="post" action="/eo/events/${esc(e.id)}/absensi/mark" class="lrow-form" style="margin:0;padding:12px 2px;border-top:1px solid var(--line)">
+          <input type="hidden" name="app" value="${esc(tt.applicationId)}"><input type="hidden" name="day" value="${esc(day || '')}">${inner}</form>`
+      : `<div style="padding:12px 2px;border-top:1px solid var(--line)">${inner}</div>`;
+  };
+  const groupList = (recap.groups && recap.groups.length) ? recap.groups.map((g) => `<div class="card" style="margin-top:14px">
+      <div style="font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)">${esc(g.label)} <span class="muted" style="font-weight:600">· ${g.talents.length}</span></div>
+      ${g.talents.map(talentRow).join('')}
+    </div>`).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${esc(s.empty)}</p></div>`;
+  const style = `<style>
+    .asbtn{border:1.5px solid var(--line);background:var(--card,#fff);color:var(--ink);border-radius:999px;padding:7px 11px;font:600 12.5px/1 inherit;cursor:pointer;flex:1;min-width:88px;transition:.12s}
+    .asbtn:active{transform:scale(.97)}
+    .asbtn.as-present.on{background:#0f7a45;border-color:#0f7a45;color:#fff}
+    .asbtn.as-notified.on{background:#b45309;border-color:#b45309;color:#fff}
+    .asbtn.as-nonotice.on{background:#b91c1c;border-color:#b91c1c;color:#fff}
+  </style>
+  <script>document.addEventListener('input',function(ev){var el=ev.target;if(el.name==='status')return;});
+  document.addEventListener('click',function(ev){var b=ev.target;if(b.classList&&b.classList.contains('asbtn')){var form=b.closest('form');if(form){var n=form.querySelector('.lrow-note');if(n)n.style.display=(b.value==='absent_notified')?'block':'none';}}},true);</script>`;
+  const body = `<div class="wrap">${style}
+    <a href="/eo/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">← ${esc(s.back)}</a>
+    ${flashBanner}
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div><h1 style="margin:0">${esc(s.title)}</h1><p class="sub" style="margin:4px 0 0">${esc(e.name)}${eventDate ? ' · ' + esc(eventDate) : ''}</p></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stateBadge}<a href="/eo/events/${esc(e.id)}/absensi.csv?lang=${L}" class="btn btn-sm">${esc(s.csv)}</a></div>
+    </div>
+    ${closeW ? `<div class="muted" style="font-size:12.5px;margin-top:8px">🕒 ${esc(s.closeAt(closeW))}</div>` : ''}
+    ${locked ? `<div class="banner banner-warn" style="margin-top:10px">${esc(s.lockedNote)}</div>` : (active ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${esc(s.editHint)}</div>` : '')}
+    ${nearDeadline ? `<div class="banner banner-warn" style="margin-top:10px">${esc(s.warnUnmarked(recap.unmarkedTotal, closeW))}</div>` : ''}
+    ${linkUrl ? `<div class="card" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="muted" style="font-size:12.5px">${esc(s.leaderLink)}:</span>
+      <input type="text" id="attLinkUrl2" readonly value="${esc(linkUrl)}" onclick="this.select()" style="flex:1;min-width:200px;font-size:12.5px">
+      <button type="button" class="btn btn-sm" onclick="(function(b){navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('attLinkUrl2').value);b.textContent='${esc(s.copied)}';setTimeout(function(){b.textContent='${esc(s.copy)}'},1500)})(this)">${esc(s.copy)}</button>
+    </div>` : ''}
+    ${daySel}
+    ${counts}
+    ${groupList}
+  </div>`;
+  return appLayout({ title: s.title + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
 function performancePage(board, totalSubs) {
   const rows = board.length ? board.map((e, i) => `<tr>
     <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
@@ -5464,7 +5576,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, eoAttendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,

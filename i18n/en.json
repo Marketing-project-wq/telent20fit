@@ -476,6 +476,7 @@
   "eo.att.open2": "Open",
   "eo.att.share": "Share this link only with the leader/PIC responsible for marking attendance.",
   "eo.att.window": "Active {open} to {close}",
+  "eo.att.recap": "View attendance recap",
   "eo.rel.events": "{n} events joined",
   "eo.rel.cancels": "{n} cancelled (H-{h})",
   "eo.rel.cancels0": "0 cancelled",

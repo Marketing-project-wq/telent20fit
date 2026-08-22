@@ -3190,6 +3190,118 @@ app.get('/absen/:token/name-reset', (req, res) => {
   res.redirect('/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang);
 });
 
+// --- Tahap 3: EO attendance recap + CSV export -----------------------------
+// Talents grouped by position, each day's status, plus per-day + overall
+// counts. The EO oversees on-site marking here; a super admin reuses the same
+// shape (Tahap 5).
+async function attendanceRecap(st, ev) {
+  const groups = await leaderAttendanceData(st, ev);
+  const days = eventDays(ev);
+  const blank = () => ({ present: 0, absent_notified: 0, absent_no_notice: 0, unmarked: 0 });
+  const countsByDay = {}; days.forEach((d) => { countsByDay[d] = blank(); });
+  const overall = blank();
+  let unmarkedTotal = 0; let markedTotal = 0;
+  groups.forEach((g) => g.talents.forEach((tt) => days.forEach((d) => {
+    const row = tt.byDay[d] || null;
+    const s = row && row.status ? row.status : null;
+    const key = s || 'unmarked';
+    if (countsByDay[d][key] != null) countsByDay[d][key]++;
+    if (overall[key] != null) overall[key]++;
+    if (s) markedTotal++; else unmarkedTotal++;
+  })));
+  return { groups, days, countsByDay, overall, unmarkedTotal, markedTotal };
+}
+
+function csvCell(v) { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+const ATT_CSV_LABEL = {
+  id: { present: 'Hadir', absent_notified: 'Tidak hadir (ada kabar)', absent_no_notice: 'Tidak hadir (tanpa kabar)', unmarked: 'Belum ditandai' },
+  en: { present: 'Present', absent_notified: 'Absent (notified)', absent_no_notice: 'Absent (no notice)', unmarked: 'Not marked' },
+};
+async function attendanceCsv(st, ev, lang) {
+  const L = lang === 'en' ? 'en' : 'id';
+  const recap = await attendanceRecap(st, ev);
+  const head = L === 'en'
+    ? ['Position', 'Name', 'Date', 'Status', 'Status code', 'Note', 'Marked by', 'Marked at (WIB)']
+    : ['Posisi', 'Nama', 'Tanggal', 'Status', 'Kode status', 'Keterangan', 'Ditandai oleh', 'Waktu ditandai (WIB)'];
+  const lines = [head.map(csvCell).join(',')];
+  const whenWib = (iso) => { try { return new Date(iso).toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }); } catch (_) { return ''; } };
+  recap.groups.forEach((g) => g.talents.forEach((tt) => recap.days.forEach((d) => {
+    const row = tt.byDay[d] || null; const s = row && row.status ? row.status : 'unmarked';
+    lines.push([
+      g.label, tt.name, d, ATT_CSV_LABEL[L][s] || s, (s === 'unmarked' ? '' : s),
+      (row && row.note) || '', (row && row.marked_by_name) || '', (row && row.marked_at) ? whenWib(row.marked_at) : '',
+    ].map(csvCell).join(','));
+  })));
+  return lines.join('\r\n');
+}
+function attFilenameSlug(name) { return String(name || 'event').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'event'; }
+
+app.get('/eo/events/:id/absensi', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const recap = await attendanceRecap(st, ev);
+    const days = recap.days; const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const link = await st.getAttendanceLinkForEvent(ev.id);
+    res.send(V.eoAttendancePage({
+      staff: eoCtx(req), event: ev, eventDate: eventDateStr(ev), recap, day, lang: req.lang,
+      active: attendanceWindowActive(ev), locked: attendanceLocked(ev), openMs: attendanceOpenMs(ev), closeMs: correctionCloseMs(ev),
+      linkUrl: link ? publicBase(req) + '/absen/' + link.token : null,
+      flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') },
+    }));
+  } catch (e) { next(e); }
+});
+
+// EO marks/corrects a talent's status within the window (recorded as the EO).
+app.post('/eo/events/:id/absensi/mark', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const back = '/eo/events/' + ev.id + '/absensi?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    if (!attendanceWindowActive(ev)) return res.redirect(back + '&err=locked');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return res.redirect(back + '&err=bad');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return res.redirect(back + '&err=bad');
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return res.redirect(back + '&err=bad');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return res.redirect(back + '&err=bad');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: null });
+    }
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id/absensi.csv', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const csv = await attendanceCsv(st, ev, req.lang);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="absensi-' + attFilenameSlug(ev.name) + '.csv"');
+    res.send('﻿' + csv); // BOM so Excel reads UTF-8 correctly
+  } catch (e) { next(e); }
+});
+
 // Public: leader marks/re-marks one talent's status for one day. Server re-checks
 // the window; writes the attendance row + a change-log entry (never silent).
 app.post('/absen/:token/mark', async (req, res, next) => {
