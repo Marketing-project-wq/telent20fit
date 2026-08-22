@@ -5277,7 +5277,7 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
   return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
 
-function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, standbyFlash, subFlash }) {
+function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, standbyFlash, subFlash, attendance, corrFlash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
@@ -5317,6 +5317,61 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
         <form method="post" action="/event/${esc(slug)}/substitute"><input type="hidden" name="sub_id" value="${esc(ctx.mySubOffer.id)}"><input type="hidden" name="v" value="0"><button class="btn btn-ghost btn-sm">${t('ta.sub.decline')}</button></form>
       </div>
     </div>` : '';
+  // D: the accepted talent's own attendance — their status per day, who marked
+  // it + when, and an "Ajukan Koreksi" button (a reason to the Super Admin).
+  const att = attendance;
+  const aStr = L !== 'en' ? {
+    title: 'Absensi saya', unmarked: 'Belum ditandai', markedBy: (n, w) => 'Ditandai oleh ' + n + (w ? ' · ' + w : ''),
+    ask: 'Ajukan koreksi', reasonPh: 'Alasan koreksi (jelaskan yang sebenarnya terjadi)', submit: 'Kirim ke Super Admin',
+    pending: 'Koreksi sedang ditinjau', approved: 'Koreksi disetujui', rejected: 'Koreksi ditolak',
+    note: 'Keterangan', hint: 'Status ini dipakai sebagai dasar pembayaran. Jika ada yang keliru, ajukan koreksi.',
+    dayN: (n) => 'Hari ' + n, submitted: 'Pengajuan koreksi terkirim. Menunggu keputusan Super Admin.', decidedNote: 'Catatan',
+  } : {
+    title: 'My attendance', unmarked: 'Not marked yet', markedBy: (n, w) => 'Marked by ' + n + (w ? ' · ' + w : ''),
+    ask: 'Request a correction', reasonPh: 'Reason (explain what actually happened)', submit: 'Send to Super Admin',
+    pending: 'Correction under review', approved: 'Correction approved', rejected: 'Correction rejected',
+    note: 'Note', hint: 'This status is used as the basis for payment. If anything is wrong, request a correction.',
+    dayN: (n) => 'Day ' + n, submitted: 'Correction request sent. Awaiting the Super Admin decision.', decidedNote: 'Note',
+  };
+  let attendancePanel = '';
+  if (att && att.days && att.days.length) {
+    const meta = attStatusMeta(L);
+    const whenWib = (iso) => fmtWhenWib(typeof iso === 'number' ? iso : Date.parse(iso), L);
+    const byAtt = new Map();
+    (att.corrections || []).forEach((c) => { const cur = byAtt.get(c.attendance_id); if (!cur || String(c.created_at) > String(cur.created_at)) byAtt.set(c.attendance_id, c); });
+    const tagFor = (status) => status
+      ? `<span class="pill" style="background:${status === 'present' ? '#d8f3e3' : status === 'absent_notified' ? '#fdeccd' : '#fde2e2'};color:${status === 'present' ? '#0f7a45' : status === 'absent_notified' ? '#8a5a00' : '#b91c1c'}">${esc(meta[status].label)}</span>`
+      : `<span class="pill pill-off">${esc(aStr.unmarked)}</span>`;
+    const rowHtml = att.days.map((d, i) => {
+      const row = att.byDay[d] || null; const status = row && row.status ? row.status : null;
+      const marked = (status && row.marked_by_name) ? `<div class="muted" style="font-size:12px;margin-top:5px">${esc(aStr.markedBy(row.marked_by_name, row.marked_at ? whenWib(row.marked_at) : ''))}</div>` : '';
+      const noteLine = (status === 'absent_notified' && row.note) ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📝 ${esc(aStr.note)}: ${esc(row.note)}</div>` : '';
+      let corr = '';
+      if (row && row.id) {
+        const c = byAtt.get(row.id);
+        if (c && c.state === 'pending') corr = `<div style="margin-top:8px"><span class="pill pill-off">⏳ ${esc(aStr.pending)}</span></div>`;
+        else {
+          const decided = c ? `<div class="muted" style="font-size:12px;margin-top:6px">${c.state === 'approved' ? '✓ ' + esc(aStr.approved) : '✕ ' + esc(aStr.rejected)}${c.decision_note ? ' · ' + esc(aStr.decidedNote) + ': ' + esc(c.decision_note) : ''}</div>` : '';
+          corr = `${decided}<details style="margin-top:8px"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">${esc(aStr.ask)}</summary>
+            <form method="post" action="/event/${esc(slug)}/koreksi" style="margin-top:10px;display:flex;flex-direction:column;gap:9px">
+              <input type="hidden" name="attendance_id" value="${esc(row.id)}">
+              <textarea name="reason" rows="3" maxlength="600" required placeholder="${esc(aStr.reasonPh)}" style="width:100%;box-sizing:border-box"></textarea>
+              <button type="submit" class="btn btn-sm">${esc(aStr.submit)}</button>
+            </form></details>`;
+        }
+      }
+      return `<div style="padding:12px 0;border-top:${i ? '1px solid var(--line)' : '0'}">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+          <b style="font-size:13.5px">${att.days.length > 1 ? esc(aStr.dayN(i + 1)) + ' · ' : ''}${esc(fmtDay(d))}</b>${tagFor(status)}
+        </div>${noteLine}${marked}${corr}</div>`;
+    }).join('');
+    const submittedBanner = corrFlash === 'sent' ? `<div class="banner banner-ok" style="margin:0 0 12px">${esc(aStr.submitted)}</div>` : '';
+    attendancePanel = `<div class="card" style="margin-top:14px;border-left:4px solid #0f7a45">
+      <b style="font-size:15px">🗓️ ${esc(aStr.title)}</b>
+      <div class="muted" style="font-size:12.5px;margin:4px 0 6px">${esc(aStr.hint)}</div>
+      ${submittedBanner}${rowHtml}
+    </div>`;
+  }
   // Public page: a logged-out visitor sees everything but gets a "log in to
   // apply" link instead of the confirm-apply button on each open position.
   const loggedIn = !!account;
@@ -5511,7 +5566,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
     ${chips}
     <div style="max-width:820px">
       ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
-      ${savedBanner}${cancelBanner}${flashSub}${flashStandby}${subOfferPanel}${standbyPanel}${eb}${docsWarn}
+      ${savedBanner}${cancelBanner}${flashSub}${flashStandby}${subOfferPanel}${standbyPanel}${attendancePanel}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>

@@ -1305,10 +1305,42 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || ''), standbyFlash: String(req.query.standby || ''), subFlash: String(req.query.sub || '') }));
+    // D: an accepted talent sees their own attendance for this event (status per
+    // day, who marked + when) and can request a correction. Only when accepted.
+    let attendance = null;
+    if (req.talent && ctx.myApp && ctx.myApp.status === 'approved' && (ctx.myChoices || []).some((c) => c.accepted)) {
+      const accepted = ctx.myChoices.find((c) => c.accepted);
+      const rows = (await st.listAttendanceForTalent(req.talent.id)).filter((r) => r.application_id === ctx.myApp.id);
+      const rowIds = new Set(rows.map((r) => r.id));
+      const byDay = {}; rows.forEach((r) => { byDay[r.event_day] = r; });
+      const corrections = (await st.listCorrectionsForTalent(req.talent.id)).filter((c) => rowIds.has(c.attendance_id));
+      attendance = { days: eventDays(ev), byDay, positionId: accepted ? accepted.position_id : null, corrections, active: attendanceWindowActive(ev), locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev) };
+    }
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || ''), standbyFlash: String(req.query.standby || ''), subFlash: String(req.query.sub || ''), attendance, corrFlash: String(req.query.koreksi || '') }));
   } catch (e) { next(e); }
 });
 
+
+// D: an accepted talent asks the Super Admin to correct one of their attendance
+// records — submits a reason; the record itself is never changed here (Tahap 5).
+app.post('/event/:id/koreksi', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const back = '/event/' + eventRef(ev) + '?lang=' + req.lang;
+    const attId = String(req.body.attendance_id || '');
+    const att = await st.getAttendanceById(attId);
+    if (!att || att.talent_id !== req.talent.id || att.event_id !== ev.id) return res.redirect(back);
+    const reason = String(req.body.reason || '').trim().slice(0, 600);
+    if (reason.length < 3) return res.redirect(back + '&koreksi=empty');
+    // One pending correction per record — silently coalesce repeat submits.
+    const pending = (await st.listCorrectionsForTalent(req.talent.id)).find((c) => c.attendance_id === attId && c.state === 'pending');
+    if (!pending) await st.createCorrection({ attendance_id: attId, talent_id: req.talent.id, reason });
+    res.redirect(back + '&koreksi=sent');
+  } catch (e) { next(e); }
+});
 
 app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => {
   try {
