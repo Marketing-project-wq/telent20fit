@@ -3229,6 +3229,21 @@ app.post('/eo/events/:id/attendance-link', requireEo, async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
+// Simpang 5: a leaked link can be revoked. The old token stops working
+// immediately (getAttendanceLinkByToken ignores revoked links); the EO can then
+// generate a fresh, different token.
+app.post('/eo/events/:id/attendance-link/revoke', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const link = await st.getAttendanceLinkForEvent(ev.id);
+    if (link) await st.revokeAttendanceLink(link.id);
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=revoked#absen');
+  } catch (e) { next(e); }
+});
+
 // Resolve a leader link token -> { link, ev } or null.
 async function resolveAttLink(st, token) {
   const link = await st.getAttendanceLinkByToken(String(token || ''));

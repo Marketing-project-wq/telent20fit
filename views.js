@@ -2603,6 +2603,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     : f.ok === 'standby' ? `<div class="banner banner-ok">${t('eo.ap.okStandby')}</div>`
     : f.ok === 'offered' ? `<div class="banner banner-ok">${t('eo.sub.okOffered')}</div>`
     : f.ok === 'link' ? `<div class="banner banner-ok">${t('eo.att.linkReady')}</div>`
+    : f.ok === 'revoked' ? `<div class="banner banner-ok">${t('eo.att.revoked')}</div>`
     : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
   // Tahap 2/3: the event's ONE public leader attendance link. Opens without
   // login, shows only name + position + status. Generate on demand + copy.
@@ -2623,7 +2624,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     </div>
     ${attWindow ? `<div class="muted" style="font-size:12px;margin-top:8px">🕒 ${attWindow}</div>` : ''}
     <div class="muted" style="font-size:12px;margin-top:6px">${t('eo.att.share')}</div>
-    <div style="margin-top:12px"><a href="/eo/events/${esc(e.id)}/absensi?lang=${L}" class="btn btn-sm">${t('eo.att.recap')}</a></div>`
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><a href="/eo/events/${esc(e.id)}/absensi?lang=${L}" class="btn btn-sm">${t('eo.att.recap')}</a>
+      <form method="post" action="/eo/events/${esc(e.id)}/attendance-link/revoke" style="margin:0" ${jsConfirm(t('eo.att.revokeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.att.revoke')}</button></form></div>`
     : `<form method="post" action="/eo/events/${esc(e.id)}/attendance-link" style="margin-top:12px">
         <button class="btn btn-sm">${t('eo.att.generate')}</button>
       </form>

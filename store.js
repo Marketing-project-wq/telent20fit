@@ -525,6 +525,7 @@ function supabaseStore() {
     async createAttendanceLink(row) { const { data, error } = await sb.from('talent_attendance_link').insert(row).select('*').maybeSingle(); if (error) throw new Error(error.message); return data; },
     async getAttendanceLinkByToken(token) { const { data } = await sb.from('talent_attendance_link').select('*').eq('token', token).is('revoked_at', null).maybeSingle(); return data || null; },
     async getAttendanceLinkForEvent(eventId) { const { data } = await sb.from('talent_attendance_link').select('*').eq('event_id', eventId).is('revoked_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(); return data || null; },
+    async revokeAttendanceLink(id) { const { error } = await sb.from('talent_attendance_link').update({ revoked_at: new Date().toISOString() }).eq('id', id); if (error) throw new Error(error.message); },
     // ---- Attendance correction requests ----
     async createCorrection(row) { const { data, error } = await sb.from('talent_attendance_correction').insert(row).select('*').maybeSingle(); if (error) throw new Error(error.message); return data; },
     async listCorrections({ state } = {}) { let q = sb.from('talent_attendance_correction').select('*'); if (state) q = q.eq('state', state); const { data } = await q.order('created_at', { ascending: false }); return data || []; },
@@ -926,6 +927,7 @@ function memoryStore() {
     async createAttendanceLink(row) { const rec = Object.assign({ id: 'alk-' + (++seq), created_by: null, created_at: now(), revoked_at: null }, row); attendanceLinks.push(rec); return { ...rec }; },
     async getAttendanceLinkByToken(token) { const l = attendanceLinks.find((x) => x.token === token && !x.revoked_at); return l ? { ...l } : null; },
     async getAttendanceLinkForEvent(eventId) { const l = attendanceLinks.filter((x) => x.event_id === eventId && !x.revoked_at).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]; return l ? { ...l } : null; },
+    async revokeAttendanceLink(id) { const l = attendanceLinks.find((x) => x.id === id); if (l) l.revoked_at = now(); },
     // ---- Corrections ----
     async createCorrection(row) { const rec = Object.assign({ id: 'cor-' + (++seq), state: 'pending', decided_by: null, decided_at: null, decision_note: null, created_at: now() }, row); corrections.push(rec); return { ...rec }; },
     async listCorrections({ state } = {}) { return corrections.filter((c) => !state || c.state === state).map((c) => ({ ...c })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
