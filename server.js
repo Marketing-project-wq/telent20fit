@@ -1122,6 +1122,27 @@ function cancelWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null 
 // Standby list stays callable until H-12 hours before start.
 function standbyWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 12; }
 
+// E: a talent's reliability snapshot for curation — events participated,
+// non-emergency cancellations (with how close to the event the nearest one was),
+// and no-shows. Emergency-flagged cancellations are excluded (admin-set).
+function computeReliability(tid, apps, eventsById) {
+  const mine = (apps || []).filter((a) => a.talent_id === tid);
+  const placed = (a) => ['approved', 'assigned', 'completed'].includes(a.status);
+  const participated = mine.filter(placed).length;
+  const cancels = mine.filter((a) => a.status === 'cancelled' && !a.cancel_is_emergency);
+  let closestCancelDay = null;
+  cancels.forEach((a) => {
+    const ev = eventsById.get(a.event_id); const start = ev ? eventStartMs(ev) : null;
+    if (start != null && a.cancelled_at) {
+      const days = Math.max(0, Math.round((start - new Date(a.cancelled_at).getTime()) / 86400000));
+      if (closestCancelDay == null || days < closestCancelDay) closestCancelDay = days;
+    }
+  });
+  const now = Date.now();
+  const noShows = mine.filter((a) => placed(a) && a.attended === false && (() => { const ev = eventsById.get(a.event_id); const s = ev ? eventStartMs(ev) : null; return s != null && s < now; })()).length;
+  return { participated, cancels: cancels.length, closestCancelDay, noShows };
+}
+
 // Build the apply context for one event + talent (positions, open slots, my application).
 async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -2024,9 +2045,10 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positions, apps, choices, talents] = await Promise.all([
-      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+    const [positions, apps, choices, talents, allEvents] = await Promise.all([
+      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listEvents(),
     ]);
+    const eventsById = new Map(allEvents.map((x) => [x.id, x]));
     const view = eoEventView(ev, positions, apps, choices);
     // Tahap 6: applicants for this event, each with their prioritised choices + contact.
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
@@ -2051,6 +2073,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
           hyroxStatus: tt.hyrox_cert_status || 'none',
           status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
+          reliability: computeReliability(a.talent_id, apps, eventsById),
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
@@ -2291,6 +2314,18 @@ app.post('/eo/events/:id/replace', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// E: super admin marks/unmarks a cancellation as an emergency, so it is excluded
+// from the talent's reliability count (illness, family emergency, etc.).
+app.post('/admin/applications/:id/cancel-emergency', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = await st.getApplication(req.params.id);
+    if (app && app.status === 'cancelled') await st.updateApplication(app.id, { cancel_is_emergency: !app.cancel_is_emergency });
+    res.redirect(safeNext(req.body.next) || '/admin/applications');
+  } catch (e) { next(e); }
+});
+
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
 app.get('/admin/health', async (req, res) => {
   const st = db();
@@ -2499,6 +2534,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
+        reliability: computeReliability(a.talent_id, apps, eventById),
       };
     });
     // Attendance links: one per event that has any approved talent, for on-site PICs.
@@ -2737,6 +2773,41 @@ async function runDueReminders(st) {
   }
 }
 
+// A/D: hourly maintenance for the standby/substitute flow. Deactivates the standby
+// list at H-12h, expires overdue substitute offers (frees them + alerts the EO +
+// emails the lapsed candidate), and sends a pre-deadline reminder once. Idempotent
+// via state transitions + reminded_at, so it is safe to run every hour.
+async function runStandbyMaintenance(st) {
+  if (!st) return { expiredStandby: 0, expiredOffers: 0, reminders: 0 };
+  const events = await st.listEvents().catch(() => []);
+  const now = Date.now();
+  const active = events.filter((e) => e.is_active && !e.completed_at && eventStartMs(e) != null && eventStartMs(e) > now - 24 * 3600 * 1000);
+  let exSb = 0, exOf = 0, rem = 0;
+  for (const ev of active) {
+    const [standby, subs] = await Promise.all([st.listStandby(ev.id).catch(() => []), st.listSubstitutions(ev.id).catch(() => [])]);
+    if (!standbyWindowOpen(ev)) {
+      for (const s of standby) { if (['offered', 'available'].includes(s.state)) { await st.updateStandby(s.id, { state: 'expired' }); exSb++; } }
+    }
+    for (const sub of subs) {
+      if (sub.state !== 'offered') continue;
+      const dl = sub.deadline_at ? new Date(sub.deadline_at).getTime() : null;
+      if (dl != null && now > dl) {
+        await st.updateSubstitution(sub.id, { state: 'expired' });
+        await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'substitute_expired', application_id: sub.outgoing_application_id, position_id: sub.position_id, data: null });
+        const inApp = await st.getApplication(sub.incoming_application_id);
+        if (inApp) notifyClosing(st, inApp, ev, 'lapsed').catch(() => {});
+        exOf++;
+      } else if (dl != null && !sub.reminded_at && (dl - now) <= 3 * 3600 * 1000) {
+        await st.updateSubstitution(sub.id, { reminded_at: new Date().toISOString() });
+        const inApp = await st.getApplication(sub.incoming_application_id);
+        if (inApp) notifyDecisionReminder(st, inApp, ev, sub.deadline_at).catch(() => {});
+        rem++;
+      }
+    }
+  }
+  return { expiredStandby: exSb, expiredOffers: exOf, reminders: rem };
+}
+
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
 // is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
 // even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
@@ -2744,6 +2815,9 @@ let _remTimer = null;
 function startReminderScheduler() {
   if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
   const tick = () => {
+    // Standby/substitute maintenance runs every hour (state changes are time-
+    // critical); the H-1 courtesy reminders stay gated to daytime WIB.
+    runStandbyMaintenance(db()).catch((e) => console.warn('[standby] tick skipped:', e && e.message));
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
     runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
@@ -3285,7 +3359,13 @@ app.use((err, req, res, next) => {
   res.status(500).send(V.page500(msg));
 });
 
-app.listen(PORT, HOST, () => {
-  console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
-  startReminderScheduler();
-});
+// Start listening only when run directly; requiring this module (e.g. for tests)
+// registers the app and helpers without opening a port.
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
+    startReminderScheduler();
+  });
+}
+
+module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen };

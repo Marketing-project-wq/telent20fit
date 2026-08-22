@@ -2616,6 +2616,17 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
+// E: compact reliability line for curation. Empty for talents with no history.
+function reliabilityLine(rel, lang) {
+  if (!rel || (!rel.participated && !rel.cancels && !rel.noShows)) return '';
+  const L = normLang(lang); const t = (k, v) => tr(L, k, v);
+  const parts = [t('eo.rel.events', { n: rel.participated })];
+  parts.push(rel.cancels ? t('eo.rel.cancels', { n: rel.cancels, h: rel.closestCancelDay != null ? rel.closestCancelDay : '?' }) : t('eo.rel.cancels0'));
+  parts.push(t('eo.rel.noShows', { n: rel.noShows }));
+  const warn = rel.cancels > 0 || rel.noShows > 0;
+  return `<div class="muted" style="font-size:12px;margin-top:6px;color:${warn ? '#92400e' : 'var(--muted)'}">🛈 ${esc(parts.join(' · '))}</div>`;
+}
+
 // Tahap 6: applicants for one EO event — per-talent and per-position, with a
 // name search + status filter (all client-side). Contact is shown so the EO
 // can coordinate with talents who applied.
@@ -2694,6 +2705,7 @@ function eoApplicantsSection(e, view, aps, L) {
       ${talentStatusBadge(a.status, L)}
     </div>
     ${contactLine(a)}
+    ${reliabilityLine(a.reliability, L)}
     ${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
     ${decisionControls(a)}
@@ -4530,6 +4542,14 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
         ${mpStatusBadge(a.status, L)}
       </div>
       ${stationLine}
+      ${reliabilityLine(a.reliability, L)}
+      ${a.status === 'cancelled' ? `<div style="margin-top:10px;background:#fef3c7;border:1px solid #f0c76a;border-radius:8px;padding:10px 12px">
+        <div style="font-size:13px"><b>${t('adm.cancelled')}</b>${a.cancel_reason ? ' · ' + esc(t('ta.reason.' + a.cancel_reason)) : ''}${a.cancel_reason_note ? ` · "${esc(a.cancel_reason_note)}"` : ''}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <form method="post" action="/admin/applications/${esc(a.id)}/cancel-emergency" class="inline-form"><input type="hidden" name="next" value="/admin/applications?cat=${esc(cat)}"><button class="btn btn-ghost btn-sm">${a.cancel_is_emergency ? t('adm.emergencyUnset') : t('adm.emergencySet')}</button></form>
+          ${a.cancel_is_emergency ? `<span class="pill" style="background:#d8f3e3;color:#0f7a45">${t('adm.emergencyOn')}</span>` : ''}
+        </div>
+      </div>` : ''}
       ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         ${a.attended ? `<span class="pill pill-ok">✓ ${t('mpr.attended')}</span>` : `<span class="pill pill-off">${t('mpr.notAttended')}</span>`}
         <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
