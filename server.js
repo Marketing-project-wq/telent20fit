@@ -1122,6 +1122,38 @@ function cancelWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null 
 // Standby list stays callable until H-12 hours before start.
 function standbyWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 12; }
 
+// --- New attendance & reliability system (Tahap 2+) ------------------------
+// The three real-world outcomes the leader records. NULL = belum ditandai
+// (unmarked) — never defaulted to "present". Only 'absent_no_notice' is a
+// reliability violation; 'absent_notified' (told the EO via WhatsApp) is not.
+const ATT_STATUSES = ['present', 'absent_notified', 'absent_no_notice'];
+// Leader link opens H-3 hours before the event start (user decision) so the PIC
+// can prepare on-site, and stays active until the correction window closes.
+function attendanceOpenMs(ev) { const s = eventStartMs(ev); return s == null ? null : s - 3 * 3600 * 1000; }
+// Correction window closes at end of the 10th day (23:59:59 WIB) after the
+// event ends. After this the day is LOCKED to the leader/EO — only a super
+// admin may still edit (with a recorded reason). Checked on the server so the
+// UI can never widen it.
+function correctionCloseMs(ev) {
+  const end = String((ev && (ev.ends_at || ev.starts_at)) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return null;
+  const ms = Date.parse(addDaysYMD(end, 10) + 'T23:59:59+07:00');
+  return Number.isNaN(ms) ? null : ms;
+}
+// The leader link is active (can mark / re-mark) only inside [open, close].
+function attendanceWindowActive(ev, at) {
+  const now = at == null ? Date.now() : at;
+  const open = attendanceOpenMs(ev); const close = correctionCloseMs(ev);
+  if (open == null || close == null) return false;
+  return now >= open && now <= close;
+}
+// A day is locked once the correction window has passed (leader/EO can no
+// longer change it; only a super admin can, with a reason).
+function attendanceLocked(ev, at) { const c = correctionCloseMs(ev); return c == null ? false : (at == null ? Date.now() : at) > c; }
+// Random, long, unguessable link token — NOT derived from the event id, so the
+// public URL leaks nothing about which event it belongs to.
+function randomAttToken() { return crypto.randomBytes(24).toString('base64url'); }
+
 // E: a talent's reliability snapshot for curation — events participated,
 // non-emergency cancellations (with how close to the event the nearest one was),
 // and no-shows. Emergency-flagged cancellations are excluded (admin-set).
@@ -2102,7 +2134,11 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     });
     await attachMockups(st, ev);
     const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang, cancelAlerts, hoursLeft: hoursUntilEvent(ev) }));
+    // Tahap 2/3: the event's single leader attendance link (if generated) +
+    // whether the marking window is open, so the EO can share/copy it.
+    const attLinkRow = await st.getAttendanceLinkForEvent(ev.id);
+    const att = { url: attLinkRow ? publicBase(req) + '/absen/' + attLinkRow.token : null, active: attendanceWindowActive(ev), openMs: attendanceOpenMs(ev), closeMs: correctionCloseMs(ev) };
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang, cancelAlerts, hoursLeft: hoursUntilEvent(ev), att }));
   } catch (e) { next(e); }
 });
 
@@ -3038,6 +3074,162 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// === Talent attendance & reliability system (Tahap 2+) =====================
+// ONE public leader link per EVENT. The leader is external (no login) and sees
+// ONLY name + position + 3-status buttons — never phone/email/personal data.
+// A/B: the leader marks HADIR / TIDAK HADIR ADA KABAR / TIDAK HADIR TANPA KABAR
+// per talent per day. Attendance is the basis of payment by an outside party,
+// so every mark records who (leader name), when, and keeps a full change log.
+
+// Accepted talents of an event grouped by their accepted position, each with
+// per-day attendance rows. STRICTLY name + position + status — this feeds the
+// public leader page, so no phone/email/IG/bank/personal field is ever read.
+async function leaderAttendanceData(st, ev) {
+  const [apps, talents, choices, positions, attRows] = await Promise.all([
+    st.listApplications(), st.listTalents(), st.listApplicationChoices(),
+    st.listEventPositions(ev.id), st.listAttendanceForEvent(ev.id),
+  ]);
+  const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  const posById = new Map(positions.map((p) => [p.position_id, p]));
+  const attByApp = new Map();
+  attRows.forEach((a) => { const m = attByApp.get(a.application_id) || {}; m[a.event_day] = a; attByApp.set(a.application_id, m); });
+  const acceptedPos = new Map();
+  choices.forEach((c) => { if (c.accepted) acceptedPos.set(c.application_id, c.position_id); });
+  const groups = new Map();
+  apps.filter((a) => a.event_id === ev.id && a.status === 'approved' && acceptedPos.has(a.id)).forEach((a) => {
+    const pid = acceptedPos.get(a.id); const p = posById.get(pid) || {};
+    const label = p.label_id || p.label_en || pid;
+    if (!groups.has(pid)) groups.set(pid, { position_id: pid, label, talents: [] });
+    groups.get(pid).talents.push({ applicationId: a.id, talentId: a.talent_id, name: nameById.get(a.talent_id) || '—', byDay: attByApp.get(a.id) || {} });
+  });
+  const list = [...groups.values()].sort((x, y) => String(x.label).localeCompare(String(y.label), 'id'));
+  list.forEach((g) => g.talents.sort((x, y) => String(x.name).localeCompare(String(y.name), 'id', { sensitivity: 'base' })));
+  return list;
+}
+
+// Public absolute base for building the shareable leader URL.
+function publicBase(req) {
+  const env = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  if (env) return env;
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  return proto + '://' + req.get('host');
+}
+
+// EO (owner) creates — or re-fetches — the single active leader link for their
+// event. Token is random + long (crypto), never the event id.
+app.post('/eo/events/:id/attendance-link', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    let link = await st.getAttendanceLinkForEvent(ev.id);
+    if (!link) {
+      let token = randomAttToken();
+      for (let i = 0; i < 4 && (await st.getAttendanceLinkByToken(token)); i++) token = randomAttToken();
+      link = await st.createAttendanceLink({ event_id: ev.id, token, created_by: req.staff.id });
+    }
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=link#absen');
+  } catch (e) { next(e); }
+});
+
+// Resolve a leader link token -> { link, ev } or null.
+async function resolveAttLink(st, token) {
+  const link = await st.getAttendanceLinkByToken(String(token || ''));
+  if (!link) return null;
+  const ev = (await st.listEvents()).find((e) => e.id === link.event_id) || null;
+  if (!ev) return null;
+  return { link, ev };
+}
+function leaderName(req) { try { return decodeURIComponent(String((req.cookies && req.cookies.att_name) || '')).trim().slice(0, 80); } catch (_) { return ''; } }
+
+// Public leader page. No login. Window is enforced on the server.
+app.get('/absen/:token', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return res.status(404).send(V.leaderAttendancePage({ invalid: true, lang: req.lang }));
+    const { ev } = found;
+    const now = Date.now();
+    const openMs = attendanceOpenMs(ev); const closeMs = correctionCloseMs(ev);
+    const active = attendanceWindowActive(ev, now);
+    const notYet = openMs != null && now < openMs;
+    const closed = closeMs != null && now > closeMs;
+    if (!active) {
+      return res.send(V.leaderAttendancePage({ closedWindow: true, notYet, closed, event: ev, eventDate: eventDateStr(ev), openMs, closeMs, lang: req.lang }));
+    }
+    const name = leaderName(req);
+    if (!name) return res.send(V.leaderAttendancePage({ needName: true, event: ev, eventDate: eventDateStr(ev), token: req.params.token, lang: req.lang }));
+    const days = eventDays(ev);
+    const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const groups = await leaderAttendanceData(st, ev);
+    res.send(V.leaderAttendancePage({ event: ev, eventDate: eventDateStr(ev), groups, days, day, token: req.params.token, leaderName: name, lang: req.lang, saved: String(req.query.saved || '') }));
+  } catch (e) { next(e); }
+});
+
+// Public: leader records their name (mandatory, no login). Stored in a cookie
+// and written onto every mark for payment-dispute traceability.
+app.post('/absen/:token/name', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return res.status(404).send(V.leaderAttendancePage({ invalid: true, lang: req.lang }));
+    const name = String(req.body.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (name.length >= 2) res.cookie('att_name', encodeURIComponent(name), { maxAge: 30 * 24 * 3600 * 1000, sameSite: 'lax', path: '/', httpOnly: true });
+    res.redirect('/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// Public: leader clears their stored name (to re-enter it before the list).
+app.get('/absen/:token/name-reset', (req, res) => {
+  res.clearCookie('att_name', { path: '/' });
+  res.redirect('/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang);
+});
+
+// Public: leader marks/re-marks one talent's status for one day. Server re-checks
+// the window; writes the attendance row + a change-log entry (never silent).
+app.post('/absen/:token/mark', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const wantsJson = req.body.ajax === '1' || String(req.get('accept') || '').includes('application/json');
+    const back = '/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    const fail = (code, err) => wantsJson ? res.status(code).json({ ok: false, error: err }) : res.redirect(back + '&saved=' + err);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return fail(404, 'invalid');
+    const { ev } = found;
+    if (!attendanceWindowActive(ev)) return fail(403, 'closed');
+    const name = leaderName(req);
+    if (!name) return fail(400, 'name');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return fail(400, 'status');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return fail(400, 'day');
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return fail(400, 'app');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return fail(400, 'app');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: name, marked_by_staff: null, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: name, changed_by_staff: null, reason: null });
+    }
+    if (wantsJson) return res.json({ ok: true, app: appId, day, status, note, marked_by: name, marked_at: nowIso });
+    res.redirect(back + '&saved=1');
+  } catch (e) { next(e); }
+});
+
 // Super admin: download a PDF report of Man Power who have checked in — bank
 // details, phone, and how many days each attended. Payment/reconciliation aid.
 app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
@@ -3383,4 +3575,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen };
+module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked };
