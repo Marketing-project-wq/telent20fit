@@ -1355,11 +1355,21 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     let attendance = null;
     if (req.talent && ctx.myApp && ctx.myApp.status === 'approved' && (ctx.myChoices || []).some((c) => c.accepted)) {
       const accepted = ctx.myChoices.find((c) => c.accepted);
-      const rows = (await st.listAttendanceForTalent(req.talent.id)).filter((r) => r.application_id === ctx.myApp.id);
+      const allRows = await st.listAttendanceForTalent(req.talent.id);
+      const rows = allRows.filter((r) => r.application_id === ctx.myApp.id);
       const rowIds = new Set(rows.map((r) => r.id));
       const byDay = {}; rows.forEach((r) => { byDay[r.event_day] = r; });
       const corrections = (await st.listCorrectionsForTalent(req.talent.id)).filter((c) => rowIds.has(c.attendance_id));
-      attendance = { days: eventDays(ev), byDay, positionId: accepted ? accepted.position_id : null, corrections, active: attendanceWindowActive(ev), locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev) };
+      // I: graduated-sanction signal to the talent — active (within 6mo) no-notice
+      // absences across ALL their events, excluding Super-Admin emergency flags.
+      const nowMs = Date.now();
+      let noNoticeActive = 0;
+      allRows.forEach((r) => {
+        if (r.is_emergency || r.status !== 'absent_no_notice') return;
+        const dm = Date.parse(String(r.event_day) + 'T00:00:00+07:00');
+        if (!Number.isNaN(dm) && (nowMs - dm) <= 183 * 86400000) noNoticeActive++;
+      });
+      attendance = { days: eventDays(ev), byDay, positionId: accepted ? accepted.position_id : null, corrections, active: attendanceWindowActive(ev), locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev), noNoticeActive };
     }
     res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || ''), standbyFlash: String(req.query.standby || ''), subFlash: String(req.query.sub || ''), attendance, corrFlash: String(req.query.koreksi || '') }));
   } catch (e) { next(e); }
@@ -3229,6 +3239,18 @@ async function resolveAttLink(st, token) {
 }
 function leaderName(req) { try { return decodeURIComponent(String((req.cookies && req.cookies.att_name) || '')).trim().slice(0, 80); } catch (_) { return ''; } }
 
+// Tahap 7: notify the talent on EVERY attendance status change (best-effort, so
+// a mail hiccup never blocks or breaks the mark). Fire-and-forget.
+function notifyTalentAttendance(st, ev, talentId, day, status, markedByName, lang) {
+  (async () => {
+    try {
+      const acc = await st.getAccountById(talentId);
+      if (!acc || !acc.login) return;
+      await mailer.sendAttendanceEmail({ to: acc.login, name: acc.name, lang: lang || 'id', eventName: ev.name, day, status, markedBy: markedByName });
+    } catch (_) { /* non-fatal */ }
+  })().catch(() => {});
+}
+
 // Public leader page. No login. Window is enforced on the server.
 app.get('/absen/:token', async (req, res, next) => {
   try {
@@ -3370,6 +3392,7 @@ app.post('/eo/events/:id/absensi/mark', requireEo, async (req, res, next) => {
     });
     if (from !== status) {
       await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: null });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, req.staff.name, req.lang);
     }
     res.redirect(back + '&ok=marked');
   } catch (e) { next(e); }
@@ -3438,6 +3461,8 @@ app.post('/admin/koreksi/:id/decide', auth.requireStaff(['super_admin']), async 
       if (from !== status) {
         await st.updateAttendance(att.id, { status, note: status === 'absent_notified' ? (att.note || null) : null, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso });
         await st.addAttendanceLog({ attendance_id: att.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Koreksi disetujui: ' + note });
+        const evK = (await st.listEvents()).find((e) => e.id === att.event_id);
+        if (evK) notifyTalentAttendance(st, evK, att.talent_id, att.event_day, status, req.staff.name, req.lang);
       }
       await st.updateCorrection(c.id, { state: 'approved', decided_by: req.staff.id, decided_at: nowIso, decision_note: note });
     } else if (decision === 'reject') {
@@ -3501,7 +3526,27 @@ app.post('/admin/events/:id/absensi/mark', auth.requireStaff(['super_admin']), a
     });
     if (from !== status) {
       await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Admin: ' + reason });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, req.staff.name, req.lang);
     }
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
+// Tahap 7 (I): Super Admin flags/unflags an incident as an EMERGENCY, excluding
+// it from the talent's violation record. Who + reason are recorded; logged.
+app.post('/admin/absensi/:attendanceId/emergency', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const att = await st.getAttendanceById(req.params.attendanceId);
+    if (!att) return res.redirect('/admin/manage');
+    const back = '/admin/events/' + att.event_id + '/absensi?lang=' + req.lang + '&day=' + encodeURIComponent(att.event_day);
+    const on = !att.is_emergency;
+    const reason = String(req.body.reason || '').trim().slice(0, 500) || null;
+    if (on && (!reason || reason.length < 3)) return res.redirect(back + '&err=needreason');
+    const nowIso = new Date().toISOString();
+    await st.updateAttendance(att.id, { is_emergency: on, emergency_by: on ? req.staff.id : null, emergency_reason: on ? reason : null, emergency_at: on ? nowIso : null });
+    await st.addAttendanceLog({ attendance_id: att.id, from_status: att.status, to_status: att.status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: (on ? 'Ditandai darurat (dikecualikan dari pelanggaran): ' : 'Batal tanda darurat: ') + (reason || '') });
     res.redirect(back + '&ok=marked');
   } catch (e) { next(e); }
 });
@@ -3540,6 +3585,7 @@ app.post('/absen/:token/mark', async (req, res, next) => {
     });
     if (from !== status) {
       await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: name, changed_by_staff: null, reason: null });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, name, req.lang);
     }
     if (wantsJson) return res.json({ ok: true, app: appId, day, status, note, marked_by: name, marked_at: nowIso });
     res.redirect(back + '&saved=1');

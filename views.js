@@ -2691,6 +2691,10 @@ function attReliabilityPanel(ar, lang) {
     active: (n) => n + ' aktif', ownDetail: 'Detail acara Anda', otherDetail: 'Acara penyelenggara lain',
     note: 'Ket', hidden: 'Nama acara & keterangan disembunyikan demi privasi.',
     statusShort: { present: 'Hadir', absent_notified: 'Ada kabar', absent_no_notice: 'Tanpa kabar' },
+    sanction: (n) => n >= 3
+      ? '⛔ ' + n + 'x tidak hadir tanpa kabar (aktif). Keputusan pembatasan ada di Super Admin — tidak diblokir otomatis.'
+      : n === 2 ? '⚠️ 2x tidak hadir tanpa kabar (aktif). Pertimbangkan matang; talent tetap boleh dilamar.'
+        : '⚠️ 1x tidak hadir tanpa kabar (aktif). Mohon diperhatikan.',
   } : {
     title: 'Attendance track record', across: 'across all organizers',
     events: (n) => n + ' events', present: (n) => '✓ ' + n + ' present',
@@ -2698,6 +2702,10 @@ function attReliabilityPanel(ar, lang) {
     active: (n) => n + ' active', ownDetail: 'Your events (detail)', otherDetail: 'Other organizers’ events',
     note: 'Note', hidden: 'Event name & note hidden for privacy.',
     statusShort: { present: 'Present', absent_notified: 'Notified', absent_no_notice: 'No notice' },
+    sanction: (n) => n >= 3
+      ? '⛔ ' + n + ' no-notice absences (active). Any restriction is the Super Admin’s decision — no automatic block.'
+      : n === 2 ? '⚠️ 2 no-notice absences (active). Weigh carefully; the talent can still be selected.'
+        : '⚠️ 1 no-notice absence (active). Please take note.',
   };
   const chip = (txt, color) => `<span style="display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:${color}22;color:${color};margin:0 5px 4px 0">${esc(txt)}</span>`;
   const chips = [
@@ -2712,9 +2720,11 @@ function attReliabilityPanel(ar, lang) {
   const otherList = ar.other && ar.other.length ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">${esc(s.otherDetail)} · ${ar.other.length}</summary>
     <div style="margin-top:4px;font-size:11px;color:var(--muted)">🔒 ${esc(s.hidden)}</div>
     <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.other.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date))}</span><span class="muted">· ${esc(o.positionCategory || '—')}</span></div>`).join('')}</div></details>` : '';
+  const sn = g.noNoticeActive || 0;
+  const sanctionBanner = sn >= 1 ? `<div style="margin-top:6px;font-size:12px;font-weight:600;padding:6px 9px;border-radius:8px;background:${sn >= 3 ? '#fde2e2' : sn === 2 ? '#fdeccd' : '#fff7ed'};color:${sn >= 3 ? '#b91c1c' : '#8a5a00'}">${esc(s.sanction(sn))}</div>` : '';
   return `<div style="margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px">
     <div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${esc(s.title)} <span style="font-weight:600;text-transform:none">· ${esc(s.across)}</span></div>
-    <div style="margin-top:6px">${chips}</div>${ownList}${otherList}
+    <div style="margin-top:6px">${chips}</div>${sanctionBanner}${ownList}${otherList}
   </div>`;
 }
 
@@ -5239,6 +5249,25 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
   return appLayout({ title: s.title + ' — 20FIT', body, role: 'super_admin', active: 'koreksi', user: staff.name, lang: L });
 }
 
+// Emergency flag control for one attendance record (super admin). Its own form
+// (kept OUTSIDE the mark form — HTML forbids nested forms).
+function emergencyControl(row, eventId, s, L) {
+  if (!row || !row.id) return '';
+  if (row.is_emergency) {
+    return `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="pill" style="background:#e0e7ff;color:#3730a3">${esc(s.emgFlag)}</span>
+      ${row.emergency_reason ? `<span class="muted" style="font-size:12px">· ${esc(row.emergency_reason)}</span>` : ''}
+      <form method="post" action="/admin/absensi/${esc(row.id)}/emergency" style="margin:0"><button class="btn btn-ghost btn-sm">${esc(s.emgOff)}</button></form>
+    </div>`;
+  }
+  if (row.status !== 'absent_no_notice') return '';
+  return `<details style="margin-top:6px"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">${esc(s.emgOn)}</summary>
+    <form method="post" action="/admin/absensi/${esc(row.id)}/emergency" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" name="reason" maxlength="500" required placeholder="${esc(s.emgReason)}" style="flex:1;min-width:180px;font-size:13px">
+      <button type="submit" class="btn btn-sm">🚑</button>
+    </form></details>`;
+}
+
 // === Tahap 5: Super Admin per-event attendance edit (override + history) ===
 function adminAttendancePage(o) {
   const { staff, event, eventDate, recap, day, lang, locked, closeMs, logsByAtt, flash } = o || {};
@@ -5254,6 +5283,7 @@ function adminAttendancePage(o) {
     notePh: 'Keterangan (opsional)', empty: 'Belum ada talent diterima untuk acara ini.',
     okMarked: 'Status tersimpan ✓', errNeed: 'Alasan perubahan wajib diisi.', errBad: 'Gagal menyimpan.',
     by: (n, w) => 'oleh ' + n + (w ? ' · ' + w : ''), from: 'dari', to: 'ke', csv: '⬇ Ekspor CSV',
+    emgOn: 'Tandai darurat (kecualikan dari pelanggaran)', emgOff: 'Batalkan tanda darurat', emgReason: 'Alasan darurat (wajib)', emgFlag: '🚑 Darurat — dikecualikan',
   } : {
     title: 'Attendance (Super Admin)', back: 'Back', locked: 'Locked (past correction window) — only you can change it',
     open: 'Within correction window', closeAt: (w) => 'Correction deadline: ' + w, dayN: (n) => 'Day ' + n,
@@ -5261,6 +5291,7 @@ function adminAttendancePage(o) {
     notePh: 'Note (optional)', empty: 'No accepted talent for this event yet.',
     okMarked: 'Status saved ✓', errNeed: 'A reason for the change is required.', errBad: 'Could not save.',
     by: (n, w) => 'by ' + n + (w ? ' · ' + w : ''), from: 'from', to: 'to', csv: '⬇ Export CSV',
+    emgOn: 'Flag emergency (exclude from violations)', emgOff: 'Remove emergency flag', emgReason: 'Emergency reason (required)', emgFlag: '🚑 Emergency — excluded',
   };
   const days = recap.days || [];
   const closeW = closeMs != null ? fmtWhenWib(closeMs, L) : '';
@@ -5294,7 +5325,8 @@ function adminAttendancePage(o) {
       <div class="lrow-note" style="margin-top:8px;display:${status === 'absent_notified' ? 'block' : 'none'}"><input type="text" name="note" maxlength="500" placeholder="${esc(s.notePh)}" value="${esc((row && row.status === 'absent_notified' && row.note) || '')}" style="width:100%;font-size:13px"></div>
       <input type="text" name="reason" maxlength="500" required placeholder="${esc(s.reasonPh)}" style="width:100%;font-size:13px;margin-top:8px">
       ${attId ? histFor(attId) : ''}
-    </form>`;
+    </form>
+    ${attId ? emergencyControl(row, e.id, s, L) : ''}`;
   };
   const groupList = (recap.groups && recap.groups.length) ? recap.groups.map((g) => `<div class="card" style="margin-top:14px">
       <div style="font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)">${esc(g.label)} <span class="muted" style="font-weight:600">· ${g.talents.length}</span></div>
@@ -5523,12 +5555,20 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
     pending: 'Koreksi sedang ditinjau', approved: 'Koreksi disetujui', rejected: 'Koreksi ditolak',
     note: 'Keterangan', hint: 'Status ini dipakai sebagai dasar pembayaran. Jika ada yang keliru, ajukan koreksi.',
     dayN: (n) => 'Hari ' + n, submitted: 'Pengajuan koreksi terkirim. Menunggu keputusan Super Admin.', decidedNote: 'Catatan',
+    sanction: (n) => n >= 3
+      ? '⛔ Kamu tercatat ' + n + 'x tidak hadir tanpa kabar. Keikutsertaanmu bisa ditinjau Super Admin. Jaga kehadiranmu ke depan.'
+      : n === 2 ? '⚠️ Kamu tercatat 2x tidak hadir tanpa kabar. Mohon jaga kehadiranmu agar tidak berlanjut.'
+        : '⚠️ Kamu tercatat 1x tidak hadir tanpa kabar. Mohon diperhatikan untuk acara berikutnya.',
   } : {
     title: 'My attendance', unmarked: 'Not marked yet', markedBy: (n, w) => 'Marked by ' + n + (w ? ' · ' + w : ''),
     ask: 'Request a correction', reasonPh: 'Reason (explain what actually happened)', submit: 'Send to Super Admin',
     pending: 'Correction under review', approved: 'Correction approved', rejected: 'Correction rejected',
     note: 'Note', hint: 'This status is used as the basis for payment. If anything is wrong, request a correction.',
     dayN: (n) => 'Day ' + n, submitted: 'Correction request sent. Awaiting the Super Admin decision.', decidedNote: 'Note',
+    sanction: (n) => n >= 3
+      ? '⛔ You have ' + n + ' no-notice absences on record. Your participation may be reviewed by the Super Admin. Please keep your attendance up.'
+      : n === 2 ? '⚠️ You have 2 no-notice absences on record. Please keep your attendance up so it does not continue.'
+        : '⚠️ You have 1 no-notice absence on record. Please take note for future events.',
   };
   let attendancePanel = '';
   if (att && att.days && att.days.length) {
@@ -5563,10 +5603,12 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
         </div>${noteLine}${marked}${corr}</div>`;
     }).join('');
     const submittedBanner = corrFlash === 'sent' ? `<div class="banner banner-ok" style="margin:0 0 12px">${esc(aStr.submitted)}</div>` : '';
+    const sn = att.noNoticeActive || 0;
+    const sanctionBanner = sn >= 1 ? `<div style="margin:0 0 10px;font-size:12.5px;font-weight:600;padding:8px 11px;border-radius:8px;background:${sn >= 3 ? '#fde2e2' : sn === 2 ? '#fdeccd' : '#fff7ed'};color:${sn >= 3 ? '#b91c1c' : '#8a5a00'}">${esc(aStr.sanction(sn))}</div>` : '';
     attendancePanel = `<div class="card" style="margin-top:14px;border-left:4px solid #0f7a45">
       <b style="font-size:15px">🗓️ ${esc(aStr.title)}</b>
       <div class="muted" style="font-size:12.5px;margin:4px 0 6px">${esc(aStr.hint)}</div>
-      ${submittedBanner}${rowHtml}
+      ${sanctionBanner}${submittedBanner}${rowHtml}
     </div>`;
   }
   // Public page: a logged-out visitor sees everything but gets a "log in to

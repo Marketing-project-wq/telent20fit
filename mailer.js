@@ -481,4 +481,42 @@ async function sendClosingEmail({ to, name, lang, eventName, kind }) {
   return _send(to, subj, closingEmailHtml({ name, lang, eventName, kind }), 'closing:' + kind);
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml };
+// Tahap 7: notify the talent whenever their attendance status changes. The
+// status is the basis of payment, so the talent is told on every change (who
+// recorded it + when) and can request a correction from their dashboard.
+function attendanceEmailHtml({ name, lang, eventName, day, status, markedBy }) {
+  const id = lang !== 'en';
+  const label = {
+    present: id ? 'Hadir' : 'Present',
+    absent_notified: id ? 'Tidak hadir (ada kabar)' : 'Absent (notified)',
+    absent_no_notice: id ? 'Tidak hadir (tanpa kabar)' : 'Absent (no notice)',
+  }[status] || status;
+  const l = id ? {
+    hi: 'Halo ' + (name || '') + ',',
+    body: 'Status kehadiranmu untuk acara berikut diperbarui:',
+    st: 'Status', by: 'Ditandai oleh', when: 'Tanggal',
+    foot: 'Jika ini keliru, buka dashboard 20FIT Talent dan ajukan koreksi. Status ini dipakai sebagai dasar pembayaran.',
+  } : {
+    hi: 'Hi ' + (name || '') + ',',
+    body: 'Your attendance status for this event was updated:',
+    st: 'Status', by: 'Marked by', when: 'Date',
+    foot: 'If this is wrong, open the 20FIT Talent dashboard and request a correction. This status is the basis for payment.',
+  };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.body}</p>
+    <div style="border:1px solid #eee;border-radius:10px;padding:14px 16px;margin:12px 0">
+      <div style="font-weight:700;font-size:16px">${eventName || ''}</div>
+      <div style="margin-top:6px">${l.st}: <b>${label}</b></div>
+      ${day ? `<div>${l.when}: ${day}</div>` : ''}
+      ${markedBy ? `<div>${l.by}: ${markedBy}</div>` : ''}
+    </div>
+    <p style="color:#6b6b70;font-size:13px">${l.foot}</p>
+  </div>`;
+}
+async function sendAttendanceEmail({ to, name, lang, eventName, day, status, markedBy }) {
+  const id = lang !== 'en';
+  const subj = id ? 'Absensimu Diperbarui — 20FIT Talent' : 'Your Attendance Was Updated — 20FIT Talent';
+  return _send(to, subj, attendanceEmailHtml({ name, lang, eventName, day, status, markedBy }), 'attendance:' + status);
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml };
