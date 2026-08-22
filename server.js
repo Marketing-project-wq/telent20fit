@@ -2077,9 +2077,10 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-    // C: active, unread cancellation alerts for this event (never silent).
+    // C + edge cases: all active, unread alerts for this event (never silent):
+    // cancellation, substitute declined/expired, cross-position chain effect.
     const notifs = (await st.listEoNotifications(req.staff.id, { unreadOnly: true }))
-      .filter((n) => n.event_id === ev.id && n.kind === 'cancellation');
+      .filter((n) => n.event_id === ev.id);
     const standbyRows = await st.listStandby(ev.id);
     const availByPos = {};
     standbyRows.forEach((s) => { if (s.state === 'available') availByPos[s.position_id] = (availByPos[s.position_id] || 0) + 1; });
@@ -2087,8 +2088,8 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
       const a = apps.find((x) => x.id === n.application_id);
       const tt = a ? talentById.get(a.talent_id) : null;
       const data = n.data || {};
-      return { id: n.id, appId: n.application_id, positionId: n.position_id, talentName: tt ? tt.name : '—',
-        reason: data.reason || null, note: data.note || null, when: n.created_at, standbyAvail: availByPos[n.position_id] || 0 };
+      return { id: n.id, kind: n.kind, appId: n.application_id, positionId: n.position_id, talentName: tt ? tt.name : '—',
+        reason: data.reason || null, note: data.note || null, data, when: n.created_at, standbyAvail: availByPos[n.position_id] || 0 };
     });
     await attachMockups(st, ev);
     const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
@@ -2233,6 +2234,11 @@ app.post('/event/:id/substitute', requireAnyTalentReady(), async (req, res, next
     const accept = String(req.body.v || '1') === '1';
     if (accept) {
       const outcome = await st.confirmSubstituteTxn(sub.id, req.talent.id);
+      // Edge #4: a cross-position pull shrinks the origin position's pool — make it
+      // visible to the EO rather than silent.
+      if (outcome === 'ok' && sub.from_position_id && sub.from_position_id !== sub.position_id) {
+        await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'cross_position_filled', application_id: sub.incoming_application_id, position_id: sub.position_id, data: { name: (req.account && req.account.name) || null, from_position: sub.from_position_id, to_position: sub.position_id } });
+      }
       return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&sub=' + (outcome === 'ok' ? 'done' : outcome));
     }
     // decline: free the candidate's standby and notify the EO to pick the next one.

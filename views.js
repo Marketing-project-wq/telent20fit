@@ -2562,7 +2562,24 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     if (hoursLeft >= 48) return t('eo.time.daysLeft', { n: Math.round(hoursLeft / 24) });
     return t('eo.time.hoursLeft', { n: Math.max(1, Math.round(hoursLeft)) });
   };
+  const dismissForm = (id) => `<form class="inline-form" method="post" action="/eo/notifications/${esc(id)}/read"><input type="hidden" name="next" value="/eo/events/${esc(e.id)}"><button class="btn btn-ghost btn-sm">${t('eo.cancel.dismiss')}</button></form>`;
+  const pickLink = (appId, pos) => `<a href="/eo/events/${esc(e.id)}/replace?app=${esc(appId)}&pos=${esc(pos)}&lang=${L}" class="btn btn-sm">${t('eo.cancel.pickReplacement')}</a>`;
   const alertsPanel = (cancelAlerts && cancelAlerts.length) ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">${cancelAlerts.map((c) => {
+    if (c.kind === 'substitute_declined' || c.kind === 'substitute_expired') {
+      const msg = c.kind === 'substitute_declined' ? t('eo.alert.subDeclined', { pos: esc(posLblD(c.positionId)) }) : t('eo.alert.subExpired', { pos: esc(posLblD(c.positionId)) });
+      return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid #d97706">
+        <div style="font-weight:700;color:#92400e">↩️ ${esc(msg)}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(whenStr(c.when))} · ${esc(timeLeftStr())}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${pickLink(c.appId, c.positionId)}${dismissForm(c.id)}</div>
+      </div>`;
+    }
+    if (c.kind === 'cross_position_filled') {
+      return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid #0e7490">
+        <div style="font-weight:700;color:#0e7490">🔀 ${esc(t('eo.alert.crossFilled', { name: esc(c.data.name || '—'), from: esc(posLblD(c.data.from_position)), to: esc(posLblD(c.data.to_position)) }))}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(whenStr(c.when))}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${dismissForm(c.id)}</div>
+      </div>`;
+    }
     const reason = c.reason ? t('ta.reason.' + c.reason) : '—';
     const stern = c.standbyAvail === 0;
     return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid ${stern ? '#b91c1c' : '#d97706'}">
@@ -2572,10 +2589,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
       <div style="margin-top:8px;font-size:13px">${stern
         ? `<b style="color:#b91c1c">${t('eo.cancel.stern', { pos: esc(posLblD(c.positionId)), when: esc(timeLeftStr()) })}</b>`
         : `${t('eo.cancel.standbyAvail', { n: c.standbyAvail })}`}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-        <a href="/eo/events/${esc(e.id)}/replace?app=${esc(c.appId)}&pos=${esc(c.positionId)}&lang=${L}" class="btn btn-sm">${t('eo.cancel.pickReplacement')}</a>
-        <form class="inline-form" method="post" action="/eo/notifications/${esc(c.id)}/read"><input type="hidden" name="next" value="/eo/events/${esc(e.id)}"><button class="btn btn-ghost btn-sm">${t('eo.cancel.dismiss')}</button></form>
-      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${pickLink(c.appId, c.positionId)}${dismissForm(c.id)}</div>
     </div>`;
   }).join('')}</div>` : '';
   const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
@@ -4948,9 +4962,10 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
     </div>`;
   }).join('');
   const flashSub = subFlash === 'done' ? `<div class="banner banner-ok" style="margin-top:14px">${t('ta.sub.done', { pos: '' })}</div>`
-    : subFlash === 'declined' ? `<div class="banner" style="margin-top:14px;background:#f4f4f5;color:#6b6b70">${t('ta.sub.declined')}</div>` : '';
+    : subFlash === 'declined' ? `<div class="banner" style="margin-top:14px;background:#f4f4f5;color:#6b6b70">${t('ta.sub.declined')}</div>`
+    : subFlash === 'expired' ? `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.sub.expired')}</div>` : '';
   const flashStandby = standbyFlash === 'closed' ? `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.standby.closedMsg')}</div>` : '';
-  const subOfferPanel = (ctx.mySubOffer && ctx.standbyOpen) ? `<div class="card" style="margin-top:14px;border-left:4px solid #0f7a45">
+  const subOfferPanel = ctx.mySubOffer ? `<div class="card" style="margin-top:14px;border-left:4px solid #0f7a45">
       <b>${t('ta.sub.offerTitle')}</b>
       <p style="margin:6px 0 6px;font-size:13.5px">${t('ta.sub.offerAsk', { pos: esc(posLblT(ctx.mySubOffer.position_id)) })}</p>
       ${ctx.mySubOffer.deadline_at ? `<p class="muted" style="font-size:12.5px;margin:0 0 12px">${t('ta.sub.deadline', { when: esc(fmtDeadlineShort(ctx.mySubOffer.deadline_at, L)) })}</p>` : ''}
