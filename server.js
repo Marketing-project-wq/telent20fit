@@ -1182,6 +1182,51 @@ function computeReliability(tid, apps, eventsById, scopeEventIds) {
   return { participated, cancels: cancels.length, closestCancelDay, noShows };
 }
 
+// === Tahap 6: attendance reliability + cross-EO privacy ====================
+// ONE place that decides how much of a talent's attendance history a viewer may
+// see (centralized so the rule can change later without hunting call sites):
+//   - super admin: everything;
+//   - the EO that owns the event: full detail (event name, note);
+//   - any other EO: LIMITED — only date + position category + status. Never the
+//     event name, the other EO's identity, or the keterangan.
+function attendanceVisibility(viewerStaffId, ev, isSuperAdmin) {
+  if (isSuperAdmin) return 'full';
+  if (ev && ev.created_by && viewerStaffId && ev.created_by === viewerStaffId) return 'full';
+  return 'limited';
+}
+// Six calendar months in ms (H expiry: an old no-notice stops being an ACTIVE
+// warning after 6 months but is never deleted — still counted in the total).
+const ATT_SIX_MONTHS_MS = 183 * 86400000;
+function computeAttendanceReliability(talentId, attRows, eventsById, positionLabelById, viewerStaffId, isSuperAdmin, nowMs) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  const agg = { present: 0, absentNotified: 0, absentNoNotice: 0, noNoticeActive: 0, events: 0 };
+  const own = []; const other = [];
+  const seenEvents = new Set();
+  (attRows || []).forEach((a) => {
+    if (a.talent_id !== talentId || !a.status) return;
+    if (a.is_emergency) return; // Super-Admin-flagged emergency: excluded from the record
+    seenEvents.add(a.event_id);
+    if (a.status === 'present') agg.present++;
+    else if (a.status === 'absent_notified') agg.absentNotified++;
+    else if (a.status === 'absent_no_notice') {
+      agg.absentNoNotice++;
+      const dayMs = Date.parse(String(a.event_day) + 'T00:00:00+07:00');
+      if (!Number.isNaN(dayMs) && (now - dayMs) <= ATT_SIX_MONTHS_MS) agg.noNoticeActive++;
+    }
+    const ev = eventsById.get(a.event_id) || null;
+    const posLabel = positionLabelById.get(a.position_id) || null;
+    if (attendanceVisibility(viewerStaffId, ev, isSuperAdmin) === 'full') {
+      own.push({ eventName: ev ? ev.name : null, date: a.event_day, positionLabel: posLabel, status: a.status, note: a.status === 'absent_notified' ? (a.note || null) : null });
+    } else {
+      other.push({ date: a.event_day, positionCategory: posLabel, status: a.status });
+    }
+  });
+  agg.events = seenEvents.size;
+  own.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  other.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  return { agg, own, other, hasAny: (agg.present + agg.absentNotified + agg.absentNoNotice) > 0 };
+}
+
 // Build the apply context for one event + talent (positions, open slots, my application).
 async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -2135,8 +2180,16 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review';
       }
     }
-    const applicants = apps
-      .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
+    const applicantApps = apps.filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length);
+    // Tahap 6: attendance history for each applicant, across ALL organizers, with
+    // cross-EO privacy applied inside computeAttendanceReliability (this EO sees
+    // its own events in full; other organizers' events show only date/category/status).
+    const applicantTalentIds = [...new Set(applicantApps.map((a) => a.talent_id))];
+    const positionsMaster = await st.listPositions();
+    const positionLabelById = new Map(positionsMaster.map((p) => [p.id, p.label_id || p.label_en || p.id]));
+    const attByTalent = await Promise.all(applicantTalentIds.map((tid) => st.listAttendanceForTalent(tid)));
+    const allAttRows = attByTalent.flat();
+    const applicants = applicantApps
       .map((a) => {
         const tt = talentById.get(a.talent_id) || {};
         const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
@@ -2147,6 +2200,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           hyroxStatus: tt.hyrox_cert_status || 'none',
           status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
           reliability: computeReliability(a.talent_id, apps, eventsById, myEventIds),
+          attRel: computeAttendanceReliability(a.talent_id, allAttRows, eventsById, positionLabelById, req.staff.id, false),
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
@@ -3837,4 +3891,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked };
+module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked, computeAttendanceReliability, attendanceVisibility };

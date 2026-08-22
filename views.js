@@ -2674,6 +2674,50 @@ function reliabilityLine(rel, lang) {
   return `<div class="muted" style="font-size:12px;margin-top:6px;color:${warn ? '#92400e' : 'var(--muted)'}">🛈 ${esc(parts.join(' · '))}</div>`;
 }
 
+// Tahap 6: attendance track record for curation. Raw numbers only (never a
+// percentage), positives shown alongside negatives, and cross-EO privacy — the
+// viewer's own events are detailed; other organizers' show only date + position
+// category + status (no event name, no organizer identity, no keterangan).
+function attReliabilityPanel(ar, lang) {
+  if (!ar || !ar.hasAny) return '';
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const meta = attStatusMeta(L);
+  const g = ar.agg;
+  const s = id ? {
+    title: 'Rekam jejak absensi', across: 'lintas semua penyelenggara',
+    events: (n) => n + ' acara', present: (n) => '✓ ' + n + ' hadir',
+    notified: (n) => n + ' izin (ada kabar)', nonotice: (n) => n + ' tanpa kabar',
+    active: (n) => n + ' aktif', ownDetail: 'Detail acara Anda', otherDetail: 'Acara penyelenggara lain',
+    note: 'Ket', hidden: 'Nama acara & keterangan disembunyikan demi privasi.',
+    statusShort: { present: 'Hadir', absent_notified: 'Ada kabar', absent_no_notice: 'Tanpa kabar' },
+  } : {
+    title: 'Attendance track record', across: 'across all organizers',
+    events: (n) => n + ' events', present: (n) => '✓ ' + n + ' present',
+    notified: (n) => n + ' notified absence', nonotice: (n) => n + ' no-notice',
+    active: (n) => n + ' active', ownDetail: 'Your events (detail)', otherDetail: 'Other organizers’ events',
+    note: 'Note', hidden: 'Event name & note hidden for privacy.',
+    statusShort: { present: 'Present', absent_notified: 'Notified', absent_no_notice: 'No notice' },
+  };
+  const chip = (txt, color) => `<span style="display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:${color}22;color:${color};margin:0 5px 4px 0">${esc(txt)}</span>`;
+  const chips = [
+    chip(s.events(g.events), '#41454d'),
+    chip(s.present(g.present), '#0f7a45'),
+    g.absentNotified ? chip(s.notified(g.absentNotified), '#b45309') : '',
+    g.absentNoNotice ? chip(s.nonotice(g.absentNoNotice) + (g.noNoticeActive < g.absentNoNotice ? ' (' + s.active(g.noNoticeActive) + ')' : ''), '#b91c1c') : '',
+  ].join('');
+  const stTag = (st0) => `<span class="pill" style="font-size:10.5px;background:${st0 === 'present' ? '#d8f3e3' : st0 === 'absent_notified' ? '#fdeccd' : '#fde2e2'};color:${st0 === 'present' ? '#0f7a45' : st0 === 'absent_notified' ? '#8a5a00' : '#b91c1c'}">${esc(s.statusShort[st0] || st0)}</span>`;
+  const ownList = ar.own && ar.own.length ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">${esc(s.ownDetail)} · ${ar.own.length}</summary>
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.own.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date))}</span><span class="muted">· ${esc(o.positionLabel || '—')}</span>${o.eventName ? `<span class="muted">· ${esc(o.eventName)}</span>` : ''}${o.note ? `<span class="muted">· ${esc(s.note)}: ${esc(o.note)}</span>` : ''}</div>`).join('')}</div></details>` : '';
+  const otherList = ar.other && ar.other.length ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">${esc(s.otherDetail)} · ${ar.other.length}</summary>
+    <div style="margin-top:4px;font-size:11px;color:var(--muted)">🔒 ${esc(s.hidden)}</div>
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.other.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date))}</span><span class="muted">· ${esc(o.positionCategory || '—')}</span></div>`).join('')}</div></details>` : '';
+  return `<div style="margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px">
+    <div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${esc(s.title)} <span style="font-weight:600;text-transform:none">· ${esc(s.across)}</span></div>
+    <div style="margin-top:6px">${chips}</div>${ownList}${otherList}
+  </div>`;
+}
+
 // Tahap 6: applicants for one EO event — per-talent and per-position, with a
 // name search + status filter (all client-side). Contact is shown so the EO
 // can coordinate with talents who applied.
@@ -2753,6 +2797,7 @@ function eoApplicantsSection(e, view, aps, L) {
     </div>
     ${contactLine(a)}
     ${reliabilityLine(a.reliability, L)}
+    ${attReliabilityPanel(a.attRel, L)}
     ${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
     ${decisionControls(a)}
