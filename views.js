@@ -30,6 +30,10 @@ function fmtDay(d) {
   const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
+// Compact WIB day+time for a timestamp (used for confirmation deadlines).
+function fmtDeadlineShort(iso, lang) {
+  try { return new Date(iso).toLocaleString(lang === 'en' ? 'en-GB' : 'id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (_) { return ''; }
+}
 
 // Official 20FIT logos (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
 // One variant per theme so the mark is always readable with its red ring intact:
@@ -2576,6 +2580,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
   }).join('')}</div>` : '';
   const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
     : f.ok === 'rejected' ? `<div class="banner banner-ok">${t('eo.ap.okRejected')}</div>`
+    : f.ok === 'standby' ? `<div class="banner banner-ok">${t('eo.ap.okStandby')}</div>`
+    : f.ok === 'offered' ? `<div class="banner banner-ok">${t('eo.sub.okOffered')}</div>`
     : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
@@ -2661,7 +2667,7 @@ function eoApplicantsSection(e, view, aps, L) {
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
-    if (['rejected', 'not_selected', 'not_continued'].includes(a.status)) {
+    if (['rejected', 'not_selected', 'not_continued', 'cancelled'].includes(a.status)) {
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
@@ -2671,9 +2677,11 @@ function eoApplicantsSection(e, view, aps, L) {
       if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
       return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`;
     }).join('');
+    // A: mark this applicant as standby (cadangan) for one of their picks.
+    const standbyBtns = a.choices.map((c) => `<form class="inline-form" method="post" action="${base}/standby"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-ghost btn-sm">${t('eo.ap.makeStandby')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`).join('');
     return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
       <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${acceptBtns}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${acceptBtns}${standbyBtns}
         <form class="inline-form" method="post" action="${base}/reject" ${jsConfirm(t('eo.ap.rejectConfirm'))}><button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
       </div>
     </div>`;
@@ -4892,7 +4900,7 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
   return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
 }
 
-function talentEventApply({ account, event, ctx, lang, saved, cancelFlash }) {
+function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, standbyFlash, subFlash }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
@@ -4900,6 +4908,37 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash }) {
   const savedBanner = saved ? `<div class="banner banner-ok" style="margin-top:14px">${t('ta.applySaved')}</div>` : '';
   const cancelBanner = cancelFlash === 'closed'
     ? `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.cancelClosedMsg')}</div>` : '';
+  // A: standby availability prompt; D: substitute offer prompt. Position labels
+  // resolve from ctx.posById (position_id -> position with label_*).
+  const posLblT = (pid) => { const p = ctx.posById && ctx.posById.get(String(pid)); return p ? posLabel(p, L) : pid; };
+  const slug = e.slug || e.id;
+  const standbyPanel = (ctx.myStandby || []).map((s) => {
+    const posName = esc(posLblT(s.position_id));
+    if (s.state === 'available') return `<div class="banner" style="margin-top:14px;background:#d8f3e3;border:1px solid #9fe0bd;color:#0f7a45">${t('ta.standby.confirmed', { pos: posName })}</div>`;
+    if (s.state === 'declined') return `<div class="banner" style="margin-top:14px;background:#f4f4f5;color:#6b6b70">${t('ta.standby.declined', { pos: posName })}</div>`;
+    if (s.state !== 'offered') return '';
+    if (!ctx.standbyOpen) return `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.standby.closedMsg')}</div>`;
+    return `<div class="card" style="margin-top:14px;border-left:4px solid #d97706">
+      <b>${t('ta.standby.title')}</b>
+      <p style="margin:6px 0 12px;font-size:13.5px">${t('ta.standby.ask', { pos: posName })}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <form method="post" action="/event/${esc(slug)}/standby"><input type="hidden" name="position_id" value="${esc(s.position_id)}"><input type="hidden" name="v" value="1"><button class="btn btn-sm">${t('ta.standby.yes')}</button></form>
+        <form method="post" action="/event/${esc(slug)}/standby"><input type="hidden" name="position_id" value="${esc(s.position_id)}"><input type="hidden" name="v" value="0"><button class="btn btn-ghost btn-sm">${t('ta.standby.no')}</button></form>
+      </div>
+    </div>`;
+  }).join('');
+  const flashSub = subFlash === 'done' ? `<div class="banner banner-ok" style="margin-top:14px">${t('ta.sub.done', { pos: '' })}</div>`
+    : subFlash === 'declined' ? `<div class="banner" style="margin-top:14px;background:#f4f4f5;color:#6b6b70">${t('ta.sub.declined')}</div>` : '';
+  const flashStandby = standbyFlash === 'closed' ? `<div class="banner" style="margin-top:14px;background:#fdeccd;border:1px solid #f0c76a;color:#7a4e00">${t('ta.standby.closedMsg')}</div>` : '';
+  const subOfferPanel = (ctx.mySubOffer && ctx.standbyOpen) ? `<div class="card" style="margin-top:14px;border-left:4px solid #0f7a45">
+      <b>${t('ta.sub.offerTitle')}</b>
+      <p style="margin:6px 0 6px;font-size:13.5px">${t('ta.sub.offerAsk', { pos: esc(posLblT(ctx.mySubOffer.position_id)) })}</p>
+      ${ctx.mySubOffer.deadline_at ? `<p class="muted" style="font-size:12.5px;margin:0 0 12px">${t('ta.sub.deadline', { when: esc(fmtDeadlineShort(ctx.mySubOffer.deadline_at, L)) })}</p>` : ''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <form method="post" action="/event/${esc(slug)}/substitute"><input type="hidden" name="sub_id" value="${esc(ctx.mySubOffer.id)}"><input type="hidden" name="v" value="1"><button class="btn btn-sm">${t('ta.sub.accept')}</button></form>
+        <form method="post" action="/event/${esc(slug)}/substitute"><input type="hidden" name="sub_id" value="${esc(ctx.mySubOffer.id)}"><input type="hidden" name="v" value="0"><button class="btn btn-ghost btn-sm">${t('ta.sub.decline')}</button></form>
+      </div>
+    </div>` : '';
   // Public page: a logged-out visitor sees everything but gets a "log in to
   // apply" link instead of the confirm-apply button on each open position.
   const loggedIn = !!account;
@@ -5094,7 +5133,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash }) {
     ${chips}
     <div style="max-width:820px">
       ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
-      ${savedBanner}${cancelBanner}${eb}${docsWarn}
+      ${savedBanner}${cancelBanner}${flashSub}${flashStandby}${subOfferPanel}${standbyPanel}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
       <h2 class="bband-h">${t('ta.positionsTitle')}</h2>
@@ -5108,7 +5147,52 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash }) {
   return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: (loggedIn ? '/talent' : '/') + '?lang=' + L, lang: L });
 }
 
+// D: manual substitute picker screen. EO chooses one available standby candidate
+// (same position first, then cross-position clearly labelled) to offer the slot.
+function eoReplacePicker({ staff, event, outgoingApp, outName, positionId, positionLabel, candidates, windowOpen, flash, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const cands = candidates || [];
+  const flashBanner = flash === 'closed' ? `<div class="banner banner-err">${t('eo.sub.errClosed')}</div>`
+    : flash === 'gone' ? `<div class="banner banner-err">${t('eo.sub.errGone')}</div>`
+    : flash === 'ineligible' ? `<div class="banner banner-err">${t('eo.sub.errIneligible')}</div>` : '';
+  let inner;
+  if (!windowOpen) {
+    inner = `<div class="card"><p class="muted" style="margin:0">${t('eo.sub.windowClosed')}</p></div>`;
+  } else if (!cands.length) {
+    inner = `<div class="card"><p class="muted" style="margin:0">${t('eo.sub.noCandidates')}</p></div>`;
+  } else {
+    const opts = cands.map((c) => {
+      const origin = c.samePosition
+        ? t('eo.sub.originSame', { pos: esc(c.positionLabel), n: c.rank || '?' })
+        : t('eo.sub.originOther', { pos: esc(c.positionLabel), n: c.rank || '?' });
+      return `<option value="${esc(c.standbyId)}">${esc(c.name)} — ${esc(origin)}</option>`;
+    }).join('');
+    const contacts = cands.map((c) => `<div class="dl-item"><div><b>${esc(c.name)}</b> <span class="muted" style="font-size:12.5px">· ${esc(c.samePosition ? c.positionLabel : c.positionLabel + ' (' + t('eo.sub.otherShort') + ')')}</span></div><div>${c.phone ? `<a href="tel:${esc(c.phone)}" style="font-weight:700">${esc(c.phone)}</a>` : `<span class="muted">${t('eo.sub.noPhone')}</span>`}</div></div>`).join('');
+    inner = `<form method="post" action="/eo/events/${esc(e.id)}/replace" class="card" style="display:flex;flex-direction:column;gap:12px">
+      <input type="hidden" name="position_id" value="${esc(positionId)}">
+      <input type="hidden" name="outgoing_app" value="${esc(outgoingApp)}">
+      <label style="font-weight:700;font-size:13px">${t('eo.sub.chooseLabel')}</label>
+      <select name="standby_id" style="width:100%;box-sizing:border-box">${opts}</select>
+      <button type="submit" class="btn">${t('eo.sub.offer')}</button>
+    </form>
+    <div class="section-head" style="margin-top:20px"><h2 style="margin:0;font-size:16px">${t('eo.sub.contactsTitle')}</h2></div>
+    <p class="muted" style="font-size:12.5px;margin:6px 0 10px">${t('eo.sub.contactsHint')}</p>
+    <div class="card"><div class="dl-list">${contacts}</div></div>`;
+  }
+  const body = `<div class="wrap">
+  <a href="/eo/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${flashBanner}
+  <h1 style="margin:0">${t('eo.sub.title')}</h1>
+  <p class="sub" style="margin:6px 0 0">${t('eo.sub.subtitle', { name: esc(outName), pos: esc(positionLabel) })}</p>
+  <div style="margin-top:16px">${inner}</div>
+</div>`;
+  return appLayout({ title: t('eo.sub.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+}
+
 module.exports = {
+  eoReplacePicker,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,

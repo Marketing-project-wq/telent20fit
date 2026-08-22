@@ -464,6 +464,20 @@ function supabaseStore() {
       return data;
     },
     async updateSubstitution(id, patch) { const { error } = await sb.from('talent_substitution').update(patch).eq('id', id); if (error) throw new Error(error.message); },
+    // Offer a standby candidate a vacated slot as ONE transaction (reserve + mark
+    // called), via the RPC. Returns the substitution id or null if a guard blocked.
+    async offerSubstituteTxn({ event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id, deadline_at, created_by }) {
+      const { data, error } = await sb.rpc('talent_offer_substitute', { p_event: event_id, p_position: position_id, p_outgoing: outgoing_application_id, p_incoming: incoming_application_id, p_from_position: from_position_id || null, p_deadline: deadline_at || null, p_actor: created_by || null });
+      if (error) throw new Error(error.message);
+      return data || null;
+    },
+    // A called substitute confirms, as ONE transaction (lock slot + status log +
+    // mark confirmed), via the RPC. Returns 'ok' | 'skip' | 'expired'.
+    async confirmSubstituteTxn(subId, actorId) {
+      const { data, error } = await sb.rpc('talent_confirm_substitute', { p_sub: subId, p_actor: actorId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
     // ---- EO notifications (pemberitahuan aktif) ----
     async listEoNotifications(staffId, { unreadOnly } = {}) {
       let q = sb.from('talent_eo_notification').select('*').eq('staff_id', staffId);
@@ -818,6 +832,33 @@ function memoryStore() {
     async getSubstitution(id) { const s = substitutions.find((x) => x.id === id); return s ? { ...s } : null; },
     async createSubstitution(row) { const rec = { id: 'sub-' + (++seq), state: 'offered', offered_at: now(), responded_at: null, deadline_at: null, created_by: null, created_at: now(), ...row }; substitutions.push(rec); return { id: rec.id }; },
     async updateSubstitution(id, patch) { const s = substitutions.find((x) => x.id === id); if (s) Object.assign(s, patch); },
+    async offerSubstituteTxn({ event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id, deadline_at, created_by }) {
+      if (applicationChoices.some((c) => c.application_id === incoming_application_id && c.accepted)) return null;
+      if (substitutions.some((s) => s.event_id === event_id && s.position_id === position_id && s.outgoing_application_id === outgoing_application_id && s.state === 'offered')) return null;
+      const rec = { id: 'sub-' + (++seq), event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id: from_position_id || null, state: 'offered', offered_at: now(), responded_at: null, deadline_at: deadline_at || null, created_by: created_by || null, created_at: now() };
+      substitutions.push(rec);
+      standby.forEach((s) => { if (s.application_id === incoming_application_id && s.position_id === from_position_id) s.state = 'called'; });
+      return rec.id;
+    },
+    async confirmSubstituteTxn(subId, actorId) {
+      const sub = substitutions.find((s) => s.id === subId);
+      if (!sub || sub.state !== 'offered') return 'skip';
+      if (sub.deadline_at && new Date() > new Date(sub.deadline_at)) { sub.state = 'expired'; sub.responded_at = now(); return 'expired'; }
+      const app = applications.find((a) => a.id === sub.incoming_application_id);
+      if (!app) return 'skip';
+      if (applicationChoices.some((c) => c.application_id === app.id && c.accepted)) return 'skip';
+      const mine = applicationChoices.filter((c) => c.application_id === app.id);
+      mine.forEach((c) => { c.accepted = false; c.outcome = null; });
+      const has = mine.find((c) => c.position_id === sub.position_id);
+      if (has) { has.accepted = true; has.outcome = 'accepted'; }
+      else if (mine.length < 3) { applicationChoices.push({ id: 'ac-' + (++seq), application_id: app.id, position_id: sub.position_id, priority: mine.length + 1, accepted: true, outcome: 'accepted' }); }
+      else { const top = mine.reduce((m, c) => (c.priority > m.priority ? c : m), mine[0]); top.position_id = sub.position_id; top.accepted = true; top.outcome = 'accepted'; }
+      statusLog.push({ id: 'sl-' + (++seq), application_id: app.id, from_status: app.status, to_status: 'approved', changed_by: actorId || null, changed_at: now() });
+      Object.assign(app, { status: 'approved', confirmed_at: now(), reviewed_by: actorId || null, reviewed_at: now() });
+      sub.state = 'confirmed'; sub.responded_at = now();
+      standby.forEach((s) => { if (s.application_id === app.id) s.state = 'confirmed'; });
+      return 'ok';
+    },
     // ---- EO notifications (pemberitahuan aktif) ----
     async listEoNotifications(staffId, { unreadOnly } = {}) { return eoNotifications.filter((n) => n.staff_id === staffId && (!unreadOnly || !n.read_at)).map((n) => ({ ...n })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
     async createEoNotification(row) { const rec = { id: 'eon-' + (++seq), data: null, read_at: null, created_at: now(), ...row }; eoNotifications.push(rec); return { id: rec.id }; },

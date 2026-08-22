@@ -382,4 +382,103 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml };
+// ---- Cancellation/standby flow emails (policy F: NEVER name the position) ----
+// Every email only says a decision exists and asks the talent to open the web to
+// see the detail and click their approval. Title + deadline are allowed so the
+// email isn't ignored.
+function decisionEmailHtml({ name, lang, eventName, link, kind, deadline }) {
+  const id = lang !== 'en';
+  const body = id ? {
+    accepted: 'Ada keputusan untuk pendaftaranmu di event ini. Masuk ke web untuk melihat detail dan menekan persetujuanmu.',
+    standby: 'Kamu masuk daftar kandidat cadangan untuk event ini. Masuk ke web untuk menyatakan apakah kamu bersedia siaga sampai hari-H.',
+    substitute: 'Ada kesempatan untukmu di event ini. Masuk ke web untuk melihat detail dan menekan persetujuanmu.',
+    reminder: 'Pengingat: konfirmasimu masih ditunggu. Masuk ke web untuk menekan persetujuanmu sebelum tenggat.',
+  }[kind] : {
+    accepted: 'There is a decision on your registration for this event. Open the web to see the details and click your approval.',
+    standby: 'You are on the standby candidate list for this event. Open the web to state whether you are available on standby until event day.',
+    substitute: 'There is an opportunity for you at this event. Open the web to see the details and click your approval.',
+    reminder: 'Reminder: your confirmation is still awaited. Open the web to click your approval before the deadline.',
+  }[kind];
+  const cta = id ? (kind === 'standby' ? 'Nyatakan Kesediaan' : 'Lihat & Setujui') : (kind === 'standby' ? 'State Availability' : 'View & Approve');
+  const hi = (id ? 'Halo ' : 'Hi ') + (name || '');
+  const dl = deadline ? (id ? `Batas waktu: ${deadline} WIB.` : `Deadline: ${deadline} WIB.`) : '';
+  const foot = id ? 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.' : 'Automated email from 20FIT Talent. Please do not reply.';
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      ${logoBar()}
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(hi.trim())},</p>
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#41454d">${esc(body)}</p>
+        <p style="margin:0 0 18px;font-size:14px;font-weight:700">${esc(eventName || 'Event 20FIT')}</p>
+        ${dl ? `<p style="margin:0 0 18px;font-size:13px;color:#8a1c1c;font-weight:700">${esc(dl)}</p>` : ''}
+        <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">${esc(cta)}</a>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+function closingEmailHtml({ name, lang, eventName, kind }) {
+  const id = lang !== 'en';
+  const body = id ? {
+    not_selected: 'Terima kasih sudah mendaftar. Untuk kesempatan ini kamu belum terpilih. Semoga bisa bergabung di event berikutnya.',
+    lapsed: 'Kesempatan untuk event ini sudah tidak tersedia karena melewati tenggat konfirmasi. Terima kasih atas ketertarikanmu.',
+    standby_closed: 'Terima kasih atas kesediaanmu. Untuk event ini kamu tidak jadi dipanggil. Sampai jumpa di kesempatan berikutnya.',
+  }[kind] : {
+    not_selected: 'Thank you for registering. You were not selected for this opportunity. We hope you can join a future event.',
+    lapsed: 'The opportunity for this event is no longer available as the confirmation deadline passed. Thank you for your interest.',
+    standby_closed: 'Thank you for being available. You were not called for this event. See you next time.',
+  }[kind];
+  const hi = (id ? 'Halo ' : 'Hi ') + (name || '');
+  const foot = id ? 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.' : 'Automated email from 20FIT Talent. Please do not reply.';
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      ${logoBar()}
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(hi.trim())},</p>
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#41454d">${esc(body)}</p>
+        <p style="margin:0;font-size:14px;font-weight:700">${esc(eventName || 'Event 20FIT')}</p>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+async function _send(to, subject, html, label) {
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — ' + label + ' for ' + to);
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) { console.warn('[mail] Resend API key is invalid; ' + label + ' not sent to ' + to); return { delivered: false, error: 'Invalid API key' }; }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+async function sendDecisionEmail({ to, name, lang, eventName, link, kind, deadline }) {
+  const id = lang !== 'en';
+  const subj = {
+    accepted: id ? 'Ada Keputusan untuk Pendaftaranmu — 20FIT Talent' : 'A Decision on Your Registration — 20FIT Talent',
+    standby: id ? 'Kamu Jadi Kandidat Cadangan — 20FIT Talent' : "You're a Standby Candidate — 20FIT Talent",
+    substitute: id ? 'Ada Kesempatan untukmu — 20FIT Talent' : 'An Opportunity for You — 20FIT Talent',
+    reminder: id ? 'Pengingat: Konfirmasimu Ditunggu — 20FIT Talent' : 'Reminder: Your Confirmation Is Awaited — 20FIT Talent',
+  }[kind] || (id ? 'Kabar dari 20FIT Talent' : 'News from 20FIT Talent');
+  return _send(to, subj, decisionEmailHtml({ name, lang, eventName, link, kind, deadline }), 'decision:' + kind);
+}
+async function sendClosingEmail({ to, name, lang, eventName, kind }) {
+  const id = lang !== 'en';
+  const subj = kind === 'lapsed'
+    ? (id ? 'Kesempatan Sudah Berlalu — 20FIT Talent' : 'Opportunity Has Passed — 20FIT Talent')
+    : (id ? 'Kabar Pendaftaran Event — 20FIT Talent' : 'Your Event Registration — 20FIT Talent');
+  return _send(to, subj, closingEmailHtml({ name, lang, eventName, kind }), 'closing:' + kind);
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml };

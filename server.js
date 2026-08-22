@@ -1134,7 +1134,15 @@ async function positionApplyCtx(st, ev, talentId) {
   const myApp = talentId ? (apps.find((a) => a.talent_id === talentId && a.event_id === ev.id) || null) : null;
   const myChoices = myApp ? choices.filter((c) => c.application_id === myApp.id).slice().sort((a, b) => a.priority - b.priority) : [];
   const myByPosition = new Map(myChoices.map((c) => [String(c.position_id), c]));
-  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev), cancelOpen: cancelWindowOpen(ev) };
+  // A/D: standby designations for this talent + any pending substitute offer.
+  let myStandby = [];
+  let mySubOffer = null;
+  if (myApp) {
+    myStandby = (await st.listStandbyForApp(myApp.id)) || [];
+    const subs = await st.listSubstitutions(ev.id);
+    mySubOffer = subs.find((s) => s.incoming_application_id === myApp.id && s.state === 'offered') || null;
+  }
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev), cancelOpen: cancelWindowOpen(ev), standbyOpen: standbyWindowOpen(ev), myStandby, mySubOffer };
 }
 
 // Position-based EO events currently open to a talent: published, within the
@@ -1237,7 +1245,7 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || '') }));
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || ''), standbyFlash: String(req.query.standby || ''), subFlash: String(req.query.sub || '') }));
   } catch (e) { next(e); }
 });
 
@@ -2143,6 +2151,146 @@ app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, n
   } catch (e) { next(e); }
 });
 
+// A: EO designates an applicant as standby (cadangan) for one of their chosen
+// positions, assigning the next rank per position, then emails the availability
+// request. The applicant's bucket becomes 'standby' until accepted or closed.
+app.post('/eo/events/:id/applicants/:appId/standby', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    if (found.app.status === 'approved') return res.redirect(backTo); // already placed
+    const choices = (await st.listApplicationChoices()).filter((c) => c.application_id === found.app.id);
+    if (!choices.some((c) => c.position_id === positionId)) return res.redirect(backTo);
+    const existing = (await st.listStandby(found.ev.id)).filter((s) => s.position_id === positionId);
+    await st.upsertStandby({ event_id: found.ev.id, application_id: found.app.id, position_id: positionId, rank: existing.length + 1, state: 'offered', created_by: req.staff.id });
+    if (found.app.status !== 'standby') { await st.logStatusChange(found.app.id, found.app.status, 'standby', req.staff.id); await st.updateApplication(found.app.id, { status: 'standby' }); }
+    notifyStandbyOffer(st, found.app, found.ev).catch((e) => console.error('[mail] standby offer failed:', e && e.message));
+    res.redirect(backTo + '&ok=standby');
+  } catch (e) { next(e); }
+});
+
+// A: an offered standby talent states availability (v=1 available / v=0 declined).
+// Callable only while the standby window is open (until H-12h), re-checked here.
+app.post('/event/:id/standby', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const positionId = String(req.body.position_id || '');
+    const sb = (await st.listStandbyForApp(app.id)).find((s) => s.position_id === positionId);
+    if (!sb || !['offered', 'available', 'declined'].includes(sb.state)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    if (!standbyWindowOpen(ev)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&standby=closed');
+    const available = String(req.body.v || '1') === '1';
+    await st.updateStandby(sb.id, { state: available ? 'available' : 'declined', responded_at: new Date().toISOString() });
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&standby=' + (available ? 'ok' : 'declined'));
+  } catch (e) { next(e); }
+});
+
+// D/F: a called substitute confirms (v=1) or declines (v=0) their offer. Confirm
+// locks the slot in one transaction; decline frees the candidate and alerts the EO
+// so they can pick the next one.
+app.post('/event/:id/substitute', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const subId = String(req.body.sub_id || '');
+    const sub = (await st.listSubstitutions(ev.id)).find((s) => s.id === subId && s.incoming_application_id === app.id && s.state === 'offered');
+    if (!sub) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const accept = String(req.body.v || '1') === '1';
+    if (accept) {
+      const outcome = await st.confirmSubstituteTxn(sub.id, req.talent.id);
+      return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&sub=' + (outcome === 'ok' ? 'done' : outcome));
+    }
+    // decline: free the candidate's standby and notify the EO to pick the next one.
+    await st.updateSubstitution(sub.id, { state: 'declined', responded_at: new Date().toISOString() });
+    const backSb = (await st.listStandbyForApp(app.id)).find((s) => s.position_id === sub.from_position_id);
+    if (backSb) await st.updateStandby(backSb.id, { state: 'available' });
+    await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'substitute_declined', application_id: sub.outgoing_application_id, position_id: sub.position_id, data: { declined_by: app.id } });
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&sub=declined');
+  } catch (e) { next(e); }
+});
+
+// D: manual substitute picker. Lists available standby candidates for the vacated
+// position (ranked), then standby from OTHER positions (labelled), excluding anyone
+// already holding an accepted slot in this event. Shows contacts so the EO can call.
+async function buildReplaceCandidates(st, ev, posId) {
+  const [standbyRows, apps, choices, talents] = await Promise.all([
+    st.listStandby(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+  ]);
+  const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+  const appById = new Map(apps.map((a) => [a.id, a]));
+  const positions = await st.listEventPositions(ev.id);
+  const posLbl = (pid) => { const p = positions.find((x) => x.position_id === pid); return p ? (p.label_id || p.label_en || pid) : pid; };
+  // apps that already hold an accepted slot in this event (one-per-event exclusion)
+  const eventAppIds = new Set(apps.filter((a) => a.event_id === ev.id).map((a) => a.id));
+  const acceptedAppIds = new Set(choices.filter((c) => c.accepted && eventAppIds.has(c.application_id)).map((c) => c.application_id));
+  const cands = standbyRows
+    .filter((s) => s.state === 'available' && !acceptedAppIds.has(s.application_id))
+    .map((s) => {
+      const app = appById.get(s.application_id) || {};
+      const tt = talentById.get(app.talent_id) || {};
+      return { standbyId: s.id, applicationId: s.application_id, positionId: s.position_id, rank: s.rank || null,
+        name: tt.name || '—', phone: tt.phone || null, samePosition: s.position_id === posId, positionLabel: posLbl(s.position_id) };
+    });
+  cands.sort((a, b) => (a.samePosition === b.samePosition ? 0 : (a.samePosition ? -1 : 1))
+    || String(a.positionLabel).localeCompare(String(b.positionLabel)) || ((a.rank || 999) - (b.rank || 999)));
+  return cands;
+}
+app.get('/eo/events/:id/replace', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const posId = String(req.query.pos || '');
+    const outgoingAppId = String(req.query.app || '');
+    const apps = await st.listApplications();
+    const outApp = apps.find((a) => a.id === outgoingAppId && a.event_id === ev.id) || null;
+    const talents = await st.listTalents();
+    const outName = outApp ? ((talents.find((tt) => tt.id === outApp.talent_id) || {}).name || '—') : '—';
+    const positions = await st.listEventPositions(ev.id);
+    const posLabelStr = ((positions.find((p) => p.position_id === posId) || {}).label_id) || posId;
+    const windowOpen = standbyWindowOpen(ev);
+    const candidates = windowOpen ? await buildReplaceCandidates(st, ev, posId) : [];
+    res.send(V.eoReplacePicker({ staff: eoCtx(req), event: ev, outgoingApp: outgoingAppId, outName, positionId: posId, positionLabel: posLabelStr, candidates, windowOpen, flash: String(req.query.err || ''), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+app.post('/eo/events/:id/replace', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const posId = String(req.body.position_id || '');
+    const outgoingAppId = String(req.body.outgoing_app || '');
+    const standbyId = String(req.body.standby_id || '');
+    const backPicker = '/eo/events/' + ev.id + '/replace?app=' + encodeURIComponent(outgoingAppId) + '&pos=' + encodeURIComponent(posId) + '&lang=' + req.lang;
+    if (!standbyWindowOpen(ev)) return res.redirect(backPicker + '&err=closed');
+    const chosen = (await st.listStandby(ev.id)).find((s) => s.id === standbyId && s.state === 'available');
+    if (!chosen) return res.redirect(backPicker + '&err=gone');
+    // deadline: min(now + 24h, event start); fall back to now + 24h if no start.
+    const startMs = eventStartMs(ev);
+    const dlMs = Math.min(Date.now() + 24 * 3600 * 1000, startMs == null ? Infinity : startMs);
+    const deadlineAt = new Date(Number.isFinite(dlMs) ? dlMs : Date.now() + 24 * 3600 * 1000).toISOString();
+    const subId = await st.offerSubstituteTxn({ event_id: ev.id, position_id: posId, outgoing_application_id: outgoingAppId, incoming_application_id: chosen.application_id, from_position_id: chosen.position_id, deadline_at: deadlineAt, created_by: req.staff.id });
+    if (!subId) return res.redirect(backPicker + '&err=ineligible');
+    const incomingApp = (await st.listApplications()).find((a) => a.id === chosen.application_id);
+    if (incomingApp) notifySubstituteOffer(st, incomingApp, ev, deadlineAt).catch((e) => console.error('[mail] substitute offer failed:', e && e.message));
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=offered');
+  } catch (e) { next(e); }
+});
+
 // Public diagnostic (no secrets): reports whether the service key can read staff accounts.
 app.get('/admin/health', async (req, res) => {
   const st = db();
@@ -2517,6 +2665,18 @@ async function notifyPositionRejection(st, app, ev) {
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
   });
 }
+
+// Base URL for links inside emails (no req available in fire-and-forget notifiers).
+function appBase() { return (process.env.APP_BASE_URL || 'https://talent.20fit.id').replace(/\/+$/, ''); }
+// Compact WIB timestamp for email deadlines.
+function fmtDeadlineWIB(iso) { try { return new Date(iso).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (_) { return ''; } }
+// Cancellation/standby flow notifiers (position-free, policy F). Each resolves the
+// talent's email and points them to the web to see the detail + click approval.
+async function _talentEmail(st, app) { const a = await st.getAccountById(app.talent_id); const to = a && a.login; return (to && /@/.test(to)) ? { to, name: a.name } : null; }
+async function notifyStandbyOffer(st, app, ev) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'standby' }); }
+async function notifySubstituteOffer(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'substitute', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
+async function notifyDecisionReminder(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'reminder', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
+async function notifyClosing(st, app, ev, kind) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendClosingEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', kind }); }
 
 // --- H-1 event reminders --------------------------------------------------
 // All date math is done in Asia/Jakarta (WIB) so "tomorrow" matches the local
