@@ -1135,9 +1135,13 @@ function computeReliability(tid, apps, eventsById, scopeEventIds) {
   const cancels = mine.filter((a) => a.status === 'cancelled' && !a.cancel_is_emergency);
   let closestCancelDay = null;
   cancels.forEach((a) => {
-    const ev = eventsById.get(a.event_id); const start = ev ? eventStartMs(ev) : null;
-    if (start != null && a.cancelled_at) {
-      const days = Math.max(0, Math.round((start - new Date(a.cancelled_at).getTime()) / 86400000));
+    const ev = eventsById.get(a.event_id);
+    if (ev && ev.starts_at && a.cancelled_at) {
+      // "H-x" = whole WIB calendar days between the cancel date and the event date
+      // (event parlance), not an hour-precise diff — so it's stable across the day.
+      const eventYMD = String(ev.starts_at).slice(0, 10);
+      const cancelYMD = new Date(a.cancelled_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const days = Math.max(0, Math.round((Date.parse(eventYMD + 'T00:00:00Z') - Date.parse(cancelYMD + 'T00:00:00Z')) / 86400000));
       if (closestCancelDay == null || days < closestCancelDay) closestCancelDay = days;
     }
   });
