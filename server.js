@@ -1125,8 +1125,11 @@ function standbyWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null
 // E: a talent's reliability snapshot for curation — events participated,
 // non-emergency cancellations (with how close to the event the nearest one was),
 // and no-shows. Emergency-flagged cancellations are excluded (admin-set).
-function computeReliability(tid, apps, eventsById) {
-  const mine = (apps || []).filter((a) => a.talent_id === tid);
+// scopeEventIds: when provided (a Set), only count the talent's history within
+// those events — so an EO sees reliability from THEIR OWN events only, never
+// another organizer's data. Pass null for the platform super-admin (sees all).
+function computeReliability(tid, apps, eventsById, scopeEventIds) {
+  const mine = (apps || []).filter((a) => a.talent_id === tid && (!scopeEventIds || scopeEventIds.has(a.event_id)));
   const placed = (a) => ['approved', 'assigned', 'completed'].includes(a.status);
   const participated = mine.filter(placed).length;
   const cancels = mine.filter((a) => a.status === 'cancelled' && !a.cancel_is_emergency);
@@ -2049,6 +2052,8 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
       st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listEvents(),
     ]);
     const eventsById = new Map(allEvents.map((x) => [x.id, x]));
+    // Data isolation: reliability counts only THIS EO's own events, never another organizer's.
+    const myEventIds = new Set(allEvents.filter((x) => x.created_by === req.staff.id).map((x) => x.id));
     const view = eoEventView(ev, positions, apps, choices);
     // Tahap 6: applicants for this event, each with their prioritised choices + contact.
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
@@ -2073,7 +2078,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
           hyroxStatus: tt.hyrox_cert_status || 'none',
           status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
-          reliability: computeReliability(a.talent_id, apps, eventsById),
+          reliability: computeReliability(a.talent_id, apps, eventsById, myEventIds),
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
