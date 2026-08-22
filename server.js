@@ -2046,9 +2046,33 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    // C: active, unread cancellation alerts for this event (never silent).
+    const notifs = (await st.listEoNotifications(req.staff.id, { unreadOnly: true }))
+      .filter((n) => n.event_id === ev.id && n.kind === 'cancellation');
+    const standbyRows = await st.listStandby(ev.id);
+    const availByPos = {};
+    standbyRows.forEach((s) => { if (s.state === 'available') availByPos[s.position_id] = (availByPos[s.position_id] || 0) + 1; });
+    const cancelAlerts = notifs.map((n) => {
+      const a = apps.find((x) => x.id === n.application_id);
+      const tt = a ? talentById.get(a.talent_id) : null;
+      const data = n.data || {};
+      return { id: n.id, appId: n.application_id, positionId: n.position_id, talentName: tt ? tt.name : '—',
+        reason: data.reason || null, note: data.note || null, when: n.created_at, standbyAvail: availByPos[n.position_id] || 0 };
+    });
     await attachMockups(st, ev);
     const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang, cancelAlerts, hoursLeft: hoursUntilEvent(ev) }));
+  } catch (e) { next(e); }
+});
+
+// C: EO dismisses a cancellation alert (only their own).
+app.post('/eo/notifications/:id/read', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const n = (await st.listEoNotifications(req.staff.id, {})).find((x) => x.id === req.params.id);
+    if (n) await st.markEoNotificationRead(n.id);
+    return res.redirect(safeNext(req.body.next) || '/eo/events');
   } catch (e) { next(e); }
 });
 

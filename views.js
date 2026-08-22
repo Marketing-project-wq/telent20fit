@@ -2542,12 +2542,38 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
+function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAlerts, hoursLeft }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
   const aps = applicants || [];
   const f = flash || {};
+  // C: active cancellation alerts (never silent). Each links to the manual
+  // substitute picker and shows how many standby candidates are on hand.
+  const posLblD = (pid) => { const p = (view.positions || []).find((x) => x.position_id === pid); return p ? posLabel(p, L) : pid; };
+  const whenStr = (iso) => { try { return new Date(iso).toLocaleString(L === 'en' ? 'en-GB' : 'id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) + ' WIB'; } catch (_) { return ''; } };
+  const timeLeftStr = () => {
+    if (hoursLeft == null) return '';
+    if (hoursLeft <= 0) return t('eo.time.started');
+    if (hoursLeft >= 48) return t('eo.time.daysLeft', { n: Math.round(hoursLeft / 24) });
+    return t('eo.time.hoursLeft', { n: Math.max(1, Math.round(hoursLeft)) });
+  };
+  const alertsPanel = (cancelAlerts && cancelAlerts.length) ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">${cancelAlerts.map((c) => {
+    const reason = c.reason ? t('ta.reason.' + c.reason) : '—';
+    const stern = c.standbyAvail === 0;
+    return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid ${stern ? '#b91c1c' : '#d97706'}">
+      <div style="font-weight:800;color:${stern ? '#b91c1c' : '#92400e'}">⚠️ ${t('eo.cancel.who', { name: esc(c.talentName) })} — ${esc(posLblD(c.positionId))}</div>
+      <div class="muted" style="font-size:13px;margin-top:5px">${t('eo.cancel.reason')}: ${esc(reason)}${c.note ? ` · "${esc(c.note)}"` : ''}</div>
+      <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(whenStr(c.when))} · ${esc(timeLeftStr())}</div>
+      <div style="margin-top:8px;font-size:13px">${stern
+        ? `<b style="color:#b91c1c">${t('eo.cancel.stern', { pos: esc(posLblD(c.positionId)), when: esc(timeLeftStr()) })}</b>`
+        : `${t('eo.cancel.standbyAvail', { n: c.standbyAvail })}`}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <a href="/eo/events/${esc(e.id)}/replace?app=${esc(c.appId)}&pos=${esc(c.positionId)}&lang=${L}" class="btn btn-sm">${t('eo.cancel.pickReplacement')}</a>
+        <form class="inline-form" method="post" action="/eo/notifications/${esc(c.id)}/read"><input type="hidden" name="next" value="/eo/events/${esc(e.id)}"><button class="btn btn-ghost btn-sm">${t('eo.cancel.dismiss')}</button></form>
+      </div>
+    </div>`;
+  }).join('')}</div>` : '';
   const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
     : f.ok === 'rejected' ? `<div class="banner banner-ok">${t('eo.ap.okRejected')}</div>`
     : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
@@ -2565,7 +2591,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-  ${flashBanner}
+  ${flashBanner}${alertsPanel}
   ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
