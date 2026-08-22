@@ -514,6 +514,13 @@ function supabaseStore() {
     async updateAttendance(id, patch) { const { error } = await sb.from('talent_event_attendance').update(Object.assign({ updated_at: new Date().toISOString() }, patch)).eq('id', id); if (error) throw new Error(error.message); },
     async addAttendanceLog(row) { const { error } = await sb.from('talent_attendance_log').insert(row); if (error) throw new Error(error.message); },
     async listAttendanceLog(attendanceId) { const { data } = await sb.from('talent_attendance_log').select('*').eq('attendance_id', attendanceId).order('changed_at'); return data || []; },
+    async listAttendanceLogsForEvent(eventId) {
+      const { data: att } = await sb.from('talent_event_attendance').select('id').eq('event_id', eventId);
+      const ids = (att || []).map((a) => a.id);
+      if (!ids.length) return [];
+      const { data } = await sb.from('talent_attendance_log').select('*').in('attendance_id', ids).order('changed_at');
+      return data || [];
+    },
     // ---- Attendance link token ----
     async createAttendanceLink(row) { const { data, error } = await sb.from('talent_attendance_link').insert(row).select('*').maybeSingle(); if (error) throw new Error(error.message); return data; },
     async getAttendanceLinkByToken(token) { const { data } = await sb.from('talent_attendance_link').select('*').eq('token', token).is('revoked_at', null).maybeSingle(); return data || null; },
@@ -914,6 +921,7 @@ function memoryStore() {
     async updateAttendance(id, patch) { const a = attendance.find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: now() }); },
     async addAttendanceLog(row) { attendanceLog.push(Object.assign({ id: 'atl-' + (++seq), changed_at: now() }, row)); },
     async listAttendanceLog(attendanceId) { return attendanceLog.filter((x) => x.attendance_id === attendanceId).map((x) => ({ ...x })).sort((a, b) => String(a.changed_at).localeCompare(String(b.changed_at))); },
+    async listAttendanceLogsForEvent(eventId) { const ids = new Set(attendance.filter((a) => a.event_id === eventId).map((a) => a.id)); return attendanceLog.filter((x) => ids.has(x.attendance_id)).map((x) => ({ ...x })).sort((a, b) => String(a.changed_at).localeCompare(String(b.changed_at))); },
     // ---- Attendance link ----
     async createAttendanceLink(row) { const rec = Object.assign({ id: 'alk-' + (++seq), created_by: null, created_at: now(), revoked_at: null }, row); attendanceLinks.push(rec); return { ...rec }; },
     async getAttendanceLinkByToken(token) { const l = attendanceLinks.find((x) => x.token === token && !x.revoked_at); return l ? { ...l } : null; },

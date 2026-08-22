@@ -390,6 +390,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
         + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
         + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
+        + navLink('/admin/koreksi', 'koreksi', active, 'applications', t('nav.corrections'))
         + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'proofs', t('nav.appKol'))
         + navLink('/admin/applications?cat=creative', 'applications-creative', active, 'proofs', t('nav.appCreative'))
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
@@ -4267,7 +4268,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
-    <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
+    <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/absensi?lang=${L}" class="btn btn-ghost btn-sm" title="${t('nav.corrections')}">🗓️</a> <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
@@ -5124,6 +5125,157 @@ function eoAttendancePage(o) {
   return appLayout({ title: s.title + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
+// === Tahap 5: Super Admin correction queue ================================
+function adminCorrections({ staff, pending, decided, lang, flash }) {
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const meta = attStatusMeta(L);
+  const f = flash || {};
+  const s = id ? {
+    title: 'Koreksi Absensi', sub: 'Permintaan koreksi absensi dari talent. Setiap perubahan wajib disertai alasan dan tercatat.',
+    none: 'Tidak ada permintaan koreksi yang menunggu.', pending: 'Menunggu keputusan', history: 'Riwayat keputusan',
+    talent: 'Talent', event: 'Acara', pos: 'Posisi', day: 'Tanggal', now: 'Status sekarang', reason: 'Alasan talent',
+    setTo: 'Ubah status ke', decNote: 'Alasan keputusan (wajib untuk menyetujui)', approve: 'Setujui & ubah', reject: 'Tolak',
+    unmarked: 'Belum ditandai', approved: 'Disetujui', rejected: 'Ditolak', decidedNote: 'Catatan',
+    okSaved: 'Keputusan tersimpan ✓', okNeedReason: 'Alasan keputusan wajib diisi saat menyetujui.', okBad: 'Status tidak valid.',
+    openEvent: 'Buka absensi acara',
+  } : {
+    title: 'Attendance Corrections', sub: 'Talent correction requests. Every change requires a recorded reason and is logged.',
+    none: 'No correction requests waiting.', pending: 'Awaiting decision', history: 'Decision history',
+    talent: 'Talent', event: 'Event', pos: 'Position', day: 'Date', now: 'Current status', reason: 'Talent reason',
+    setTo: 'Change status to', decNote: 'Decision reason (required to approve)', approve: 'Approve & change', reject: 'Reject',
+    unmarked: 'Not marked', approved: 'Approved', rejected: 'Rejected', decidedNote: 'Note',
+    okSaved: 'Decision saved ✓', okNeedReason: 'A decision reason is required to approve.', okBad: 'Invalid status.',
+    openEvent: 'Open event attendance',
+  };
+  const tag = (status) => status
+    ? `<span class="pill" style="background:${status === 'present' ? '#d8f3e3' : status === 'absent_notified' ? '#fdeccd' : '#fde2e2'};color:${status === 'present' ? '#0f7a45' : status === 'absent_notified' ? '#8a5a00' : '#b91c1c'}">${esc(meta[status].label)}</span>`
+    : `<span class="pill pill-off">${esc(s.unmarked)}</span>`;
+  const flashBanner = f.ok === '1' ? `<div class="banner banner-ok">${esc(s.okSaved)}</div>`
+    : f.ok === 'needreason' ? `<div class="banner banner-err">${esc(s.okNeedReason)}</div>`
+    : f.ok === 'bad' ? `<div class="banner banner-err">${esc(s.okBad)}</div>` : '';
+  const pendingCard = (i) => `<div class="card" style="margin-top:12px;border-left:4px solid #b45309">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+      <div><b style="font-size:15px">${esc(i.talentName)}</b> <span class="muted" style="font-size:12.5px">· ${esc(i.eventName)}</span></div>
+      ${tag(i.status)}
+    </div>
+    <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(s.pos)}: ${esc(i.posLabel)} · ${esc(s.day)}: ${esc(fmtDay(i.day))}</div>
+    <div style="margin-top:8px;font-size:13.5px;background:var(--bg-soft,#f5f5f7);border-radius:8px;padding:9px 11px"><b>${esc(s.reason)}:</b> ${esc(i.reason || '—')}</div>
+    <form method="post" action="/admin/koreksi/${esc(i.id)}/decide" style="margin-top:12px;display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12.5px;font-weight:600">${esc(s.setTo)}</label>
+        <select name="status" style="font-size:13px">
+          ${['present', 'absent_notified', 'absent_no_notice'].map((k) => `<option value="${k}"${i.status === k ? ' selected' : ''}>${esc(meta[k].label)}</option>`).join('')}
+        </select>
+      </div>
+      <textarea name="decision_note" rows="2" maxlength="500" placeholder="${esc(s.decNote)}" style="width:100%;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="submit" name="decision" value="approve" class="btn btn-sm">${esc(s.approve)}</button>
+        <button type="submit" name="decision" value="reject" class="btn btn-ghost btn-sm">${esc(s.reject)}</button>
+        <a href="/admin/events/${esc(i.eventId)}/absensi?lang=${L}&day=${esc(i.day)}" class="btn btn-ghost btn-sm">${esc(s.openEvent)}</a>
+      </div>
+    </form>
+  </div>`;
+  const decidedRow = (i) => `<div class="card" style="margin-top:10px;padding:12px 14px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+      <div><b style="font-size:14px">${esc(i.talentName)}</b> <span class="muted" style="font-size:12px">· ${esc(i.eventName)} · ${esc(fmtDay(i.day))}</span></div>
+      <span class="pill ${i.state === 'approved' ? 'pill-ok' : 'pill-off'}">${i.state === 'approved' ? esc(s.approved) : esc(s.rejected)}</span>
+    </div>
+    ${i.decisionNote ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(s.decidedNote)}: ${esc(i.decisionNote)}</div>` : ''}
+  </div>`;
+  const body = `<div class="wrap">
+    <h1 style="margin:0">${esc(s.title)}</h1>
+    <p class="sub" style="margin:6px 0 0">${esc(s.sub)}</p>
+    ${flashBanner}
+    <h2 style="margin:22px 0 0;font-size:16px">${esc(s.pending)} <span class="muted" style="font-weight:600">· ${(pending || []).length}</span></h2>
+    ${(pending || []).length ? pending.map(pendingCard).join('') : `<p class="muted" style="margin-top:12px">${esc(s.none)}</p>`}
+    ${(decided || []).length ? `<h2 style="margin:26px 0 0;font-size:16px">${esc(s.history)}</h2>${decided.map(decidedRow).join('')}` : ''}
+  </div>`;
+  return appLayout({ title: s.title + ' — 20FIT', body, role: 'super_admin', active: 'koreksi', user: staff.name, lang: L });
+}
+
+// === Tahap 5: Super Admin per-event attendance edit (override + history) ===
+function adminAttendancePage(o) {
+  const { staff, event, eventDate, recap, day, lang, locked, closeMs, logsByAtt, flash } = o || {};
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const meta = attStatusMeta(L);
+  const e = event || {};
+  const f = flash || {};
+  const s = id ? {
+    title: 'Absensi (Super Admin)', back: 'Kembali', locked: 'Terkunci (lewat masa koreksi) — hanya Anda yang bisa mengubah',
+    open: 'Dalam masa koreksi', closeAt: (w) => 'Batas koreksi: ' + w, dayN: (n) => 'Hari ' + n,
+    reasonPh: 'Alasan perubahan (wajib, tercatat)', unmarked: 'Belum ditandai', history: 'Riwayat perubahan',
+    notePh: 'Keterangan (opsional)', empty: 'Belum ada talent diterima untuk acara ini.',
+    okMarked: 'Status tersimpan ✓', errNeed: 'Alasan perubahan wajib diisi.', errBad: 'Gagal menyimpan.',
+    by: (n, w) => 'oleh ' + n + (w ? ' · ' + w : ''), from: 'dari', to: 'ke', csv: '⬇ Ekspor CSV',
+  } : {
+    title: 'Attendance (Super Admin)', back: 'Back', locked: 'Locked (past correction window) — only you can change it',
+    open: 'Within correction window', closeAt: (w) => 'Correction deadline: ' + w, dayN: (n) => 'Day ' + n,
+    reasonPh: 'Reason for change (required, recorded)', unmarked: 'Not marked', history: 'Change history',
+    notePh: 'Note (optional)', empty: 'No accepted talent for this event yet.',
+    okMarked: 'Status saved ✓', errNeed: 'A reason for the change is required.', errBad: 'Could not save.',
+    by: (n, w) => 'by ' + n + (w ? ' · ' + w : ''), from: 'from', to: 'to', csv: '⬇ Export CSV',
+  };
+  const days = recap.days || [];
+  const closeW = closeMs != null ? fmtWhenWib(closeMs, L) : '';
+  const flashBanner = f.ok === 'marked' ? `<div class="banner banner-ok">${esc(s.okMarked)}</div>`
+    : f.err === 'needreason' ? `<div class="banner banner-err">${esc(s.errNeed)}</div>`
+    : f.err === 'bad' ? `<div class="banner banner-err">${esc(s.errBad)}</div>` : '';
+  const daySel = (days.length > 1) ? `<div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px">
+    ${days.map((d, i) => `<a href="/admin/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+  </div>` : '';
+  const lbl = (st0) => st0 ? meta[st0].label : s.unmarked;
+  const histFor = (attId) => {
+    const rows = (logsByAtt && logsByAtt[attId]) || [];
+    if (!rows.length) return '';
+    return `<details style="margin-top:8px"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">${esc(s.history)} · ${rows.length}</summary>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${rows.map((l) => `<div class="muted" style="font-size:12px;border-left:2px solid var(--line);padding-left:8px">
+        <b>${esc(lbl(l.from_status))}</b> → <b>${esc(lbl(l.to_status))}</b> · ${esc(s.by(l.changed_by_name || '—', l.changed_at ? fmtWhenWib(Date.parse(l.changed_at), L) : ''))}${l.reason ? `<div>📝 ${esc(l.reason)}</div>` : ''}
+      </div>`).join('')}</div></details>`;
+  };
+  const talentRow = (tt) => {
+    const row = tt.byDay[day] || null; const status = row && row.status ? row.status : null;
+    const attId = row ? row.id : null;
+    const marked = (status && row.marked_by_name) ? `<div class="muted" style="font-size:11.5px;margin-top:4px">${esc(s.by(row.marked_by_name, row.marked_at ? fmtWhenWib(Date.parse(row.marked_at), L) : ''))}</div>` : '';
+    return `<form method="post" action="/admin/events/${esc(e.id)}/absensi/mark" class="lrow-form" style="margin:0;padding:12px 2px;border-top:1px solid var(--line)">
+      <input type="hidden" name="app" value="${esc(tt.applicationId)}"><input type="hidden" name="day" value="${esc(day || '')}">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><b style="font-size:14.5px">${esc(tt.name)}</b>
+        <span class="pill" style="background:${status === 'present' ? '#d8f3e3' : status === 'absent_notified' ? '#fdeccd' : status === 'absent_no_notice' ? '#fde2e2' : 'var(--bg-soft,#eee)'};color:${status === 'present' ? '#0f7a45' : status === 'absent_notified' ? '#8a5a00' : status === 'absent_no_notice' ? '#b91c1c' : '#6b6b70'}">${esc(lbl(status))}</span></div>
+      ${marked}
+      <div class="asrow" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        ${['present', 'absent_notified', 'absent_no_notice'].map((k) => `<button type="submit" name="status" value="${k}" class="asbtn ${meta[k].cls}${status === k ? ' on' : ''}">${meta[k].label}</button>`).join('')}
+      </div>
+      <div class="lrow-note" style="margin-top:8px;display:${status === 'absent_notified' ? 'block' : 'none'}"><input type="text" name="note" maxlength="500" placeholder="${esc(s.notePh)}" value="${esc((row && row.status === 'absent_notified' && row.note) || '')}" style="width:100%;font-size:13px"></div>
+      <input type="text" name="reason" maxlength="500" required placeholder="${esc(s.reasonPh)}" style="width:100%;font-size:13px;margin-top:8px">
+      ${attId ? histFor(attId) : ''}
+    </form>`;
+  };
+  const groupList = (recap.groups && recap.groups.length) ? recap.groups.map((g) => `<div class="card" style="margin-top:14px">
+      <div style="font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)">${esc(g.label)} <span class="muted" style="font-weight:600">· ${g.talents.length}</span></div>
+      ${g.talents.map(talentRow).join('')}
+    </div>`).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${esc(s.empty)}</p></div>`;
+  const style = `<style>
+    .asbtn{border:1.5px solid var(--line);background:var(--card,#fff);color:var(--ink);border-radius:999px;padding:7px 11px;font:600 12.5px/1 inherit;cursor:pointer;flex:1;min-width:88px}
+    .asbtn.as-present.on{background:#0f7a45;border-color:#0f7a45;color:#fff}
+    .asbtn.as-notified.on{background:#b45309;border-color:#b45309;color:#fff}
+    .asbtn.as-nonotice.on{background:#b91c1c;border-color:#b91c1c;color:#fff}
+  </style>
+  <script>document.addEventListener('click',function(ev){var b=ev.target;if(b.classList&&b.classList.contains('asbtn')){var form=b.closest('form');if(form){var n=form.querySelector('.lrow-note');if(n)n.style.display=(b.value==='absent_notified')?'block':'none';}}},true);</script>`;
+  const body = `<div class="wrap">${style}
+    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">← ${esc(s.back)}</a>
+    ${flashBanner}
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div><h1 style="margin:0">${esc(s.title)}</h1><p class="sub" style="margin:4px 0 0">${esc(e.name)}${eventDate ? ' · ' + esc(eventDate) : ''}</p></div>
+    </div>
+    ${locked ? `<div class="banner banner-warn" style="margin-top:10px">🔒 ${esc(s.locked)}</div>` : `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(s.open)}</div>`}
+    ${closeW ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🕒 ${esc(s.closeAt(closeW))}</div>` : ''}
+    ${daySel}
+    ${groupList}
+  </div>`;
+  return appLayout({ title: s.title + ' — 20FIT', body, role: 'super_admin', active: 'koreksi', user: staff.name, lang: L });
+}
+
 function performancePage(board, totalSubs) {
   const rows = board.length ? board.map((e, i) => `<tr>
     <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
@@ -5631,7 +5783,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, eoAttendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, eoAttendancePage, adminCorrections, adminAttendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,

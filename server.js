@@ -3334,6 +3334,124 @@ app.get('/eo/events/:id/absensi.csv', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// --- Tahap 5: Super Admin correction queue + locked-day edit ---------------
+// The super admin is the only party who can change data after the 10-day lock,
+// and who decides correction requests. They see ALL events (cross-EO); every
+// change carries a mandatory recorded reason + a change-log row.
+app.get('/admin/koreksi', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [corrs, talents, events, positions] = await Promise.all([st.listCorrections({}), st.listTalents(), st.listEvents(), st.listPositions()]);
+    const tById = new Map(talents.map((t) => [t.id, t.name]));
+    const evById = new Map(events.map((e) => [e.id, e]));
+    const posLbl = new Map(positions.map((p) => [p.id, p.label_id || p.label_en || p.id]));
+    const items = [];
+    for (const c of corrs) {
+      const att = await st.getAttendanceById(c.attendance_id);
+      if (!att) continue;
+      const ev = evById.get(att.event_id) || null;
+      items.push({
+        id: c.id, state: c.state, reason: c.reason, decisionNote: c.decision_note, createdAt: c.created_at, decidedAt: c.decided_at,
+        talentName: tById.get(c.talent_id) || '—', eventName: ev ? ev.name : '—', eventId: att.event_id, day: att.event_day,
+        posLabel: posLbl.get(att.position_id) || att.position_id, status: att.status || null, attendanceId: att.id,
+      });
+    }
+    const pending = items.filter((i) => i.state === 'pending');
+    const decided = items.filter((i) => i.state !== 'pending').sort((a, b) => String(b.decidedAt || '').localeCompare(String(a.decidedAt || ''))).slice(0, 50);
+    res.send(V.adminCorrections({ staff: staffCtx(req), pending, decided, lang: req.lang, flash: { ok: String(req.query.ok || '') } }));
+  } catch (e) { next(e); }
+});
+
+// Decide one correction. Approve -> set the record to the chosen status with a
+// mandatory reason (change-logged as the admin). Reject -> record the outcome.
+app.post('/admin/koreksi/:id/decide', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = await st.getCorrection(req.params.id);
+    if (!c || c.state !== 'pending') return res.redirect('/admin/koreksi');
+    const att = await st.getAttendanceById(c.attendance_id);
+    if (!att) return res.redirect('/admin/koreksi');
+    const decision = String(req.body.decision || '');
+    const note = String(req.body.decision_note || '').trim().slice(0, 500) || null;
+    const nowIso = new Date().toISOString();
+    if (decision === 'approve') {
+      const status = String(req.body.status || '');
+      if (!ATT_STATUSES.includes(status)) return res.redirect('/admin/koreksi?ok=bad');
+      if (!note || note.length < 3) return res.redirect('/admin/koreksi?ok=needreason'); // mandatory recorded reason
+      const from = att.status || null;
+      if (from !== status) {
+        await st.updateAttendance(att.id, { status, note: status === 'absent_notified' ? (att.note || null) : null, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso });
+        await st.addAttendanceLog({ attendance_id: att.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Koreksi disetujui: ' + note });
+      }
+      await st.updateCorrection(c.id, { state: 'approved', decided_by: req.staff.id, decided_at: nowIso, decision_note: note });
+    } else if (decision === 'reject') {
+      await st.updateCorrection(c.id, { state: 'rejected', decided_by: req.staff.id, decided_at: nowIso, decision_note: note });
+    } else {
+      return res.redirect('/admin/koreksi');
+    }
+    res.redirect('/admin/koreksi?ok=1');
+  } catch (e) { next(e); }
+});
+
+// Admin per-event attendance: recap + edit that works even after the lock, each
+// change requiring a recorded reason. Also renders the full change history.
+app.get('/admin/events/:id/absensi', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id) || null;
+    if (!ev) return res.redirect('/admin/manage');
+    const recap = await attendanceRecap(st, ev);
+    const days = recap.days; const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const logs = await st.listAttendanceLogsForEvent(ev.id);
+    const logsByAtt = {};
+    logs.forEach((l) => { (logsByAtt[l.attendance_id] = logsByAtt[l.attendance_id] || []).push(l); });
+    res.send(V.adminAttendancePage({
+      staff: staffCtx(req), event: ev, eventDate: eventDateStr(ev), recap, day, lang: req.lang,
+      locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev), logsByAtt,
+      flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') },
+    }));
+  } catch (e) { next(e); }
+});
+
+// Admin marks/corrects any day (even locked) — mandatory reason, change-logged.
+app.post('/admin/events/:id/absensi/mark', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id) || null;
+    if (!ev) return res.redirect('/admin/manage');
+    const back = '/admin/events/' + ev.id + '/absensi?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return res.redirect(back + '&err=bad');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return res.redirect(back + '&err=bad');
+    const reason = String(req.body.reason || '').trim().slice(0, 500);
+    if (reason.length < 3) return res.redirect(back + '&err=needreason'); // mandatory recorded reason
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return res.redirect(back + '&err=bad');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return res.redirect(back + '&err=bad');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Admin: ' + reason });
+    }
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
 // Public: leader marks/re-marks one talent's status for one day. Server re-checks
 // the window; writes the attendance row + a change-log entry (never silent).
 app.post('/absen/:token/mark', async (req, res, next) => {
