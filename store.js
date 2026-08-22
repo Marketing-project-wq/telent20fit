@@ -398,6 +398,140 @@ function supabaseStore() {
       const { error } = await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
       if (error) throw new Error(error.message);
     },
+    // Accept a talent into one position as ONE transaction (quota check + accept +
+    // auto-decline their other picks for the event + status-history rows), via the
+    // talent_accept_choice RPC. Returns 'ok' | 'full' | 'skip'.
+    async acceptApplicationTxn(applicationId, positionId, reviewerId) {
+      const { data, error } = await sb.rpc('talent_accept_choice', { p_app_id: applicationId, p_position_id: positionId, p_reviewer: reviewerId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
+    // An accepted talent cancels, as ONE transaction (free slot + status history +
+    // EO notification), via the talent_cancel_application RPC (also re-checks the
+    // H-1 window in-DB). Returns 'ok' | 'skip' | 'closed'.
+    async cancelApplicationTxn(applicationId, reason, note, actorId) {
+      const { data, error } = await sb.rpc('talent_cancel_application', { p_app_id: applicationId, p_reason: reason || null, p_note: note || null, p_actor: actorId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
+    // Append a status-history row (kapan, dari apa ke apa, oleh siapa).
+    async logStatusChange(applicationId, fromStatus, toStatus, changedBy) {
+      const { error } = await sb.from('talent_application_status_log')
+        .insert({ application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null });
+      if (error) throw new Error(error.message);
+    },
+    // K4: talent confirms (or clears) that they're available for the position they
+    // were accepted into. Records a timestamp; does not change the quota count.
+    async setApplicationConfirmed(applicationId, on) {
+      const { error } = await sb.from('talent_applications')
+        .update({ confirmed_at: on ? new Date().toISOString() : null }).eq('id', applicationId);
+      if (error) throw new Error(error.message);
+    },
+    async listApplicationStatusLog(applicationId) {
+      const { data } = await sb.from('talent_application_status_log').select('*').eq('application_id', applicationId).order('changed_at');
+      return data || [];
+    },
+    // ---- Standby list (cadangan/siaga) ----
+    async listStandby(eventId) {
+      const { data, error } = await sb.from('talent_event_standby').select('*').eq('event_id', eventId).order('position_id').order('rank', { nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listStandbyForApp(applicationId) {
+      const { data } = await sb.from('talent_event_standby').select('*').eq('application_id', applicationId);
+      return data || [];
+    },
+    async getStandby(id) { const { data } = await sb.from('talent_event_standby').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async upsertStandby({ event_id, application_id, position_id, rank, state, created_by }) {
+      const { data, error } = await sb.from('talent_event_standby')
+        .upsert({ event_id, application_id, position_id, rank: rank == null ? null : rank, state: state || 'offered', created_by: created_by || null }, { onConflict: 'application_id,position_id' })
+        .select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateStandby(id, patch) { const { error } = await sb.from('talent_event_standby').update(patch).eq('id', id); if (error) throw new Error(error.message); },
+    async deleteStandby(id) { await sb.from('talent_event_standby').delete().eq('id', id); },
+    // ---- Substitution history (riwayat pergantian) ----
+    async listSubstitutions(eventId) {
+      const { data, error } = await sb.from('talent_substitution').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async getSubstitution(id) { const { data } = await sb.from('talent_substitution').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async createSubstitution(row) {
+      const { data, error } = await sb.from('talent_substitution').insert(row).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateSubstitution(id, patch) { const { error } = await sb.from('talent_substitution').update(patch).eq('id', id); if (error) throw new Error(error.message); },
+    // Offer a standby candidate a vacated slot as ONE transaction (reserve + mark
+    // called), via the RPC. Returns the substitution id or null if a guard blocked.
+    async offerSubstituteTxn({ event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id, deadline_at, created_by }) {
+      const { data, error } = await sb.rpc('talent_offer_substitute', { p_event: event_id, p_position: position_id, p_outgoing: outgoing_application_id, p_incoming: incoming_application_id, p_from_position: from_position_id || null, p_deadline: deadline_at || null, p_actor: created_by || null });
+      if (error) throw new Error(error.message);
+      return data || null;
+    },
+    // A called substitute confirms, as ONE transaction (lock slot + status log +
+    // mark confirmed), via the RPC. Returns 'ok' | 'skip' | 'expired'.
+    async confirmSubstituteTxn(subId, actorId) {
+      const { data, error } = await sb.rpc('talent_confirm_substitute', { p_sub: subId, p_actor: actorId || null });
+      if (error) throw new Error(error.message);
+      return data || 'skip';
+    },
+    // ---- EO notifications (pemberitahuan aktif) ----
+    async listEoNotifications(staffId, { unreadOnly } = {}) {
+      let q = sb.from('talent_eo_notification').select('*').eq('staff_id', staffId);
+      if (unreadOnly) q = q.is('read_at', null);
+      const { data } = await q.order('created_at', { ascending: false });
+      return data || [];
+    },
+    async createEoNotification(row) {
+      const { data, error } = await sb.from('talent_eo_notification').insert(row).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async markEoNotificationRead(id) { await sb.from('talent_eo_notification').update({ read_at: new Date().toISOString() }).eq('id', id); },
+    // ---- Attendance (absensi 3-status per hari) ----
+    async listAttendanceForEvent(eventId) {
+      const { data, error } = await sb.from('talent_event_attendance').select('*').eq('event_id', eventId);
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listAttendanceForTalent(talentId) {
+      const { data } = await sb.from('talent_event_attendance').select('*').eq('talent_id', talentId);
+      return data || [];
+    },
+    async getAttendanceById(id) { const { data } = await sb.from('talent_event_attendance').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async getAttendance(applicationId, eventDay) { const { data } = await sb.from('talent_event_attendance').select('*').eq('application_id', applicationId).eq('event_day', eventDay).maybeSingle(); return data || null; },
+    // Set status; inserts the row on first mark (unique application_id+event_day).
+    async upsertAttendance(row) {
+      const payload = Object.assign({ updated_at: new Date().toISOString() }, row);
+      const { data, error } = await sb.from('talent_event_attendance')
+        .upsert(payload, { onConflict: 'application_id,event_day' }).select('*').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateAttendance(id, patch) { const { error } = await sb.from('talent_event_attendance').update(Object.assign({ updated_at: new Date().toISOString() }, patch)).eq('id', id); if (error) throw new Error(error.message); },
+    async addAttendanceLog(row) { const { error } = await sb.from('talent_attendance_log').insert(row); if (error) throw new Error(error.message); },
+    async listAttendanceLog(attendanceId) { const { data } = await sb.from('talent_attendance_log').select('*').eq('attendance_id', attendanceId).order('changed_at'); return data || []; },
+    async listAttendanceLogsForEvent(eventId) {
+      const { data: att } = await sb.from('talent_event_attendance').select('id').eq('event_id', eventId);
+      const ids = (att || []).map((a) => a.id);
+      if (!ids.length) return [];
+      const { data } = await sb.from('talent_attendance_log').select('*').in('attendance_id', ids).order('changed_at');
+      return data || [];
+    },
+    // ---- Attendance link token ----
+    async createAttendanceLink(row) { const { data, error } = await sb.from('talent_attendance_link').insert(row).select('*').maybeSingle(); if (error) throw new Error(error.message); return data; },
+    async getAttendanceLinkByToken(token) { const { data } = await sb.from('talent_attendance_link').select('*').eq('token', token).is('revoked_at', null).maybeSingle(); return data || null; },
+    async getAttendanceLinkForEvent(eventId) { const { data } = await sb.from('talent_attendance_link').select('*').eq('event_id', eventId).is('revoked_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(); return data || null; },
+    async revokeAttendanceLink(id) { const { error } = await sb.from('talent_attendance_link').update({ revoked_at: new Date().toISOString() }).eq('id', id); if (error) throw new Error(error.message); },
+    // ---- Attendance correction requests ----
+    async createCorrection(row) { const { data, error } = await sb.from('talent_attendance_correction').insert(row).select('*').maybeSingle(); if (error) throw new Error(error.message); return data; },
+    async listCorrections({ state } = {}) { let q = sb.from('talent_attendance_correction').select('*'); if (state) q = q.eq('state', state); const { data } = await q.order('created_at', { ascending: false }); return data || []; },
+    async listCorrectionsForTalent(talentId) { const { data } = await sb.from('talent_attendance_correction').select('*').eq('talent_id', talentId).order('created_at', { ascending: false }); return data || []; },
+    async getCorrection(id) { const { data } = await sb.from('talent_attendance_correction').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async updateCorrection(id, patch) { const { error } = await sb.from('talent_attendance_correction').update(patch).eq('id', id); if (error) throw new Error(error.message); },
     async deleteApplication(id) {
       // No FK cascade on talent_application_choices, so remove choices first to
       // avoid leaving orphaned rows behind.
@@ -560,6 +694,14 @@ function memoryStore() {
   const passwordResets = [];
   const certificates = [];
   const proofs = [];
+  const statusLog = [];
+  const standby = [];
+  const substitutions = [];
+  const eoNotifications = [];
+  const attendance = [];
+  const attendanceLog = [];
+  const attendanceLinks = [];
+  const corrections = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
 
@@ -668,7 +810,7 @@ function memoryStore() {
     async createApplication({ event_id, talent_id, talent_type, role, answers }) {
       // New flow allows one application per (talent, event, position), so no
       // (talent, event) uniqueness here — the apply handlers guard duplicates.
-      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() };
+      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, confirmed_at: null, cancelled_at: null, cancel_reason: null, cancel_reason_note: null, cancel_is_emergency: false, cancelled_by: null, created_at: now() };
       applications.push(rec);
       return { id: rec.id };
     },
@@ -682,6 +824,116 @@ function memoryStore() {
     async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
     async acceptApplicationChoice(applicationId, positionId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); }); },
     async clearApplicationAccepted(applicationId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = false; }); },
+    async acceptApplicationTxn(applicationId, positionId, reviewerId) {
+      const app = applications.find((a) => a.id === applicationId);
+      if (!app) return 'skip';
+      const myChoices = applicationChoices.filter((c) => c.application_id === applicationId);
+      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip';
+      const ep = eventPositions.find((p) => p.event_id === app.event_id && p.position_id === positionId);
+      const quota = ep ? ep.quota : 0;
+      const appIds = new Set(applications.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+      const taken = applicationChoices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== applicationId && appIds.has(c.application_id)).length;
+      if (quota > 0 && taken >= quota) return 'full';
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = (c.position_id === positionId); c.outcome = c.position_id === positionId ? 'accepted' : null; } });
+      if (app.status !== 'approved') statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: app.status || null, to_status: 'approved', changed_by: reviewerId || null, changed_at: now() });
+      Object.assign(app, { status: 'approved', reviewed_by: reviewerId || null, reviewed_at: now() });
+      const others = applications.filter((a) => a.event_id === app.event_id && a.talent_id === app.talent_id && a.id !== applicationId && !['approved', 'not_selected', 'not_continued', 'rejected'].includes(a.status));
+      for (const o of others) {
+        applicationChoices.forEach((c) => { if (c.application_id === o.id) { c.accepted = false; c.outcome = 'not_continued'; } });
+        statusLog.push({ id: 'sl-' + (++seq), application_id: o.id, from_status: o.status || null, to_status: 'not_continued', changed_by: reviewerId || null, changed_at: now() });
+        Object.assign(o, { status: 'not_continued', reviewed_by: reviewerId || null, reviewed_at: now(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
+      }
+      return 'ok';
+    },
+    async logStatusChange(applicationId, fromStatus, toStatus, changedBy) { statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, changed_at: now() }); },
+    async cancelApplicationTxn(applicationId, reason, note, actorId) {
+      const app = applications.find((a) => a.id === applicationId);
+      if (!app || app.status !== 'approved') return 'skip';
+      const acc = applicationChoices.find((c) => c.application_id === applicationId && c.accepted);
+      const pos = acc ? acc.position_id : null;
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = false; c.outcome = 'cancelled'; } });
+      statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: app.status, to_status: 'cancelled', changed_by: actorId || null, changed_at: now() });
+      const ev = events.find((e) => e.id === app.event_id);
+      Object.assign(app, { status: 'cancelled', cancelled_at: now(), cancel_reason: reason || null, cancel_reason_note: note || null, cancelled_by: actorId || null });
+      eoNotifications.push({ id: 'eon-' + (++seq), event_id: app.event_id, staff_id: ev ? ev.created_by : null, kind: 'cancellation', application_id: applicationId, position_id: pos, data: { reason: reason || null, note: note || null }, read_at: null, created_at: now() });
+      return 'ok';
+    },
+    async setApplicationConfirmed(applicationId, on) { const a = applications.find((a) => a.id === applicationId); if (a) a.confirmed_at = on ? now() : null; },
+    async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
+    // ---- Standby list (cadangan/siaga) ----
+    async listStandby(eventId) { return standby.filter((s) => s.event_id === eventId).map((s) => ({ ...s })).sort((a, b) => String(a.position_id).localeCompare(String(b.position_id)) || ((a.rank || 999) - (b.rank || 999))); },
+    async listStandbyForApp(applicationId) { return standby.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
+    async getStandby(id) { const s = standby.find((x) => x.id === id); return s ? { ...s } : null; },
+    async upsertStandby({ event_id, application_id, position_id, rank, state, created_by }) {
+      let s = standby.find((x) => x.application_id === application_id && x.position_id === position_id);
+      if (s) { s.rank = rank == null ? null : rank; if (state) s.state = state; }
+      else { s = { id: 'sb-' + (++seq), event_id, application_id, position_id, rank: rank == null ? null : rank, state: state || 'offered', offered_at: now(), responded_at: null, created_by: created_by || null, created_at: now() }; standby.push(s); }
+      return { id: s.id };
+    },
+    async updateStandby(id, patch) { const s = standby.find((x) => x.id === id); if (s) Object.assign(s, patch); },
+    async deleteStandby(id) { const i = standby.findIndex((x) => x.id === id); if (i >= 0) standby.splice(i, 1); },
+    // ---- Substitution history (riwayat pergantian) ----
+    async listSubstitutions(eventId) { return substitutions.filter((s) => s.event_id === eventId).map((s) => ({ ...s })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async getSubstitution(id) { const s = substitutions.find((x) => x.id === id); return s ? { ...s } : null; },
+    async createSubstitution(row) { const rec = { id: 'sub-' + (++seq), state: 'offered', offered_at: now(), responded_at: null, deadline_at: null, created_by: null, created_at: now(), ...row }; substitutions.push(rec); return { id: rec.id }; },
+    async updateSubstitution(id, patch) { const s = substitutions.find((x) => x.id === id); if (s) Object.assign(s, patch); },
+    async offerSubstituteTxn({ event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id, deadline_at, created_by }) {
+      if (applicationChoices.some((c) => c.application_id === incoming_application_id && c.accepted)) return null;
+      if (substitutions.some((s) => s.event_id === event_id && s.position_id === position_id && s.outgoing_application_id === outgoing_application_id && s.state === 'offered')) return null;
+      const rec = { id: 'sub-' + (++seq), event_id, position_id, outgoing_application_id, incoming_application_id, from_position_id: from_position_id || null, state: 'offered', offered_at: now(), responded_at: null, deadline_at: deadline_at || null, created_by: created_by || null, created_at: now() };
+      substitutions.push(rec);
+      standby.forEach((s) => { if (s.application_id === incoming_application_id && s.position_id === from_position_id) s.state = 'called'; });
+      return rec.id;
+    },
+    async confirmSubstituteTxn(subId, actorId) {
+      const sub = substitutions.find((s) => s.id === subId);
+      if (!sub || sub.state !== 'offered') return 'skip';
+      if (sub.deadline_at && new Date() > new Date(sub.deadline_at)) { sub.state = 'expired'; sub.responded_at = now(); return 'expired'; }
+      const app = applications.find((a) => a.id === sub.incoming_application_id);
+      if (!app) return 'skip';
+      if (applicationChoices.some((c) => c.application_id === app.id && c.accepted)) return 'skip';
+      const mine = applicationChoices.filter((c) => c.application_id === app.id);
+      mine.forEach((c) => { c.accepted = false; c.outcome = null; });
+      const has = mine.find((c) => c.position_id === sub.position_id);
+      if (has) { has.accepted = true; has.outcome = 'accepted'; }
+      else if (mine.length < 3) { applicationChoices.push({ id: 'ac-' + (++seq), application_id: app.id, position_id: sub.position_id, priority: mine.length + 1, accepted: true, outcome: 'accepted' }); }
+      else { const top = mine.reduce((m, c) => (c.priority > m.priority ? c : m), mine[0]); top.position_id = sub.position_id; top.accepted = true; top.outcome = 'accepted'; }
+      statusLog.push({ id: 'sl-' + (++seq), application_id: app.id, from_status: app.status, to_status: 'approved', changed_by: actorId || null, changed_at: now() });
+      Object.assign(app, { status: 'approved', confirmed_at: now(), reviewed_by: actorId || null, reviewed_at: now() });
+      sub.state = 'confirmed'; sub.responded_at = now();
+      standby.forEach((s) => { if (s.application_id === app.id) s.state = 'confirmed'; });
+      return 'ok';
+    },
+    // ---- EO notifications (pemberitahuan aktif) ----
+    async listEoNotifications(staffId, { unreadOnly } = {}) { return eoNotifications.filter((n) => n.staff_id === staffId && (!unreadOnly || !n.read_at)).map((n) => ({ ...n })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async createEoNotification(row) { const rec = { id: 'eon-' + (++seq), data: null, read_at: null, created_at: now(), ...row }; eoNotifications.push(rec); return { id: rec.id }; },
+    async markEoNotificationRead(id) { const n = eoNotifications.find((x) => x.id === id); if (n) n.read_at = now(); },
+    // ---- Attendance ----
+    async listAttendanceForEvent(eventId) { return attendance.filter((a) => a.event_id === eventId).map((a) => ({ ...a })); },
+    async listAttendanceForTalent(talentId) { return attendance.filter((a) => a.talent_id === talentId).map((a) => ({ ...a })); },
+    async getAttendanceById(id) { const a = attendance.find((x) => x.id === id); return a ? { ...a } : null; },
+    async getAttendance(applicationId, eventDay) { const a = attendance.find((x) => x.application_id === applicationId && x.event_day === eventDay); return a ? { ...a } : null; },
+    async upsertAttendance(row) {
+      let a = attendance.find((x) => x.application_id === row.application_id && x.event_day === row.event_day);
+      if (a) { Object.assign(a, row, { updated_at: now() }); }
+      else { a = Object.assign({ id: 'att-' + (++seq), status: null, note: null, marked_by_name: null, marked_by_staff: null, marked_at: null, is_emergency: false, emergency_by: null, emergency_reason: null, emergency_at: null, created_at: now(), updated_at: now() }, row); attendance.push(a); }
+      return { ...a };
+    },
+    async updateAttendance(id, patch) { const a = attendance.find((x) => x.id === id); if (a) Object.assign(a, patch, { updated_at: now() }); },
+    async addAttendanceLog(row) { attendanceLog.push(Object.assign({ id: 'atl-' + (++seq), changed_at: now() }, row)); },
+    async listAttendanceLog(attendanceId) { return attendanceLog.filter((x) => x.attendance_id === attendanceId).map((x) => ({ ...x })).sort((a, b) => String(a.changed_at).localeCompare(String(b.changed_at))); },
+    async listAttendanceLogsForEvent(eventId) { const ids = new Set(attendance.filter((a) => a.event_id === eventId).map((a) => a.id)); return attendanceLog.filter((x) => ids.has(x.attendance_id)).map((x) => ({ ...x })).sort((a, b) => String(a.changed_at).localeCompare(String(b.changed_at))); },
+    // ---- Attendance link ----
+    async createAttendanceLink(row) { const rec = Object.assign({ id: 'alk-' + (++seq), created_by: null, created_at: now(), revoked_at: null }, row); attendanceLinks.push(rec); return { ...rec }; },
+    async getAttendanceLinkByToken(token) { const l = attendanceLinks.find((x) => x.token === token && !x.revoked_at); return l ? { ...l } : null; },
+    async getAttendanceLinkForEvent(eventId) { const l = attendanceLinks.filter((x) => x.event_id === eventId && !x.revoked_at).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]; return l ? { ...l } : null; },
+    async revokeAttendanceLink(id) { const l = attendanceLinks.find((x) => x.id === id); if (l) l.revoked_at = now(); },
+    // ---- Corrections ----
+    async createCorrection(row) { const rec = Object.assign({ id: 'cor-' + (++seq), state: 'pending', decided_by: null, decided_at: null, decision_note: null, created_at: now() }, row); corrections.push(rec); return { ...rec }; },
+    async listCorrections({ state } = {}) { return corrections.filter((c) => !state || c.state === state).map((c) => ({ ...c })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async listCorrectionsForTalent(talentId) { return corrections.filter((c) => c.talent_id === talentId).map((c) => ({ ...c })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async getCorrection(id) { const c = corrections.find((x) => x.id === id); return c ? { ...c } : null; },
+    async updateCorrection(id, patch) { const c = corrections.find((x) => x.id === id); if (c) Object.assign(c, patch); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }

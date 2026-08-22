@@ -809,7 +809,7 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
       proofs: proofs.length,
       certs: certs.length,
     };
-    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang }));
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang, cancelFlash: String(req.query.cancel || '') }));
   } catch (e) { next(e); }
 });
 
@@ -1104,6 +1104,129 @@ function eventRegOpen(ev) {
   return true;
 }
 
+// Event start as an epoch (ms), interpreting starts_at (date) + start_time
+// ("HH:MM", default 00:00) as Asia/Jakarta / WIB (UTC+7, no DST). Returns null if
+// no date is stored. All H-1 day / H-12 hour math flows through here so the cutoff
+// is computed one way, in WIB, on the server — never from the UI or server clock TZ.
+function eventStartMs(ev) {
+  if (!ev || !ev.starts_at) return null;
+  const d = String(ev.starts_at).slice(0, 10);
+  const t = (ev.start_time && /^\d{2}:\d{2}/.test(String(ev.start_time))) ? String(ev.start_time).slice(0, 5) : '00:00';
+  const ms = Date.parse(d + 'T' + t + ':00+07:00');
+  return Number.isNaN(ms) ? null : ms;
+}
+function hoursUntilEvent(ev) { const ms = eventStartMs(ev); return ms == null ? null : (ms - Date.now()) / 3600000; }
+// Talent may self-cancel until H-1 day (24h before start). Unknown start = leave
+// open (never close the exit early — the spec's rationale).
+function cancelWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 24; }
+// Standby list stays callable until H-12 hours before start.
+function standbyWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 12; }
+
+// --- New attendance & reliability system (Tahap 2+) ------------------------
+// The three real-world outcomes the leader records. NULL = belum ditandai
+// (unmarked) — never defaulted to "present". Only 'absent_no_notice' is a
+// reliability violation; 'absent_notified' (told the EO via WhatsApp) is not.
+const ATT_STATUSES = ['present', 'absent_notified', 'absent_no_notice'];
+// Leader link opens H-3 hours before the event start (user decision) so the PIC
+// can prepare on-site, and stays active until the correction window closes.
+function attendanceOpenMs(ev) { const s = eventStartMs(ev); return s == null ? null : s - 3 * 3600 * 1000; }
+// Correction window closes at end of the 10th day (23:59:59 WIB) after the
+// event ends. After this the day is LOCKED to the leader/EO — only a super
+// admin may still edit (with a recorded reason). Checked on the server so the
+// UI can never widen it.
+function correctionCloseMs(ev) {
+  const end = String((ev && (ev.ends_at || ev.starts_at)) || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return null;
+  const ms = Date.parse(addDaysYMD(end, 10) + 'T23:59:59+07:00');
+  return Number.isNaN(ms) ? null : ms;
+}
+// The leader link is active (can mark / re-mark) only inside [open, close].
+function attendanceWindowActive(ev, at) {
+  const now = at == null ? Date.now() : at;
+  const open = attendanceOpenMs(ev); const close = correctionCloseMs(ev);
+  if (open == null || close == null) return false;
+  return now >= open && now <= close;
+}
+// A day is locked once the correction window has passed (leader/EO can no
+// longer change it; only a super admin can, with a reason).
+function attendanceLocked(ev, at) { const c = correctionCloseMs(ev); return c == null ? false : (at == null ? Date.now() : at) > c; }
+// Random, long, unguessable link token — NOT derived from the event id, so the
+// public URL leaks nothing about which event it belongs to.
+function randomAttToken() { return crypto.randomBytes(24).toString('base64url'); }
+
+// E: a talent's reliability snapshot for curation — events participated,
+// non-emergency cancellations (with how close to the event the nearest one was),
+// and no-shows. Emergency-flagged cancellations are excluded (admin-set).
+// scopeEventIds: when provided (a Set), only count the talent's history within
+// those events — so an EO sees reliability from THEIR OWN events only, never
+// another organizer's data. Pass null for the platform super-admin (sees all).
+function computeReliability(tid, apps, eventsById, scopeEventIds) {
+  const mine = (apps || []).filter((a) => a.talent_id === tid && (!scopeEventIds || scopeEventIds.has(a.event_id)));
+  const placed = (a) => ['approved', 'assigned', 'completed'].includes(a.status);
+  const participated = mine.filter(placed).length;
+  const cancels = mine.filter((a) => a.status === 'cancelled' && !a.cancel_is_emergency);
+  let closestCancelDay = null;
+  cancels.forEach((a) => {
+    const ev = eventsById.get(a.event_id);
+    if (ev && ev.starts_at && a.cancelled_at) {
+      // "H-x" = whole WIB calendar days between the cancel date and the event date
+      // (event parlance), not an hour-precise diff — so it's stable across the day.
+      const eventYMD = String(ev.starts_at).slice(0, 10);
+      const cancelYMD = new Date(a.cancelled_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const days = Math.max(0, Math.round((Date.parse(eventYMD + 'T00:00:00Z') - Date.parse(cancelYMD + 'T00:00:00Z')) / 86400000));
+      if (closestCancelDay == null || days < closestCancelDay) closestCancelDay = days;
+    }
+  });
+  const now = Date.now();
+  const noShows = mine.filter((a) => placed(a) && a.attended === false && (() => { const ev = eventsById.get(a.event_id); const s = ev ? eventStartMs(ev) : null; return s != null && s < now; })()).length;
+  return { participated, cancels: cancels.length, closestCancelDay, noShows };
+}
+
+// === Tahap 6: attendance reliability + cross-EO privacy ====================
+// ONE place that decides how much of a talent's attendance history a viewer may
+// see (centralized so the rule can change later without hunting call sites):
+//   - super admin: everything;
+//   - the EO that owns the event: full detail (event name, note);
+//   - any other EO: LIMITED — only date + position category + status. Never the
+//     event name, the other EO's identity, or the keterangan.
+function attendanceVisibility(viewerStaffId, ev, isSuperAdmin) {
+  if (isSuperAdmin) return 'full';
+  if (ev && ev.created_by && viewerStaffId && ev.created_by === viewerStaffId) return 'full';
+  return 'limited';
+}
+// Six calendar months in ms (H expiry: an old no-notice stops being an ACTIVE
+// warning after 6 months but is never deleted — still counted in the total).
+const ATT_SIX_MONTHS_MS = 183 * 86400000;
+function computeAttendanceReliability(talentId, attRows, eventsById, positionLabelById, viewerStaffId, isSuperAdmin, nowMs) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  const agg = { present: 0, absentNotified: 0, absentNoNotice: 0, noNoticeActive: 0, events: 0 };
+  const own = []; const other = [];
+  const seenEvents = new Set();
+  (attRows || []).forEach((a) => {
+    if (a.talent_id !== talentId || !a.status) return;
+    if (a.is_emergency) return; // Super-Admin-flagged emergency: excluded from the record
+    seenEvents.add(a.event_id);
+    if (a.status === 'present') agg.present++;
+    else if (a.status === 'absent_notified') agg.absentNotified++;
+    else if (a.status === 'absent_no_notice') {
+      agg.absentNoNotice++;
+      const dayMs = Date.parse(String(a.event_day) + 'T00:00:00+07:00');
+      if (!Number.isNaN(dayMs) && (now - dayMs) <= ATT_SIX_MONTHS_MS) agg.noNoticeActive++;
+    }
+    const ev = eventsById.get(a.event_id) || null;
+    const posLabel = positionLabelById.get(a.position_id) || null;
+    if (attendanceVisibility(viewerStaffId, ev, isSuperAdmin) === 'full') {
+      own.push({ eventName: ev ? ev.name : null, date: a.event_day, positionLabel: posLabel, status: a.status, note: a.status === 'absent_notified' ? (a.note || null) : null });
+    } else {
+      other.push({ date: a.event_day, positionCategory: posLabel, status: a.status });
+    }
+  });
+  agg.events = seenEvents.size;
+  own.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  other.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  return { agg, own, other, hasAny: (agg.present + agg.absentNotified + agg.absentNoNotice) > 0 };
+}
+
 // Build the apply context for one event + talent (positions, open slots, my application).
 async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -1116,7 +1239,15 @@ async function positionApplyCtx(st, ev, talentId) {
   const myApp = talentId ? (apps.find((a) => a.talent_id === talentId && a.event_id === ev.id) || null) : null;
   const myChoices = myApp ? choices.filter((c) => c.application_id === myApp.id).slice().sort((a, b) => a.priority - b.priority) : [];
   const myByPosition = new Map(myChoices.map((c) => [String(c.position_id), c]));
-  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev) };
+  // A/D: standby designations for this talent + any pending substitute offer.
+  let myStandby = [];
+  let mySubOffer = null;
+  if (myApp) {
+    myStandby = (await st.listStandbyForApp(myApp.id)) || [];
+    const subs = await st.listSubstitutions(ev.id);
+    mySubOffer = subs.find((s) => s.incoming_application_id === myApp.id && s.state === 'offered') || null;
+  }
+  return { view, positions: view.positions, openPositions, posById, myApp, myChoices, myByPosition, regOpen: eventRegOpen(ev), cancelOpen: cancelWindowOpen(ev), standbyOpen: standbyWindowOpen(ev), myStandby, mySubOffer };
 }
 
 // Position-based EO events currently open to a talent: published, within the
@@ -1219,10 +1350,52 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1' }));
+    // D: an accepted talent sees their own attendance for this event (status per
+    // day, who marked + when) and can request a correction. Only when accepted.
+    let attendance = null;
+    if (req.talent && ctx.myApp && ctx.myApp.status === 'approved' && (ctx.myChoices || []).some((c) => c.accepted)) {
+      const accepted = ctx.myChoices.find((c) => c.accepted);
+      const allRows = await st.listAttendanceForTalent(req.talent.id);
+      const rows = allRows.filter((r) => r.application_id === ctx.myApp.id);
+      const rowIds = new Set(rows.map((r) => r.id));
+      const byDay = {}; rows.forEach((r) => { byDay[r.event_day] = r; });
+      const corrections = (await st.listCorrectionsForTalent(req.talent.id)).filter((c) => rowIds.has(c.attendance_id));
+      // I: graduated-sanction signal to the talent — active (within 6mo) no-notice
+      // absences across ALL their events, excluding Super-Admin emergency flags.
+      const nowMs = Date.now();
+      let noNoticeActive = 0;
+      allRows.forEach((r) => {
+        if (r.is_emergency || r.status !== 'absent_no_notice') return;
+        const dm = Date.parse(String(r.event_day) + 'T00:00:00+07:00');
+        if (!Number.isNaN(dm) && (nowMs - dm) <= 183 * 86400000) noNoticeActive++;
+      });
+      attendance = { days: eventDays(ev), byDay, positionId: accepted ? accepted.position_id : null, corrections, active: attendanceWindowActive(ev), locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev), noNoticeActive };
+    }
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cancelFlash: String(req.query.cancel || ''), standbyFlash: String(req.query.standby || ''), subFlash: String(req.query.sub || ''), attendance, corrFlash: String(req.query.koreksi || '') }));
   } catch (e) { next(e); }
 });
 
+
+// D: an accepted talent asks the Super Admin to correct one of their attendance
+// records — submits a reason; the record itself is never changed here (Tahap 5).
+app.post('/event/:id/koreksi', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const back = '/event/' + eventRef(ev) + '?lang=' + req.lang;
+    const attId = String(req.body.attendance_id || '');
+    const att = await st.getAttendanceById(attId);
+    if (!att || att.talent_id !== req.talent.id || att.event_id !== ev.id) return res.redirect(back);
+    const reason = String(req.body.reason || '').trim().slice(0, 600);
+    if (reason.length < 3) return res.redirect(back + '&koreksi=empty');
+    // One pending correction per record — silently coalesce repeat submits.
+    const pending = (await st.listCorrectionsForTalent(req.talent.id)).find((c) => c.attendance_id === attId && c.state === 'pending');
+    if (!pending) await st.createCorrection({ attendance_id: attId, talent_id: req.talent.id, reason });
+    res.redirect(back + '&koreksi=sent');
+  } catch (e) { next(e); }
+});
 
 app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => {
   try {
@@ -1274,6 +1447,44 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
       else await st.replaceApplicationChoices(app.id, remaining);
     }
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// K4: an accepted talent confirms (v=1) or clears (v=0) their availability for the
+// position they were accepted into. Records confirmed_at; does not change quota.
+app.post('/event/:id/confirm', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (app && app.status === 'approved') await st.setApplicationConfirmed(app.id, String(req.body.v || '1') === '1');
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// Allowed cancellation reasons (talent-facing). 'other' pairs with a free-text note.
+const CANCEL_REASONS = ['schedule_conflict', 'sick', 'family', 'changed_mind', 'other'];
+
+// B: an accepted talent cancels their participation. Allowed only until H-1 day
+// (24h before start), re-checked on the SERVER here AND inside the RPC. Runs as one
+// transaction: free the slot, log the status change, notify the EO.
+app.post('/event/:id/withdraw', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app || app.status !== 'approved') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    // Server-side window guard (rule 5): closed within H-1 day → must contact EO.
+    if (!cancelWindowOpen(ev)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&cancel=closed');
+    const reason = CANCEL_REASONS.includes(String(req.body.reason || '')) ? String(req.body.reason) : 'other';
+    const note = String(req.body.note || '').trim().slice(0, 300) || null;
+    const outcome = await st.cancelApplicationTxn(app.id, reason, note, req.talent.id);
+    if (outcome === 'closed') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&cancel=closed');
+    return res.redirect('/talent?lang=' + req.lang + '&cancel=done');
   } catch (e) { next(e); }
 });
 
@@ -1845,6 +2056,8 @@ function validateEventForm(f, req) {
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
   if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
+  // Start time (WIB) is now required — the H-1 day / H-12 hour cutoffs depend on it.
+  if (!f.data.start_time || !/^\d{2}:\d{2}$/.test(String(f.data.start_time))) e.push(req.t('eo.ev.err.startTime'));
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   return e;
 }
@@ -1958,9 +2171,12 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positions, apps, choices, talents] = await Promise.all([
-      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+    const [positions, apps, choices, talents, allEvents] = await Promise.all([
+      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listEvents(),
     ]);
+    const eventsById = new Map(allEvents.map((x) => [x.id, x]));
+    // Data isolation: reliability counts only THIS EO's own events, never another organizer's.
+    const myEventIds = new Set(allEvents.filter((x) => x.created_by === req.staff.id).map((x) => x.id));
     const view = eoEventView(ev, positions, apps, choices);
     // Tahap 6: applicants for this event, each with their prioritised choices + contact.
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
@@ -1974,8 +2190,16 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review';
       }
     }
-    const applicants = apps
-      .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
+    const applicantApps = apps.filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length);
+    // Tahap 6: attendance history for each applicant, across ALL organizers, with
+    // cross-EO privacy applied inside computeAttendanceReliability (this EO sees
+    // its own events in full; other organizers' events show only date/category/status).
+    const applicantTalentIds = [...new Set(applicantApps.map((a) => a.talent_id))];
+    const positionsMaster = await st.listPositions();
+    const positionLabelById = new Map(positionsMaster.map((p) => [p.id, p.label_id || p.label_en || p.id]));
+    const attByTalent = await Promise.all(applicantTalentIds.map((tid) => st.listAttendanceForTalent(tid)));
+    const allAttRows = attByTalent.flat();
+    const applicants = applicantApps
       .map((a) => {
         const tt = talentById.get(a.talent_id) || {};
         const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
@@ -1984,13 +2208,44 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           id: a.id, talentId: a.talent_id, name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
           hyroxStatus: tt.hyrox_cert_status || 'none',
-          status: a.status || 'applied', createdAt: a.created_at, choices: ch,
+          status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
+          reliability: computeReliability(a.talent_id, apps, eventsById, myEventIds),
+          attRel: computeAttendanceReliability(a.talent_id, allAttRows, eventsById, positionLabelById, req.staff.id, false),
         };
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+    // C + edge cases: all active, unread alerts for this event (never silent):
+    // cancellation, substitute declined/expired, cross-position chain effect.
+    const notifs = (await st.listEoNotifications(req.staff.id, { unreadOnly: true }))
+      .filter((n) => n.event_id === ev.id);
+    const standbyRows = await st.listStandby(ev.id);
+    const availByPos = {};
+    standbyRows.forEach((s) => { if (s.state === 'available') availByPos[s.position_id] = (availByPos[s.position_id] || 0) + 1; });
+    const cancelAlerts = notifs.map((n) => {
+      const a = apps.find((x) => x.id === n.application_id);
+      const tt = a ? talentById.get(a.talent_id) : null;
+      const data = n.data || {};
+      return { id: n.id, kind: n.kind, appId: n.application_id, positionId: n.position_id, talentName: tt ? tt.name : '—',
+        reason: data.reason || null, note: data.note || null, data, when: n.created_at, standbyAvail: availByPos[n.position_id] || 0 };
+    });
     await attachMockups(st, ev);
     const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
+    // Tahap 2/3: the event's single leader attendance link (if generated) +
+    // whether the marking window is open, so the EO can share/copy it.
+    const attLinkRow = await st.getAttendanceLinkForEvent(ev.id);
+    const att = { url: attLinkRow ? publicBase(req) + '/absen/' + attLinkRow.token : null, active: attendanceWindowActive(ev), openMs: attendanceOpenMs(ev), closeMs: correctionCloseMs(ev) };
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang, cancelAlerts, hoursLeft: hoursUntilEvent(ev), att }));
+  } catch (e) { next(e); }
+});
+
+// C: EO dismisses a cancellation alert (only their own).
+app.post('/eo/notifications/:id/read', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const n = (await st.listEoNotifications(req.staff.id, {})).find((x) => x.id === req.params.id);
+    if (n) await st.markEoNotificationRead(n.id);
+    return res.redirect(safeNext(req.body.next) || '/eo/events');
   } catch (e) { next(e); }
 });
 
@@ -2004,30 +2259,10 @@ async function eoOwnedApplication(st, staffId, eventId, appId) {
   return { ev, app };
 }
 
-// Accept an applicant into one of their chosen positions (respects quota BR-9;
-// the DB enforces one accepted position per application).
-// #4: serialize accept operations per event so the quota read-then-write cannot
-// race two simultaneous accepts into over-filling a position. Single-process
-// guard (matches this app's single-instance deployment); for multi-node this
-// should be paired with a DB-level quota constraint.
-const _eventAcceptLocks = new Map();
-function withEventLock(eventId, fn) {
-  const prev = _eventAcceptLocks.get(eventId) || Promise.resolve();
-  const run = prev.then(fn, fn); // run regardless of the previous op's outcome
-  _eventAcceptLocks.set(eventId, run.then(() => {}, () => {}));
-  return run;
-}
-// #5 (Option A): one accepted position per talent per event. When a talent is
-// accepted into a position, decline their other still-open applications for the
-// same event (their other position picks lapse). Returns how many were declined.
-async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, reviewerId) {
-  const others = (apps || []).filter((a) => a.event_id === eventId && a.talent_id === talentId && a.id !== keepAppId && !['approved', 'rejected'].includes(a.status));
-  for (const o of others) {
-    await st.clearApplicationAccepted(o.id);
-    await st.updateApplication(o.id, { status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
-  }
-  return others.length;
-}
+// Accept an applicant into one of their chosen positions. The quota check, the
+// acceptance, the auto-decline of the talent's other picks for the event, and the
+// status-history rows all run inside st.acceptApplicationTxn as ONE transaction
+// (#4 quota race + #5 one accepted position per talent/event).
 app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2036,27 +2271,15 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     if (!found) return res.redirect('/eo/events');
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
     const positionId = String(req.body.position_id || '');
-    const outcome = await withEventLock(found.ev.id, async () => {
-      const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
-      const myChoices = choices.filter((c) => c.application_id === found.app.id);
-      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip'; // not one of their choices
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      // Quota check: accepted choices for this position across the event, excluding this application.
-      const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return 'full';
-      const wasApproved = found.app.status === 'approved';
-      await st.acceptApplicationChoice(found.app.id, positionId);
-      await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
-      // Email the talent their acceptance only on the first approval (mirrors the
-      // admin path's no-spam rule; re-accepting a different position won't resend).
-      if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
-      return 'ok';
-    });
+    const wasApproved = found.app.status === 'approved';
+    // One transaction (#4): quota check + accept + auto-decline the talent's other
+    // picks for this event + status-history rows, all inside acceptApplicationTxn.
+    const outcome = await st.acceptApplicationTxn(found.app.id, positionId, req.staff.id);
     if (outcome === 'full') return res.redirect(backTo + '&err=full');
     if (outcome === 'skip') return res.redirect(backTo);
+    // Email the talent their acceptance only on the first approval (re-accepting a
+    // different position won't resend).
+    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
     res.redirect(backTo + '&ok=accepted');
   } catch (e) { next(e); }
 });
@@ -2068,9 +2291,12 @@ app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, 
     if (!st) return needConfig(req, res);
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
-    const wasRejected = found.app.status === 'rejected';
+    // 'not_selected' = the EO decided against this talent (vs 'not_continued',
+    // which is set automatically when they're accepted into another position).
+    const wasRejected = ['not_selected', 'rejected'].includes(found.app.status);
     await st.clearApplicationAccepted(found.app.id);
-    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.logStatusChange(found.app.id, found.app.status, 'not_selected', req.staff.id);
+    await st.updateApplication(found.app.id, { status: 'not_selected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     if (!wasRejected) notifyPositionRejection(st, found.app, found.ev).catch((e) => console.error('[mail] EO rejection email failed:', e && e.message));
     res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
   } catch (e) { next(e); }
@@ -2084,8 +2310,166 @@ app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, n
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
     await st.clearApplicationAccepted(found.app.id);
+    await st.logStatusChange(found.app.id, found.app.status, 'applied', req.staff.id);
     await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// A: EO designates an applicant as standby (cadangan) for one of their chosen
+// positions, assigning the next rank per position, then emails the availability
+// request. The applicant's bucket becomes 'standby' until accepted or closed.
+app.post('/eo/events/:id/applicants/:appId/standby', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
+    if (!found) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    if (found.app.status === 'approved') return res.redirect(backTo); // already placed
+    const choices = (await st.listApplicationChoices()).filter((c) => c.application_id === found.app.id);
+    if (!choices.some((c) => c.position_id === positionId)) return res.redirect(backTo);
+    const existing = (await st.listStandby(found.ev.id)).filter((s) => s.position_id === positionId);
+    await st.upsertStandby({ event_id: found.ev.id, application_id: found.app.id, position_id: positionId, rank: existing.length + 1, state: 'offered', created_by: req.staff.id });
+    if (found.app.status !== 'standby') { await st.logStatusChange(found.app.id, found.app.status, 'standby', req.staff.id); await st.updateApplication(found.app.id, { status: 'standby' }); }
+    notifyStandbyOffer(st, found.app, found.ev).catch((e) => console.error('[mail] standby offer failed:', e && e.message));
+    res.redirect(backTo + '&ok=standby');
+  } catch (e) { next(e); }
+});
+
+// A: an offered standby talent states availability (v=1 available / v=0 declined).
+// Callable only while the standby window is open (until H-12h), re-checked here.
+app.post('/event/:id/standby', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const positionId = String(req.body.position_id || '');
+    const sb = (await st.listStandbyForApp(app.id)).find((s) => s.position_id === positionId);
+    if (!sb || !['offered', 'available', 'declined'].includes(sb.state)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    if (!standbyWindowOpen(ev)) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&standby=closed');
+    const available = String(req.body.v || '1') === '1';
+    await st.updateStandby(sb.id, { state: available ? 'available' : 'declined', responded_at: new Date().toISOString() });
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&standby=' + (available ? 'ok' : 'declined'));
+  } catch (e) { next(e); }
+});
+
+// D/F: a called substitute confirms (v=1) or declines (v=0) their offer. Confirm
+// locks the slot in one transaction; decline frees the candidate and alerts the EO
+// so they can pick the next one.
+app.post('/event/:id/substitute', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/events');
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const subId = String(req.body.sub_id || '');
+    const sub = (await st.listSubstitutions(ev.id)).find((s) => s.id === subId && s.incoming_application_id === app.id && s.state === 'offered');
+    if (!sub) return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+    const accept = String(req.body.v || '1') === '1';
+    if (accept) {
+      const outcome = await st.confirmSubstituteTxn(sub.id, req.talent.id);
+      // Edge #4: a cross-position pull shrinks the origin position's pool — make it
+      // visible to the EO rather than silent.
+      if (outcome === 'ok' && sub.from_position_id && sub.from_position_id !== sub.position_id) {
+        await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'cross_position_filled', application_id: sub.incoming_application_id, position_id: sub.position_id, data: { name: (req.account && req.account.name) || null, from_position: sub.from_position_id, to_position: sub.position_id } });
+      }
+      return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&sub=' + (outcome === 'ok' ? 'done' : outcome));
+    }
+    // decline: free the candidate's standby and notify the EO to pick the next one.
+    await st.updateSubstitution(sub.id, { state: 'declined', responded_at: new Date().toISOString() });
+    const backSb = (await st.listStandbyForApp(app.id)).find((s) => s.position_id === sub.from_position_id);
+    if (backSb) await st.updateStandby(backSb.id, { state: 'available' });
+    await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'substitute_declined', application_id: sub.outgoing_application_id, position_id: sub.position_id, data: { declined_by: app.id } });
+    res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&sub=declined');
+  } catch (e) { next(e); }
+});
+
+// D: manual substitute picker. Lists available standby candidates for the vacated
+// position (ranked), then standby from OTHER positions (labelled), excluding anyone
+// already holding an accepted slot in this event. Shows contacts so the EO can call.
+async function buildReplaceCandidates(st, ev, posId) {
+  const [standbyRows, apps, choices, talents] = await Promise.all([
+    st.listStandby(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+  ]);
+  const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+  const appById = new Map(apps.map((a) => [a.id, a]));
+  const positions = await st.listEventPositions(ev.id);
+  const posLbl = (pid) => { const p = positions.find((x) => x.position_id === pid); return p ? (p.label_id || p.label_en || pid) : pid; };
+  // apps that already hold an accepted slot in this event (one-per-event exclusion)
+  const eventAppIds = new Set(apps.filter((a) => a.event_id === ev.id).map((a) => a.id));
+  const acceptedAppIds = new Set(choices.filter((c) => c.accepted && eventAppIds.has(c.application_id)).map((c) => c.application_id));
+  const cands = standbyRows
+    .filter((s) => s.state === 'available' && !acceptedAppIds.has(s.application_id))
+    .map((s) => {
+      const app = appById.get(s.application_id) || {};
+      const tt = talentById.get(app.talent_id) || {};
+      return { standbyId: s.id, applicationId: s.application_id, positionId: s.position_id, rank: s.rank || null,
+        name: tt.name || '—', phone: tt.phone || null, samePosition: s.position_id === posId, positionLabel: posLbl(s.position_id) };
+    });
+  cands.sort((a, b) => (a.samePosition === b.samePosition ? 0 : (a.samePosition ? -1 : 1))
+    || String(a.positionLabel).localeCompare(String(b.positionLabel)) || ((a.rank || 999) - (b.rank || 999)));
+  return cands;
+}
+app.get('/eo/events/:id/replace', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const posId = String(req.query.pos || '');
+    const outgoingAppId = String(req.query.app || '');
+    const apps = await st.listApplications();
+    const outApp = apps.find((a) => a.id === outgoingAppId && a.event_id === ev.id) || null;
+    const talents = await st.listTalents();
+    const outName = outApp ? ((talents.find((tt) => tt.id === outApp.talent_id) || {}).name || '—') : '—';
+    const positions = await st.listEventPositions(ev.id);
+    const posLabelStr = ((positions.find((p) => p.position_id === posId) || {}).label_id) || posId;
+    const windowOpen = standbyWindowOpen(ev);
+    const candidates = windowOpen ? await buildReplaceCandidates(st, ev, posId) : [];
+    res.send(V.eoReplacePicker({ staff: eoCtx(req), event: ev, outgoingApp: outgoingAppId, outName, positionId: posId, positionLabel: posLabelStr, candidates, windowOpen, flash: String(req.query.err || ''), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+app.post('/eo/events/:id/replace', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const posId = String(req.body.position_id || '');
+    const outgoingAppId = String(req.body.outgoing_app || '');
+    const standbyId = String(req.body.standby_id || '');
+    const backPicker = '/eo/events/' + ev.id + '/replace?app=' + encodeURIComponent(outgoingAppId) + '&pos=' + encodeURIComponent(posId) + '&lang=' + req.lang;
+    if (!standbyWindowOpen(ev)) return res.redirect(backPicker + '&err=closed');
+    const chosen = (await st.listStandby(ev.id)).find((s) => s.id === standbyId && s.state === 'available');
+    if (!chosen) return res.redirect(backPicker + '&err=gone');
+    // deadline: min(now + 24h, event start); fall back to now + 24h if no start.
+    const startMs = eventStartMs(ev);
+    const dlMs = Math.min(Date.now() + 24 * 3600 * 1000, startMs == null ? Infinity : startMs);
+    const deadlineAt = new Date(Number.isFinite(dlMs) ? dlMs : Date.now() + 24 * 3600 * 1000).toISOString();
+    const subId = await st.offerSubstituteTxn({ event_id: ev.id, position_id: posId, outgoing_application_id: outgoingAppId, incoming_application_id: chosen.application_id, from_position_id: chosen.position_id, deadline_at: deadlineAt, created_by: req.staff.id });
+    if (!subId) return res.redirect(backPicker + '&err=ineligible');
+    const incomingApp = (await st.listApplications()).find((a) => a.id === chosen.application_id);
+    if (incomingApp) notifySubstituteOffer(st, incomingApp, ev, deadlineAt).catch((e) => console.error('[mail] substitute offer failed:', e && e.message));
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=offered');
+  } catch (e) { next(e); }
+});
+
+// E: super admin marks/unmarks a cancellation as an emergency, so it is excluded
+// from the talent's reliability count (illness, family emergency, etc.).
+app.post('/admin/applications/:id/cancel-emergency', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = await st.getApplication(req.params.id);
+    if (app && app.status === 'cancelled') await st.updateApplication(app.id, { cancel_is_emergency: !app.cancel_is_emergency });
+    res.redirect(safeNext(req.body.next) || '/admin/applications');
   } catch (e) { next(e); }
 });
 
@@ -2297,6 +2681,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
+        reliability: computeReliability(a.talent_id, apps, eventById),
       };
     });
     // Attendance links: one per event that has any approved talent, for on-site PICs.
@@ -2346,6 +2731,7 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
     } else {
       patch.status = 'rejected';
     }
+    if (prior && prior.status !== patch.status) await st.logStatusChange(req.params.id, prior.status, patch.status, req.staff.id);
     await st.updateApplication(req.params.id, patch);
     // On the first approval (transition into approved), email the talent their placement.
     // Fire-and-forget: a mail hiccup must never block or fail the approval itself.
@@ -2368,24 +2754,13 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
     const positionId = String(req.body.position_id || '');
     const app0 = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app0) return res.redirect('/admin/applications');
-    await withEventLock(app0.event_id, async () => {
-      const apps = await st.listApplications();
-      const app = apps.find((a) => a.id === req.params.id);
-      if (!app) return;
-      const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return; // not one of their picks
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
-      const wasApproved = app.status === 'approved';
-      await st.acceptApplicationChoice(app.id, positionId);
-      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
-      if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
-    });
+    const wasApproved = app0.status === 'approved';
+    // One transaction (#4): mirrors the EO accept path.
+    const outcome = await st.acceptApplicationTxn(app0.id, positionId, req.staff.id);
+    if (outcome === 'ok' && !wasApproved) {
+      const ev = (await st.listEvents()).find((e) => e.id === app0.event_id);
+      if (ev) notifyPositionAcceptance(st, app0, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+    }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -2396,9 +2771,10 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
     if (!st) return needConfig(req, res);
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
-    const wasRejected = app.status === 'rejected';
+    const wasRejected = ['not_selected', 'rejected'].includes(app.status);
     await st.clearApplicationAccepted(app.id);
-    await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.logStatusChange(app.id, app.status, 'not_selected', req.staff.id);
+    await st.updateApplication(app.id, { status: 'not_selected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     if (!wasRejected) {
       const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
       notifyPositionRejection(st, app, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
@@ -2414,6 +2790,7 @@ app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_adm
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
     await st.clearApplicationAccepted(app.id);
+    await st.logStatusChange(app.id, app.status, 'applied', req.staff.id);
     await st.updateApplication(app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
@@ -2471,6 +2848,18 @@ async function notifyPositionRejection(st, app, ev) {
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
   });
 }
+
+// Base URL for links inside emails (no req available in fire-and-forget notifiers).
+function appBase() { return (process.env.APP_BASE_URL || 'https://talent.20fit.id').replace(/\/+$/, ''); }
+// Compact WIB timestamp for email deadlines.
+function fmtDeadlineWIB(iso) { try { return new Date(iso).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }); } catch (_) { return ''; } }
+// Cancellation/standby flow notifiers (position-free, policy F). Each resolves the
+// talent's email and points them to the web to see the detail + click approval.
+async function _talentEmail(st, app) { const a = await st.getAccountById(app.talent_id); const to = a && a.login; return (to && /@/.test(to)) ? { to, name: a.name } : null; }
+async function notifyStandbyOffer(st, app, ev) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'standby' }); }
+async function notifySubstituteOffer(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'substitute', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
+async function notifyDecisionReminder(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'reminder', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
+async function notifyClosing(st, app, ev, kind) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendClosingEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', kind }); }
 
 // --- H-1 event reminders --------------------------------------------------
 // All date math is done in Asia/Jakarta (WIB) so "tomorrow" matches the local
@@ -2531,6 +2920,41 @@ async function runDueReminders(st) {
   }
 }
 
+// A/D: hourly maintenance for the standby/substitute flow. Deactivates the standby
+// list at H-12h, expires overdue substitute offers (frees them + alerts the EO +
+// emails the lapsed candidate), and sends a pre-deadline reminder once. Idempotent
+// via state transitions + reminded_at, so it is safe to run every hour.
+async function runStandbyMaintenance(st) {
+  if (!st) return { expiredStandby: 0, expiredOffers: 0, reminders: 0 };
+  const events = await st.listEvents().catch(() => []);
+  const now = Date.now();
+  const active = events.filter((e) => e.is_active && !e.completed_at && eventStartMs(e) != null && eventStartMs(e) > now - 24 * 3600 * 1000);
+  let exSb = 0, exOf = 0, rem = 0;
+  for (const ev of active) {
+    const [standby, subs] = await Promise.all([st.listStandby(ev.id).catch(() => []), st.listSubstitutions(ev.id).catch(() => [])]);
+    if (!standbyWindowOpen(ev)) {
+      for (const s of standby) { if (['offered', 'available'].includes(s.state)) { await st.updateStandby(s.id, { state: 'expired' }); exSb++; } }
+    }
+    for (const sub of subs) {
+      if (sub.state !== 'offered') continue;
+      const dl = sub.deadline_at ? new Date(sub.deadline_at).getTime() : null;
+      if (dl != null && now > dl) {
+        await st.updateSubstitution(sub.id, { state: 'expired' });
+        await st.createEoNotification({ event_id: ev.id, staff_id: sub.created_by || null, kind: 'substitute_expired', application_id: sub.outgoing_application_id, position_id: sub.position_id, data: null });
+        const inApp = await st.getApplication(sub.incoming_application_id);
+        if (inApp) notifyClosing(st, inApp, ev, 'lapsed').catch(() => {});
+        exOf++;
+      } else if (dl != null && !sub.reminded_at && (dl - now) <= 3 * 3600 * 1000) {
+        await st.updateSubstitution(sub.id, { reminded_at: new Date().toISOString() });
+        const inApp = await st.getApplication(sub.incoming_application_id);
+        if (inApp) notifyDecisionReminder(st, inApp, ev, sub.deadline_at).catch(() => {});
+        rem++;
+      }
+    }
+  }
+  return { expiredStandby: exSb, expiredOffers: exOf, reminders: rem };
+}
+
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
 // is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
 // even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
@@ -2538,6 +2962,9 @@ let _remTimer = null;
 function startReminderScheduler() {
   if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
   const tick = () => {
+    // Standby/substitute maintenance runs every hour (state changes are time-
+    // critical); the H-1 courtesy reminders stay gated to daytime WIB.
+    runStandbyMaintenance(db()).catch((e) => console.warn('[standby] tick skipped:', e && e.message));
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
     runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
@@ -2740,6 +3167,443 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
     }
     const q = 'k=' + encodeURIComponent(token) + '&day=' + encodeURIComponent(day) + (doneName ? '&done=' + encodeURIComponent(doneName) : '');
     res.redirect('/absensi/' + encodeURIComponent(eventId) + '?' + q);
+  } catch (e) { next(e); }
+});
+
+// === Talent attendance & reliability system (Tahap 2+) =====================
+// ONE public leader link per EVENT. The leader is external (no login) and sees
+// ONLY name + position + 3-status buttons — never phone/email/personal data.
+// A/B: the leader marks HADIR / TIDAK HADIR ADA KABAR / TIDAK HADIR TANPA KABAR
+// per talent per day. Attendance is the basis of payment by an outside party,
+// so every mark records who (leader name), when, and keeps a full change log.
+
+// Accepted talents of an event grouped by their accepted position, each with
+// per-day attendance rows. STRICTLY name + position + status — this feeds the
+// public leader page, so no phone/email/IG/bank/personal field is ever read.
+async function leaderAttendanceData(st, ev) {
+  const [apps, talents, choices, positions, attRows] = await Promise.all([
+    st.listApplications(), st.listTalents(), st.listApplicationChoices(),
+    st.listEventPositions(ev.id), st.listAttendanceForEvent(ev.id),
+  ]);
+  const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+  const posById = new Map(positions.map((p) => [p.position_id, p]));
+  const attByApp = new Map();
+  attRows.forEach((a) => { const m = attByApp.get(a.application_id) || {}; m[a.event_day] = a; attByApp.set(a.application_id, m); });
+  const acceptedPos = new Map();
+  choices.forEach((c) => { if (c.accepted) acceptedPos.set(c.application_id, c.position_id); });
+  const groups = new Map();
+  apps.filter((a) => a.event_id === ev.id && a.status === 'approved' && acceptedPos.has(a.id)).forEach((a) => {
+    const pid = acceptedPos.get(a.id); const p = posById.get(pid) || {};
+    const label = p.label_id || p.label_en || pid;
+    if (!groups.has(pid)) groups.set(pid, { position_id: pid, label, talents: [] });
+    groups.get(pid).talents.push({ applicationId: a.id, talentId: a.talent_id, name: nameById.get(a.talent_id) || '—', byDay: attByApp.get(a.id) || {} });
+  });
+  const list = [...groups.values()].sort((x, y) => String(x.label).localeCompare(String(y.label), 'id'));
+  list.forEach((g) => g.talents.sort((x, y) => String(x.name).localeCompare(String(y.name), 'id', { sensitivity: 'base' })));
+  return list;
+}
+
+// Public absolute base for building the shareable leader URL.
+function publicBase(req) {
+  const env = String(process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+  if (env) return env;
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  return proto + '://' + req.get('host');
+}
+
+// EO (owner) creates — or re-fetches — the single active leader link for their
+// event. Token is random + long (crypto), never the event id.
+app.post('/eo/events/:id/attendance-link', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    let link = await st.getAttendanceLinkForEvent(ev.id);
+    if (!link) {
+      let token = randomAttToken();
+      for (let i = 0; i < 4 && (await st.getAttendanceLinkByToken(token)); i++) token = randomAttToken();
+      link = await st.createAttendanceLink({ event_id: ev.id, token, created_by: req.staff.id });
+    }
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=link#absen');
+  } catch (e) { next(e); }
+});
+
+// Simpang 5: a leaked link can be revoked. The old token stops working
+// immediately (getAttendanceLinkByToken ignores revoked links); the EO can then
+// generate a fresh, different token.
+app.post('/eo/events/:id/attendance-link/revoke', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const link = await st.getAttendanceLinkForEvent(ev.id);
+    if (link) await st.revokeAttendanceLink(link.id);
+    res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang + '&ok=revoked#absen');
+  } catch (e) { next(e); }
+});
+
+// Resolve a leader link token -> { link, ev } or null.
+async function resolveAttLink(st, token) {
+  const link = await st.getAttendanceLinkByToken(String(token || ''));
+  if (!link) return null;
+  const ev = (await st.listEvents()).find((e) => e.id === link.event_id) || null;
+  if (!ev) return null;
+  return { link, ev };
+}
+function leaderName(req) { try { return decodeURIComponent(String((req.cookies && req.cookies.att_name) || '')).trim().slice(0, 80); } catch (_) { return ''; } }
+
+// Tahap 7: notify the talent on EVERY attendance status change (best-effort, so
+// a mail hiccup never blocks or breaks the mark). Fire-and-forget.
+function notifyTalentAttendance(st, ev, talentId, day, status, markedByName, lang) {
+  (async () => {
+    try {
+      const acc = await st.getAccountById(talentId);
+      if (!acc || !acc.login) return;
+      await mailer.sendAttendanceEmail({ to: acc.login, name: acc.name, lang: lang || 'id', eventName: ev.name, day, status, markedBy: markedByName });
+    } catch (_) { /* non-fatal */ }
+  })().catch(() => {});
+}
+
+// Public leader page. No login. Window is enforced on the server.
+app.get('/absen/:token', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return res.status(404).send(V.leaderAttendancePage({ invalid: true, lang: req.lang }));
+    const { ev } = found;
+    const now = Date.now();
+    const openMs = attendanceOpenMs(ev); const closeMs = correctionCloseMs(ev);
+    const active = attendanceWindowActive(ev, now);
+    const notYet = openMs != null && now < openMs;
+    const closed = closeMs != null && now > closeMs;
+    if (!active) {
+      return res.send(V.leaderAttendancePage({ closedWindow: true, notYet, closed, event: ev, eventDate: eventDateStr(ev), openMs, closeMs, lang: req.lang }));
+    }
+    const name = leaderName(req);
+    if (!name) return res.send(V.leaderAttendancePage({ needName: true, event: ev, eventDate: eventDateStr(ev), token: req.params.token, lang: req.lang }));
+    const days = eventDays(ev);
+    const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const groups = await leaderAttendanceData(st, ev);
+    res.send(V.leaderAttendancePage({ event: ev, eventDate: eventDateStr(ev), groups, days, day, token: req.params.token, leaderName: name, lang: req.lang, saved: String(req.query.saved || '') }));
+  } catch (e) { next(e); }
+});
+
+// Public: leader records their name (mandatory, no login). Stored in a cookie
+// and written onto every mark for payment-dispute traceability.
+app.post('/absen/:token/name', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return res.status(404).send(V.leaderAttendancePage({ invalid: true, lang: req.lang }));
+    const name = String(req.body.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (name.length >= 2) res.cookie('att_name', encodeURIComponent(name), { maxAge: 30 * 24 * 3600 * 1000, sameSite: 'lax', path: '/', httpOnly: true });
+    res.redirect('/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// Public: leader clears their stored name (to re-enter it before the list).
+app.get('/absen/:token/name-reset', (req, res) => {
+  res.clearCookie('att_name', { path: '/' });
+  res.redirect('/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang);
+});
+
+// --- Tahap 3: EO attendance recap + CSV export -----------------------------
+// Talents grouped by position, each day's status, plus per-day + overall
+// counts. The EO oversees on-site marking here; a super admin reuses the same
+// shape (Tahap 5).
+async function attendanceRecap(st, ev) {
+  const groups = await leaderAttendanceData(st, ev);
+  const days = eventDays(ev);
+  const blank = () => ({ present: 0, absent_notified: 0, absent_no_notice: 0, unmarked: 0 });
+  const countsByDay = {}; days.forEach((d) => { countsByDay[d] = blank(); });
+  const overall = blank();
+  let unmarkedTotal = 0; let markedTotal = 0;
+  groups.forEach((g) => g.talents.forEach((tt) => days.forEach((d) => {
+    const row = tt.byDay[d] || null;
+    const s = row && row.status ? row.status : null;
+    const key = s || 'unmarked';
+    if (countsByDay[d][key] != null) countsByDay[d][key]++;
+    if (overall[key] != null) overall[key]++;
+    if (s) markedTotal++; else unmarkedTotal++;
+  })));
+  return { groups, days, countsByDay, overall, unmarkedTotal, markedTotal };
+}
+
+function csvCell(v) { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+const ATT_CSV_LABEL = {
+  id: { present: 'Hadir', absent_notified: 'Tidak hadir (ada kabar)', absent_no_notice: 'Tidak hadir (tanpa kabar)', unmarked: 'Belum ditandai' },
+  en: { present: 'Present', absent_notified: 'Absent (notified)', absent_no_notice: 'Absent (no notice)', unmarked: 'Not marked' },
+};
+async function attendanceCsv(st, ev, lang) {
+  const L = lang === 'en' ? 'en' : 'id';
+  const recap = await attendanceRecap(st, ev);
+  const head = L === 'en'
+    ? ['Position', 'Name', 'Date', 'Status', 'Status code', 'Note', 'Marked by', 'Marked at (WIB)']
+    : ['Posisi', 'Nama', 'Tanggal', 'Status', 'Kode status', 'Keterangan', 'Ditandai oleh', 'Waktu ditandai (WIB)'];
+  const lines = [head.map(csvCell).join(',')];
+  const whenWib = (iso) => { try { return new Date(iso).toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }); } catch (_) { return ''; } };
+  recap.groups.forEach((g) => g.talents.forEach((tt) => recap.days.forEach((d) => {
+    const row = tt.byDay[d] || null; const s = row && row.status ? row.status : 'unmarked';
+    lines.push([
+      g.label, tt.name, d, ATT_CSV_LABEL[L][s] || s, (s === 'unmarked' ? '' : s),
+      (row && row.note) || '', (row && row.marked_by_name) || '', (row && row.marked_at) ? whenWib(row.marked_at) : '',
+    ].map(csvCell).join(','));
+  })));
+  return lines.join('\r\n');
+}
+function attFilenameSlug(name) { return String(name || 'event').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'event'; }
+
+app.get('/eo/events/:id/absensi', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const recap = await attendanceRecap(st, ev);
+    const days = recap.days; const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const link = await st.getAttendanceLinkForEvent(ev.id);
+    res.send(V.eoAttendancePage({
+      staff: eoCtx(req), event: ev, eventDate: eventDateStr(ev), recap, day, lang: req.lang,
+      active: attendanceWindowActive(ev), locked: attendanceLocked(ev), openMs: attendanceOpenMs(ev), closeMs: correctionCloseMs(ev),
+      linkUrl: link ? publicBase(req) + '/absen/' + link.token : null,
+      flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') },
+    }));
+  } catch (e) { next(e); }
+});
+
+// EO marks/corrects a talent's status within the window (recorded as the EO).
+app.post('/eo/events/:id/absensi/mark', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const back = '/eo/events/' + ev.id + '/absensi?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    if (!attendanceWindowActive(ev)) return res.redirect(back + '&err=locked');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return res.redirect(back + '&err=bad');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return res.redirect(back + '&err=bad');
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return res.redirect(back + '&err=bad');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return res.redirect(back + '&err=bad');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: null });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, req.staff.name, req.lang);
+    }
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id/absensi.csv', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const csv = await attendanceCsv(st, ev, req.lang);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="absensi-' + attFilenameSlug(ev.name) + '.csv"');
+    res.send('﻿' + csv); // BOM so Excel reads UTF-8 correctly
+  } catch (e) { next(e); }
+});
+
+// --- Tahap 5: Super Admin correction queue + locked-day edit ---------------
+// The super admin is the only party who can change data after the 10-day lock,
+// and who decides correction requests. They see ALL events (cross-EO); every
+// change carries a mandatory recorded reason + a change-log row.
+app.get('/admin/koreksi', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [corrs, talents, events, positions] = await Promise.all([st.listCorrections({}), st.listTalents(), st.listEvents(), st.listPositions()]);
+    const tById = new Map(talents.map((t) => [t.id, t.name]));
+    const evById = new Map(events.map((e) => [e.id, e]));
+    const posLbl = new Map(positions.map((p) => [p.id, p.label_id || p.label_en || p.id]));
+    const items = [];
+    for (const c of corrs) {
+      const att = await st.getAttendanceById(c.attendance_id);
+      if (!att) continue;
+      const ev = evById.get(att.event_id) || null;
+      items.push({
+        id: c.id, state: c.state, reason: c.reason, decisionNote: c.decision_note, createdAt: c.created_at, decidedAt: c.decided_at,
+        talentName: tById.get(c.talent_id) || '—', eventName: ev ? ev.name : '—', eventId: att.event_id, day: att.event_day,
+        posLabel: posLbl.get(att.position_id) || att.position_id, status: att.status || null, attendanceId: att.id,
+      });
+    }
+    const pending = items.filter((i) => i.state === 'pending');
+    const decided = items.filter((i) => i.state !== 'pending').sort((a, b) => String(b.decidedAt || '').localeCompare(String(a.decidedAt || ''))).slice(0, 50);
+    res.send(V.adminCorrections({ staff: staffCtx(req), pending, decided, lang: req.lang, flash: { ok: String(req.query.ok || '') } }));
+  } catch (e) { next(e); }
+});
+
+// Decide one correction. Approve -> set the record to the chosen status with a
+// mandatory reason (change-logged as the admin). Reject -> record the outcome.
+app.post('/admin/koreksi/:id/decide', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const c = await st.getCorrection(req.params.id);
+    if (!c || c.state !== 'pending') return res.redirect('/admin/koreksi');
+    const att = await st.getAttendanceById(c.attendance_id);
+    if (!att) return res.redirect('/admin/koreksi');
+    const decision = String(req.body.decision || '');
+    const note = String(req.body.decision_note || '').trim().slice(0, 500) || null;
+    const nowIso = new Date().toISOString();
+    if (decision === 'approve') {
+      const status = String(req.body.status || '');
+      if (!ATT_STATUSES.includes(status)) return res.redirect('/admin/koreksi?ok=bad');
+      if (!note || note.length < 3) return res.redirect('/admin/koreksi?ok=needreason'); // mandatory recorded reason
+      const from = att.status || null;
+      if (from !== status) {
+        await st.updateAttendance(att.id, { status, note: status === 'absent_notified' ? (att.note || null) : null, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso });
+        await st.addAttendanceLog({ attendance_id: att.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Koreksi disetujui: ' + note });
+        const evK = (await st.listEvents()).find((e) => e.id === att.event_id);
+        if (evK) notifyTalentAttendance(st, evK, att.talent_id, att.event_day, status, req.staff.name, req.lang);
+      }
+      await st.updateCorrection(c.id, { state: 'approved', decided_by: req.staff.id, decided_at: nowIso, decision_note: note });
+    } else if (decision === 'reject') {
+      await st.updateCorrection(c.id, { state: 'rejected', decided_by: req.staff.id, decided_at: nowIso, decision_note: note });
+    } else {
+      return res.redirect('/admin/koreksi');
+    }
+    res.redirect('/admin/koreksi?ok=1');
+  } catch (e) { next(e); }
+});
+
+// Admin per-event attendance: recap + edit that works even after the lock, each
+// change requiring a recorded reason. Also renders the full change history.
+app.get('/admin/events/:id/absensi', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id) || null;
+    if (!ev) return res.redirect('/admin/manage');
+    const recap = await attendanceRecap(st, ev);
+    const days = recap.days; const today = jakartaDateStr();
+    let day = String(req.query.day || '');
+    if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
+    const logs = await st.listAttendanceLogsForEvent(ev.id);
+    const logsByAtt = {};
+    logs.forEach((l) => { (logsByAtt[l.attendance_id] = logsByAtt[l.attendance_id] || []).push(l); });
+    res.send(V.adminAttendancePage({
+      staff: staffCtx(req), event: ev, eventDate: eventDateStr(ev), recap, day, lang: req.lang,
+      locked: attendanceLocked(ev), closeMs: correctionCloseMs(ev), logsByAtt,
+      flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') },
+    }));
+  } catch (e) { next(e); }
+});
+
+// Admin marks/corrects any day (even locked) — mandatory reason, change-logged.
+app.post('/admin/events/:id/absensi/mark', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = (await st.listEvents()).find((e) => e.id === req.params.id) || null;
+    if (!ev) return res.redirect('/admin/manage');
+    const back = '/admin/events/' + ev.id + '/absensi?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return res.redirect(back + '&err=bad');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return res.redirect(back + '&err=bad');
+    const reason = String(req.body.reason || '').trim().slice(0, 500);
+    if (reason.length < 3) return res.redirect(back + '&err=needreason'); // mandatory recorded reason
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return res.redirect(back + '&err=bad');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return res.redirect(back + '&err=bad');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: req.staff.name, marked_by_staff: req.staff.id, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: 'Admin: ' + reason });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, req.staff.name, req.lang);
+    }
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
+// Tahap 7 (I): Super Admin flags/unflags an incident as an EMERGENCY, excluding
+// it from the talent's violation record. Who + reason are recorded; logged.
+app.post('/admin/absensi/:attendanceId/emergency', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const att = await st.getAttendanceById(req.params.attendanceId);
+    if (!att) return res.redirect('/admin/manage');
+    const back = '/admin/events/' + att.event_id + '/absensi?lang=' + req.lang + '&day=' + encodeURIComponent(att.event_day);
+    const on = !att.is_emergency;
+    const reason = String(req.body.reason || '').trim().slice(0, 500) || null;
+    if (on && (!reason || reason.length < 3)) return res.redirect(back + '&err=needreason');
+    const nowIso = new Date().toISOString();
+    await st.updateAttendance(att.id, { is_emergency: on, emergency_by: on ? req.staff.id : null, emergency_reason: on ? reason : null, emergency_at: on ? nowIso : null });
+    await st.addAttendanceLog({ attendance_id: att.id, from_status: att.status, to_status: att.status, changed_by_name: req.staff.name, changed_by_staff: req.staff.id, reason: (on ? 'Ditandai darurat (dikecualikan dari pelanggaran): ' : 'Batal tanda darurat: ') + (reason || '') });
+    res.redirect(back + '&ok=marked');
+  } catch (e) { next(e); }
+});
+
+// Public: leader marks/re-marks one talent's status for one day. Server re-checks
+// the window; writes the attendance row + a change-log entry (never silent).
+app.post('/absen/:token/mark', async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const wantsJson = req.body.ajax === '1' || String(req.get('accept') || '').includes('application/json');
+    const back = '/absen/' + encodeURIComponent(req.params.token) + '?lang=' + req.lang + (req.body.day ? '&day=' + encodeURIComponent(String(req.body.day)) : '');
+    const fail = (code, err) => wantsJson ? res.status(code).json({ ok: false, error: err }) : res.redirect(back + '&saved=' + err);
+    const found = await resolveAttLink(st, req.params.token);
+    if (!found) return fail(404, 'invalid');
+    const { ev } = found;
+    if (!attendanceWindowActive(ev)) return fail(403, 'closed');
+    const name = leaderName(req);
+    if (!name) return fail(400, 'name');
+    const status = String(req.body.status || '');
+    if (!ATT_STATUSES.includes(status)) return fail(400, 'status');
+    const day = String(req.body.day || '');
+    if (!eventDays(ev).includes(day)) return fail(400, 'day');
+    const appId = String(req.body.app || '');
+    const app0 = await st.getApplication(appId);
+    if (!app0 || app0.event_id !== ev.id || app0.status !== 'approved') return fail(400, 'app');
+    const acc = (await st.listApplicationChoices()).find((c) => c.application_id === appId && c.accepted);
+    if (!acc) return fail(400, 'app');
+    const note = status === 'absent_notified' ? (String(req.body.note || '').trim().slice(0, 500) || null) : null;
+    const existing = await st.getAttendance(appId, day);
+    const from = existing ? (existing.status || null) : null;
+    const nowIso = new Date().toISOString();
+    const saved = await st.upsertAttendance({
+      event_id: ev.id, talent_id: app0.talent_id, application_id: appId, position_id: acc.position_id,
+      event_day: day, status, note, marked_by_name: name, marked_by_staff: null, marked_at: nowIso,
+    });
+    if (from !== status) {
+      await st.addAttendanceLog({ attendance_id: saved.id, from_status: from, to_status: status, changed_by_name: name, changed_by_staff: null, reason: null });
+      notifyTalentAttendance(st, ev, app0.talent_id, day, status, name, req.lang);
+    }
+    if (wantsJson) return res.json({ ok: true, app: appId, day, status, note, marked_by: name, marked_at: nowIso });
+    res.redirect(back + '&saved=1');
   } catch (e) { next(e); }
 });
 
@@ -3079,7 +3943,13 @@ app.use((err, req, res, next) => {
   res.status(500).send(V.page500(msg));
 });
 
-app.listen(PORT, HOST, () => {
-  console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
-  startReminderScheduler();
-});
+// Start listening only when run directly; requiring this module (e.g. for tests)
+// registers the app and helpers without opening a port.
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
+    startReminderScheduler();
+  });
+}
+
+module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked, computeAttendanceReliability, attendanceVisibility };
