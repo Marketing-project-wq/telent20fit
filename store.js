@@ -423,6 +423,52 @@ function supabaseStore() {
       const { data } = await sb.from('talent_application_status_log').select('*').eq('application_id', applicationId).order('changed_at');
       return data || [];
     },
+    // ---- Standby list (cadangan/siaga) ----
+    async listStandby(eventId) {
+      const { data, error } = await sb.from('talent_event_standby').select('*').eq('event_id', eventId).order('position_id').order('rank', { nullsFirst: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listStandbyForApp(applicationId) {
+      const { data } = await sb.from('talent_event_standby').select('*').eq('application_id', applicationId);
+      return data || [];
+    },
+    async getStandby(id) { const { data } = await sb.from('talent_event_standby').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async upsertStandby({ event_id, application_id, position_id, rank, state, created_by }) {
+      const { data, error } = await sb.from('talent_event_standby')
+        .upsert({ event_id, application_id, position_id, rank: rank == null ? null : rank, state: state || 'offered', created_by: created_by || null }, { onConflict: 'application_id,position_id' })
+        .select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateStandby(id, patch) { const { error } = await sb.from('talent_event_standby').update(patch).eq('id', id); if (error) throw new Error(error.message); },
+    async deleteStandby(id) { await sb.from('talent_event_standby').delete().eq('id', id); },
+    // ---- Substitution history (riwayat pergantian) ----
+    async listSubstitutions(eventId) {
+      const { data, error } = await sb.from('talent_substitution').select('*').eq('event_id', eventId).order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async getSubstitution(id) { const { data } = await sb.from('talent_substitution').select('*').eq('id', id).maybeSingle(); return data || null; },
+    async createSubstitution(row) {
+      const { data, error } = await sb.from('talent_substitution').insert(row).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async updateSubstitution(id, patch) { const { error } = await sb.from('talent_substitution').update(patch).eq('id', id); if (error) throw new Error(error.message); },
+    // ---- EO notifications (pemberitahuan aktif) ----
+    async listEoNotifications(staffId, { unreadOnly } = {}) {
+      let q = sb.from('talent_eo_notification').select('*').eq('staff_id', staffId);
+      if (unreadOnly) q = q.is('read_at', null);
+      const { data } = await q.order('created_at', { ascending: false });
+      return data || [];
+    },
+    async createEoNotification(row) {
+      const { data, error } = await sb.from('talent_eo_notification').insert(row).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async markEoNotificationRead(id) { await sb.from('talent_eo_notification').update({ read_at: new Date().toISOString() }).eq('id', id); },
     async deleteApplication(id) {
       // No FK cascade on talent_application_choices, so remove choices first to
       // avoid leaving orphaned rows behind.
@@ -586,6 +632,9 @@ function memoryStore() {
   const certificates = [];
   const proofs = [];
   const statusLog = [];
+  const standby = [];
+  const substitutions = [];
+  const eoNotifications = [];
   const settings = { ...DEFAULT_SETTINGS };
   let seq = 0;
 
@@ -694,7 +743,7 @@ function memoryStore() {
     async createApplication({ event_id, talent_id, talent_type, role, answers }) {
       // New flow allows one application per (talent, event, position), so no
       // (talent, event) uniqueness here — the apply handlers guard duplicates.
-      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, confirmed_at: null, created_at: now() };
+      const rec = { id: 'app-' + (++seq), event_id, talent_id, talent_type: talent_type || 'main_power', role, answers: answers || null, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, confirmed_at: null, cancelled_at: null, cancel_reason: null, cancel_reason_note: null, cancel_is_emergency: false, cancelled_by: null, created_at: now() };
       applications.push(rec);
       return { id: rec.id };
     },
@@ -732,6 +781,27 @@ function memoryStore() {
     async logStatusChange(applicationId, fromStatus, toStatus, changedBy) { statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, changed_at: now() }); },
     async setApplicationConfirmed(applicationId, on) { const a = applications.find((a) => a.id === applicationId); if (a) a.confirmed_at = on ? now() : null; },
     async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
+    // ---- Standby list (cadangan/siaga) ----
+    async listStandby(eventId) { return standby.filter((s) => s.event_id === eventId).map((s) => ({ ...s })).sort((a, b) => String(a.position_id).localeCompare(String(b.position_id)) || ((a.rank || 999) - (b.rank || 999))); },
+    async listStandbyForApp(applicationId) { return standby.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
+    async getStandby(id) { const s = standby.find((x) => x.id === id); return s ? { ...s } : null; },
+    async upsertStandby({ event_id, application_id, position_id, rank, state, created_by }) {
+      let s = standby.find((x) => x.application_id === application_id && x.position_id === position_id);
+      if (s) { s.rank = rank == null ? null : rank; if (state) s.state = state; }
+      else { s = { id: 'sb-' + (++seq), event_id, application_id, position_id, rank: rank == null ? null : rank, state: state || 'offered', offered_at: now(), responded_at: null, created_by: created_by || null, created_at: now() }; standby.push(s); }
+      return { id: s.id };
+    },
+    async updateStandby(id, patch) { const s = standby.find((x) => x.id === id); if (s) Object.assign(s, patch); },
+    async deleteStandby(id) { const i = standby.findIndex((x) => x.id === id); if (i >= 0) standby.splice(i, 1); },
+    // ---- Substitution history (riwayat pergantian) ----
+    async listSubstitutions(eventId) { return substitutions.filter((s) => s.event_id === eventId).map((s) => ({ ...s })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async getSubstitution(id) { const s = substitutions.find((x) => x.id === id); return s ? { ...s } : null; },
+    async createSubstitution(row) { const rec = { id: 'sub-' + (++seq), state: 'offered', offered_at: now(), responded_at: null, deadline_at: null, created_by: null, created_at: now(), ...row }; substitutions.push(rec); return { id: rec.id }; },
+    async updateSubstitution(id, patch) { const s = substitutions.find((x) => x.id === id); if (s) Object.assign(s, patch); },
+    // ---- EO notifications (pemberitahuan aktif) ----
+    async listEoNotifications(staffId, { unreadOnly } = {}) { return eoNotifications.filter((n) => n.staff_id === staffId && (!unreadOnly || !n.read_at)).map((n) => ({ ...n })).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))); },
+    async createEoNotification(row) { const rec = { id: 'eon-' + (++seq), data: null, read_at: null, created_at: now(), ...row }; eoNotifications.push(rec); return { id: rec.id }; },
+    async markEoNotificationRead(id) { const n = eoNotifications.find((x) => x.id === id); if (n) n.read_at = now(); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
