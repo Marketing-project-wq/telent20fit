@@ -578,6 +578,26 @@ async function sendStandbyFadeEmail({ to, name, lang, eventName }) {
   const subj = id ? ('Kabar status cadangan kamu — ' + (eventName || 'Event 20FIT')) : ('Your standby status — ' + (eventName || '20FIT Event'));
   return _send(to, subj, standbyFadeEmailHtml({ name, lang, eventName }), 'standby-fade');
 }
+// After the talent CONFIRMS: a "you're in" email that MAY include the Man Power
+// group link + their station. Only sent post-confirmation (never before), so the
+// group link is not exposed until they have agreed on the web.
+function confirmedEmailHtml({ name, lang, eventName, station, groupUrl }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Kehadiranmu untuk <b>' + (eventName || '') + '</b> sudah <b>dikonfirmasi</b>. Sampai jumpa di lokasi!', st: 'Station kamu', grp: 'Gabung grup Man Power di sini:', foot: 'Detail juga bisa kamu lihat kapan saja di dashboard 20FIT Talent.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'Your attendance for <b>' + (eventName || '') + '</b> is <b>confirmed</b>. See you there!', st: 'Your station', grp: 'Join the Man Power group here:', foot: 'You can also see the details anytime on your 20FIT Talent dashboard.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.body}</p>
+    ${station ? `<p style="background:#eef1f6;border-radius:8px;padding:10px 12px">📍 ${l.st}: <b>${station}</b></p>` : ''}
+    ${groupUrl ? `<p style="margin:18px 0">${l.grp}<br><a href="${groupUrl}" style="background:#25D366;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:700;display:inline-block;margin-top:8px">💬 ${id ? 'Gabung Grup Man Power' : 'Join Man Power Group'}</a></p>` : ''}
+    <p style="color:#6b6b70;font-size:12.5px">${l.foot}</p>
+  </div>`;
+}
+async function sendConfirmedEmail({ to, name, lang, eventName, station, groupUrl }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Kehadiranmu dikonfirmasi — ' + (eventName || 'Event 20FIT')) : ('Your attendance is confirmed — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, confirmedEmailHtml({ name, lang, eventName, station, groupUrl }), 'confirmed');
+}
 async function sendOfferEmail({ to, name, lang, eventName, deadline, link, kind }) {
   const id = lang !== 'en';
   const subj = id
@@ -586,4 +606,4 @@ async function sendOfferEmail({ to, name, lang, eventName, deadline, link, kind 
   return _send(to, subj, offerEmailHtml({ name, lang, eventName, deadline, link, kind }), 'offer:' + (kind || 'offer'));
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml, sendOfferEmail, offerEmailHtml, sendScreeningEmail, screeningEmailHtml, sendStandbyFadeEmail, standbyFadeEmailHtml };
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml, sendOfferEmail, offerEmailHtml, sendScreeningEmail, screeningEmailHtml, sendStandbyFadeEmail, standbyFadeEmailHtml, sendConfirmedEmail, confirmedEmailHtml };

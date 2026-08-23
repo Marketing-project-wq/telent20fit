@@ -5885,7 +5885,8 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
       const isMainPower = !!(account && account.talent_type === 'main_power');
       const stationLine = (ctx.myApp && ctx.myApp.station)
         ? `<div style="background:#eef1f6;border-radius:8px;padding:9px 11px;font-size:13px">📍 ${t('ta.yourStation')}: <b>${esc(ctx.myApp.station)}</b></div>` : '';
-      const groupLine = (isMainPower && e.mp_group_url)
+      // Group link appears only AFTER the talent confirms (they get an email too).
+      const groupLine = (isMainPower && e.mp_group_url && os === 'confirmed')
         ? `<a href="${esc(e.mp_group_url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="width:100%;box-sizing:border-box">💬 ${t('ta.joinGroup')}</a>` : '';
       const assignInfo = stationLine + groupLine;
       action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">

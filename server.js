@@ -1511,6 +1511,9 @@ app.post('/event/:id/konfirmasi/setuju', requireAnyTalentReady(), async (req, re
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
     if (!app) return res.redirect(back);
     const out = await st.confirmOfferTxn(app.id, req.talent.id); // atomic (advisory-locked RPC)
+    // On confirmation only, email the "you're in" note WITH the Man Power group
+    // link (main_power) + station. Never before confirming.
+    if (out === 'ok') notifyConfirmed(st, app, ev, req.account).catch(() => {});
     res.redirect(back + '&k=' + (out === 'ok' ? 'setuju' : out === 'closed' ? 'closed' : 'skip'));
   } catch (e) { next(e); }
 });
@@ -2968,6 +2971,15 @@ async function notifyStandbyOffer(st, app, ev) { const m = await _talentEmail(st
 async function notifySubstituteOffer(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'substitute', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
 async function notifyDecisionReminder(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'reminder', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
 async function notifyClosing(st, app, ev, kind) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendClosingEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', kind }); }
+// Post-confirmation email: "you're in" + Man Power group link (main_power only) +
+// station. Group link is revealed here (after the talent agreed), never in the offer.
+async function notifyConfirmed(st, app, ev, account) {
+  const m = await _talentEmail(st, app);
+  if (!m) return;
+  const isMainPower = !!(account && account.talent_type === 'main_power') || app.talent_type === 'main_power';
+  const groupUrl = (isMainPower && ev && ev.mp_group_url) ? ev.mp_group_url : null;
+  await mailer.sendConfirmedEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', station: app.station || null, groupUrl });
+}
 // F1: email every still-in-selection applicant that screening has begun.
 async function notifyScreening(st, ev) {
   const apps = (await st.listApplications()).filter((a) => a.event_id === ev.id && ['applied', 'pending', 'under_review'].includes(a.status));
