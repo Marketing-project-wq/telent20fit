@@ -1116,6 +1116,20 @@ function eventStartMs(ev) {
   return Number.isNaN(ms) ? null : ms;
 }
 function hoursUntilEvent(ev) { const ms = eventStartMs(ev); return ms == null ? null : (ms - Date.now()) / 3600000; }
+
+// A: an offer's answer deadline, anchored at the moment the offer email was SENT
+// (offer_sent_at). 48 hours, OR up to 12 hours before the event — whichever is
+// first. If the event is <12h away, cap at the event start (never past it).
+const OFFER_WINDOW_MS = 48 * 3600 * 1000;
+const OFFER_SAFEGUARD_MS = 12 * 3600 * 1000;
+function offerDeadlineMs(sentMs, ev) {
+  const start = eventStartMs(ev);
+  if (start == null) return sentMs + OFFER_WINDOW_MS; // no start instant known -> plain 48h
+  let dl = Math.min(sentMs + OFFER_WINDOW_MS, start - OFFER_SAFEGUARD_MS);
+  if (dl <= sentMs) dl = Math.min(sentMs + OFFER_WINDOW_MS, start); // late accept: until event start
+  if (dl < sentMs) dl = sentMs; // event already started (edge) -> immediate
+  return dl;
+}
 // Talent may self-cancel until H-1 day (24h before start). Unknown start = leave
 // open (never close the exit early — the spec's rationale).
 function cancelWindowOpen(ev) { const h = hoursUntilEvent(ev); return h == null ? true : h > 24; }
@@ -1461,6 +1475,58 @@ app.post('/event/:id/confirm', requireAnyTalentReady(), async (req, res, next) =
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
     if (app && app.status === 'approved') await st.setApplicationConfirmed(app.id, String(req.body.v || '1') === '1');
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+  } catch (e) { next(e); }
+});
+
+// B: dedicated OFFER confirmation page. The email links straight here; an
+// unauthenticated visitor is sent to login with ?next= back to this page
+// (safeNext keeps it internal), then lands here — never on the generic dashboard.
+async function offerCtx(st, talentId, ev) {
+  const app = (await st.listApplicationsForTalent(talentId)).find((a) => a.event_id === ev.id) || null;
+  let posLabel = null;
+  if (app) {
+    const choices = await st.listApplicationChoices();
+    const acc = choices.find((c) => c.application_id === app.id && c.accepted);
+    if (acc) { const positions = await st.listEventPositions(ev.id); const p = positions.find((x) => x.position_id === acc.position_id); posLabel = p ? (p.label_id || p.label_en || null) : null; }
+  }
+  return { app, posLabel };
+}
+app.get('/event/:id/konfirmasi', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/talent');
+    const { app, posLabel } = await offerCtx(st, req.talent.id, ev);
+    res.send(V.offerConfirmPage({ account: req.account, event: ev, eventDate: eventDateStr(ev), app, posLabel, lang: req.lang, flash: String(req.query.k || '') }));
+  } catch (e) { next(e); }
+});
+app.post('/event/:id/konfirmasi/setuju', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/talent');
+    const back = '/event/' + eventRef(ev) + '/konfirmasi?lang=' + req.lang;
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect(back);
+    const out = await st.confirmOfferTxn(app.id, req.talent.id); // atomic (advisory-locked RPC)
+    res.redirect(back + '&k=' + (out === 'ok' ? 'setuju' : out === 'closed' ? 'closed' : 'skip'));
+  } catch (e) { next(e); }
+});
+app.post('/event/:id/konfirmasi/tolak', requireAnyTalentReady(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = findEventByRef(await st.listEvents(), req.params.id);
+    if (!ev) return res.redirect('/talent');
+    const back = '/event/' + eventRef(ev) + '/konfirmasi?lang=' + req.lang;
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.event_id === ev.id);
+    if (!app) return res.redirect(back);
+    const reason = CANCEL_REASONS.includes(String(req.body.reason || '')) ? String(req.body.reason) : 'other';
+    const note = String(req.body.note || '').trim().slice(0, 300) || null;
+    const out = await st.declineOfferTxn(app.id, reason, note, req.talent.id); // atomic (advisory-locked RPC)
+    res.redirect(back + '&k=' + (out === 'ok' ? 'tolak' : 'skip'));
   } catch (e) { next(e); }
 });
 
@@ -1998,10 +2064,30 @@ function eoSelMap(positions) {
 function eoEventView(ev, positions, apps, choices) {
   const evApps = apps.filter((a) => a.event_id === ev.id);
   const appIds = new Set(evApps.map((a) => a.id));
+  const offerStateByApp = new Map(evApps.map((a) => [a.id, a.offer_state || null]));
   const evChoices = (choices || []).filter((c) => appIds.has(c.application_id));
-  const filled = {}; const applicants = {};
-  evChoices.forEach((c) => { applicants[c.position_id] = (applicants[c.position_id] || 0) + 1; if (c.accepted) filled[c.position_id] = (filled[c.position_id] || 0) + 1; });
-  const pos = (positions || []).map((p) => { const f = filled[p.position_id] || 0; return Object.assign({}, p, { filled: f, applicants: applicants[p.position_id] || 0, full: p.quota > 0 && f >= p.quota }); });
+  // G: a slot is only TERISI when the talent has CONFIRMED. A pending offer is
+  // reserved (counts toward capacity so the EO can't over-offer) but shown apart.
+  const filled = {}; const applicants = {}; const confirmed = {}; const pending = {}; const declined = {}; const lapsed = {};
+  const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+  evChoices.forEach((c) => {
+    bump(applicants, c.position_id);
+    const os = offerStateByApp.get(c.application_id);
+    if (c.accepted) {
+      bump(filled, c.position_id); // capacity reserved (pending offer + confirmed)
+      if (os === 'confirmed') bump(confirmed, c.position_id);
+      else if (os === 'offered') bump(pending, c.position_id);
+    } else if (c.outcome === 'declined') bump(declined, c.position_id);
+    else if (c.outcome === 'lapsed') bump(lapsed, c.position_id);
+  });
+  const pos = (positions || []).map((p) => {
+    const f = filled[p.position_id] || 0;
+    return Object.assign({}, p, {
+      filled: f, applicants: applicants[p.position_id] || 0, full: p.quota > 0 && f >= p.quota,
+      confirmed: confirmed[p.position_id] || 0, pending: pending[p.position_id] || 0,
+      declined: declined[p.position_id] || 0, lapsed: lapsed[p.position_id] || 0,
+    });
+  });
   const allFull = pos.length > 0 && pos.every((p) => p.full);
   let display;
   if (ev.completed_at) display = 'done';
@@ -2145,7 +2231,12 @@ app.post('/eo/events/:id/close', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
-    if (ev) await st.updateEvent(ev.id, req.body.reopen ? { status: 'published', reg_closed_at: null } : { status: 'closed', reg_closed_at: new Date().toISOString() });
+    if (ev) {
+      const closing = !req.body.reopen && !ev.reg_closed_at; // published -> closed (first time)
+      await st.updateEvent(ev.id, req.body.reopen ? { status: 'published', reg_closed_at: null } : { status: 'closed', reg_closed_at: new Date().toISOString() });
+      // F1: tell applicants still in the pool that screening has begun (no position).
+      if (closing) notifyScreening(st, ev).catch(() => {});
+    }
     res.redirect('/eo/events');
   } catch (e) { next(e); }
 });
@@ -2209,6 +2300,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
           phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
           hyroxStatus: tt.hyrox_cert_status || 'none',
           status: a.status || 'applied', createdAt: a.created_at, confirmedAt: a.confirmed_at || null, choices: ch,
+          offerState: a.offer_state || null, offerDeadline: a.offer_deadline || null,
           reliability: computeReliability(a.talent_id, apps, eventsById, myEventIds),
           attRel: computeAttendanceReliability(a.talent_id, allAttRows, eventsById, positionLabelById, req.staff.id, false),
         };
@@ -2271,15 +2363,24 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     if (!found) return res.redirect('/eo/events');
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
     const positionId = String(req.body.position_id || '');
-    const wasApproved = found.app.status === 'approved';
+    // Snapshot the offer state BEFORE, so a plain re-click on an already-open offer
+    // to the SAME position doesn't reset the clock or resend the email.
+    const prevOfferState = found.app.offer_state || null;
+    const prevAccepted = (await st.listApplicationChoices()).find((c) => c.application_id === found.app.id && c.accepted);
+    const prevPos = prevAccepted ? prevAccepted.position_id : null;
     // One transaction (#4): quota check + accept + auto-decline the talent's other
     // picks for this event + status-history rows, all inside acceptApplicationTxn.
     const outcome = await st.acceptApplicationTxn(found.app.id, positionId, req.staff.id);
     if (outcome === 'full') return res.redirect(backTo + '&err=full');
     if (outcome === 'skip') return res.redirect(backTo);
-    // Email the talent their acceptance only on the first approval (re-accepting a
-    // different position won't resend).
-    if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
+    // A: acceptance is now a time-boxed OFFER. Create/refresh it and send the offer
+    // email (which anchors the 48h/H-12h deadline). Skip if this is just an
+    // idempotent re-click on an offer already open/confirmed for the same position.
+    const samePosOpen = (prevOfferState === 'offered' || prevOfferState === 'confirmed') && prevPos === positionId;
+    if (!samePosOpen) {
+      await st.setOfferOffered(found.app.id, new Date().toISOString());
+      await deliverOffer(st, found.app.id, found.ev, 'offer').catch(() => {});
+    }
     res.redirect(backTo + '&ok=accepted');
   } catch (e) { next(e); }
 });
@@ -2860,6 +2961,37 @@ async function notifyStandbyOffer(st, app, ev) { const m = await _talentEmail(st
 async function notifySubstituteOffer(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'substitute', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
 async function notifyDecisionReminder(st, app, ev, deadlineIso) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendDecisionEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', link: appBase() + '/event/' + (ev ? ev.id : ''), kind: 'reminder', deadline: deadlineIso ? fmtDeadlineWIB(deadlineIso) : null }); }
 async function notifyClosing(st, app, ev, kind) { const m = await _talentEmail(st, app); if (!m) return; await mailer.sendClosingEmail({ to: m.to, name: m.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', kind }); }
+// F1: email every still-in-selection applicant that screening has begun.
+async function notifyScreening(st, ev) {
+  const apps = (await st.listApplications()).filter((a) => a.event_id === ev.id && ['applied', 'pending', 'under_review'].includes(a.status));
+  for (const app of apps) {
+    const m = await _talentEmail(st, app);
+    if (m) await mailer.sendScreeningEmail({ to: m.to, name: m.name, lang: 'id', eventName: ev.name || 'Event 20FIT' }).catch(() => {});
+  }
+}
+
+// A/F#7: send the offer email and, ONLY if it is delivered, anchor the deadline
+// (offer_sent_at + offer_deadline). Per the product decision, the 48h clock does
+// not start until the email is actually sent — so a failed send leaves the offer
+// open with no deadline, and the hourly job retries delivery. In mock/dev (no API
+// key or MAIL_MOCK) the send is treated as delivered so the flow can be exercised.
+async function deliverOffer(st, appId, ev, kind) {
+  const app = await st.getApplication(appId);
+  if (!app || app.offer_state !== 'offered') return false;
+  if (app.offer_sent_at) return true; // already anchored
+  const acc = await st.getAccountById(app.talent_id);
+  if (!acc || !acc.login || !/@/.test(acc.login)) return false; // no usable email — cannot anchor
+  const sentMs = Date.now();
+  const deadlineIso = new Date(offerDeadlineMs(sentMs, ev)).toISOString();
+  const mock = !mailer.configured() || process.env.MAIL_MOCK === '1';
+  let delivered = false;
+  try {
+    const r = await mailer.sendOfferEmail({ to: acc.login, name: acc.name, lang: 'id', eventName: (ev && ev.name) || 'Event 20FIT', deadline: fmtDeadlineWIB(deadlineIso), link: appBase() + '/event/' + ev.id + '/konfirmasi', kind: kind || 'offer' });
+    delivered = mock ? true : !!(r && r.delivered);
+  } catch (_) { delivered = false; }
+  if (delivered) await st.setOfferSent(appId, new Date(sentMs).toISOString(), deadlineIso);
+  return delivered;
+}
 
 // --- H-1 event reminders --------------------------------------------------
 // All date math is done in Asia/Jakarta (WIB) so "tomorrow" matches the local
@@ -2934,6 +3066,19 @@ async function runStandbyMaintenance(st) {
     const [standby, subs] = await Promise.all([st.listStandby(ev.id).catch(() => []), st.listSubstitutions(ev.id).catch(() => [])]);
     if (!standbyWindowOpen(ev)) {
       for (const s of standby) { if (['offered', 'available'].includes(s.state)) { await st.updateStandby(s.id, { state: 'expired' }); exSb++; } }
+    } else {
+      // F8: standby not yet called by ~H-2 (48h) — tell them once their chance is
+      // now small so they don't wait until the event day.
+      const h = hoursUntilEvent(ev);
+      if (h != null && h > 0 && h <= 48) {
+        for (const s of standby) {
+          if (['offered', 'available'].includes(s.state) && !s.faded_at) {
+            await st.updateStandby(s.id, { faded_at: new Date().toISOString() });
+            const app = await st.getApplication(s.application_id);
+            if (app) { const m = await _talentEmail(st, app); if (m) mailer.sendStandbyFadeEmail({ to: m.to, name: m.name, lang: 'id', eventName: ev.name || 'Event 20FIT' }).catch(() => {}); }
+          }
+        }
+      }
     }
     for (const sub of subs) {
       if (sub.state !== 'offered') continue;
@@ -2955,6 +3100,40 @@ async function runStandbyMaintenance(st) {
   return { expiredStandby: exSb, expiredOffers: exOf, reminders: rem };
 }
 
+// A/C/D: offer maintenance — retry the offer email for offers whose send failed
+// (so the deadline finally anchors), send the 12h pre-deadline reminder once, and
+// auto-lapse offers past their deadline (free slot + notify EO + email the talent),
+// all in the hourly job. Idempotent via offer_state / offer_sent_at / offer_reminded_at.
+async function runOfferMaintenance(st) {
+  if (!st) return { sent: 0, reminders: 0, lapsed: 0 };
+  const apps = await st.listApplications().catch(() => []);
+  const offers = apps.filter((a) => a.offer_state === 'offered');
+  if (!offers.length) return { sent: 0, reminders: 0, lapsed: 0 };
+  const events = await st.listEvents().catch(() => []);
+  const evById = new Map(events.map((e) => [e.id, e]));
+  const now = Date.now();
+  let sent = 0, rem = 0, lap = 0;
+  for (const a of offers) {
+    const ev = evById.get(a.event_id);
+    if (!ev) continue;
+    if (!a.offer_sent_at) { // delivery still pending → retry; deadline anchors on success
+      if (await deliverOffer(st, a.id, ev, 'offer')) sent++;
+      continue;
+    }
+    const dl = a.offer_deadline ? Date.parse(a.offer_deadline) : null;
+    if (dl == null) continue;
+    if (now >= dl) {
+      const out = await st.lapseOfferTxn(a.id);
+      if (out === 'ok') { lap++; const app2 = (await st.getApplication(a.id)) || a; notifyClosing(st, app2, ev, 'lapsed').catch(() => {}); }
+    } else if (!a.offer_reminded_at && (dl - now) <= OFFER_SAFEGUARD_MS) {
+      await st.setOfferReminded(a.id, new Date().toISOString());
+      notifyDecisionReminder(st, a, ev, a.offer_deadline).catch(() => {});
+      rem++;
+    }
+  }
+  return { sent, reminders: rem, lapsed: lap };
+}
+
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
 // is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
 // even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
@@ -2965,6 +3144,7 @@ function startReminderScheduler() {
     // Standby/substitute maintenance runs every hour (state changes are time-
     // critical); the H-1 courtesy reminders stay gated to daytime WIB.
     runStandbyMaintenance(db()).catch((e) => console.warn('[standby] tick skipped:', e && e.message));
+    runOfferMaintenance(db()).catch((e) => console.warn('[offer] tick skipped:', e && e.message));
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
     runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
@@ -3973,4 +4153,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, runStandbyMaintenance, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked, computeAttendanceReliability, attendanceVisibility };
+module.exports = { app, runStandbyMaintenance, runOfferMaintenance, deliverOffer, offerDeadlineMs, computeReliability, eventStartMs, cancelWindowOpen, standbyWindowOpen, attendanceOpenMs, correctionCloseMs, attendanceWindowActive, attendanceLocked, computeAttendanceReliability, attendanceVisibility };

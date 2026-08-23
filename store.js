@@ -431,6 +431,40 @@ function supabaseStore() {
       const { data } = await sb.from('talent_application_status_log').select('*').eq('application_id', applicationId).order('changed_at');
       return data || [];
     },
+    // ---- Offer / confirmation lifecycle (Tahap 2+) ----
+    // Turn a just-accepted application into an OPEN OFFER (deadline set later, when
+    // the email is actually sent). Clears any prior offer resolution (re-offer).
+    async setOfferOffered(applicationId, offeredAtIso) {
+      const { error } = await sb.from('talent_applications').update({
+        offer_state: 'offered', offered_at: offeredAtIso, offer_sent_at: null, offer_deadline: null,
+        offer_reminded_at: null, offer_resolved_at: null, offer_decline_reason: null, offer_decline_note: null, confirmed_at: null,
+      }).eq('id', applicationId);
+      if (error) throw new Error(error.message);
+    },
+    // Anchor the deadline once the offer email has actually been sent.
+    async setOfferSent(applicationId, sentIso, deadlineIso) {
+      const { error } = await sb.from('talent_applications').update({ offer_sent_at: sentIso, offer_deadline: deadlineIso })
+        .eq('id', applicationId).eq('offer_state', 'offered').is('offer_sent_at', null);
+      if (error) throw new Error(error.message);
+    },
+    async setOfferReminded(applicationId, iso) {
+      const { error } = await sb.from('talent_applications').update({ offer_reminded_at: iso })
+        .eq('id', applicationId).eq('offer_state', 'offered').is('offer_reminded_at', null);
+      if (error) throw new Error(error.message);
+    },
+    // Transactions (advisory-locked per event in the RPC). 'ok' | 'closed' | 'skip'.
+    async confirmOfferTxn(applicationId, actorId) {
+      const { data, error } = await sb.rpc('talent_confirm_offer', { p_app_id: applicationId, p_actor: actorId || null });
+      if (error) throw new Error(error.message); return data || 'skip';
+    },
+    async declineOfferTxn(applicationId, reason, note, actorId) {
+      const { data, error } = await sb.rpc('talent_decline_offer', { p_app_id: applicationId, p_reason: reason || null, p_note: note || null, p_actor: actorId || null });
+      if (error) throw new Error(error.message); return data || 'skip';
+    },
+    async lapseOfferTxn(applicationId) {
+      const { data, error } = await sb.rpc('talent_lapse_offer', { p_app_id: applicationId });
+      if (error) throw new Error(error.message); return data || 'skip';
+    },
     // ---- Standby list (cadangan/siaga) ----
     async listStandby(eventId) {
       const { data, error } = await sb.from('talent_event_standby').select('*').eq('event_id', eventId).order('position_id').order('rank', { nullsFirst: false });
@@ -860,6 +894,54 @@ function memoryStore() {
     },
     async setApplicationConfirmed(applicationId, on) { const a = applications.find((a) => a.id === applicationId); if (a) a.confirmed_at = on ? now() : null; },
     async listApplicationStatusLog(applicationId) { return statusLog.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },
+    // ---- Offer / confirmation lifecycle (Tahap 2+) ----
+    async setOfferOffered(applicationId, offeredAtIso) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (a) Object.assign(a, { offer_state: 'offered', offered_at: offeredAtIso || now(), offer_sent_at: null, offer_deadline: null, offer_reminded_at: null, offer_resolved_at: null, offer_decline_reason: null, offer_decline_note: null, confirmed_at: null });
+    },
+    async setOfferSent(applicationId, sentIso, deadlineIso) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (a && a.offer_state === 'offered' && !a.offer_sent_at) Object.assign(a, { offer_sent_at: sentIso, offer_deadline: deadlineIso });
+    },
+    async setOfferReminded(applicationId, iso) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (a && a.offer_state === 'offered' && !a.offer_reminded_at) a.offer_reminded_at = iso;
+    },
+    async confirmOfferTxn(applicationId, actorId) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (!a) return 'skip';
+      if (a.offer_state === 'confirmed') return 'ok';
+      if (a.offer_state !== 'offered') return 'closed';
+      if (a.offer_deadline && Date.parse(a.offer_deadline) <= Date.now()) return 'closed';
+      Object.assign(a, { offer_state: 'confirmed', confirmed_at: now(), offer_resolved_at: now() });
+      statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: 'offered', to_status: 'offer_confirmed', changed_by: actorId || null, changed_at: now() });
+      return 'ok';
+    },
+    async declineOfferTxn(applicationId, reason, note, actorId) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (!a || a.offer_state !== 'offered') return 'skip';
+      const acc = applicationChoices.find((c) => c.application_id === applicationId && c.accepted);
+      const pos = acc ? acc.position_id : null;
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = false; c.outcome = 'declined'; } });
+      Object.assign(a, { offer_state: 'declined', status: 'not_continued', offer_resolved_at: now(), offer_decline_reason: reason || null, offer_decline_note: note || null });
+      statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: 'offered', to_status: 'offer_declined', changed_by: actorId || null, changed_at: now() });
+      const ev = events.find((e) => e.id === a.event_id);
+      eoNotifications.push({ id: 'eon-' + (++seq), event_id: a.event_id, staff_id: ev ? ev.created_by : null, kind: 'offer_declined', application_id: applicationId, position_id: pos, data: { reason: reason || null, note: note || null }, read_at: null, created_at: now() });
+      return 'ok';
+    },
+    async lapseOfferTxn(applicationId) {
+      const a = applications.find((x) => x.id === applicationId);
+      if (!a || a.offer_state !== 'offered') return 'skip';
+      if (!a.offer_deadline || Date.parse(a.offer_deadline) > Date.now()) return 'skip';
+      const acc = applicationChoices.find((c) => c.application_id === applicationId && c.accepted);
+      const pos = acc ? acc.position_id : null;
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) { c.accepted = false; c.outcome = 'lapsed'; } });
+      Object.assign(a, { offer_state: 'lapsed', status: 'not_continued', offer_resolved_at: now() });
+      statusLog.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: 'offered', to_status: 'offer_lapsed', changed_by: null, changed_at: now() });
+      const ev = events.find((e) => e.id === a.event_id);
+      eoNotifications.push({ id: 'eon-' + (++seq), event_id: a.event_id, staff_id: ev ? ev.created_by : null, kind: 'offer_lapsed', application_id: applicationId, position_id: pos, data: null, read_at: null, created_at: now() });
+      return 'ok';
+    },
     // ---- Standby list (cadangan/siaga) ----
     async listStandby(eventId) { return standby.filter((s) => s.event_id === eventId).map((s) => ({ ...s })).sort((a, b) => String(a.position_id).localeCompare(String(b.position_id)) || ((a.rank || 999) - (b.rank || 999))); },
     async listStandbyForApp(applicationId) { return standby.filter((s) => s.application_id === applicationId).map((s) => ({ ...s })); },

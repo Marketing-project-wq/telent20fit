@@ -2586,6 +2586,19 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${dismissForm(c.id)}</div>
       </div>`;
     }
+    // A/C: a talent declined the offer, or it lapsed past the deadline. Slot is
+    // back; the EO may pick a replacement (manual) or re-offer from the applicant.
+    if (c.kind === 'offer_declined' || c.kind === 'offer_lapsed') {
+      const lapsed = c.kind === 'offer_lapsed';
+      const reason = c.reason ? t('ta.reason.' + c.reason) : null;
+      return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid ${lapsed ? '#b91c1c' : '#d97706'}">
+        <div style="font-weight:800;color:${lapsed ? '#b91c1c' : '#92400e'}">${lapsed ? '⌛' : '↩️'} ${esc(t(lapsed ? 'eo.alert.offerLapsed' : 'eo.alert.offerDeclined', { name: esc(c.talentName), pos: esc(posLblD(c.positionId)) }))}</div>
+        ${reason ? `<div class="muted" style="font-size:13px;margin-top:5px">${t('eo.cancel.reason')}: ${esc(reason)}${c.note ? ` · "${esc(c.note)}"` : ''}</div>` : ''}
+        <div class="muted" style="font-size:12.5px;margin-top:3px">${esc(whenStr(c.when))} · ${esc(timeLeftStr())}</div>
+        <div style="margin-top:8px;font-size:13px">${t('eo.cancel.standbyAvail', { n: c.standbyAvail })}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${pickLink(c.appId, c.positionId)}${dismissForm(c.id)}</div>
+      </div>`;
+    }
     const reason = c.reason ? t('ta.reason.' + c.reason) : '—';
     const stern = c.standbyAvail === 0;
     return `<div class="card" style="margin:0;padding:14px 16px;border-left:4px solid ${stern ? '#b91c1c' : '#d97706'}">
@@ -2637,9 +2650,18 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <b>${esc(posLabel(p, L))}</b>${p.full ? `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.full')}</span>` : `<span class="pill pill-ok">${t('eo.ev.openPos')}</span>`}
     </div>
-    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span></div>
-    <div class="muted" style="font-size:12px">${t('eo.ev.filledNeeded')}</div>
+    <div style="font-size:26px;font-weight:800;margin-top:8px" title="${t('eo.g.confirmed')}">${p.confirmed || 0}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span></div>
+    <div class="muted" style="font-size:12px">${t('eo.g.confirmedFilled')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${p.pending ? `<span class="pill" style="background:#fdeccd;color:#8a5a00" title="${t('eo.g.pending')}">⏳ ${p.pending}</span>` : ''}
+      ${p.declined ? `<span class="pill" style="background:#f4f4f5;color:#6b6b70" title="${t('eo.g.declined')}">✕ ${p.declined}</span>` : ''}
+      ${p.lapsed ? `<span class="pill" style="background:#fde2e2;color:#b91c1c" title="${t('eo.g.lapsed')}">⌛ ${p.lapsed}</span>` : ''}
+    </div>
   </div>`).join('') : `<p class="muted">${t('eo.ev.noPositions')}</p>`;
+  // G: warn when the event is near and offers are still unanswered.
+  const totalPending = (view.positions || []).reduce((n, p) => n + (p.pending || 0), 0);
+  const pendingWarn = (totalPending > 0 && hoursLeft != null && hoursLeft <= 72)
+    ? `<div class="banner banner-warn" style="margin-top:14px">⏳ ${t('eo.g.pendingWarn', { n: totalPending })}</div>` : '';
   let closeBtn = '';
   if (view.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
   else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
@@ -2659,6 +2681,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
+  ${pendingWarn}
   ${attSection}
   ${eoApplicantsSection(e, view, aps, L)}
 </div>${eoApplicantsScript()}`;
@@ -2768,17 +2791,44 @@ function eoApplicantsSection(e, view, aps, L) {
 
   // Accept / reject controls per applicant. Accept is offered per chosen
   // position that still has quota; a full position is shown disabled.
+  // Remaining-time label for a pending offer (from the server-side deadline).
+  const remainStr = (iso) => {
+    if (!iso) return null;
+    const ms = Date.parse(iso) - Date.now();
+    if (Number.isNaN(ms)) return null;
+    if (ms <= 0) return t('eo.off.overdue');
+    const h = Math.floor(ms / 3600000); const d = Math.floor(h / 24);
+    return d >= 2 ? t('eo.off.leftDays', { n: d }) : t('eo.off.leftHours', { n: Math.max(1, h) });
+  };
   const decisionControls = (a) => {
     const base = `/eo/events/${esc(e.id)}/applicants/${esc(a.id)}`;
     const acceptedChoice = a.choices.find((c) => c.accepted);
-    if (a.status === 'approved' && acceptedChoice) {
-      const confirmTag = a.confirmedAt
-        ? `<span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${esc(t('eo.ap.availConfirmed'))}</span>`
-        : `<span class="pill" style="background:#fdeccd;color:#8a5a00">${esc(t('eo.ap.availPending'))}</span>`;
+    // Live offer: pending confirmation or already confirmed.
+    if (a.status === 'approved' && acceptedChoice && (a.offerState === 'offered' || a.offerState === 'confirmed' || !a.offerState)) {
+      const offerTag = a.offerState === 'confirmed'
+        ? `<span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${esc(t('eo.off.confirmed'))}</span>`
+        : (a.offerDeadline
+          ? `<span class="pill" style="background:#fdeccd;color:#8a5a00">⏳ ${esc(t('eo.off.waiting'))} · ${esc(remainStr(a.offerDeadline) || '')}</span>`
+          : `<span class="pill" style="background:#fdeccd;color:#8a5a00">⏳ ${esc(t('eo.off.waitingNoDeadline'))}</span>`);
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
-        ${confirmTag}
-        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+        <span class="pill pill-ok">✓ ${esc(t('eo.off.offeredAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        ${offerTag}
+        <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.off.cancelOffer')}</button></form>
+      </div>`;
+    }
+    // Declined / lapsed offer: the EO MAY re-offer manually (spec C). Show why + the buttons.
+    if (a.status === 'not_continued' && (a.offerState === 'declined' || a.offerState === 'lapsed')) {
+      const why = a.offerState === 'declined'
+        ? `<span class="pill" style="background:#f4f4f5;color:#6b6b70">✕ ${esc(t('eo.off.declined'))}</span>`
+        : `<span class="pill" style="background:#fde2e2;color:#b91c1c">⌛ ${esc(t('eo.off.lapsed'))}</span>`;
+      const reoffer = a.choices.map((c) => {
+        const p = posById.get(c.position_id) || {};
+        if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
+        return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.off.reoffer')}: ${esc(posLbl(c.position_id))}</button></form>`;
+      }).join('');
+      return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">${why}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${reoffer}</div>
       </div>`;
     }
     if (['rejected', 'not_selected', 'not_continued', 'cancelled'].includes(a.status)) {
@@ -5376,6 +5426,112 @@ function adminAttendancePage(o) {
   return appLayout({ title: s.title + ' — 20FIT', body, role: 'super_admin', active: 'koreksi', user: staff.name, lang: L });
 }
 
+// === Offer confirmation page (Tahap 3) =====================================
+// Public-facing, mobile-first. Two buttons only. Countdown to the deadline.
+function offerConfirmPage({ account, event, eventDate, app, posLabel, lang, flash }) {
+  const L = normLang(lang);
+  const id = L !== 'en';
+  const e = event || {};
+  const st0 = app ? (app.offer_state || null) : null;
+  const s = id ? {
+    title: 'Konfirmasi Kehadiran',
+    lead: 'Kamu diterima untuk event ini. Mohon beri jawaban sebelum tenggat.',
+    event: 'Event', pos: 'Posisi', date: 'Tanggal', loc: 'Lokasi', deadline: 'Tenggat menjawab',
+    noDeadline: 'Tenggat mulai berjalan setelah email undangan terkirim.',
+    left: 'Sisa waktu', agree: 'SAYA SETUJU', cannot: 'SAYA TIDAK BISA IKUT',
+    reasonTitle: 'Boleh tahu alasannya?', reasonSend: 'Kirim jawaban', reasonBack: 'Batal',
+    reasons: { schedule_conflict: 'Bentrok jadwal', sick: 'Sakit', family: 'Urusan keluarga', changed_mind: 'Berubah pikiran', other: 'Lainnya' },
+    notePh: 'Keterangan singkat (opsional)',
+    okAgree: 'Terima kasih! Kehadiranmu sudah dikonfirmasi. Sampai jumpa di lokasi.',
+    okDecline: 'Jawaban tercatat: kamu tidak bisa ikut. Terima kasih sudah memberi kabar.',
+    confirmed: 'Kamu sudah mengkonfirmasi kehadiran untuk event ini. ✓',
+    declined: 'Kamu sudah menyatakan tidak bisa ikut event ini.',
+    lapsed: 'Tenggat sudah lewat, jadi tawaran ini otomatis hangus. Kalau slot terbuka lagi, EO bisa menawari kamu kembali.',
+    none: 'Belum ada tawaran yang perlu kamu jawab untuk event ini.',
+    expiredNow: 'Maaf, tenggat sudah lewat. Tawaran ini tidak lagi bisa dijawab.',
+    backHome: 'Ke dashboard',
+  } : {
+    title: 'Confirm Attendance',
+    lead: 'You have been accepted for this event. Please answer before the deadline.',
+    event: 'Event', pos: 'Position', date: 'Date', loc: 'Location', deadline: 'Answer by',
+    noDeadline: 'The deadline starts once the invitation email is sent.',
+    left: 'Time left', agree: 'I AGREE', cannot: 'I CANNOT ATTEND',
+    reasonTitle: 'May we know why?', reasonSend: 'Send answer', reasonBack: 'Cancel',
+    reasons: { schedule_conflict: 'Schedule clash', sick: 'Sick', family: 'Family matter', changed_mind: 'Changed my mind', other: 'Other' },
+    notePh: 'Short note (optional)',
+    okAgree: 'Thank you! Your attendance is confirmed. See you there.',
+    okDecline: 'Recorded: you cannot attend. Thanks for letting us know.',
+    confirmed: 'You have already confirmed your attendance for this event. ✓',
+    declined: 'You have stated you cannot attend this event.',
+    lapsed: 'The deadline passed, so this offer has lapsed automatically. If a slot opens again, the EO can offer it to you.',
+    none: 'There is no offer awaiting your answer for this event.',
+    expiredNow: 'Sorry, the deadline has passed. This offer can no longer be answered.',
+    backHome: 'To dashboard',
+  };
+  const card = (icon, title, msg, tone) => `<div class="card" style="margin-top:32px;text-align:center;border-top:4px solid ${tone || 'var(--line)'}">
+    <div style="font-size:44px">${icon}</div>
+    <h1 style="margin:12px 0 6px;font-size:21px">${esc(title)}</h1>
+    <p class="muted" style="margin:0">${esc(msg)}</p>
+    <div style="margin-top:18px"><a href="/talent?lang=${L}" class="btn btn-ghost btn-sm">${esc(s.backHome)}</a></div>
+  </div>`;
+  const shell = (inner) => layout({ title: s.title + ' — 20FIT', body: `<div class="wrap narrow">${inner}</div>`, brand: 'TALENT', home: '/talent?lang=' + L, lang: L });
+  if (flash === 'setuju' || st0 === 'confirmed') return shell(card('✅', s.title, st0 === 'confirmed' && flash !== 'setuju' ? s.confirmed : s.okAgree, '#0f7a45'));
+  if (flash === 'tolak' || st0 === 'declined') return shell(card('🙏', s.title, st0 === 'declined' && flash !== 'tolak' ? s.declined : s.okDecline, '#b45309'));
+  if (st0 === 'lapsed' || flash === 'closed') return shell(card('⌛', s.title, st0 === 'lapsed' ? s.lapsed : s.expiredNow, '#b91c1c'));
+  if (st0 !== 'offered') return shell(card('📭', s.title, s.none));
+  // Active offer: details + countdown + two buttons.
+  const dlIso = app.offer_deadline || null;
+  const rows = [
+    ['🎫', s.event, e.name],
+    ['🧩', s.pos, posLabel],
+    ['📅', s.date, eventDate],
+    ['📍', s.loc, e.location],
+  ].filter(([, , v]) => v).map(([ic, lb, v]) => `<div style="display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line)"><span style="width:22px">${ic}</span><span class="muted" style="min-width:64px">${esc(lb)}</span><b>${esc(v)}</b></div>`).join('');
+  const dlBlock = dlIso
+    ? `<div style="margin-top:14px;text-align:center;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px">
+        <div class="muted" style="font-size:12.5px">${esc(s.deadline)}</div>
+        <div style="font-weight:700;margin-top:2px">${esc(fmtWhenWib(Date.parse(dlIso), L))}</div>
+        <div id="cd" style="font-size:26px;font-weight:800;margin-top:8px;color:#b45309">—</div>
+        <div class="muted" style="font-size:11.5px">${esc(s.left)}</div>
+      </div>`
+    : `<div class="muted" style="margin-top:14px;text-align:center;font-size:12.5px">${esc(s.noDeadline)}</div>`;
+  const inner = `
+  <h1 style="margin:18px 0 2px;font-size:23px">${esc(s.title)}</h1>
+  <p class="sub" style="margin:0 0 6px">${esc(s.lead)}</p>
+  <div class="card" style="margin-top:12px">${rows}</div>
+  ${dlBlock}
+  <form method="post" action="/event/${esc(e.slug || e.id)}/konfirmasi/setuju" style="margin-top:16px">
+    <button class="btn" style="width:100%;font-size:16px;padding:14px;background:#0f7a45">${esc(s.agree)}</button>
+  </form>
+  <button type="button" id="declineBtn" class="btn btn-ghost" style="width:100%;margin-top:10px;color:var(--red)">${esc(s.cannot)}</button>
+  <div id="declineBox" hidden style="margin-top:12px" class="card">
+    <b>${esc(s.reasonTitle)}</b>
+    <form method="post" action="/event/${esc(e.slug || e.id)}/konfirmasi/tolak" style="margin-top:10px;display:flex;flex-direction:column;gap:9px">
+      ${['schedule_conflict', 'sick', 'family', 'changed_mind', 'other'].map((rk, i) => `<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="radio" name="reason" value="${rk}"${i === 0 ? ' checked' : ''}> ${esc(s.reasons[rk])}</label>`).join('')}
+      <textarea name="note" rows="2" maxlength="300" placeholder="${esc(s.notePh)}" style="width:100%;box-sizing:border-box"></textarea>
+      <div style="display:flex;gap:8px">
+        <button type="submit" class="btn btn-sm" style="background:var(--red);flex:1">${esc(s.reasonSend)}</button>
+        <button type="button" id="declineCancel" class="btn btn-ghost btn-sm">${esc(s.reasonBack)}</button>
+      </div>
+    </form>
+  </div>
+  <script>
+  (function(){
+    var b=document.getElementById('declineBtn'),box=document.getElementById('declineBox'),c=document.getElementById('declineCancel');
+    if(b&&box){b.addEventListener('click',function(){box.hidden=false;b.hidden=true;});}
+    if(c&&box&&b){c.addEventListener('click',function(){box.hidden=true;b.hidden=false;});}
+    var el=document.getElementById('cd');${dlIso ? `
+    var dl=${JSON.stringify(Date.parse(dlIso))};
+    function tick(){var ms=dl-Date.now();if(ms<=0){el.textContent=${JSON.stringify(id ? '00:00:00 — tenggat lewat' : '00:00:00 — expired')};return;}
+      var s=Math.floor(ms/1000),d=Math.floor(s/86400);s%=86400;var h=Math.floor(s/3600);s%=3600;var m=Math.floor(s/60);s%=60;
+      var pad=function(n){return(n<10?'0':'')+n;};
+      el.textContent=(d>0?d+${JSON.stringify(id ? ' hari ' : 'd ')}:'')+pad(h)+':'+pad(m)+':'+pad(s);}
+    tick();setInterval(tick,1000);` : ''}
+  })();
+  </script>`;
+  return shell(inner);
+}
+
 function performancePage(board, totalSubs) {
   const rows = board.length ? board.map((e, i) => `<tr>
     <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
@@ -5690,16 +5846,14 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
       const state = myChoice.accepted
         ? `<span class="pill pill-ok">✓ ${t('ta.acceptedHere')}</span>`
         : (appStatus === 'approved' ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.notContinued')}</span>` : talentStatusBadge(appStatus, L));
-      // K4: once accepted, the talent confirms they're available for the position.
+      // A/B: once offered, the talent answers on the dedicated confirmation page.
+      const os = ctx.myApp ? ctx.myApp.offer_state : null;
       const confirmUi = myChoice.accepted ? (
-        (ctx.myApp && ctx.myApp.confirmed_at)
-          ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${t('ta.availConfirmed')}</span>
-              <form method="post" action="/event/${esc(e.slug || e.id)}/confirm"><input type="hidden" name="v" value="0"><button type="submit" class="btn btn-ghost btn-sm">${t('ta.availUndo')}</button></form>
-            </div>`
+        os === 'confirmed'
+          ? `<span class="pill" style="background:#d8f3e3;color:#0f7a45">✓ ${t('ta.offerConfirmed')}</span>`
           : `<div>
-              <form method="post" action="/event/${esc(e.slug || e.id)}/confirm"><input type="hidden" name="v" value="1"><button type="submit" class="btn btn-sm" style="width:100%">${t('ta.confirmAvail')}</button></form>
-              <div class="muted" style="font-size:12px;margin-top:6px">${t('ta.confirmAvailHint')}</div>
+              <a href="/event/${esc(e.slug || e.id)}/konfirmasi?lang=${L}" class="btn btn-sm" style="width:100%;box-sizing:border-box">${t('ta.offerOpen')}</a>
+              <div class="muted" style="font-size:12px;margin-top:6px">${t('ta.offerHint')}</div>
             </div>`
       ) : '';
       // B: an accepted talent may cancel until H-1 day; after that, contact the EO.
@@ -5893,7 +6047,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, eoAttendancePage, adminCorrections, adminAttendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, leaderAttendancePage, eoAttendancePage, adminCorrections, adminAttendancePage, offerConfirmPage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,

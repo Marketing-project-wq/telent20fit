@@ -519,4 +519,71 @@ async function sendAttendanceEmail({ to, name, lang, eventName, day, status, mar
   return _send(to, subj, attendanceEmailHtml({ name, lang, eventName, day, status, markedBy }), 'attendance:' + status);
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml };
+// Offer/confirmation flow (Tahap 5). NEVER names the position — only tells the
+// talent there is a decision to answer on the web, with the deadline + a button
+// straight to the confirmation page. `kind`: 'offer' (accepted) | 'substitute'.
+function offerEmailHtml({ name, lang, eventName, deadline, link, kind }) {
+  const id = lang !== 'en';
+  const l = id ? {
+    hi: 'Halo ' + (name || '') + ',',
+    lead: kind === 'substitute'
+      ? 'Ada kesempatan untuk kamu di <b>' + (eventName || '') + '</b>. Kamu ditawari mengisi slot yang kosong.'
+      : 'Ada keputusan untuk lamaran kamu di <b>' + (eventName || '') + '</b>.',
+    need: 'Kamu perlu masuk ke web untuk melihat detail dan memberi jawaban.',
+    dl: deadline ? ('Jawab sebelum <b>' + deadline + ' WIB</b>. Lewat dari itu, tawaran otomatis hangus.') : '',
+    btn: 'Buka halaman konfirmasi',
+    foot: 'Kalau tombol tidak jalan, salin tautan ini ke browser: ',
+  } : {
+    hi: 'Hi ' + (name || '') + ',',
+    lead: kind === 'substitute'
+      ? 'There is an opportunity for you at <b>' + (eventName || '') + '</b>. You have been offered an open slot.'
+      : 'There is a decision on your application for <b>' + (eventName || '') + '</b>.',
+    need: 'Please open the web to see the details and give your answer.',
+    dl: deadline ? ('Answer before <b>' + deadline + ' WIB</b>. After that, the offer lapses automatically.') : '',
+    btn: 'Open confirmation page',
+    foot: 'If the button does not work, copy this link into your browser: ',
+  };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.lead}</p><p>${l.need}</p>
+    ${l.dl ? `<p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px">${l.dl}</p>` : ''}
+    <p style="margin:20px 0"><a href="${link}" style="background:#e11d48;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block">${l.btn}</a></p>
+    <p style="color:#6b6b70;font-size:12.5px">${l.foot}<br><a href="${link}">${link}</a></p>
+  </div>`;
+}
+// F1: registration closed — tell an applicant their application entered
+// screening. No position, no result — just that curation has begun.
+function screeningEmailHtml({ name, lang, eventName }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Pendaftaran untuk <b>' + (eventName || '') + '</b> sudah ditutup. Lamaran kamu masuk tahap seleksi.', tail: 'Hasilnya akan diumumkan setelah kurasi selesai. Kami akan mengabari kamu lewat email lagi.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'Registration for <b>' + (eventName || '') + '</b> is now closed. Your application has entered the screening stage.', tail: 'Results will be announced after curation. We will email you again.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a"><p>${l.hi}</p><p>${l.body}</p><p style="color:#6b6b70;font-size:13px">${l.tail}</p></div>`;
+}
+async function sendScreeningEmail({ to, name, lang, eventName }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Lamaran kamu masuk tahap seleksi — ' + (eventName || 'Event 20FIT')) : ('Your application is in screening — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, screeningEmailHtml({ name, lang, eventName }), 'screening');
+}
+// F8: standby not yet called by ~H-2 — tell them their chance is now small so
+// they are not left waiting until the event day.
+function standbyFadeEmailHtml({ name, lang, eventName }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Sampai mendekati hari-H, slot untuk <b>' + (eventName || '') + '</b> belum terbuka untuk kamu.', tail: 'Kemungkinan dipanggil sekarang sudah kecil. Terima kasih sudah bersedia jadi cadangan — kamu tidak perlu menunggu di hari-H.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'As the event nears, a slot for <b>' + (eventName || '') + '</b> has not opened for you.', tail: 'The chance of being called now is small. Thank you for standing by — you do not need to wait on the event day.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a"><p>${l.hi}</p><p>${l.body}</p><p style="color:#6b6b70;font-size:13px">${l.tail}</p></div>`;
+}
+async function sendStandbyFadeEmail({ to, name, lang, eventName }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Kabar status cadangan kamu — ' + (eventName || 'Event 20FIT')) : ('Your standby status — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, standbyFadeEmailHtml({ name, lang, eventName }), 'standby-fade');
+}
+async function sendOfferEmail({ to, name, lang, eventName, deadline, link, kind }) {
+  const id = lang !== 'en';
+  const subj = id
+    ? ('Ada keputusan untuk lamaran kamu di ' + (eventName || 'Event 20FIT') + (deadline ? ' — perlu jawaban sebelum ' + deadline + ' WIB' : ''))
+    : ('A decision on your application at ' + (eventName || '20FIT Event') + (deadline ? ' — answer before ' + deadline + ' WIB' : ''));
+  return _send(to, subj, offerEmailHtml({ name, lang, eventName, deadline, link, kind }), 'offer:' + (kind || 'offer'));
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml, sendOfferEmail, offerEmailHtml, sendScreeningEmail, screeningEmailHtml, sendStandbyFadeEmail, standbyFadeEmailHtml };
