@@ -3335,6 +3335,24 @@ async function attendanceRecap(st, ev) {
   return { groups, days, countsByDay, overall, unmarkedTotal, markedTotal };
 }
 
+// Correction requests for one event, joined to talent name + the day/position/
+// current status of the record. Read-only for the EO (Super Admin decides).
+async function attendanceCorrectionsForEvent(st, eventId) {
+  const attRows = await st.listAttendanceForEvent(eventId);
+  const attById = new Map(attRows.map((a) => [a.id, a]));
+  if (!attById.size) return [];
+  const [allCorr, talents, positions] = await Promise.all([st.listCorrections({}), st.listTalents(), st.listPositions()]);
+  const tName = new Map(talents.map((t) => [t.id, t.name]));
+  const posLbl = new Map(positions.map((p) => [p.id, p.label_id || p.label_en || p.id]));
+  return allCorr
+    .filter((c) => attById.has(c.attendance_id))
+    .map((c) => { const a = attById.get(c.attendance_id); return {
+      talentName: tName.get(c.talent_id) || '—', day: a.event_day, posLabel: posLbl.get(a.position_id) || '',
+      status: a.status || null, reason: c.reason, state: c.state, decisionNote: c.decision_note || null, createdAt: c.created_at,
+    }; })
+    .sort((x, y) => (x.state === 'pending' ? 0 : 1) - (y.state === 'pending' ? 0 : 1) || String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
+}
+
 function csvCell(v) { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 const ATT_CSV_LABEL = {
   id: { present: 'Hadir', absent_notified: 'Tidak hadir (ada kabar)', absent_no_notice: 'Tidak hadir (tanpa kabar)', unmarked: 'Belum ditandai' },
@@ -3370,10 +3388,13 @@ app.get('/eo/events/:id/absensi', requireEo, async (req, res, next) => {
     let day = String(req.query.day || '');
     if (!days.includes(day)) day = days.includes(today) ? today : (days[days.length - 1] || today);
     const link = await st.getAttendanceLinkForEvent(ev.id);
+    // Correction requests the talents filed for THIS event, so the owning EO can
+    // read the reason (the decision itself stays with the Super Admin).
+    const corrections = await attendanceCorrectionsForEvent(st, ev.id);
     res.send(V.eoAttendancePage({
       staff: eoCtx(req), event: ev, eventDate: eventDateStr(ev), recap, day, lang: req.lang,
       active: attendanceWindowActive(ev), locked: attendanceLocked(ev), openMs: attendanceOpenMs(ev), closeMs: correctionCloseMs(ev),
-      linkUrl: link ? publicBase(req) + '/absen/' + link.token : null,
+      linkUrl: link ? publicBase(req) + '/absen/' + link.token : null, corrections,
       flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') },
     }));
   } catch (e) { next(e); }

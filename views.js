@@ -5073,7 +5073,7 @@ function leaderAttendancePage(o) {
 
 // === Tahap 3: EO attendance recap dashboard ================================
 function eoAttendancePage(o) {
-  const { staff, event, eventDate, recap, day, lang, active, locked, closeMs, linkUrl, flash } = o || {};
+  const { staff, event, eventDate, recap, day, lang, active, locked, closeMs, linkUrl, flash, corrections } = o || {};
   const L = normLang(lang);
   const id = L !== 'en';
   const meta = attStatusMeta(L);
@@ -5092,6 +5092,8 @@ function eoAttendancePage(o) {
     errLocked: 'Sudah lewat masa koreksi — tidak bisa diubah.', errBad: 'Gagal menyimpan.',
     editHint: 'Anda bisa menandai/mengoreksi langsung di sini selama masa absensi.', notePh: 'Keterangan (opsional)',
     total: 'total', ofDay: 'hari ini',
+    corrTitle: 'Pengajuan koreksi dari talent', corrHint: 'Alasan dari talent. Keputusan akhir di Super Admin.',
+    corrPending: 'Menunggu Super Admin', corrApproved: 'Disetujui', corrRejected: 'Ditolak', corrReason: 'Alasan',
   } : {
     title: 'Attendance Recap', back: 'Back to event',
     active: 'Attendance active', lockedT: 'Locked (past correction window)', notYet: 'Not open yet',
@@ -5105,6 +5107,8 @@ function eoAttendancePage(o) {
     errLocked: 'Past the correction window — cannot change.', errBad: 'Could not save.',
     editHint: 'You can mark/correct directly here during the attendance window.', notePh: 'Note (optional)',
     total: 'total', ofDay: 'this day',
+    corrTitle: 'Correction requests from talents', corrHint: 'The talent’s reason. The final decision is the Super Admin’s.',
+    corrPending: 'Awaiting Super Admin', corrApproved: 'Approved', corrRejected: 'Rejected', corrReason: 'Reason',
   };
   const days = recap.days || [];
   const cur = recap.countsByDay[day] || { present: 0, absent_notified: 0, absent_no_notice: 0, unmarked: 0 };
@@ -5160,6 +5164,22 @@ function eoAttendancePage(o) {
   </style>
   <script>document.addEventListener('input',function(ev){var el=ev.target;if(el.name==='status')return;});
   document.addEventListener('click',function(ev){var b=ev.target;if(b.classList&&b.classList.contains('asbtn')){var form=b.closest('form');if(form){var n=form.querySelector('.lrow-note');if(n)n.style.display=(b.value==='absent_notified')?'block':'none';}}},true);</script>`;
+  // EO reads the talents' correction reasons (read-only; Super Admin decides).
+  const corrStateTag = (st0) => st0 === 'approved' ? `<span class="pill pill-ok">${esc(s.corrApproved)}</span>`
+    : st0 === 'rejected' ? `<span class="pill pill-off">${esc(s.corrRejected)}</span>`
+      : `<span class="pill" style="background:#fdeccd;color:#8a5a00">${esc(s.corrPending)}</span>`;
+  const corrPanel = (corrections && corrections.length) ? `<div class="card" style="margin-top:14px;border-left:4px solid #b45309">
+    <div style="font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)">📝 ${esc(s.corrTitle)} <span style="font-weight:600">· ${corrections.length}</span></div>
+    <div class="muted" style="font-size:12px;margin:4px 0 2px">${esc(s.corrHint)}</div>
+    ${corrections.map((c) => `<div style="padding:11px 0;border-top:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <b style="font-size:14px">${esc(c.talentName)}</b>${corrStateTag(c.state)}
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.posLabel || '')}${c.posLabel ? ' · ' : ''}${esc(fmtDay(c.day))} · ${esc(c.status ? (meta[c.status] ? meta[c.status].label : c.status) : s.unmarked)}</div>
+      <div style="font-size:13.5px;margin-top:6px;background:var(--bg-soft,#f5f5f7);border-radius:8px;padding:8px 11px">${esc(s.corrReason)}: ${esc(c.reason || '—')}</div>
+      ${c.decisionNote ? `<div class="muted" style="font-size:12px;margin-top:4px">↳ ${esc(c.decisionNote)}</div>` : ''}
+    </div>`).join('')}
+  </div>` : '';
   const body = `<div class="wrap">${style}
     <a href="/eo/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">← ${esc(s.back)}</a>
     ${flashBanner}
@@ -5177,6 +5197,7 @@ function eoAttendancePage(o) {
     </div>` : ''}
     ${daySel}
     ${counts}
+    ${corrPanel}
     ${groupList}
   </div>`;
   return appLayout({ title: s.title + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
