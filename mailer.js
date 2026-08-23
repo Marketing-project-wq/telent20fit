@@ -382,4 +382,228 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml };
+// ---- Cancellation/standby flow emails (policy F: NEVER name the position) ----
+// Every email only says a decision exists and asks the talent to open the web to
+// see the detail and click their approval. Title + deadline are allowed so the
+// email isn't ignored.
+function decisionEmailHtml({ name, lang, eventName, link, kind, deadline }) {
+  const id = lang !== 'en';
+  const body = id ? {
+    accepted: 'Ada keputusan untuk pendaftaranmu di event ini. Masuk ke web untuk melihat detail dan menekan persetujuanmu.',
+    standby: 'Kamu masuk daftar kandidat cadangan untuk event ini. Masuk ke web untuk menyatakan apakah kamu bersedia siaga sampai hari-H.',
+    substitute: 'Ada kesempatan untukmu di event ini. Masuk ke web untuk melihat detail dan menekan persetujuanmu.',
+    reminder: 'Pengingat: konfirmasimu masih ditunggu. Masuk ke web untuk menekan persetujuanmu sebelum tenggat.',
+  }[kind] : {
+    accepted: 'There is a decision on your registration for this event. Open the web to see the details and click your approval.',
+    standby: 'You are on the standby candidate list for this event. Open the web to state whether you are available on standby until event day.',
+    substitute: 'There is an opportunity for you at this event. Open the web to see the details and click your approval.',
+    reminder: 'Reminder: your confirmation is still awaited. Open the web to click your approval before the deadline.',
+  }[kind];
+  const cta = id ? (kind === 'standby' ? 'Nyatakan Kesediaan' : 'Lihat & Setujui') : (kind === 'standby' ? 'State Availability' : 'View & Approve');
+  const hi = (id ? 'Halo ' : 'Hi ') + (name || '');
+  const dl = deadline ? (id ? `Batas waktu: ${deadline} WIB.` : `Deadline: ${deadline} WIB.`) : '';
+  const foot = id ? 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.' : 'Automated email from 20FIT Talent. Please do not reply.';
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      ${logoBar()}
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(hi.trim())},</p>
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#41454d">${esc(body)}</p>
+        <p style="margin:0 0 18px;font-size:14px;font-weight:700">${esc(eventName || 'Event 20FIT')}</p>
+        ${dl ? `<p style="margin:0 0 18px;font-size:13px;color:#8a1c1c;font-weight:700">${esc(dl)}</p>` : ''}
+        <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px">${esc(cta)}</a>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+function closingEmailHtml({ name, lang, eventName, kind }) {
+  const id = lang !== 'en';
+  const body = id ? {
+    not_selected: 'Terima kasih sudah mendaftar. Untuk kesempatan ini kamu belum terpilih. Semoga bisa bergabung di event berikutnya.',
+    lapsed: 'Kesempatan untuk event ini sudah tidak tersedia karena melewati tenggat konfirmasi. Terima kasih atas ketertarikanmu.',
+    standby_closed: 'Terima kasih atas kesediaanmu. Untuk event ini kamu tidak jadi dipanggil. Sampai jumpa di kesempatan berikutnya.',
+  }[kind] : {
+    not_selected: 'Thank you for registering. You were not selected for this opportunity. We hope you can join a future event.',
+    lapsed: 'The opportunity for this event is no longer available as the confirmation deadline passed. Thank you for your interest.',
+    standby_closed: 'Thank you for being available. You were not called for this event. See you next time.',
+  }[kind];
+  const hi = (id ? 'Halo ' : 'Hi ') + (name || '');
+  const foot = id ? 'Email otomatis dari 20FIT Talent. Mohon jangan balas email ini.' : 'Automated email from 20FIT Talent. Please do not reply.';
+  return `<!doctype html><html><body style="margin:0;background:#f4f6f9;padding:24px;font-family:Arial,Helvetica,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e7ed">
+      ${logoBar()}
+      <tr><td style="padding:28px">
+        <p style="margin:0 0 8px;font-size:16px;font-weight:700">${esc(hi.trim())},</p>
+        <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#41454d">${esc(body)}</p>
+        <p style="margin:0;font-size:14px;font-weight:700">${esc(eventName || 'Event 20FIT')}</p>
+      </td></tr>
+      <tr><td style="padding:16px 28px;border-top:1px solid #e3e7ed;font-size:12px;color:#8b8f97">${esc(foot)}</td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+async function _send(to, subject, html, label) {
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — ' + label + ' for ' + to);
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) { console.warn('[mail] Resend API key is invalid; ' + label + ' not sent to ' + to); return { delivered: false, error: 'Invalid API key' }; }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+async function sendDecisionEmail({ to, name, lang, eventName, link, kind, deadline }) {
+  const id = lang !== 'en';
+  const subj = {
+    accepted: id ? 'Ada Keputusan untuk Pendaftaranmu — 20FIT Talent' : 'A Decision on Your Registration — 20FIT Talent',
+    standby: id ? 'Kamu Jadi Kandidat Cadangan — 20FIT Talent' : "You're a Standby Candidate — 20FIT Talent",
+    substitute: id ? 'Ada Kesempatan untukmu — 20FIT Talent' : 'An Opportunity for You — 20FIT Talent',
+    reminder: id ? 'Pengingat: Konfirmasimu Ditunggu — 20FIT Talent' : 'Reminder: Your Confirmation Is Awaited — 20FIT Talent',
+  }[kind] || (id ? 'Kabar dari 20FIT Talent' : 'News from 20FIT Talent');
+  return _send(to, subj, decisionEmailHtml({ name, lang, eventName, link, kind, deadline }), 'decision:' + kind);
+}
+async function sendClosingEmail({ to, name, lang, eventName, kind }) {
+  const id = lang !== 'en';
+  const subj = kind === 'lapsed'
+    ? (id ? 'Kesempatan Sudah Berlalu — 20FIT Talent' : 'Opportunity Has Passed — 20FIT Talent')
+    : (id ? 'Kabar Pendaftaran Event — 20FIT Talent' : 'Your Event Registration — 20FIT Talent');
+  return _send(to, subj, closingEmailHtml({ name, lang, eventName, kind }), 'closing:' + kind);
+}
+
+// Tahap 7: notify the talent whenever their attendance status changes. The
+// status is the basis of payment, so the talent is told on every change (who
+// recorded it + when) and can request a correction from their dashboard.
+function attendanceEmailHtml({ name, lang, eventName, day, status, markedBy }) {
+  const id = lang !== 'en';
+  const label = {
+    present: id ? 'Hadir' : 'Present',
+    absent_notified: id ? 'Tidak hadir (ada kabar)' : 'Absent (notified)',
+    absent_no_notice: id ? 'Tidak hadir (tanpa kabar)' : 'Absent (no notice)',
+  }[status] || status;
+  const l = id ? {
+    hi: 'Halo ' + (name || '') + ',',
+    body: 'Status kehadiranmu untuk acara berikut diperbarui:',
+    st: 'Status', by: 'Ditandai oleh', when: 'Tanggal',
+    foot: 'Jika ini keliru, buka dashboard 20FIT Talent dan ajukan koreksi. Status ini dipakai sebagai dasar pembayaran.',
+  } : {
+    hi: 'Hi ' + (name || '') + ',',
+    body: 'Your attendance status for this event was updated:',
+    st: 'Status', by: 'Marked by', when: 'Date',
+    foot: 'If this is wrong, open the 20FIT Talent dashboard and request a correction. This status is the basis for payment.',
+  };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.body}</p>
+    <div style="border:1px solid #eee;border-radius:10px;padding:14px 16px;margin:12px 0">
+      <div style="font-weight:700;font-size:16px">${eventName || ''}</div>
+      <div style="margin-top:6px">${l.st}: <b>${label}</b></div>
+      ${day ? `<div>${l.when}: ${day}</div>` : ''}
+      ${markedBy ? `<div>${l.by}: ${markedBy}</div>` : ''}
+    </div>
+    <p style="color:#6b6b70;font-size:13px">${l.foot}</p>
+  </div>`;
+}
+async function sendAttendanceEmail({ to, name, lang, eventName, day, status, markedBy }) {
+  const id = lang !== 'en';
+  const subj = id ? 'Absensimu Diperbarui — 20FIT Talent' : 'Your Attendance Was Updated — 20FIT Talent';
+  return _send(to, subj, attendanceEmailHtml({ name, lang, eventName, day, status, markedBy }), 'attendance:' + status);
+}
+
+// Offer/confirmation flow (Tahap 5). NEVER names the position — only tells the
+// talent there is a decision to answer on the web, with the deadline + a button
+// straight to the confirmation page. `kind`: 'offer' (accepted) | 'substitute'.
+function offerEmailHtml({ name, lang, eventName, deadline, link, kind }) {
+  const id = lang !== 'en';
+  const l = id ? {
+    hi: 'Halo ' + (name || '') + ',',
+    lead: kind === 'substitute'
+      ? 'Ada kesempatan untuk kamu di <b>' + (eventName || '') + '</b>. Kamu ditawari mengisi slot yang kosong.'
+      : 'Ada keputusan untuk lamaran kamu di <b>' + (eventName || '') + '</b>.',
+    need: 'Kamu perlu masuk ke web untuk melihat detail dan memberi jawaban.',
+    dl: deadline ? ('Jawab sebelum <b>' + deadline + ' WIB</b>. Lewat dari itu, tawaran otomatis hangus.') : '',
+    btn: 'Buka halaman konfirmasi',
+    foot: 'Kalau tombol tidak jalan, salin tautan ini ke browser: ',
+  } : {
+    hi: 'Hi ' + (name || '') + ',',
+    lead: kind === 'substitute'
+      ? 'There is an opportunity for you at <b>' + (eventName || '') + '</b>. You have been offered an open slot.'
+      : 'There is a decision on your application for <b>' + (eventName || '') + '</b>.',
+    need: 'Please open the web to see the details and give your answer.',
+    dl: deadline ? ('Answer before <b>' + deadline + ' WIB</b>. After that, the offer lapses automatically.') : '',
+    btn: 'Open confirmation page',
+    foot: 'If the button does not work, copy this link into your browser: ',
+  };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.lead}</p><p>${l.need}</p>
+    ${l.dl ? `<p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px">${l.dl}</p>` : ''}
+    <p style="margin:20px 0"><a href="${link}" style="background:#e11d48;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block">${l.btn}</a></p>
+    <p style="color:#6b6b70;font-size:12.5px">${l.foot}<br><a href="${link}">${link}</a></p>
+  </div>`;
+}
+// F1: registration closed — tell an applicant their application entered
+// screening. No position, no result — just that curation has begun.
+function screeningEmailHtml({ name, lang, eventName }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Pendaftaran untuk <b>' + (eventName || '') + '</b> sudah ditutup. Lamaran kamu masuk tahap seleksi.', tail: 'Hasilnya akan diumumkan setelah kurasi selesai. Kami akan mengabari kamu lewat email lagi.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'Registration for <b>' + (eventName || '') + '</b> is now closed. Your application has entered the screening stage.', tail: 'Results will be announced after curation. We will email you again.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a"><p>${l.hi}</p><p>${l.body}</p><p style="color:#6b6b70;font-size:13px">${l.tail}</p></div>`;
+}
+async function sendScreeningEmail({ to, name, lang, eventName }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Lamaran kamu masuk tahap seleksi — ' + (eventName || 'Event 20FIT')) : ('Your application is in screening — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, screeningEmailHtml({ name, lang, eventName }), 'screening');
+}
+// F8: standby not yet called by ~H-2 — tell them their chance is now small so
+// they are not left waiting until the event day.
+function standbyFadeEmailHtml({ name, lang, eventName }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Sampai mendekati hari-H, slot untuk <b>' + (eventName || '') + '</b> belum terbuka untuk kamu.', tail: 'Kemungkinan dipanggil sekarang sudah kecil. Terima kasih sudah bersedia jadi cadangan — kamu tidak perlu menunggu di hari-H.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'As the event nears, a slot for <b>' + (eventName || '') + '</b> has not opened for you.', tail: 'The chance of being called now is small. Thank you for standing by — you do not need to wait on the event day.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a"><p>${l.hi}</p><p>${l.body}</p><p style="color:#6b6b70;font-size:13px">${l.tail}</p></div>`;
+}
+async function sendStandbyFadeEmail({ to, name, lang, eventName }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Kabar status cadangan kamu — ' + (eventName || 'Event 20FIT')) : ('Your standby status — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, standbyFadeEmailHtml({ name, lang, eventName }), 'standby-fade');
+}
+// After the talent CONFIRMS: a "you're in" email that MAY include the Man Power
+// group link + their station. Only sent post-confirmation (never before), so the
+// group link is not exposed until they have agreed on the web.
+function confirmedEmailHtml({ name, lang, eventName, station, groupUrl }) {
+  const id = lang !== 'en';
+  const l = id
+    ? { hi: 'Halo ' + (name || '') + ',', body: 'Kehadiranmu untuk <b>' + (eventName || '') + '</b> sudah <b>dikonfirmasi</b>. Sampai jumpa di lokasi!', st: 'Station kamu', grp: 'Gabung grup Man Power di sini:', foot: 'Detail juga bisa kamu lihat kapan saja di dashboard 20FIT Talent.' }
+    : { hi: 'Hi ' + (name || '') + ',', body: 'Your attendance for <b>' + (eventName || '') + '</b> is <b>confirmed</b>. See you there!', st: 'Your station', grp: 'Join the Man Power group here:', foot: 'You can also see the details anytime on your 20FIT Talent dashboard.' };
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:auto;color:#1a1a1a">
+    <p>${l.hi}</p><p>${l.body}</p>
+    ${station ? `<p style="background:#eef1f6;border-radius:8px;padding:10px 12px">📍 ${l.st}: <b>${station}</b></p>` : ''}
+    ${groupUrl ? `<p style="margin:18px 0">${l.grp}<br><a href="${groupUrl}" style="background:#25D366;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:700;display:inline-block;margin-top:8px">💬 ${id ? 'Gabung Grup Man Power' : 'Join Man Power Group'}</a></p>` : ''}
+    <p style="color:#6b6b70;font-size:12.5px">${l.foot}</p>
+  </div>`;
+}
+async function sendConfirmedEmail({ to, name, lang, eventName, station, groupUrl }) {
+  const id = lang !== 'en';
+  const subj = id ? ('Kehadiranmu dikonfirmasi — ' + (eventName || 'Event 20FIT')) : ('Your attendance is confirmed — ' + (eventName || '20FIT Event'));
+  return _send(to, subj, confirmedEmailHtml({ name, lang, eventName, station, groupUrl }), 'confirmed');
+}
+async function sendOfferEmail({ to, name, lang, eventName, deadline, link, kind }) {
+  const id = lang !== 'en';
+  const subj = id
+    ? ('Ada keputusan untuk lamaran kamu di ' + (eventName || 'Event 20FIT') + (deadline ? ' — perlu jawaban sebelum ' + deadline + ' WIB' : ''))
+    : ('A decision on your application at ' + (eventName || '20FIT Event') + (deadline ? ' — answer before ' + deadline + ' WIB' : ''));
+  return _send(to, subj, offerEmailHtml({ name, lang, eventName, deadline, link, kind }), 'offer:' + (kind || 'offer'));
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml, sendDecisionEmail, sendClosingEmail, decisionEmailHtml, closingEmailHtml, sendAttendanceEmail, attendanceEmailHtml, sendOfferEmail, offerEmailHtml, sendScreeningEmail, screeningEmailHtml, sendStandbyFadeEmail, standbyFadeEmailHtml, sendConfirmedEmail, confirmedEmailHtml };

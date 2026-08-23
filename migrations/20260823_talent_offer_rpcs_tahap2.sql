@@ -1,0 +1,15 @@
+-- Tahap 2 — Transactional RPCs for the offer/confirmation flow.
+-- Applied to Supabase project cpvzwqptzcxnwzfzgrmt on 2026-08-23.
+-- Each serializes per event via pg_advisory_xact_lock (same pattern as
+-- talent_accept_choice / talent_cancel_application). See the source in that
+-- migration; UP re-creates the three functions with CREATE OR REPLACE.
+--
+-- UP: (the three functions, verbatim as applied)
+--   talent_confirm_offer(p_app_id uuid, p_actor uuid) returns text
+--   talent_decline_offer(p_app_id uuid, p_reason text, p_note text, p_actor uuid) returns text
+--   talent_lapse_offer(p_app_id uuid) returns text
+--
+-- ============================ DOWN ============================
+-- drop function if exists public.talent_confirm_offer(uuid, uuid);
+-- drop function if exists public.talent_decline_offer(uuid, text, text, uuid);
+-- drop function if exists public.talent_lapse_offer(uuid);
