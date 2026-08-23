@@ -1452,12 +1452,6 @@ function jsConfirm(msg) {
   const s = String(msg).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\s+/g, ' ');
   return `onsubmit="return confirm('${s}')"`;
 }
-// Same confirm popup, but fired from a specific button's click — used when one
-// form has several submit buttons that each need their own confirmation text.
-function jsConfirmClick(msg) {
-  const s = String(msg).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\s+/g, ' ');
-  return `onclick="return confirm('${s}')"`;
-}
 
 // Each metric -> its per-day threshold setting keys + safe defaults.
 const METRIC_TH = {
@@ -5199,8 +5193,6 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
     none: 'Tidak ada permintaan koreksi yang menunggu.', pending: 'Menunggu keputusan', history: 'Riwayat keputusan',
     talent: 'Talent', event: 'Acara', pos: 'Posisi', day: 'Tanggal', now: 'Status sekarang', reason: 'Alasan talent',
     setTo: 'Ubah status ke', decNote: 'Alasan keputusan (wajib untuk menyetujui)', approve: 'Setujui & ubah', reject: 'Tolak',
-    approveConfirm: 'Setujui koreksi & ubah status kehadiran man power ini? Perubahan + alasan akan tercatat.',
-    rejectConfirm: 'Tolak pengajuan koreksi ini? Keputusan akan tercatat dan status tidak berubah.',
     unmarked: 'Belum ditandai', approved: 'Disetujui', rejected: 'Ditolak', decidedNote: 'Catatan',
     okSaved: 'Keputusan tersimpan ✓', okNeedReason: 'Alasan keputusan wajib diisi saat menyetujui.', okBad: 'Status tidak valid.',
     openEvent: 'Buka absensi acara',
@@ -5209,8 +5201,6 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
     none: 'No correction requests waiting.', pending: 'Awaiting decision', history: 'Decision history',
     talent: 'Talent', event: 'Event', pos: 'Position', day: 'Date', now: 'Current status', reason: 'Talent reason',
     setTo: 'Change status to', decNote: 'Decision reason (required to approve)', approve: 'Approve & change', reject: 'Reject',
-    approveConfirm: 'Approve the correction & change this man power’s attendance status? The change + reason will be recorded.',
-    rejectConfirm: 'Reject this correction request? The decision is recorded and the status stays unchanged.',
     unmarked: 'Not marked', approved: 'Approved', rejected: 'Rejected', decidedNote: 'Note',
     okSaved: 'Decision saved ✓', okNeedReason: 'A decision reason is required to approve.', okBad: 'Invalid status.',
     openEvent: 'Open event attendance',
@@ -5237,8 +5227,8 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
       </div>
       <textarea name="decision_note" rows="2" maxlength="500" placeholder="${esc(s.decNote)}" style="width:100%;box-sizing:border-box"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="submit" name="decision" value="approve" class="btn btn-sm" ${jsConfirmClick(s.approveConfirm)}>${esc(s.approve)}</button>
-        <button type="submit" name="decision" value="reject" class="btn btn-ghost btn-sm" ${jsConfirmClick(s.rejectConfirm)}>${esc(s.reject)}</button>
+        <button type="submit" name="decision" value="approve" class="btn btn-sm">${esc(s.approve)}</button>
+        <button type="submit" name="decision" value="reject" class="btn btn-ghost btn-sm">${esc(s.reject)}</button>
         <a href="/admin/events/${esc(i.eventId)}/absensi?lang=${L}&day=${esc(i.day)}" class="btn btn-ghost btn-sm">${esc(s.openEvent)}</a>
       </div>
     </form>
@@ -5274,7 +5264,7 @@ function emergencyControl(row, eventId, s, L) {
   }
   if (row.status !== 'absent_no_notice') return '';
   return `<details style="margin-top:6px"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">${esc(s.emgOn)}</summary>
-    <form method="post" action="/admin/absensi/${esc(row.id)}/emergency" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap" ${jsConfirm(s.emgConfirm)}>
+    <form method="post" action="/admin/absensi/${esc(row.id)}/emergency" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       <input type="text" name="reason" maxlength="500" required placeholder="${esc(s.emgReason)}" style="flex:1;min-width:180px;font-size:13px">
       <button type="submit" class="btn btn-sm">🚑</button>
     </form></details>`;
@@ -5295,8 +5285,6 @@ function adminAttendancePage(o) {
     notePh: 'Keterangan (opsional)', empty: 'Belum ada talent diterima untuk acara ini.',
     okMarked: 'Status tersimpan ✓', errNeed: 'Alasan perubahan wajib diisi.', errBad: 'Gagal menyimpan.',
     by: (n, w) => 'oleh ' + n + (w ? ' · ' + w : ''), from: 'dari', to: 'ke', csv: '⬇ Ekspor CSV',
-    markConfirm: 'Simpan perubahan status kehadiran man power ini? Perubahan + alasan akan tercatat di riwayat.',
-    emgConfirm: 'Tandai kejadian ini sebagai keadaan darurat (dikecualikan dari pelanggaran)? Tercatat siapa + alasannya.',
     emgOn: 'Tandai darurat (kecualikan dari pelanggaran)', emgOff: 'Batalkan tanda darurat', emgReason: 'Alasan darurat (wajib)', emgFlag: '🚑 Darurat — dikecualikan',
   } : {
     title: 'Attendance (Super Admin)', back: 'Back', locked: 'Locked (past correction window) — only you can change it',
@@ -5305,8 +5293,6 @@ function adminAttendancePage(o) {
     notePh: 'Note (optional)', empty: 'No accepted talent for this event yet.',
     okMarked: 'Status saved ✓', errNeed: 'A reason for the change is required.', errBad: 'Could not save.',
     by: (n, w) => 'by ' + n + (w ? ' · ' + w : ''), from: 'from', to: 'to', csv: '⬇ Export CSV',
-    markConfirm: 'Save this change to the man power’s attendance status? The change + reason will be recorded in the history.',
-    emgConfirm: 'Flag this incident as an emergency (excluded from violations)? Who + the reason are recorded.',
     emgOn: 'Flag emergency (exclude from violations)', emgOff: 'Remove emergency flag', emgReason: 'Emergency reason (required)', emgFlag: '🚑 Emergency — excluded',
   };
   const days = recap.days || [];
@@ -5330,7 +5316,7 @@ function adminAttendancePage(o) {
     const row = tt.byDay[day] || null; const status = row && row.status ? row.status : null;
     const attId = row ? row.id : null;
     const marked = (status && row.marked_by_name) ? `<div class="muted" style="font-size:11.5px;margin-top:4px">${esc(s.by(row.marked_by_name, row.marked_at ? fmtWhenWib(Date.parse(row.marked_at), L) : ''))}</div>` : '';
-    return `<form method="post" action="/admin/events/${esc(e.id)}/absensi/mark" class="lrow-form" style="margin:0;padding:12px 2px;border-top:1px solid var(--line)" ${jsConfirm(s.markConfirm)}>
+    return `<form method="post" action="/admin/events/${esc(e.id)}/absensi/mark" class="lrow-form" style="margin:0;padding:12px 2px;border-top:1px solid var(--line)">
       <input type="hidden" name="app" value="${esc(tt.applicationId)}"><input type="hidden" name="day" value="${esc(day || '')}">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><b style="font-size:14.5px">${esc(tt.name)}</b>
         <span class="pill" style="background:${status === 'present' ? '#d8f3e3' : status === 'absent_notified' ? '#fdeccd' : status === 'absent_no_notice' ? '#fde2e2' : 'var(--bg-soft,#eee)'};color:${status === 'present' ? '#0f7a45' : status === 'absent_notified' ? '#8a5a00' : status === 'absent_no_notice' ? '#b91c1c' : '#6b6b70'}">${esc(lbl(status))}</span></div>
@@ -5568,7 +5554,6 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
   const aStr = L !== 'en' ? {
     title: 'Absensi saya', unmarked: 'Belum ditandai', markedBy: (n, w) => 'Ditandai oleh ' + n + (w ? ' · ' + w : ''),
     ask: 'Ajukan koreksi', reasonPh: 'Alasan koreksi (jelaskan yang sebenarnya terjadi)', submit: 'Kirim ke Super Admin',
-    confirmSubmit: 'Kirim pengajuan koreksi ini ke Super Admin? Alasan Anda akan tercatat.',
     pending: 'Koreksi sedang ditinjau', approved: 'Koreksi disetujui', rejected: 'Koreksi ditolak',
     note: 'Keterangan', hint: 'Status ini dipakai sebagai dasar pembayaran. Jika ada yang keliru, ajukan koreksi.',
     dayN: (n) => 'Hari ' + n, submitted: 'Pengajuan koreksi terkirim. Menunggu keputusan Super Admin.', decidedNote: 'Catatan',
@@ -5579,7 +5564,6 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
   } : {
     title: 'My attendance', unmarked: 'Not marked yet', markedBy: (n, w) => 'Marked by ' + n + (w ? ' · ' + w : ''),
     ask: 'Request a correction', reasonPh: 'Reason (explain what actually happened)', submit: 'Send to Super Admin',
-    confirmSubmit: 'Send this correction request to the Super Admin? Your reason will be recorded.',
     pending: 'Correction under review', approved: 'Correction approved', rejected: 'Correction rejected',
     note: 'Note', hint: 'This status is used as the basis for payment. If anything is wrong, request a correction.',
     dayN: (n) => 'Day ' + n, submitted: 'Correction request sent. Awaiting the Super Admin decision.', decidedNote: 'Note',
@@ -5608,7 +5592,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
         else {
           const decided = c ? `<div class="muted" style="font-size:12px;margin-top:6px">${c.state === 'approved' ? '✓ ' + esc(aStr.approved) : '✕ ' + esc(aStr.rejected)}${c.decision_note ? ' · ' + esc(aStr.decidedNote) + ': ' + esc(c.decision_note) : ''}</div>` : '';
           corr = `${decided}<details style="margin-top:8px"><summary class="btn btn-ghost btn-sm" style="cursor:pointer">${esc(aStr.ask)}</summary>
-            <form method="post" action="/event/${esc(slug)}/koreksi" style="margin-top:10px;display:flex;flex-direction:column;gap:9px" ${jsConfirm(aStr.confirmSubmit)}>
+            <form method="post" action="/event/${esc(slug)}/koreksi" style="margin-top:10px;display:flex;flex-direction:column;gap:9px">
               <input type="hidden" name="attendance_id" value="${esc(row.id)}">
               <textarea name="reason" rows="3" maxlength="600" required placeholder="${esc(aStr.reasonPh)}" style="width:100%;box-sizing:border-box"></textarea>
               <button type="submit" class="btn btn-sm">${esc(aStr.submit)}</button>
