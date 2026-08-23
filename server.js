@@ -2107,6 +2107,8 @@ function parseEventForm(req, positionsMaster) {
     start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
     status: EO_STATUSES.includes(st) ? st : 'draft',
+    // Man Power group link (shown on the talent dashboard only). Keep only http(s) URLs.
+    mp_group_url: (() => { const u = s('mp_group_url', 500); return /^https?:\/\//i.test(u) ? u : null; })(),
   };
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
   const keyById = new Map((positionsMaster || []).map((p) => [String(p.id), p.key]));
@@ -2377,6 +2379,11 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     // email (which anchors the 48h/H-12h deadline). Skip if this is just an
     // idempotent re-click on an offer already open/confirmed for the same position.
     const samePosOpen = (prevOfferState === 'offered' || prevOfferState === 'confirmed') && prevPos === positionId;
+    // Station assignment (e.g. Judges "Station 1..8"). Stored on the application,
+    // shown on the talent's dashboard only. Accept 'Station 1'..'Station 20' or ''.
+    const stationRaw = String(req.body.station || '').trim().slice(0, 40);
+    const station = /^Station ([1-9]|1\d|20)$/.test(stationRaw) ? stationRaw : null;
+    if (station != null) await st.updateApplication(found.app.id, { station });
     if (!samePosOpen) {
       await st.setOfferOffered(found.app.id, new Date().toISOString());
       await deliverOffer(st, found.app.id, found.ev, 'offer').catch(() => {});

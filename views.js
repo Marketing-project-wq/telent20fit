@@ -2505,6 +2505,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
     </div>
     <div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
     ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
+    <div class="field"><label for="mp_group_url">${t('eo.ev.f.mpGroup')}</label>
+      <input type="url" id="mp_group_url" name="mp_group_url" value="${esc(e.mp_group_url || '')}" placeholder="https://chat.whatsapp.com/..." maxlength="500">
+      <div class="muted" style="font-size:12px;margin-top:4px">${t('eo.ev.f.mpGroupHint')}</div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
       <div style="flex:1;min-width:150px">${field('ends_at', t('eo.ev.f.endDate'), dval(e.ends_at), 'date', false, '')}</div>
@@ -2823,8 +2826,9 @@ function eoApplicantsSection(e, view, aps, L) {
         : `<span class="pill" style="background:#fde2e2;color:#b91c1c">⌛ ${esc(t('eo.off.lapsed'))}</span>`;
       const reoffer = a.choices.map((c) => {
         const p = posById.get(c.position_id) || {};
+        const stSel = (p && p.key === 'judge') ? `<select name="station" class="btn btn-ghost btn-sm" style="padding:6px 8px"><option value="">${t('eo.st.pick')}</option>${Array.from({ length: 8 }, (_, i) => `<option value="Station ${i + 1}">${t('eo.st.n', { n: i + 1 })}</option>`).join('')}</select>` : '';
         if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
-        return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.off.reoffer')}: ${esc(posLbl(c.position_id))}</button></form>`;
+        return `<form class="inline-form" method="post" action="${base}/accept" style="display:inline-flex;gap:6px;align-items:center"><input type="hidden" name="position_id" value="${esc(c.position_id)}">${stSel}<button class="btn btn-sm">${t('eo.off.reoffer')}: ${esc(posLbl(c.position_id))}</button></form>`;
       }).join('');
       return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">${why}</div>
@@ -2836,10 +2840,15 @@ function eoApplicantsSection(e, view, aps, L) {
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
+    // Judges get a "Station 1..8" dropdown so the EO records where they'll stand
+    // (shown on the talent's dashboard). Other positions have no station picker.
+    const stationSel = (p) => (p && p.key === 'judge')
+      ? `<select name="station" class="btn btn-ghost btn-sm" style="padding:6px 8px"><option value="">${t('eo.st.pick')}</option>${Array.from({ length: 8 }, (_, i) => `<option value="Station ${i + 1}">${t('eo.st.n', { n: i + 1 })}</option>`).join('')}</select>`
+      : '';
     const acceptBtns = a.choices.map((c) => {
       const p = posById.get(c.position_id) || {};
       if (p.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLbl(c.position_id))} · ${t('eo.ap.posFull')}</button>`;
-      return `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`;
+      return `<form class="inline-form" method="post" action="${base}/accept" style="display:inline-flex;gap:6px;align-items:center"><input type="hidden" name="position_id" value="${esc(c.position_id)}">${stationSel(p)}<button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`;
     }).join('');
     // A: mark this applicant as standby (cadangan) for one of their picks.
     const standbyBtns = a.choices.map((c) => `<form class="inline-form" method="post" action="${base}/standby"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-ghost btn-sm">${t('eo.ap.makeStandby')}: P${c.priority} ${esc(posLbl(c.position_id))}</button></form>`).join('');
@@ -5871,8 +5880,17 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
             </details>`
           : `<div class="muted" style="font-size:12px;background:#f4f4f5;border-radius:8px;padding:9px 11px">${t('ta.withdrawClosed')}</div>`
       ) : '';
+      // Shown on the talent's dashboard only: their assigned station (e.g. Judges
+      // "Station 3") and the one Man Power group link the EO set for the event.
+      const isMainPower = !!(account && account.talent_type === 'main_power');
+      const stationLine = (ctx.myApp && ctx.myApp.station)
+        ? `<div style="background:#eef1f6;border-radius:8px;padding:9px 11px;font-size:13px">📍 ${t('ta.yourStation')}: <b>${esc(ctx.myApp.station)}</b></div>` : '';
+      const groupLine = (isMainPower && e.mp_group_url)
+        ? `<a href="${esc(e.mp_group_url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="width:100%;box-sizing:border-box">💬 ${t('ta.joinGroup')}</a>` : '';
+      const assignInfo = stationLine + groupLine;
       action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${rankChip}${state}</div>
+        ${assignInfo}
         ${confirmUi}
         ${withdrawUi}
         ${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))}><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}

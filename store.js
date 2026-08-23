@@ -247,9 +247,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status, mp_group_url }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published' })
+        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', mp_group_url: mp_group_url || null })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -273,6 +273,7 @@ function supabaseStore() {
       if (patch.reg_open !== undefined) row.reg_open = patch.reg_open || null;
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.reg_closed_at !== undefined) row.reg_closed_at = patch.reg_closed_at;
+      if (patch.mp_group_url !== undefined) row.mp_group_url = patch.mp_group_url || null;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
         await sb.from('talent_event_needs').delete().eq('event_id', id);
@@ -793,8 +794,8 @@ function memoryStore() {
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
     async listHyroxCerts() { return accounts.filter((a) => a.hyrox_cert_path).map(accountProfile); },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', reg_closed_at: null };
+    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, status, mp_group_url }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, status: status || 'published', reg_closed_at: null, mp_group_url: mp_group_url || null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -816,6 +817,7 @@ function memoryStore() {
       if (patch.reg_open !== undefined) ev.reg_open = patch.reg_open || null;
       if (patch.status !== undefined) ev.status = patch.status;
       if (patch.reg_closed_at !== undefined) ev.reg_closed_at = patch.reg_closed_at;
+      if (patch.mp_group_url !== undefined) ev.mp_group_url = patch.mp_group_url || null;
       if (patch.needs) {
         for (let j = eventNeeds.length - 1; j >= 0; j--) if (eventNeeds[j].event_id === id) eventNeeds.splice(j, 1);
         patch.needs.filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
