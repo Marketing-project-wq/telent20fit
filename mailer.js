@@ -17,6 +17,8 @@
 
 const API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const FROM = (process.env.RESET_EMAIL_FROM || '20FIT Talent <onboarding@resend.dev>').trim();
+// Public base URL for links inside emails (e.g. "View Application Status").
+const APP_BASE = (process.env.APP_BASE_URL || 'https://talent.20fit.id').replace(/\/+$/, '');
 
 function configured() { return !!API_KEY; }
 
@@ -382,4 +384,73 @@ async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, locat
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, acceptanceEmailHtml, rejectionEmailHtml };
+// "Under Review" notification. Always English (independent of the talent's
+// saved ID/EN preference), per spec. Details table + a red CTA to the tracker.
+function underReviewEmailHtml({ name, eventName, positionName, eventDate }) {
+  const statusUrl = APP_BASE + '/talent';
+  const row = (label, value, accent) => `<tr>
+      <td style="padding:13px 16px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8b8f97;vertical-align:top;border-top:1px solid #eceff3">${esc(label)}</td>
+      <td style="padding:13px 16px;font-size:14px;font-weight:700;text-align:right;vertical-align:top;color:${accent ? '#E4121F' : '#17171d'};border-top:1px solid #eceff3">${esc(value)}</td>
+    </tr>`;
+  const rowsHtml = [
+    row('Event', eventName),
+    row('Position', positionName),
+    row('Event Date', eventDate || 'To be announced'),
+    row('Status', 'Under Review', true),
+  ].join('').replace('border-top:1px solid #eceff3', 'border-top:0');
+  return `<!doctype html><html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Your application is being reviewed by the Event Organizer.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      ${logoBar()}
+      <tr><td bgcolor="#E4121F" style="background:#E4121F;background:linear-gradient(135deg,#ff3b47,#d10f1b);padding:30px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:#fffffe">Application Under Review</div>
+      </td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">Hi ${esc(name || '')},</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#4a4e57">Good news! Your application for the <b style="color:#E4121F">${esc(positionName)}</b> role at <b>${esc(eventName)}</b> is currently being reviewed by the Event Organizer.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafbfc;border:1px solid #eceff3;border-radius:14px">
+          ${rowsHtml}
+        </table>
+      </td></tr>
+      <tr><td style="padding:24px 30px 6px;text-align:center">
+        <a href="${esc(statusUrl)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">View Application Status</a>
+      </td></tr>
+      <tr><td style="padding:20px 30px 4px">
+        <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;color:#4a4e57">We'll notify you again once there's a decision. You can also check your latest status anytime from your account.</p>
+        <p style="margin:16px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">Thanks for being part of 20FIT Talent!</p>
+        <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">Best,<br><b style="color:#17171d">20FIT Talent Team</b></p>
+      </td></tr>
+      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">This is an automated email from 20FIT Talent. Please do not reply to this email.</p></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Notify a talent their application moved to "Under Review". Always English. Never throws for a missing key. */
+async function sendUnderReviewEmail({ to, name, eventName, positionName, eventDate }) {
+  const subject = 'Your Application for ' + (eventName || 'an event') + ' is Under Review';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — under-review for ' + to + ' (' + eventName + ')');
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: underReviewEmailHtml({ name, eventName, positionName, eventDate }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; under-review email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml };

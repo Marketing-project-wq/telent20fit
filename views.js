@@ -340,6 +340,26 @@ ${body}
 </body></html>`;
 }
 
+/**
+ * Public page shell for the pre-dashboard talent journey (event catalog, event
+ * detail, login/register). Same document frame as layout(), but topped with the
+ * landing-page header (landingNav: logo + optional event search + ID/EN toggle
+ * + account menu) so the whole public flow shares one consistent sticky/blurred
+ * navbar. Dashboards keep appLayout; this is only for public pages.
+ */
+function publicLayout({ title, body, lang, account, active, cities, search = true }) {
+  const L = normLang(lang);
+  const nav = landingNav(L, active || '', account || null, { search, cities: cities || [] });
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
+<body>
+${nav}
+${body}
+</body></html>`;
+}
+
 // Inline stroke icons for the sidebar (no external assets, CSP-safe).
 const NAV_ICON = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
@@ -4860,34 +4880,20 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
   const cards = (events && events.length)
     ? events.map((e) => talentPositionCard(e, L, false)).join('')
     : `<p class="muted" style="margin-top:14px">${esc(empty)}</p>`;
-  const cityOpts = (cities || []).map((c) => `<option value="${esc(c)}"${c === cityVal ? ' selected' : ''}>${esc(c)}</option>`).join('');
-  const pillStyle = 'display:flex;align-items:center;gap:9px;background:var(--card,#fff);border:1px solid var(--line,#e3e7ed);border-radius:999px;padding:9px 15px;box-shadow:0 2px 10px rgba(16,16,19,.05)';
-  // Refine box — mirrors the header search (keyword + Location + Search); a native GET keeps it working without JS.
-  const searchBox = `<form method="get" action="/events" role="search" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 6px">
-      <input type="hidden" name="lang" value="${L}">
-      <div style="${pillStyle};flex:1 1 240px;min-width:0">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" name="q" value="${esc(query)}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" maxlength="80" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14.5px;color:inherit">
-      </div>
-      ${(cities && cities.length) ? `<div style="${pillStyle}">
-        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted,#6b6b70);flex:0 0 auto" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-        <select name="city" aria-label="${esc(t('search.location'))}" style="border:0;outline:0;background:transparent;font-size:14.5px;color:inherit;cursor:pointer;max-width:160px"><option value="">${esc(t('search.location'))}</option>${cityOpts}</select>
-      </div>` : ''}
-      <button type="submit" class="btn btn-sm" style="border-radius:999px;padding:11px 24px">${esc(t('search.btn'))}</button>
-    </form>`;
+  // Search now lives in the unified header (landingNav) — no separate in-body box.
   const body = `<div class="wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
       <h1 style="margin:0">${t('ta.openTitle')}</h1>
       <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     </div>
     <p class="sub">${t('ta.openSub')}</p>
-    ${searchBox}
+    ${(query || cityVal) ? `<p class="muted" style="font-size:13px;margin:8px 0 0">${esc(t('search.aria'))}: <b>${esc(query || cityVal)}</b></p>` : ''}
     ${cards}
   </div>`;
-  return layout({ title: t('ta.openTitle') + ' — 20FIT', body, brand: 'TALENT', home: talentHomePath(account) + '?lang=' + L, lang: L });
+  return publicLayout({ title: t('ta.openTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities, search: true });
 }
 
-function talentEventApply({ account, event, ctx, lang, saved }) {
+function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event;
@@ -5065,7 +5071,7 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
     </div>
   </div>
   ${applyModal}`;
-  return layout({ title: e.name + ' — 20FIT', body, brand: 'TALENT', home: (loggedIn ? '/talent' : '/') + '?lang=' + L, lang: L });
+  return publicLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: '', cities: cities || [], search: true });
 }
 
 module.exports = {

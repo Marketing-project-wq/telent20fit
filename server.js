@@ -1161,6 +1161,15 @@ const eventCity = (loc) => { const parts = String(loc || '').split(','); return 
 const eventInCity = (e, city) => !city || String(e.location || '').toLowerCase().includes(String(city).toLowerCase());
 // Distinct cities of a set of events, for the Location dropdown.
 const eventCityList = (events) => Array.from(new Set((events || []).map((e) => eventCity(e.location)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
+// Cities of currently-open events, for the unified header's search dropdown on
+// public pages. Cached briefly so it doesn't re-scan every event on each load.
+let _cityCache = { at: 0, list: [] };
+async function publicCityList(st) {
+  const now = Date.now();
+  if (_cityCache.list.length && now - _cityCache.at < 60000) return _cityCache.list;
+  try { _cityCache = { at: now, list: eventCityList(await openPositionEvents(st, null)) }; } catch (_) { /* keep last known */ }
+  return _cityCache.list;
+}
 
 // PUBLIC live event search (search-as-you-type for the landing header). Only
 // events currently open for registration appear — the same live data as the
@@ -1222,7 +1231,8 @@ app.get('/event/:id', optionalTalent(), async (req, res, next) => {
     const ctx = await positionApplyCtx(st, ev, req.talent ? req.talent.id : null);
     if (!ctx.positions.length) return res.redirect(fallback); // not a position-based event
     await attachMockups(st, ev);
-    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1' }));
+    const cities = await publicCityList(st);
+    res.send(V.talentEventApply({ account: req.account || null, event: ev, ctx, lang: req.lang, saved: req.query.saved === '1', cities }));
   } catch (e) { next(e); }
 });
 
@@ -1992,9 +2002,26 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     // #7: as soon as the owning EO opens the applicant list, move this event's
     // still-new applications to "under_review" so the talent's tracker lights up
     // the Review stage. Idempotent — only touches applied/pending rows.
+    const nowUnderReview = [];
     for (const a of apps) {
       if (a.event_id === ev.id && (a.status === 'applied' || a.status === 'pending') && (choicesByApp.get(a.id) || []).length) {
         await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review';
+        nowUnderReview.push(a);
+      }
+    }
+    // Notify each talent (English, always) that their application is under review.
+    // Fire-and-forget so a slow/failed mail send never blocks the applicants page.
+    if (nowUnderReview.length) {
+      const posById = new Map(positions.map((p) => [p.position_id, p]));
+      for (const a of nowUnderReview) {
+        const tt = talentById.get(a.talent_id) || {};
+        const to = tt.login;
+        if (!to || !/@/.test(to)) continue;
+        const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
+        const pos = top && posById.get(top.position_id);
+        const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
+        mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: ev.name || 'Event 20FIT', positionName, eventDate: eventDateStrEn(ev) })
+          .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
       }
     }
     const applicants = apps
