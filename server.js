@@ -81,6 +81,17 @@ app.use(cookieParser());
 app.use((req, res, next) => { if (!/\/logout$/.test(req.path)) auth.touchSession(req, res); next(); });
 // Resolve the request language once (from ?lang= or the persisted `lang` cookie).
 app.use((req, res, next) => { req.lang = readLang(req, res); req.t = (k, v) => i18n.t(req.lang, k, v); next(); });
+// Never let a browser/CDN cache an auth-flow response. These routes render
+// login-state-dependent content and issue role-based redirects (e.g. /eo/login
+// -> /login/eo -> dashboard-or-form), so a cached 3xx/page would pin a stale
+// destination — exactly the "/eo/login keeps going to /admin" class of bug.
+app.use((req, res, next) => {
+  if (/^\/(admin|eo|login|register|talent|events|event)(\/|$)/.test(req.path)) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+  }
+  next();
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
