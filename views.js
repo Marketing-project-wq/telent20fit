@@ -2386,7 +2386,7 @@ function eoVerifyNeeded({ email, lang }) {
 
 // Registration-status badge for an EO event.
 // Localized label for a master/event position.
-function posLabel(p, lang) { return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
+function posLabel(p, lang) { if (p && p.custom_label) return p.custom_label; return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
 
 function eoRegBadge(status, lang) {
   const L = normLang(lang);
@@ -2454,7 +2454,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   const dval = (v) => esc(String(v || '').slice(0, 10));
   const field = (name, label, val, type, required, extra) => `<div class="field"><label for="${name}">${label}${required ? rq : ''}</label><input type="${type || 'text'}" id="${name}" name="${name}" ${required ? 'required' : ''} value="${esc(val || '')}" ${extra || ''}></div>`;
   const status = e.status || 'draft';
-  const posRows = (positionsMaster || []).map((p) => {
+  const KOL_KEYS = ['kol', 'fotografer', 'videografer'];
+  const posRow = (p) => {
     const on = Object.prototype.hasOwnProperty.call(sel, p.id);
     const cur = on ? sel[p.id] : null;
     const pid = esc(p.id);
@@ -2462,27 +2463,40 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
     const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
     const grp = (txt) => `<div class="muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:12px">${txt}</div>`;
+    const isOther = p.key === 'other';
+    // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
+    // The custom "Lainnya" slot has no template — the EO names & fills it manually.
+    const tplAttrs = isOther ? ' data-other="1"'
+      : ` data-tpl-desc="${esc(t('pos.tpl.' + p.key + '.desc'))}" data-tpl-job="${esc(t('pos.tpl.' + p.key + '.job'))}" data-tpl-req="${esc(t('pos.tpl.' + p.key + '.req'))}"`;
+    const customName = isOther ? `<input type="text" name="custom_label_${pid}" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600">` : '';
     // Category-specific fields only render (and only save) for the matching type.
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
-    return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
+    return `<div class="posm-row" data-key="${esc(p.key)}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
         <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
-        <textarea name="jobdesk_${pid}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px">${esc(cv('jobdesk'))}</textarea>
+        ${customName}
+        <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:${isOther ? '6px' : '0'};font-size:13px">${esc(cv('description'))}</textarea>
+        <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
         ${grp(t('eo.pos.detailGroup'))}
         ${inp('work_hours', 'eo.pos.workHoursPh', 120)}
         ${inp('venue_detail', 'eo.pos.venuePh', 200)}
         <input type="text" name="fee_${pid}" maxlength="200" value="${esc(cv('fee'))}" placeholder="${t('eo.ev.feePh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">
-        <textarea name="requirement_${pid}" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('requirement'))}</textarea>
+        <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('requirement'))}</textarea>
         ${inp('dresscode', 'eo.pos.dresscodePh', 400)}
         ${inp('meeting_point', 'eo.pos.meetingPh', 400)}
         ${kolFields}${photoFields}
       </div>
     </div>`;
-  }).join('');
+  };
+  const gHead = (txt) => `<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#6b6b70);margin:16px 0 2px">${txt}</div>`;
+  const mpRows = (positionsMaster || []).filter((p) => p.key !== 'other' && !KOL_KEYS.includes(p.key));
+  const otherRows = (positionsMaster || []).filter((p) => p.key === 'other');
+  const kolRows = (positionsMaster || []).filter((p) => KOL_KEYS.includes(p.key));
+  const posRows = `${gHead(t('eo.ev.grp.manpower'))}${mpRows.map(posRow).join('')}${otherRows.map(posRow).join('')}${kolRows.length ? gHead(t('eo.ev.grp.kol')) + kolRows.map(posRow).join('') : ''}`;
   const body = `<div class="wrap">
   <a href="${listHref}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
@@ -2544,8 +2558,14 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
   function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'); if(ex) ex.style.display=(cb&&cb.checked)?'':'none'; }
+  // On tick, fill empty Deskripsi/Jobdesk/Requirement from the role's default template.
+  function fillTpl(r){
+    var cb=r.querySelector('.posm-cb'); if(!cb||!cb.checked) return;
+    var map=[['.posm-desc','data-tpl-desc'],['.posm-job','data-tpl-job'],['.posm-req','data-tpl-req']];
+    map.forEach(function(m){ var el=r.querySelector(m[0]), val=r.getAttribute(m[1]); if(el && val && !el.value.trim()) el.value=val; });
+  }
   var rows=[].slice.call(list.querySelectorAll('.posm-row'));
-  rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); }); });
+  rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); fillTpl(r); }); });
   // Pick an event type -> auto-fill its default positions (still adjustable by hand).
   var cat=document.getElementById('category');
   if(cat && cat.tagName==='SELECT'){
@@ -2554,7 +2574,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       var ids=(opt.getAttribute('data-pos')||'').split(',').filter(Boolean);
       if(!ids.length) return;
       var set={}; ids.forEach(function(id){ set[id]=1; });
-      rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(!cb) return; cb.checked=!!set[cb.value]; sync(r); });
+      rows.forEach(function(r){
+        if(r.getAttribute('data-other')) return; // never disturb the custom "Lainnya" slot
+        var cb=r.querySelector('.posm-cb'); if(!cb) return;
+        cb.checked=!!set[cb.value]; sync(r); fillTpl(r);
+      });
     });
   }
 })();
@@ -4950,10 +4974,6 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
     } else {
       action = '';
     }
-    // Team-context line — derived from quota but never shown as a slot/quota
-    // number: "you'll work alongside N other talents in this position".
-    const mates = Math.max(0, (p.quota || 0) - 1);
-    const teamLine = mates > 0 ? `<div style="font-size:12.5px;color:var(--muted,#6b6b70);margin-top:12px">👥 ${t('ta.teamContext', { n: mates })}</div>` : '';
     // The full jobdesk + every EO-filled extra detail sit in ONE expandable
     // "Lihat Detail" so the card stays compact; empty fields are skipped.
     // Category-specific fields only for the matching type.
@@ -4969,11 +4989,11 @@ function talentEventApply({ account, event, ctx, lang, saved }) {
     const detailHtml = filledRows.length
       ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div>${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
       : '';
-    const foot = `${teamLine}${detailHtml}${action}`;
+    const foot = `${detailHtml}${action}`;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
-      desc: '', // jobdesk now lives inside the "Lihat Detail" dropdown
+      desc: p.description ? esc(p.description) : '', // short role description on the card face
       corner: badge,
       foot,
       id: 'pos-' + esc(p.position_id),

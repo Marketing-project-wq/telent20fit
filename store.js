@@ -17,7 +17,7 @@ const BUCKET = 'kol-uploads';
 // Optional per-position detail fields (all nullable text). General fields apply
 // to every category; the kol_* / photo_* fields only carry data for KOL /
 // photographer positions. Shared by the read + write paths in both stores.
-const POS_DETAIL_COLS = ['work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
+const POS_DETAIL_COLS = ['description', 'custom_label', 'work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
 const pickPosDetails = (src) => { const o = {}; for (const c of POS_DETAIL_COLS) o[c] = (src && src[c]) || null; return o; };
 
 // Per-metric "reasonable per day" thresholds (green ceiling, yellow ceiling).
@@ -549,9 +549,11 @@ function memoryStore() {
     ['registration_staff', 'Registration Staff', 'Registration Staff', 40], ['water_station', 'Water Station', 'Water Station', 50],
     ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
     ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
+    ['other', 'Lainnya', 'Other', 200],
   ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
   // Managed event types (HYROX + Lari active); each auto-fills its default positions in the form.
-  const ALL_POS_IDS = positions.map((p) => p.id);
+  // 'other' (Lainnya) is the custom slot — never part of a type's default set.
+  const ALL_POS_IDS = positions.filter((p) => p.key !== 'other').map((p) => p.id);
   const eventTypes = [
     { key: 'lari', label_id: 'Lari', label_en: 'Running', sort: 10, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
     { key: 'hyrox', label_id: 'HYROX', label_en: 'HYROX', sort: 20, is_active: true, default_position_ids: ALL_POS_IDS.slice() },

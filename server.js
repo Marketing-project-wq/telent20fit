@@ -1782,7 +1782,7 @@ const UNLIMITED_QUOTA = 100000;
 function eoSelMap(positions) {
   const m = {};
   (positions || []).forEach((p) => {
-    const o = { quota: p.quota, jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' };
+    const o = { quota: p.quota, description: p.description || '', custom_label: p.custom_label || '', jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' };
     POS_DETAIL_KEYS.forEach((k) => { o[k] = p[k] || ''; });
     m[p.position_id] = o;
   });
@@ -1834,7 +1834,12 @@ function parseEventForm(req, positionsMaster) {
     const g = (f, max) => String(req.body[f + '_' + id] || '').trim().slice(0, max) || null;
     const key = keyById.get(id);
     const pos = {
-      position_id: id, quota: q,
+      position_id: id, quota: q, key,
+      // Short role description shown on the talent card face; auto-filled from a
+      // per-role template but freely editable by the EO.
+      description: g('description', 600),
+      // Custom name for the "Lainnya" (other) slot only; ignored for fixed roles.
+      custom_label: key === 'other' ? g('custom_label', 80) : null,
       jobdesk: g('jobdesk', 1000), requirement: g('requirement', 1000), fee: g('fee', 200),
       // General extra fields (all categories).
       work_hours: g('work_hours', 120), venue_detail: g('venue_detail', 200),
@@ -1862,6 +1867,8 @@ function validateEventForm(f, req) {
   if (openDT && closeDT && closeDT < openDT) e.push(req.t('eo.ev.err.regCloseBeforeOpen'));
   if (d.reg_deadline && d.starts_at && d.reg_deadline > d.starts_at) e.push(req.t('eo.ev.err.regCloseAfterStart'));
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
+  // The "Lainnya" (custom) role needs a name to identify it.
+  if (f.positions.some((p) => p.key === 'other' && !p.custom_label)) e.push(req.t('eo.ev.err.customNameRequired'));
   return e;
 }
 
