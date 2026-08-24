@@ -1701,7 +1701,8 @@ app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirec
 // Event Organizer area. EO staff see only their own data (events created_by
 // them, and applications to those events). Profile must be complete before an
 // EO can create events (enforced in the event phase; surfaced as a reminder here).
-const requireEo = auth.requireStaff(['eo']);
+// Unauthenticated EO routes bounce to the EO sign-in (not the Super Admin one).
+const requireEo = auth.requireStaff(['eo'], '/login/eo');
 
 function eoCtx(req) { return { role: 'eo', name: req.staff.name }; }
 

@@ -128,11 +128,11 @@ function requireTalent(type) {
 }
 
 /** Middleware: require a logged-in staff member whose role is in `roles`, else /admin/login. */
-function requireStaff(roles) {
+function requireStaff(roles, loginPath) {
   return (req, res, next) => {
     const t = anySession(req, roles);
     if (t) { req.staff = t; return next(); }
-    res.redirect('/admin/login');
+    res.redirect(loginPath || '/admin/login');
   };
 }
 
