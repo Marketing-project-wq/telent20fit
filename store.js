@@ -298,6 +298,11 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
+    async listEventTypes() {
+      const { data, error } = await sb.from('event_types').select('key,label_id,label_en,default_position_ids,sort').eq('is_active', true).order('sort');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
         .select('id,quota,closed_at,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
@@ -545,6 +550,12 @@ function memoryStore() {
     ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
     ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
   ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
+  // Managed event types (HYROX + Lari active); each auto-fills its default positions in the form.
+  const ALL_POS_IDS = positions.map((p) => p.id);
+  const eventTypes = [
+    { key: 'lari', label_id: 'Lari', label_en: 'Running', sort: 10, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
+    { key: 'hyrox', label_id: 'HYROX', label_en: 'HYROX', sort: 20, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
+  ];
   const eventPositions = [
     { id: 'ep-j-kol', event_id: 'ev-jakarta', position_id: 'pos-kol', quota: 2, closed_at: null, jobdesk: 'Buat 3 konten (reels/story) selama event & tag akun 20FIT. Hadir di lokasi hari-H.', requirement: 'Followers IG 5.000+, engagement bagus, terbiasa bikin konten olahraga.', fee: 'Rp750.000 + merchandise event' },
     { id: 'ep-j-foto', event_id: 'ev-jakarta', position_id: 'pos-fotografer', quota: 2, closed_at: null, jobdesk: 'Dokumentasi foto di area start/finish & sepanjang rute. Deliver min. 150 foto terkurasi H+2.', requirement: 'Punya kamera mirrorless/DSLR sendiri, pengalaman foto event olahraga.', fee: 'Rp600.000/hari' },
@@ -650,6 +661,7 @@ function memoryStore() {
       }
     },
     async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
+    async listEventTypes() { return eventTypes.filter((t) => t.is_active).slice().sort((a, b) => a.sort - b.sort).map((t) => ({ ...t, default_position_ids: (t.default_position_ids || []).slice() })); },
     async listEventPositions(eventId) {
       return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
     },

@@ -1776,6 +1776,9 @@ async function eoOwnedEvent(st, staffId, eventId) {
   return (await st.listEvents()).find((e) => e.id === eventId && e.created_by === staffId) || null;
 }
 const POS_DETAIL_KEYS = ['work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
+// Sentinel quota for form-created positions now that the quota field is gone:
+// high enough that a position never reads as "full" (registration is unlimited).
+const UNLIMITED_QUOTA = 100000;
 function eoSelMap(positions) {
   const m = {};
   (positions || []).forEach((p) => {
@@ -1822,8 +1825,11 @@ function parseEventForm(req, positionsMaster) {
   chosen.forEach((id) => {
     id = String(id);
     if (!validIds.has(id) || seen.has(id)) return;
-    const q = Math.max(0, parseInt(req.body['quota_' + id], 10) || 0);
-    if (q <= 0) return;
+    // Quota was removed from the form (registration is unlimited). A ticked position
+    // is stored with a high sentinel quota so it saves (the store requires quota>0)
+    // and never reads as "full". Editing keeps any existing quota as an internal target.
+    const existingQ = parseInt(req.body['quota_' + id], 10);
+    const q = Number.isFinite(existingQ) && existingQ > 0 ? existingQ : UNLIMITED_QUOTA;
     // Per-field getter (trim + cap length; empty -> null).
     const g = (f, max) => String(req.body[f + '_' + id] || '').trim().slice(0, max) || null;
     const key = keyById.get(id);
@@ -1877,8 +1883,8 @@ app.get('/eo/events/new', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const positionsMaster = await st.listPositions();
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, selected: {}, lang: req.lang }));
+    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, eventTypes, selected: {}, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1887,10 +1893,10 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const positionsMaster = await st.listPositions();
+    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
     const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, selected: eoSelMap(f.positions), errors, lang: req.lang }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, eventTypes, selected: eoSelMap(f.positions), errors, lang: req.lang }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
@@ -1906,9 +1912,9 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id)]);
+    const [positionsMaster, evPos, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes()]);
     await attachMockups(st, ev);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, selected: eoSelMap(evPos), lang: req.lang }));
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, selected: eoSelMap(evPos), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1918,7 +1924,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, apps, choices] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
+    const [positionsMaster, evPos, apps, choices, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes()]);
     const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
     // Guards: a position with applicants can't be removed; quota can't drop below accepted.
@@ -1928,7 +1934,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
       if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
@@ -2876,8 +2882,8 @@ app.get('/admin/events/new', auth.requireStaff(['super_admin']), async (req, res
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const positionsMaster = await st.listPositions();
-    res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, selected: {}, lang: req.lang, admin: true }));
+    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
+    res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, eventTypes, selected: {}, lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -2885,10 +2891,10 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('pos
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const positionsMaster = await st.listPositions();
+    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
     const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, eventTypes, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
@@ -2905,9 +2911,9 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos] = await Promise.all([st.listPositions(), st.listEventPositions(event.id)]);
+    const [positionsMaster, evPos, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes()]);
     await attachMockups(st, event);
-    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
+    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -2917,7 +2923,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, apps, choices] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices()]);
+    const [positionsMaster, evPos, apps, choices, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes()]);
     const f = parseEventForm(req, positionsMaster);
     const errors = validateEventForm(f, req);
     // Same guards as EO: a position with applicants can't be removed; quota can't drop below accepted.
@@ -2927,7 +2933,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
       if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang, admin: true }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang, admin: true }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, event.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(event.id, patch);

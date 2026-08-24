@@ -2437,7 +2437,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   return appLayout({ title: t('eo.ev.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin }) {
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
@@ -2457,7 +2457,6 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   const posRows = (positionsMaster || []).map((p) => {
     const on = Object.prototype.hasOwnProperty.call(sel, p.id);
     const cur = on ? sel[p.id] : null;
-    const q = cur ? (typeof cur === 'object' ? cur.quota : cur) : '';
     const pid = esc(p.id);
     // Current value for a per-position field (from the selected/edit map).
     const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
@@ -2467,10 +2466,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
     return `<div class="posm-row" style="padding:12px 0;border-top:1px solid var(--line)">
-      <label style="display:flex;gap:10px;align-items:center">
+      <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
         <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
-        <input type="number" name="quota_${pid}" min="1" value="${q ? esc(q) : ''}" placeholder="${t('eo.ev.quota')}" style="width:110px" class="posm-q">
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
         <textarea name="jobdesk_${pid}" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px">${esc(cv('jobdesk'))}</textarea>
@@ -2493,9 +2491,13 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   <form method="post" action="${action}" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:720px">
     <div style="font-weight:700;margin-bottom:6px">${t('eo.ev.sec.info')}</div>
     ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
-    <div class="field"><label for="category">${t('eo.ev.f.category')}${rq}</label>
-      <input type="text" id="category" name="category" required maxlength="80" list="evcats" value="${esc(e.category || '')}" placeholder="${t('eo.ev.f.categoryPh')}">
-      <datalist id="evcats"><option value="Marathon"><option value="Fun Run"><option value="Trail Run"><option value="HYROX / Fungsional"><option value="Triathlon"><option value="Turnamen"><option value="Konser"><option value="Expo"></datalist>
+    <div class="field"><label for="category">${t('eo.ev.f.eventType')}${rq}</label>
+      <select id="category" name="category" required>
+        <option value="">${t('eo.ev.f.eventTypePick')}</option>
+        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; return `<option value="${esc(lab)}" data-pos="${esc((ty.default_position_ids || []).join(','))}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
+        ${(e.category && !(eventTypes || []).some((ty) => ((L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '') === e.category)) ? `<option value="${esc(e.category)}" selected>${esc(e.category)}</option>` : ''}
+      </select>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
     </div>
     <div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
     ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
@@ -2541,13 +2543,20 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 <script>
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
-  [].slice.call(list.querySelectorAll('.posm-row')).forEach(function(r){
-    var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-q'), ex=r.querySelector('.posm-extra');
-    if(!cb||!q) return;
-    function sync(){ if(ex) ex.style.display = cb.checked ? '' : 'none'; }
-    cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } sync(); });
-    q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; sync(); });
-  });
+  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'); if(ex) ex.style.display=(cb&&cb.checked)?'':'none'; }
+  var rows=[].slice.call(list.querySelectorAll('.posm-row'));
+  rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); }); });
+  // Pick an event type -> auto-fill its default positions (still adjustable by hand).
+  var cat=document.getElementById('category');
+  if(cat && cat.tagName==='SELECT'){
+    cat.addEventListener('change',function(){
+      var opt=cat.options[cat.selectedIndex]; if(!opt) return;
+      var ids=(opt.getAttribute('data-pos')||'').split(',').filter(Boolean);
+      if(!ids.length) return;
+      var set={}; ids.forEach(function(id){ set[id]=1; });
+      rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(!cb) return; cb.checked=!!set[cb.value]; sync(r); });
+    });
+  }
 })();
 (function(){
   var s=document.getElementById('starts_at'), d=document.getElementById('reg_deadline'), w=document.getElementById('regWarn');
@@ -2579,8 +2588,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
       <b>${esc(posLabel(p, L))}</b>${p.full ? `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('eo.ev.full')}</span>` : `<span class="pill pill-ok">${t('eo.ev.openPos')}</span>`}
     </div>
-    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span></div>
-    <div class="muted" style="font-size:12px">${t('eo.ev.filledNeeded')}</div>
+    <div style="font-size:26px;font-weight:800;margin-top:8px">${p.filled}${p.quota >= 100000 ? '' : `<span class="muted" style="font-size:15px;font-weight:600"> / ${p.quota}</span>`}</div>
+    <div class="muted" style="font-size:12px">${p.quota >= 100000 ? t('eo.ev.acceptedLabel') : t('eo.ev.filledNeeded')}</div>
   </div>`).join('') : `<p class="muted">${t('eo.ev.noPositions')}</p>`;
   let closeBtn = '';
   if (view.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
@@ -2692,7 +2701,7 @@ function eoApplicantsSection(e, view, aps, L) {
       ${talentStatusBadge(a.status, L)}
     </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
     return `<div class="card" style="margin-top:12px;padding:14px 16px">
-      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.filled} / ${p.quota})</span></div>
+      <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.quota >= 100000 ? p.filled + ' ' + t('eo.ev.acceptedLabel') : p.filled + ' / ' + p.quota})</span></div>
       <div class="dl-list" style="margin-top:8px">${list}</div>
     </div>`;
   }).join('');
