@@ -1614,7 +1614,7 @@ function faqSection(lang) {
  * account) form, matching the 20FIT app style. Both /register and /login/talent render
  * this; `mode` picks the active tab and which panel a validation error lands on.
  */
-function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
+function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const v = values || {};
@@ -1627,8 +1627,6 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
   // visitor who clicked an event while logged out lands back on it after auth.
   const nextInput = next ? `<input type="hidden" name="next" value="${esc(next)}">` : '';
   const isLogin = mode === 'login';
-  const basePath = isLogin ? '/login/talent' : '/register';
-  const langBtn = (code, label) => `<a href="${basePath}?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3.2"/></svg>';
   const errBanner = (errors && errors.length)
     ? `<div class="au-err"><b>${t('err.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
@@ -1658,13 +1656,39 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
 
-  const body = `<div class="au-top">
-    <div class="au-top-left">
-      <a href="/?lang=${L}" class="au-back">${esc(t('common.back'))}</a>
-      <a href="/?lang=${L}" class="au-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
-    </div>
-    <div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>
-  </div>
+  // Auth-specific layout CSS (the shared STYLE already carries au-faq* + the
+  // lp-nav/lp-search/lp-acct header used by publicLayout; only the hero/form
+  // pieces below are page-local).
+  const auStyle = `<style>
+.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start}
+.au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
+.au-sub{margin:22px 0 26px;font-size:clamp(16px,1.6vw,19px);color:var(--lp-tx3);max-width:480px}
+.au-checks{list-style:none;display:flex;flex-direction:column;gap:13px}
+.au-checks li{display:flex;align-items:center;gap:12px;font-weight:600;font-size:15.5px;color:var(--lp-tx2)}
+.au-checks .ck{flex:0 0 auto;color:var(--red);font-weight:900;font-size:16px}
+.au-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(20,20,30,.10)}
+.au-tabs{display:flex;gap:28px;border-bottom:1px solid var(--lp-line);margin-bottom:22px}
+.au-tab{background:none;border:0;cursor:pointer;padding:0 0 14px;font:800 15px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;color:var(--lp-tx4);position:relative}
+.au-tab.on{color:var(--lp-tx)}
+.au-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--red);border-radius:3px}
+.au-panel{display:none}
+.au-panel.on{display:block}
+.au-f{margin-bottom:16px}
+.au-f>label{display:block;font:800 11.5px/1.3 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--lp-tx3);margin-bottom:8px}
+.au-in{width:100%;background:var(--lp-chip);border:1px solid transparent;border-radius:12px;padding:14px 15px;font:500 15px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
+.au-in:focus{outline:none;border-color:var(--red);background:#fff}
+.au-in::placeholder{color:var(--lp-tx4)}
+.au-hint{margin-top:6px;font-size:12.5px;color:var(--lp-tx4)}
+.au-pass{position:relative}
+.au-pass .au-in{padding-right:46px}
+.au-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;color:var(--lp-tx3);padding:5px;display:flex}
+.au-submit{width:100%;margin-top:6px;padding:16px;border-radius:12px;background:var(--red);color:#fff;border:0;cursor:pointer;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;box-shadow:0 10px 24px rgba(228,18,31,.28)}
+.au-forgot{display:block;text-align:right;margin-top:14px;color:var(--lp-tx3);font-size:13.5px}
+.au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
+.au-err ul{margin:6px 0 0 18px}
+@media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
+</style>`;
+  const body = `${auStyle}
   <div class="au-wrap">
     <section class="au-hero">
       <h1 class="au-title">${esc(t('authp.head1'))} ${esc(t('authp.head2'))}</h1>
@@ -1695,82 +1719,12 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
     [].slice.call(document.querySelectorAll('[data-eye]')).forEach(function(btn){btn.addEventListener('click',function(){var i=document.getElementById(btn.getAttribute('data-eye'));if(i)i.type=i.type==='password'?'text':'password';});});
   })();</script>`;
 
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${t('auth.account.registerTitle')} — 20FIT</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-<style>
-:root{--red:#E4121F;--red-soft:rgba(228,18,31,.10);
-  --lp-bg:#f4f6f9;--lp-card:#ffffff;--lp-chip:#eef1f5;--lp-line:#e3e7ed;--lp-line2:#d7dbe2;
-  --lp-tx:#17171d;--lp-tx2:#41454d;--lp-tx3:#63676e;--lp-tx4:#8b8f97}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Barlow,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--lp-bg);color:var(--lp-tx);line-height:1.5;min-height:100vh}
-a{text-decoration:none;color:inherit}
-.au-top{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1240px;margin:0 auto;padding:18px 28px}
-.au-top-left{display:flex;align-items:center;gap:18px;min-width:0}
-.au-back{display:inline-flex;align-items:center;padding:9px 16px;border-radius:999px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx2);background:var(--lp-chip);border:1px solid var(--lp-line);white-space:nowrap}
-.au-back:hover{background:var(--lp-line);color:var(--lp-tx)}
-.au-logo img{height:90px;width:auto;display:block;object-fit:contain}
-.lp-tog{display:flex;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
-.lp-tog-b{padding:8px 15px;border-radius:8px;font:700 14px/1 Barlow,sans-serif;color:var(--lp-tx3)}
-.lp-tog-b.on{color:#fff;background:var(--red)}
-.au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start}
-.au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
-.au-sub{margin:22px 0 26px;font-size:clamp(16px,1.6vw,19px);color:var(--lp-tx3);max-width:480px}
-.au-cta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:30px}
-.au-btn{display:inline-flex;align-items:center;justify-content:center;padding:15px 26px;border-radius:999px;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;border:1px solid transparent;white-space:nowrap}
-.au-btn-red{background:var(--red);color:#fff;box-shadow:0 10px 24px rgba(228,18,31,.28)}
-.au-btn-ghost{background:#fff;color:var(--lp-tx);border-color:var(--lp-line2)}
-.au-checks{list-style:none;display:flex;flex-direction:column;gap:13px}
-.au-checks li{display:flex;align-items:center;gap:12px;font-weight:600;font-size:15.5px;color:var(--lp-tx2)}
-.au-checks .ck{flex:0 0 auto;color:var(--red);font-weight:900;font-size:16px}
-.au-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:20px;padding:30px;box-shadow:0 18px 50px rgba(20,20,30,.10)}
-.au-tabs{display:flex;gap:28px;border-bottom:1px solid var(--lp-line);margin-bottom:22px}
-.au-tab{background:none;border:0;cursor:pointer;padding:0 0 14px;font:800 15px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;color:var(--lp-tx4);position:relative}
-.au-tab.on{color:var(--lp-tx)}
-.au-tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--red);border-radius:3px}
-.au-panel{display:none}
-.au-panel.on{display:block}
-.au-f{margin-bottom:16px}
-.au-f>label{display:block;font:800 11.5px/1.3 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:var(--lp-tx3);margin-bottom:8px}
-.au-in{width:100%;background:var(--lp-chip);border:1px solid transparent;border-radius:12px;padding:14px 15px;font:500 15px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
-.au-in:focus{outline:none;border-color:var(--red);background:#fff}
-.au-in::placeholder{color:var(--lp-tx4)}
-.au-hint{margin-top:6px;font-size:12.5px;color:var(--lp-tx4)}
-.au-pass{position:relative}
-.au-pass .au-in{padding-right:46px}
-.au-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;color:var(--lp-tx3);padding:5px;display:flex}
-.au-gender{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.au-gseg{display:flex;margin:0;position:relative}
-.au-gseg input{position:absolute;opacity:0;width:0;height:0;margin:0}
-.au-gseg>span{flex:1;text-align:center;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:12px;padding:14px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx2);cursor:pointer}
-.au-gseg input:checked+span{background:var(--red-soft);border-color:var(--red);color:var(--red)}
-.au-gseg input:focus-visible+span{outline:2px solid var(--red);outline-offset:1px}
-.au-submit{width:100%;margin-top:6px;padding:16px;border-radius:12px;background:var(--red);color:#fff;border:0;cursor:pointer;font:800 14px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;box-shadow:0 10px 24px rgba(228,18,31,.28)}
-.au-forgot{display:block;text-align:right;margin-top:14px;color:var(--lp-tx3);font-size:13.5px}
-.au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
-.au-err ul{margin:6px 0 0 18px}
-.au-faq{max-width:1240px;margin:0 auto;padding:8px 28px 60px}
-.au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,46px);margin:0 0 8px}
-.au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
-.au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
-.au-faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;font:700 16.5px/1.35 Barlow,sans-serif;color:var(--lp-tx)}
-.au-faq-item summary::-webkit-details-marker{display:none}
-.au-faq-ic{flex:0 0 auto;color:var(--red);font-size:28px;line-height:1;transition:transform .2s ease}
-.au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
-.au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
-@media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
-@media(max-width:560px){.au-faq{padding:8px 18px 60px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
-@media(max-width:560px){.au-top{padding:14px 16px;gap:10px}.au-top-left{gap:11px}.au-logo img{height:68px}.au-back{padding:8px 13px;font-size:13px}}
-</style>
-</head><body>${body}</body></html>`;
+  return publicLayout({ title: t('auth.account.registerTitle') + ' — 20FIT', body, lang: L, account: null, cities: cities || [], search: true });
 }
 
 function talentLogin(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName });
+  if (opts.unified) return talentAuthPage({ mode: 'login', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName, cities: opts.cities });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);
@@ -1800,7 +1754,7 @@ function talentLogin(type, opts = {}) {
 
 function talentRegister(type, opts = {}) {
   const L = normLang(opts.lang);
-  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName });
+  if (opts.unified) return talentAuthPage({ mode: 'register', lang: L, errors: opts.errors, values: opts.values, next: opts.next, eventName: opts.eventName, cities: opts.cities });
   const t = (k, v) => tr(L, k, v);
   const unified = !!opts.unified;
   const p = talentPath(type);

@@ -425,8 +425,10 @@ app.get('/register', async (req, res, nextFn) => {
     const nxt = safeNext(req.query.next);
     const tk = auth.currentTalent(req);
     if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
-    const eventName = nxt ? await eventNameFromNext(db(), nxt) : null;
-    res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt, eventName }));
+    const st = db();
+    const eventName = nxt ? await eventNameFromNext(st, nxt) : null;
+    const cities = st ? await publicCityList(st) : [];
+    res.send(V.talentRegister('kol', { unified: true, lang: req.lang, next: nxt, eventName, cities }));
   } catch (e) { nextFn(e); }
 });
 app.post('/register', talentRegisterPost('kol', { unified: true }));
@@ -434,9 +436,12 @@ async function talentLoginGet(req, res) {
   const nxt = safeNext(req.query.next);
   const tk = auth.currentTalent(req);
   if (tk && (tk.type === 'kol' || tk.type === 'main_power')) return res.redirect(nxt || '/talent');
+  const st = db();
   let eventName = null;
-  try { if (nxt) eventName = await eventNameFromNext(db(), nxt); } catch (_) { /* best-effort */ }
-  res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt, eventName }));
+  try { if (nxt) eventName = await eventNameFromNext(st, nxt); } catch (_) { /* best-effort */ }
+  let cities = [];
+  try { if (st) cities = await publicCityList(st); } catch (_) { /* best-effort */ }
+  res.send(V.talentLogin('kol', { unified: true, lang: req.lang, next: nxt, eventName, cities }));
 }
 app.get('/login/talent', talentLoginGet);
 // /login kept as an alias of the canonical /login/talent (preserve ?next/?lang).
