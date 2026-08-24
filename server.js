@@ -2230,6 +2230,8 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
       st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(), st.listProofs(),
     ]);
     await attachMockups(st, events);
+    // Attach opened positions per event so the NEEDS column reflects the shared position model.
+    await Promise.all(events.map(async (e) => { e.positions = await st.listEventPositions(e.id); }));
     res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
   } catch (e) { next(e); }
 });
@@ -2857,63 +2859,67 @@ app.post('/admin/eos', auth.requireStaff(['super_admin']), async (req, res, next
   } catch (e) { next(e); }
 });
 
-// Super admin: create event with per-talent-type needs.
-app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
+// Super admin uses the SAME position-based event form as EO (shared eoEventForm).
+app.get('/admin/events/new', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const location = String(req.body.location || '').trim().slice(0, 200) || null;
-    const starts_at = String(req.body.starts_at || '').trim() || null;
-    const ends_at = String(req.body.ends_at || '').trim() || null;
-    const needs = [];
-    if (req.body.need_kol) needs.push({ talent_type: 'kol' });
-    if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: Math.max(1, parseInt(req.body.mp_headcount, 10) || 1) });
-    if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer' });
-    const mp_sow = String(req.body.mp_sow || '').trim().slice(0, 2000) || null;
-    if (name) {
-      const ev = await st.createEvent({ name, location, starts_at, ends_at, created_by: req.staff.id, needs, mp_sow });
-      const mockupPath = ev && ev.id ? await saveMockup(st, ev.id, req.file) : null;
-      if (mockupPath) await st.updateEvent(ev.id, { mockup_path: mockupPath });
+    const positionsMaster = await st.listPositions();
+    res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, selected: {}, lang: req.lang, admin: true }));
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('poster'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const positionsMaster = await st.listPositions();
+    const f = parseEventForm(req, positionsMaster);
+    const errors = validateEventForm(f, req);
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
+    const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
+    if (ev && ev.id) {
+      await st.setEventPositions(ev.id, f.positions);
+      const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
     }
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
 
-// Super admin: edit an event — schedule, talent needs + quotas, MP SOW.
+// Super admin edits ANY event (no ownership restriction) with the shared form.
 app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const events = await st.listEvents();
-    const event = events.find((e) => e.id === req.params.id);
+    const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
+    const [positionsMaster, evPos] = await Promise.all([st.listPositions(), st.listEventPositions(event.id)]);
     await attachMockups(st, event);
-    res.send(V.adminEventEdit({ staff: staffCtx(req), event, lang: req.lang }));
+    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
-app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.single('mockup'), async (req, res, next) => {
+app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.single('poster'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const location = String(req.body.location || '').trim().slice(0, 200) || null;
-    const starts_at = String(req.body.starts_at || '').trim() || null;
-    const ends_at = String(req.body.ends_at || '').trim() || null;
-    const hc = (key) => Math.max(1, parseInt(req.body[key], 10) || 1);
-    const needs = [];
-    if (req.body.need_kol) needs.push({ talent_type: 'kol', headcount: hc('kol_headcount') });
-    if (req.body.need_main_power) needs.push({ talent_type: 'main_power', headcount: hc('mp_headcount') });
-    if (req.body.need_fotografer) needs.push({ talent_type: 'fotografer', headcount: hc('fg_headcount') });
-    // mp_sow is no longer edited from the UI; leave any existing value untouched.
-    const patch = { location, starts_at, ends_at, needs };
-    if (name) patch.name = name;
-    // Mockup: a new upload replaces it; the "remove" checkbox clears it.
-    const newPath = await saveMockup(st, req.params.id, req.file);
-    if (newPath) patch.mockup_path = newPath;
-    else if (req.body.remove_mockup) patch.mockup_path = null;
-    await st.updateEvent(req.params.id, patch);
+    const event = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!event) return res.redirect('/admin/manage');
+    const [positionsMaster, evPos, apps, choices] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices()]);
+    const f = parseEventForm(req, positionsMaster);
+    const errors = validateEventForm(f, req);
+    // Same guards as EO: a position with applicants can't be removed; quota can't drop below accepted.
+    const view = eoEventView(event, evPos, apps, choices);
+    const newByPos = eoSelMap(f.positions);
+    view.positions.forEach((p) => {
+      if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
+      if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
+    });
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, selected: newByPos, errors, lang: req.lang, admin: true }));
+    const patch = Object.assign({}, f.data);
+    const poster = await saveMockup(st, event.id, req.file); if (poster) patch.mockup_path = poster;
+    await st.updateEvent(event.id, patch);
+    await st.setEventPositions(event.id, f.positions);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });

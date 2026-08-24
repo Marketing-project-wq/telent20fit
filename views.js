@@ -2437,16 +2437,20 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   return appLayout({ title: t('eo.ev.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
-function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) {
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
   const sel = selected || {};
   const editing = !!e.id;
+  // Shared component for Super Admin (Manage) and EO — only the route base + nav differ.
+  const isAdmin = !!admin;
+  const listHref = isAdmin ? '/admin/manage' : '/eo/events';
+  const postBase = isAdmin ? '/admin/events' : '/eo/events';
   const rq = ' <span style="color:var(--red)">*</span>';
   const eb = (errors && errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
-  const action = editing ? `/eo/events/${esc(e.id)}/edit` : '/eo/events';
+  const action = editing ? `${postBase}/${esc(e.id)}/edit` : postBase;
   const dval = (v) => esc(String(v || '').slice(0, 10));
   const field = (name, label, val, type, required, extra) => `<div class="field"><label for="${name}">${label}${required ? rq : ''}</label><input type="${type || 'text'}" id="${name}" name="${name}" ${required ? 'required' : ''} value="${esc(val || '')}" ${extra || ''}></div>`;
   const status = e.status || 'draft';
@@ -2482,7 +2486,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
     </div>`;
   }).join('');
   const body = `<div class="wrap">
-  <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <a href="${listHref}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
   <p class="sub">${t('eo.ev.formSub')}</p>
   ${eb}
@@ -2539,7 +2543,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang }) 
   });
 })();
 </script>`;
-  return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
+  return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: isAdmin ? 'super_admin' : 'eo', active: isAdmin ? 'manage' : 'events', user: staff.name, lang: L });
 }
 
 function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
@@ -4152,7 +4156,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const eventRows = events.map((e) => `<tr>
     <td data-label="${t('th.event')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<b>${esc(e.name)}</b></div></td>
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
-    <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
+    <td data-label="${t('th.needs')}">${(e.positions && e.positions.length) ? (e.positions.map((p) => esc(posLabel(p, L))).slice(0, 4).join(', ') + (e.positions.length > 4 ? ` <span class="muted">+${e.positions.length - 4}</span>` : '')) : ((e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>')}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
     <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
   </tr>`).join('');
@@ -4172,18 +4176,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
   <div class="section-head"><h2 style="margin:0">${t('manage.events')}</h2></div>
   <div class="card" style="margin-top:14px">
-    <form method="post" action="/admin/events" enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:18px">
-      <input type="text" name="name" placeholder="${t('ph.eventName')}" required maxlength="140" style="flex:2;min-width:180px">
-      <input type="text" name="location" placeholder="${t('manage.locationPh')}" maxlength="200" style="flex:2;min-width:180px">
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.startDate')}<input type="date" name="starts_at" style="min-width:150px"></label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.endDate')}<input type="date" name="ends_at" style="min-width:150px"></label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">📷 ${t('manage.mockup')}<input type="file" name="mockup" accept="image/*" style="min-width:170px;font-size:12px"></label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_kol" checked> ${talentLabel(L, 'kol')}</label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_main_power"> ${talentLabel(L, 'main_power')}</label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('manage.mpQuota')}<input type="number" name="mp_headcount" min="1" value="1" style="width:90px"></label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px"><input type="checkbox" name="need_fotografer"> ${talentLabel(L, 'fotografer')}</label>
-      <button class="btn btn-sm">${t('btn.createEvent')}</button>
-    </form>
+    <div style="margin-bottom:18px"><a href="/admin/events/new?lang=${L}" class="btn btn-sm">+ ${t('btn.createEvent')}</a></div>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.needs')}</th><th>${t('th.status')}</th><th></th></tr></thead>
       <tbody>${eventRows || `<tr><td colspan="5" class="muted">${t('manage.emptyEvents')}</td></tr>`}</tbody>
