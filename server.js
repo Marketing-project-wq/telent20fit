@@ -1097,9 +1097,10 @@ function eventRegOpen(ev) {
   const nowStr = jakartaNowStr();
   if (ev.reg_open && nowStr < String(ev.reg_open).slice(0, 10) + 'T' + (ev.reg_open_time || '00:00')) return false;
   if (ev.reg_deadline && nowStr > String(ev.reg_deadline).slice(0, 10) + 'T' + (ev.reg_deadline_time || '23:59')) return false;
-  // Registration always closes at H-1 before the event starts, regardless of the
-  // EO-set deadline: no sign-ups from the day before the event onward.
-  if (ev.starts_at) {
+  // The EO-set close deadline is the exact close. The old "always close H-1 before
+  // the event" rule is only a backstop for events that set NO close deadline —
+  // it never overrides an explicit deadline.
+  if (!ev.reg_deadline && ev.starts_at) {
     const h1 = addDaysYMD(String(ev.starts_at).slice(0, 10), -1);
     if (today >= h1) return false;
   }
