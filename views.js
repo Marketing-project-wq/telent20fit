@@ -2507,10 +2507,17 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       <div style="flex:1;min-width:150px">${field('start_time', t('eo.ev.f.startTime'), e.start_time, 'time', false, '')}</div>
       <div style="flex:1;min-width:150px">${field('end_time', t('eo.ev.f.endTime'), e.end_time, 'time', false, '')}</div>
     </div>
+    <div style="font-weight:600;font-size:13.5px;margin:14px 0 2px">${t('eo.ev.sec.searchPeriod')} <span class="muted" style="font-weight:400;font-size:12px">(WIB)</span></div>
+    <p class="muted" style="font-size:12px;margin:0 0 6px">${t('eo.ev.searchPeriodHint')}</p>
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('reg_open', t('eo.ev.f.regOpen'), dval(e.reg_open), 'date', false, '')}</div>
-      <div style="flex:1;min-width:150px">${field('reg_deadline', t('eo.ev.f.deadline'), dval(e.reg_deadline), 'date', false, '')}</div>
+      <div style="flex:0 0 130px">${field('reg_open_time', t('eo.ev.f.regOpenTime'), e.reg_open_time, 'time', false, '')}</div>
     </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:150px">${field('reg_deadline', t('eo.ev.f.deadline'), dval(e.reg_deadline), 'date', false, '')}</div>
+      <div style="flex:0 0 130px">${field('reg_deadline_time', t('eo.ev.f.regCloseTime'), e.reg_deadline_time, 'time', false, '')}</div>
+    </div>
+    <div id="regWarn" class="banner banner-warn" style="display:none;margin-top:8px;padding:9px 12px;font-size:12.5px"></div>
     <div class="field"><label for="status">${t('eo.ev.f.status')}</label>
       <select id="status" name="status">
         <option value="draft"${status === 'draft' ? ' selected' : ''}>${t('eo.ev.status.draft')}</option>
@@ -2541,6 +2548,17 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     cb.addEventListener('change',function(){ if(!cb.checked){ q.value=''; } else if(!q.value){ q.value='1'; q.focus(); } sync(); });
     q.addEventListener('input',function(){ cb.checked = (parseInt(q.value,10)||0)>0; sync(); });
   });
+})();
+(function(){
+  var s=document.getElementById('starts_at'), d=document.getElementById('reg_deadline'), w=document.getElementById('regWarn');
+  if(!s||!d||!w) return;
+  var tpl=${JSON.stringify(t('eo.ev.warnTight'))};
+  function check(){
+    if(!s.value||!d.value){ w.style.display='none'; return; }
+    var gap=Math.round((new Date(s.value)-new Date(d.value))/86400000);
+    if(gap>=0 && gap<3){ w.textContent=tpl.replace('{n}', gap); w.style.display=''; } else { w.style.display='none'; }
+  }
+  s.addEventListener('change',check); d.addEventListener('change',check); check();
 })();
 </script>`;
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: isAdmin ? 'super_admin' : 'eo', active: isAdmin ? 'manage' : 'events', user: staff.name, lang: L });

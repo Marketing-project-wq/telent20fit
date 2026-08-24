@@ -1093,8 +1093,10 @@ function optionalTalent() {
 function eventRegOpen(ev) {
   if (!ev || ev.status !== 'published' || ev.reg_closed_at) return false;
   const today = jakartaDateStr();
-  if (ev.reg_open && today < String(ev.reg_open).slice(0, 10)) return false;
-  if (ev.reg_deadline && today > String(ev.reg_deadline).slice(0, 10)) return false;
+  // Search window honors the WIB open/close TIME (falls back to start/end of day).
+  const nowStr = jakartaNowStr();
+  if (ev.reg_open && nowStr < String(ev.reg_open).slice(0, 10) + 'T' + (ev.reg_open_time || '00:00')) return false;
+  if (ev.reg_deadline && nowStr > String(ev.reg_deadline).slice(0, 10) + 'T' + (ev.reg_deadline_time || '23:59')) return false;
   // Registration always closes at H-1 before the event starts, regardless of the
   // EO-set deadline: no sign-ups from the day before the event onward.
   if (ev.starts_at) {
@@ -1809,6 +1811,7 @@ function parseEventForm(req, positionsMaster) {
     location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
     start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
+    reg_open_time: s('reg_open_time', 5) || null, reg_deadline_time: s('reg_deadline_time', 5) || null,
     status: EO_STATUSES.includes(st) ? st : 'draft',
   };
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
@@ -1845,6 +1848,12 @@ function validateEventForm(f, req) {
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
   if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
+  // Search period (WIB): close must not be before open, nor after the event starts.
+  const d = f.data;
+  const openDT = d.reg_open ? d.reg_open + 'T' + (d.reg_open_time || '00:00') : null;
+  const closeDT = d.reg_deadline ? d.reg_deadline + 'T' + (d.reg_deadline_time || '23:59') : null;
+  if (openDT && closeDT && closeDT < openDT) e.push(req.t('eo.ev.err.regCloseBeforeOpen'));
+  if (d.reg_deadline && d.starts_at && d.reg_deadline > d.starts_at) e.push(req.t('eo.ev.err.regCloseAfterStart'));
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   return e;
 }
@@ -2480,6 +2489,8 @@ async function notifyPositionRejection(st, app, ev) {
 function jakartaDateStr(d) { return (d || new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }); }
 function addDaysYMD(ymd, n) { const d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function jakartaHour(d) { return parseInt((d || new Date()).toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hour12: false }), 10); }
+// Current WIB wall-clock as "YYYY-MM-DDTHH:MM" for lexical comparison with reg open/close.
+function jakartaNowStr(d) { const n = d || new Date(); return jakartaDateStr(n) + 'T' + n.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }); }
 
 // Email an H-1 reminder to every approved talent whose event starts tomorrow
 // and who hasn't been reminded yet. Idempotent via reminder_sent_at, so it is
