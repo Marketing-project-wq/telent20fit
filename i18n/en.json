@@ -400,7 +400,7 @@
   "eo.ev.f.posDescPh": "Short role description shown to talents",
   "eo.ev.tplHint": "Description, jobdesk & requirement auto-fill by role — you can still edit them.",
   "eo.pos.customName": "Custom role name",
-  "eo.pos.customNamePh": "e.g. Medical Support, Security…",
+  "eo.pos.customNamePh": "Type the role name…",
   "eo.ev.err.customNameRequired": "A name for the 'Other' role is required.",
   "pos.tpl.judge.desc": "Assesses the competition at an assigned station, making sure every participant follows the rules correctly.",
   "pos.tpl.judge.job": "Judge participants at your station per the event rules, verify that reps/movements are valid, apply penalties for any violation before a participant moves to the next station, and record the results.",

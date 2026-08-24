@@ -400,7 +400,7 @@
   "eo.ev.f.posDescPh": "Deskripsi singkat posisi yang dilihat talent",
   "eo.ev.tplHint": "Deskripsi, jobdesk & requirement terisi otomatis sesuai posisi — masih bisa kamu ubah.",
   "eo.pos.customName": "Nama posisi custom",
-  "eo.pos.customNamePh": "mis. Medical Support, Security…",
+  "eo.pos.customNamePh": "Tulis nama posisi…",
   "eo.ev.err.customNameRequired": "Nama untuk posisi \"Lainnya\" wajib diisi.",
   "pos.tpl.judge.desc": "Bertugas menilai jalannya kompetisi di station tertentu, memastikan setiap peserta menjalankan aturan dengan benar.",
   "pos.tpl.judge.job": "Menilai peserta di station sesuai peraturan event, memastikan repetisi/gerakan sah, memberi penalti bila ada pelanggaran sebelum peserta lanjut ke station berikutnya, mencatat hasil penilaian.",
