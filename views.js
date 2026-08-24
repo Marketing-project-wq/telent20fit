@@ -926,7 +926,6 @@ ${CARD_CSS}
     </div>
   </section>
   </div>
-  ${joinEventSection(L, opts)}
   ${eventsSection}
   <section style="background:var(--lp-bg2);padding:64px 0">
     <div style="max-width:1180px;margin:0 auto;padding:0 28px">
