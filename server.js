@@ -1535,14 +1535,20 @@ app.post('/reset-password', async (req, res, next) => {
 function staffHome(type) { return type === 'eo' ? '/eo' : '/admin'; }
 
 app.get('/admin/login', (req, res) => {
-  const t = auth.anySession(req, ['super_admin', 'eo']);
-  if (t) return res.redirect(staffHome(t.type));
+  // Only skip the form when ALREADY signed in as Super Admin. An EO session must
+  // not bounce this page — the /admin and /eo areas stay independent, and each
+  // login page is always reachable regardless of any other-role session.
+  const t = auth.anySession(req, ['super_admin']);
+  if (t) return res.redirect('/admin');
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
 app.get('/login/eo', (req, res) => {
-  const t = auth.anySession(req, ['super_admin', 'eo']);
-  if (t) return res.redirect(staffHome(t.type));
+  // Only skip the form when ALREADY signed in as an EO. A Super Admin session must
+  // still see the EO login here (so an admin can sign in as an EO) instead of
+  // being redirected to /admin.
+  const t = auth.anySession(req, ['eo']);
+  if (t) return res.redirect('/eo');
   res.send(V.staffLogin({ lang: req.lang, variant: 'eo' }));
 });
 // /eo/login kept as an alias of the canonical /login/eo.
