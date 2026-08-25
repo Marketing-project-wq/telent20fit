@@ -2570,6 +2570,10 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
     const grp = (txt) => `<div class="muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:12px">${txt}</div>`;
     const isOther = p.key === 'other';
+    // Label row for a template field (Deskripsi/Jobdesk/Requirement) with a small
+    // "Reset to default" button that re-applies the role's template (data-tpl-*).
+    // The custom "Lainnya" slot has no template, so no reset button there.
+    const tplField = (labelKey, tf, mt) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:${mt}"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t(labelKey)}</span>${isOther ? '' : `<button type="button" class="tpl-reset" data-tf="${tf}" style="flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--red);background:none;border:0;cursor:pointer;padding:0">↺ ${esc(t('eo.pos.resetTpl'))}</button>`}</div>`;
     // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
     // The custom "Lainnya" slot has no template — the EO names & fills it manually.
     const tplAttrs = isOther ? ' data-other="1"'
@@ -2585,11 +2589,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
         ${customName}
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:${isOther ? '6px' : '0'}">${t('eo.ev.descLabel')}</label>
+        ${tplField('eo.ev.descLabel', 'desc', isOther ? '6px' : '0')}
         <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('description'))}</textarea>
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.ev.jobdeskLabel')}</label>
+        ${tplField('eo.ev.jobdeskLabel', 'job', '8px')}
         <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.ev.requirementLabel')}</label>
+        ${tplField('eo.ev.requirementLabel', 'req', '8px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
         <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}</label>
         <input type="number" name="quota_${pid}" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
@@ -2678,6 +2682,16 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   // Safety net: on load, fill templates for any already-checked position whose
   // Description/Jobdesk/Requirement are still empty (e.g. after a validation re-render).
   rows.forEach(function(r){ sync(r); fillTpl(r); });
+  // "Reset to default": re-apply the role template to one field, overwriting any EO edits.
+  var TPL={desc:['.posm-desc','data-tpl-desc'],job:['.posm-job','data-tpl-job'],req:['.posm-req','data-tpl-req']};
+  list.addEventListener('click',function(e){
+    var b=e.target&&e.target.closest?e.target.closest('.tpl-reset'):null; if(!b)return;
+    e.preventDefault();
+    var r=b.closest('.posm-row'); if(!r)return;
+    var m=TPL[b.getAttribute('data-tf')]; if(!m)return;
+    var el=r.querySelector(m[0]), val=r.getAttribute(m[1]);
+    if(el&&val!=null){ el.value=val; el.focus(); }
+  });
   // Pick an event type -> auto-fill its default positions (still adjustable by hand).
   var cat=document.getElementById('category');
   if(cat && cat.tagName==='SELECT'){
