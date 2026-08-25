@@ -2676,6 +2676,29 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   return appLayout({ title: t('eo.ev.title') + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
+// ── Point 5: Manpower sub-roles per event type ──────────────────────────────
+// Controls which Manpower sub-roles appear in the Create/Edit Event form for each
+// event type (the "Jenis Event" dropdown). MAINTAINABLE — this is the single place
+// to edit. Values are position keys (the master row's `key`, i.e. id `pos-<key>`):
+//   • MANPOWER_SHARED      — shown for EVERY event type.
+//   • MANPOWER_TYPE_ONLY   — shown only under their own event-type key.
+// A Manpower role is available for type T iff it is in MANPOWER_SHARED or in
+// MANPOWER_TYPE_ONLY[T]. Unknown / custom event types apply NO filter (show all).
+// KOL / Photographer / Videographer / "Lainnya" are never filtered by event type.
+// NOTE: the Lari sub-role list will grow — add new keys here (and the position to
+// the master list in store.js) to surface them under Lari.
+const MANPOWER_SHARED = ['judge', 'runner', 'registration_staff', 'water_station', 'time_chip_management', 'marshal', 'drop_bag'];
+const MANPOWER_TYPE_ONLY = {
+  lari: ['judge_running'],
+  hyrox: ['judge_hybrid'],
+};
+// Allowed Manpower keys for an event-type key, or null when the type is unknown
+// (→ no filtering, show every Manpower role).
+function manpowerKeysForType(typeKey) {
+  if (!typeKey || !Object.prototype.hasOwnProperty.call(MANPOWER_TYPE_ONLY, typeKey)) return null;
+  return MANPOWER_SHARED.concat(MANPOWER_TYPE_ONLY[typeKey]);
+}
+
 function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -2719,7 +2742,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     // Category-specific fields only render (and only save) for the matching type.
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
-    return `<div class="posm-row" data-key="${esc(p.key)}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
+    // data-cat marks the group so the event-type filter only touches Manpower rows.
+    const rowCat = p.key === 'other' ? 'other' : (KOL_KEYS.includes(p.key) ? 'kol' : 'mp');
+    return `<div class="posm-row" data-key="${esc(p.key)}" data-cat="${rowCat}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
         <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
@@ -2762,8 +2787,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     <div class="field"><label for="category">${t('eo.ev.f.eventType')}${rq}</label>
       <select id="category" name="category" required>
         <option value="">${t('eo.ev.f.eventTypePick')}</option>
-        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; return `<option value="${esc(lab)}" data-pos="${esc((ty.default_position_ids || []).join(','))}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
-        ${(e.category && !(eventTypes || []).some((ty) => ((L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '') === e.category)) ? `<option value="${esc(e.category)}" selected>${esc(e.category)}</option>` : ''}
+        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; const mk = manpowerKeysForType(ty.key); return `<option value="${esc(lab)}" data-mpkeys="${esc(mk ? mk.join(',') : '')}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
+        ${(e.category && !(eventTypes || []).some((ty) => ((L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '') === e.category)) ? `<option value="${esc(e.category)}" data-mpkeys="" selected>${esc(e.category)}</option>` : ''}
       </select>
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
     </div>
@@ -2834,21 +2859,27 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     var el=r.querySelector(m[0]), val=r.getAttribute(m[1]);
     if(el&&val!=null){ el.value=val; el.focus(); }
   });
-  // Pick an event type -> auto-fill its default positions (still adjustable by hand).
+  // Point 5: pick an event type -> show only the Manpower sub-roles allowed for it
+  // (shared + type-specific). KOL/Photographer/Videographer/Lainnya are never
+  // filtered. On first load a pre-existing (checked) pick is kept visible so editing
+  // an event never silently drops a role; an explicit change hides+unchecks it.
   var cat=document.getElementById('category');
-  if(cat && cat.tagName==='SELECT'){
-    cat.addEventListener('change',function(){
-      var opt=cat.options[cat.selectedIndex]; if(!opt) return;
-      var ids=(opt.getAttribute('data-pos')||'').split(',').filter(Boolean);
-      if(!ids.length) return;
-      var set={}; ids.forEach(function(id){ set[id]=1; });
-      rows.forEach(function(r){
-        if(r.getAttribute('data-other')) return; // never disturb the custom "Lainnya" slot
-        var cb=r.querySelector('.posm-cb'); if(!cb) return;
-        cb.checked=!!set[cb.value]; sync(r); fillTpl(r);
-      });
+  function filterByType(initial){
+    if(!cat||cat.tagName!=='SELECT') return;
+    var opt=cat.options[cat.selectedIndex]; if(!opt) return;
+    var raw=opt.getAttribute('data-mpkeys'); // '' => no filter (unknown/custom type)
+    var allow=(raw!==null&&raw!=='')?raw.split(','):null;
+    rows.forEach(function(r){
+      if(r.getAttribute('data-cat')!=='mp') return; // only Manpower rows are type-filtered
+      var cb=r.querySelector('.posm-cb');
+      var ok=!allow||allow.indexOf(r.getAttribute('data-key'))>=0;
+      if(ok){ r.style.display=''; return; }
+      if(initial && cb && cb.checked){ r.style.display=''; return; } // keep an existing pick
+      r.style.display='none';
+      if(cb&&cb.checked){ cb.checked=false; sync(r); }
     });
   }
+  if(cat && cat.tagName==='SELECT'){ cat.addEventListener('change',function(){ filterByType(false); }); filterByType(true); }
 })();
 (function(){
   var s=document.getElementById('starts_at'), d=document.getElementById('reg_deadline'), w=document.getElementById('regWarn');
@@ -3881,7 +3912,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
       applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
     }
     const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
-    return `<a href="/acara/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
+    return `<a href="/acara/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-cat="${esc(e.category || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
       ${eventCover(e, L)}
       <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
       <div style="margin-top:10px">${catBadges || `<span class="muted" style="font-size:12.5px">${t('apply.noNeeds')}</span>`}</div>
@@ -3891,12 +3922,20 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
 
   const hasAny = evs.length || eoEvs.length;
   const chip = (f, label) => `<button type="button" class="ev-chip${f === 'all' ? ' is-on' : ''}" data-filter="${f}">${esc(label)}</button>`;
+  // Point 5: event-type (Lari/HYROX/…) chips — a second, orthogonal filter dimension.
+  // Only shown when the visible events span more than one type.
+  const evTypes = [...new Set([...evs, ...eoEvs].map((e) => e.category).filter(Boolean))].sort();
+  const typeChip = (c, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-typefilter="${esc(c)}">${esc(label)}</button>`;
+  const typeRow = evTypes.length > 1
+    ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${typeChip('', t('ev.filterAllTypes'), true)}${evTypes.map((c) => typeChip(c, c, false)).join('')}</div>`
+    : '';
   const controls = hasAny ? `
   <div class="card" style="margin-top:14px;padding:12px 14px">
     <input type="text" id="evSearch" placeholder="${esc(t('ev.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       ${chip('all', t('ev.filterAll'))}${chip('ongoing', t('ev.status.ongoing'))}${chip('upcoming', t('ev.status.upcoming'))}
     </div>
+    ${typeRow}
   </div>` : '';
 
   const listBlock = hasAny
@@ -3914,20 +3953,23 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
 (function(){
   var q=document.getElementById('evSearch'); if(!q) return;
   var items=[].slice.call(document.querySelectorAll('.ev-item'));
-  var chips=[].slice.call(document.querySelectorAll('.ev-chip'));
+  var statusChips=[].slice.call(document.querySelectorAll('[data-filter]'));
+  var typeChips=[].slice.call(document.querySelectorAll('[data-typefilter]'));
   var noMatch=document.getElementById('evNoMatch');
-  var flt='all';
+  var flt='all', typeFlt='';
   function apply(){
     var v=q.value.trim().toLowerCase(); var shown=0;
     items.forEach(function(it){
       var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okT=!typeFlt||(it.getAttribute('data-cat')===typeFlt);
       var okQ=!v||it.getAttribute('data-search').indexOf(v)>=0;
-      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+      var vis=okS&&okT&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
     });
     if(noMatch)noMatch.style.display=shown?'none':'';
   }
   q.addEventListener('input',apply);
-  chips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
+  statusChips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');statusChips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
+  typeChips.forEach(function(c){c.addEventListener('click',function(){typeFlt=c.getAttribute('data-typefilter');typeChips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
 })();
 </script>`;
   // Browse page → browseLayout so a logged-in creator keeps the bottom navbar
@@ -4395,20 +4437,32 @@ function aggregateStatsChart(catRows, L) {
 // for the cross-event aggregate (per-category bars). Returns just the section
 // markup (selector + content) so it can sit inside a dashboard page; the event
 // dropdown is a plain GET, so it reloads whichever dashboard renders it.
-function statsSection({ role, events, selectedId, eventStats, aggregate, lang }) {
+function statsSection({ role, events, selectedId, eventStats, aggregate, lang, typeOptions, selectedType }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isAdmin = role === 'super_admin';
   const evs = events || [];
-  if (!evs.length) return `<p class="muted" style="margin-top:14px">${t('stats.noEvents')}</p>`;
+  const tOpts = typeOptions || [];
+  const selType = selectedType || '';
+  // When an event-type filter is active but its events are empty, still show the
+  // filter so the user can switch back.
+  if (!evs.length && !selType) return `<p class="muted" style="margin-top:14px">${t('stats.noEvents')}</p>`;
   const options = `<option value="">${esc(t('stats.allEvents'))}</option>`
     + evs.map((e) => `<option value="${esc(e.id)}"${e.id === selectedId ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+  // Point 5: event-type (Lari/HYROX/…) filter — narrows the whole stats view.
+  const typeSel = (tOpts.length > 1)
+    ? `<label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);max-width:420px;margin-bottom:12px">${t('stats.pickType')}
+        <select name="type" onchange="this.form.submit()" style="width:100%;box-sizing:border-box"><option value="">${esc(t('stats.allTypes'))}</option>${tOpts.map((ty) => `<option value="${esc(ty)}"${ty === selType ? ' selected' : ''}>${esc(ty)}</option>`).join('')}</select>
+      </label>`
+    : (selType ? `<input type="hidden" name="type" value="${esc(selType)}">` : '');
   const selector = `<form method="get" class="card" style="margin-top:16px;padding:12px 14px">
+    ${typeSel}
     <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);max-width:420px">${t('stats.pickEvent')}
       <select name="event" onchange="this.form.submit()" style="width:100%;box-sizing:border-box">${options}</select>
     </label>
     <noscript><button class="btn btn-sm" type="submit" style="margin-top:10px">OK</button></noscript>
   </form>`;
+  if (!evs.length) return `${selector}<p class="muted" style="margin-top:14px">${t('stats.noEventsType')}</p>`;
   const card = (label, val, icon) => `<div class="card" style="margin:0">
     <div style="font-size:22px;line-height:1">${icon}</div>
     <div style="font-size:28px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
@@ -5684,7 +5738,7 @@ function talentPositionCard(e, lang, filterable) {
   const posLine = (e.openPositions || []).map((p) => `<a href="/event/${esc(e.id)}?lang=${L}#pos-${esc(p.position_id)}" class="tag" style="margin:0 6px 6px 0;display:inline-block;text-decoration:none;color:inherit">${esc(posLabel(p, L))}</a>`).join('');
   const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
   const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
-  const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-search="${esc(hay)}"` : '';
+  const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-cat="${esc(e.category || '')}" data-search="${esc(hay)}"` : '';
   return `<div class="${cls}"${hooks} style="position:relative;margin-top:12px">
     <a href="/event/${esc(e.id)}?lang=${L}" aria-label="${esc(e.name)}" style="position:absolute;inset:0;z-index:1"></a>
     ${eventCover(e, L)}

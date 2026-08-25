@@ -1067,7 +1067,7 @@ app.get('/acara', requireTalentBrowse('kol'), async (req, res, next) => {
     const eoIds = new Set(eoEvents.map((e) => e.id));
     const events = allEvents.filter((e) => e.is_active && !eoIds.has(e.id))
       .map((e) => ({
-        id: e.id, name: e.name, location: e.location, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
+        id: e.id, name: e.name, location: e.location, category: e.category, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
         applied: appByEvent.has(e.id) ? {
           category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status,
           station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
@@ -1859,12 +1859,17 @@ async function eoStats(st, staffId) {
 // Admin). Returns the event dropdown list, the per-event breakdown for the
 // selected event (per-position bars + status counts + average profile strength),
 // and an aggregate summary across all scoped events.
-async function statsPageData(st, scopedEvents, selectedIdRaw) {
+async function statsPageData(st, scopedEvents, selectedIdRaw, typeRaw) {
   const [apps, choices, talents, master] = await Promise.all([
     st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
   ]);
-  const evById = new Map(scopedEvents.map((e) => [e.id, e]));
-  const myIds = new Set(scopedEvents.map((e) => e.id));
+  // Point 5: optional event-type (category) filter — narrows the whole stats view
+  // (dropdown, aggregate) to one event type (e.g. Lari / HYROX).
+  const typeOptions = [...new Set((scopedEvents || []).map((e) => e.category).filter(Boolean))].sort();
+  const selectedType = (typeRaw && typeOptions.includes(typeRaw)) ? typeRaw : '';
+  const viewEvents = selectedType ? scopedEvents.filter((e) => e.category === selectedType) : scopedEvents;
+  const evById = new Map(viewEvents.map((e) => [e.id, e]));
+  const myIds = new Set(viewEvents.map((e) => e.id));
   const talentById = new Map(talents.map((tt) => [tt.id, tt]));
   const posMaster = new Map(master.map((p) => [p.id, p]));
   const choicesByApp = new Map();
@@ -1903,7 +1908,7 @@ async function statsPageData(st, scopedEvents, selectedIdRaw) {
   });
   const allTids = [...new Set(scopedApps.map((a) => a.talent_id))];
   const aggregate = {
-    totalEvents: scopedEvents.length,
+    totalEvents: viewEvents.length,
     totalApplies: scopedApps.length,
     totalApproved: scopedApps.filter((a) => accepted.has(a.status)).length,
     avgStrength: avgOf(allTids),
@@ -1913,7 +1918,7 @@ async function statsPageData(st, scopedEvents, selectedIdRaw) {
       { key: 'manpower', total: catAgg.manpower.total, approved: catAgg.manpower.approved },
     ],
   };
-  return { events: scopedEvents.map((e) => ({ id: e.id, name: e.name })), selectedId, eventStats, aggregate };
+  return { events: viewEvents.map((e) => ({ id: e.id, name: e.name })), selectedId, eventStats, aggregate, typeOptions, selectedType };
 }
 
 app.get('/eo', requireEo, async (req, res, next) => {
@@ -1924,7 +1929,7 @@ app.get('/eo', requireEo, async (req, res, next) => {
     // Statistics section is now embedded in the dashboard; ?event=<id> drives it.
     const mine = allEvents.filter((e) => e.created_by === req.staff.id)
       .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
-    const statsData = await statsPageData(st, mine, String(req.query.event || ''));
+    const statsData = await statsPageData(st, mine, String(req.query.event || ''), String(req.query.type || ''));
     res.send(V.eoDashboard({ staff: eoCtx(req), stats, statsData, profileComplete: eoProfileComplete(profile), lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -2510,7 +2515,7 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null }));
     // Event Statistics is embedded in the dashboard; a super admin sees every event.
     const evSorted = events.slice().sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
-    const statsData = await statsPageData(st, evSorted, String(req.query.event || ''));
+    const statsData = await statsPageData(st, evSorted, String(req.query.event || ''), String(req.query.type || ''));
     res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, statsData, lang: req.lang }));
   } catch (e) { next(e); }
 });
