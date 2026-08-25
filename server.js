@@ -1750,6 +1750,68 @@ async function eoStats(st, staffId) {
   };
 }
 
+// Data for the Statistics page (EO + Super Admin). `scopedEvents` is the set the
+// caller is allowed to see (an EO's own events, or every event for a Super
+// Admin). Returns the event dropdown list, the per-event breakdown for the
+// selected event (per-position bars + status counts + average profile strength),
+// and an aggregate summary across all scoped events.
+async function statsPageData(st, scopedEvents, selectedIdRaw) {
+  const [apps, choices, talents, master] = await Promise.all([
+    st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
+  ]);
+  const evById = new Map(scopedEvents.map((e) => [e.id, e]));
+  const myIds = new Set(scopedEvents.map((e) => e.id));
+  const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+  const posMaster = new Map(master.map((p) => [p.id, p]));
+  const choicesByApp = new Map();
+  (choices || []).forEach((c) => { const a = choicesByApp.get(c.application_id) || []; a.push(c); choicesByApp.set(c.application_id, a); });
+  const accepted = new Set(['approved', 'assigned', 'completed']);
+  const pctOf = (tid) => V.profileStrength(talentById.get(tid) || {}).pct;
+  const avgOf = (tids) => (tids.length ? Math.round(tids.reduce((s, id) => s + pctOf(id), 0) / tids.length) : 0);
+
+  const selectedId = myIds.has(selectedIdRaw) ? selectedIdRaw : '';
+  let eventStats = null;
+  if (selectedId) {
+    const ev = evById.get(selectedId);
+    const positions = await st.listEventPositions(ev.id);
+    const view = eoEventView(ev, positions, apps, choices);
+    const evApps = apps.filter((a) => a.event_id === ev.id);
+    const statusCounts = {};
+    evApps.forEach((a) => { const s = a.status || 'applied'; statusCounts[s] = (statusCounts[s] || 0) + 1; });
+    const tids = [...new Set(evApps.map((a) => a.talent_id))];
+    eventStats = {
+      id: ev.id, name: ev.name, applyCount: view.applyCount,
+      approvedCount: evApps.filter((a) => accepted.has(a.status)).length,
+      positions: view.positions, statusCounts, talentCount: tids.length, avgStrength: avgOf(tids),
+    };
+  }
+
+  const scopedApps = apps.filter((a) => myIds.has(a.event_id));
+  const catAgg = { kol: { total: 0, approved: 0 }, creative: { total: 0, approved: 0 }, manpower: { total: 0, approved: 0 } };
+  const catOf = (key) => (key === 'kol' ? 'kol' : (key === 'fotografer' || key === 'videografer' ? 'creative' : 'manpower'));
+  scopedApps.forEach((a) => {
+    const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
+    if (!ch.length) return;
+    const p1 = posMaster.get(ch[0].position_id) || {};
+    const cat = catOf(p1.key || (talentById.get(a.talent_id) || {}).talent_type || '');
+    catAgg[cat].total += 1;
+    if (accepted.has(a.status)) catAgg[cat].approved += 1;
+  });
+  const allTids = [...new Set(scopedApps.map((a) => a.talent_id))];
+  const aggregate = {
+    totalEvents: scopedEvents.length,
+    totalApplies: scopedApps.length,
+    totalApproved: scopedApps.filter((a) => accepted.has(a.status)).length,
+    avgStrength: avgOf(allTids),
+    catRows: [
+      { key: 'kol', total: catAgg.kol.total, approved: catAgg.kol.approved },
+      { key: 'creative', total: catAgg.creative.total, approved: catAgg.creative.approved },
+      { key: 'manpower', total: catAgg.manpower.total, approved: catAgg.manpower.approved },
+    ],
+  };
+  return { events: scopedEvents.map((e) => ({ id: e.id, name: e.name })), selectedId, eventStats, aggregate };
+}
+
 app.get('/eo', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -1854,6 +1916,18 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
     }
     rows.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
     res.send(V.eoTalents({ staff: eoCtx(req), rows, cat, counts, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// EO: Statistics page — per-event breakdown across this EO's own events.
+app.get('/eo/stats', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const mine = (await st.listEvents()).filter((e) => e.created_by === req.staff.id)
+      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
+    const data = await statsPageData(st, mine, String(req.query.event || ''));
+    res.send(V.staffStats(Object.assign({ staff: eoCtx(req), role: 'eo', lang: req.lang }, data)));
   } catch (e) { next(e); }
 });
 
@@ -2286,6 +2360,19 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin']), async (req, res,
       event_name: eventNameById.get(p.event_id) || null,
     }));
     res.send(V.adminAnalysis({ staff: staffCtx(req), proofs, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Super Admin: Statistics page — per-event breakdown across ALL events, plus a
+// cross-event aggregate summary.
+app.get('/admin/stats', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const events = (await st.listEvents())
+      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
+    const data = await statsPageData(st, events, String(req.query.event || ''));
+    res.send(V.staffStats(Object.assign({ staff: staffCtx(req), role: 'super_admin', lang: req.lang }, data)));
   } catch (e) { next(e); }
 });
 

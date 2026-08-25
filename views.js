@@ -466,6 +466,7 @@ const NAV_ICON = {
   profile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
   event: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/></svg>',
   hyrox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="5.5"/><path d="M8.5 13L7 22l5-2.7 5 2.7-1.5-9"/></svg>',
+  stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 3.5a9 9 0 0 1 6.5 6.5H14z"/></svg>',
 };
 
 function navLink(href, key, active, icon, label) {
@@ -487,12 +488,14 @@ function appLayout({ title, body, role, active, user, lang }) {
   const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+      + navLink('/eo/stats', 'stats', active, 'stats', t('nav.statistics'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
       + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
+        + navLink('/admin/stats', 'stats', active, 'stats', t('nav.statistics'))
         + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
         + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
         + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
@@ -2318,6 +2321,7 @@ function eoDashboard({ staff, stats, profileComplete, lang }) {
     ${card(t('eo.stat.accepted'), stats.accepted, '✅')}
     ${card(t('eo.stat.doneEvents'), stats.doneEvents, '🏁')}
   </div>
+  <div style="margin-top:16px"><a href="/eo/stats?lang=${L}" class="btn btn-ghost btn-sm">📊 ${t('stats.title')} →</a></div>
 </div>`;
   return appLayout({ title: t('eo.dashTitle') + ' — 20FIT', body, role: 'eo', active: 'dashboard', user: staff.name, lang: L });
 }
@@ -3277,7 +3281,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       <div class="tp-avatar" style="background:${avatarBg}">${esc(initial)}</div>
       <div class="tp-id">
         <div class="tp-kicker">${t('tp.kicker')}</div>
-        <div class="tp-nameline"><h1 class="tp-name">${esc(acc.name || '—')}</h1><span class="tp-pill-cat">${esc(roleLabel)}</span>${verified ? `<span class="tp-pill-verified">✓ ${t('tp.verified')}</span>` : ''}</div>
+        <div class="tp-nameline"><h1 class="tp-name">${esc(acc.name || '—')}</h1>${verified ? `<span class="tp-pill-verified">✓ ${t('tp.verified')}</span>` : ''}</div>
         ${metaBits ? `<div class="tp-meta">${metaBits}</div>` : ''}
         ${bio ? `<p class="tp-bio">${esc(bio)}</p>` : ''}
       </div>
@@ -3970,6 +3974,62 @@ function aggregateStatsChart(catRows, L) {
   const labelOf = { manpower: t('filter.cat.manpower'), kol: t('filter.cat.kol'), creative: t('filter.cat.creative') };
   const rows = (catRows || []).map((c) => ({ label: labelOf[c.key] || c.key, total: c.total || 0, approved: c.approved || 0 }));
   return statBars(t('stat.agg.title'), t('stat.agg.sub'), rows, L);
+}
+
+// Dedicated "Statistics" page for EO + Super Admin. An event dropdown drives the
+// view: pick one event for its per-position registration bars, an application-
+// status breakdown and the average profile completeness of everyone who applied;
+// or "All events" for the aggregate summary (per-category bars). Detailed stats
+// live here so the Dashboard can stay a short summary.
+function staffStats({ staff, role, events, selectedId, eventStats, aggregate, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const isAdmin = role === 'super_admin';
+  const evs = events || [];
+  const options = `<option value="">${esc(t('stats.allEvents'))}</option>`
+    + evs.map((e) => `<option value="${esc(e.id)}"${e.id === selectedId ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+  const selector = `<form method="get" class="card" style="margin-top:16px;padding:12px 14px">
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);max-width:420px">${t('stats.pickEvent')}
+      <select name="event" onchange="this.form.submit()" style="width:100%;box-sizing:border-box">${options}</select>
+    </label>
+    <noscript><button class="btn btn-sm" type="submit" style="margin-top:10px">OK</button></noscript>
+  </form>`;
+  const card = (label, val, icon) => `<div class="card" style="margin:0">
+    <div style="font-size:22px;line-height:1">${icon}</div>
+    <div style="font-size:28px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">${esc(label)}</div>
+  </div>`;
+  const strengthMeter = (pct) => `<div class="card" style="margin:0">
+    <div style="font-size:22px;line-height:1">📊</div>
+    <div style="font-size:28px;font-weight:800;margin-top:8px;line-height:1">${pct}%</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">${esc(t('stats.avgStrength'))}</div>
+    <div class="tp-strength-bar" style="margin-top:8px"><i style="width:${pct}%"></i></div>
+  </div>`;
+  const grid = (inner) => `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-top:16px">${inner}</div>`;
+
+  let content;
+  if (eventStats) {
+    // Merge legacy 'pending' into 'applied' so the status chart has no dup rows.
+    const merged = {};
+    Object.keys(eventStats.statusCounts || {}).forEach((s) => { const k = s === 'pending' ? 'applied' : s; merged[k] = (merged[k] || 0) + eventStats.statusCounts[s]; });
+    const STATUS_ORDER = ['applied', 'under_review', 'approved', 'assigned', 'completed', 'rejected'];
+    const statusItems = STATUS_ORDER.filter((s) => merged[s]).map((s) => ({ name: t('ta.status.' + s), value: merged[s] }));
+    const hasData = eventStats.applyCount > 0;
+    content = `<h2 style="margin:24px 0 0;font-size:18px">${esc(t('stats.forEvent', { event: eventStats.name }))}</h2>
+      ${grid(`${card(t('stats.card.applies'), eventStats.applyCount, '📝')}${card(t('stats.card.approved'), eventStats.approvedCount, '✅')}${card(t('stats.card.talents'), eventStats.talentCount, '👥')}${strengthMeter(eventStats.avgStrength)}`)}
+      ${hasData ? `${positionStatsChart(eventStats.positions, L)}<div style="margin-top:14px">${hBar(t('stats.statusTitle'), statusItems, L)}</div>` : `<p class="muted" style="margin-top:14px">${t('stats.empty')}</p>`}`;
+  } else {
+    content = `<h2 style="margin:24px 0 0;font-size:18px">${esc(isAdmin ? t('stats.overviewTitleAdmin') : t('stats.overviewTitle'))}</h2>
+      ${grid(`${card(t('stats.card.events'), aggregate.totalEvents, '📅')}${card(t('stats.card.applies'), aggregate.totalApplies, '📝')}${card(t('stats.card.approved'), aggregate.totalApproved, '✅')}${strengthMeter(aggregate.avgStrength)}`)}
+      ${aggregateStatsChart(aggregate.catRows, L)}`;
+  }
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('stats.title'), L)}
+  <p class="sub">${t('stats.sub')}</p>
+  ${evs.length ? `${selector}${content}` : `<p class="muted" style="margin-top:14px">${t('stats.noEvents')}</p>`}
+</div>`;
+  return appLayout({ title: t('stats.title') + ' — 20FIT', body, role, active: 'stats', user: staff.name, lang: L });
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
@@ -5459,5 +5519,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoTalents, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoTalents, staffStats, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };
