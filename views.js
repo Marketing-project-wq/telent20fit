@@ -2361,6 +2361,44 @@ function eoVerifyNeeded({ email, lang }) {
 // Localized label for a master/event position.
 function posLabel(p, lang) { if (p && p.custom_label) return p.custom_label; return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
 
+// Talent profile completeness — 4 equal parts (basic / social / id / docs).
+// Single source of truth for the Talent Profile page, the Talent Apply tables,
+// and the talent detail. Returns { pct, items:[{on,key}] } so each caller
+// renders the item labels in its own language.
+function profileStrength(acc) {
+  const a = acc || {};
+  const items = [
+    { on: !!a.profile_completed_at, key: 'tp.check.basic' },
+    { on: !!a.instagram, key: 'tp.check.social' },
+    { on: !!a.ktp, key: 'tp.check.id' },
+    { on: !!(a.cv_path || a.hyrox_cert_path || a.portfolio_url), key: 'tp.check.docs' },
+  ];
+  const pct = Math.round((items.filter((i) => i.on).length / items.length) * 100);
+  return { pct, items };
+}
+// Completeness colour band: red <50%, amber 50-99%, green 100%.
+function strengthColor(pct) { return pct >= 100 ? 'var(--ok)' : (pct >= 50 ? 'var(--warn)' : 'var(--err)'); }
+// Compact completeness badge (dot + %) for a talent row/card.
+function strengthBadge(acc, lang) {
+  const L = normLang(lang);
+  const { pct } = profileStrength(acc);
+  const c = strengthColor(pct);
+  return `<span title="${esc(tr(L, 'prof.completeness'))}" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:${c};background:color-mix(in srgb, ${c} 12%, transparent);border:1px solid color-mix(in srgb, ${c} 35%, transparent);border-radius:999px;padding:2px 9px;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${c};flex:0 0 auto"></span>${pct}%</span>`;
+}
+// Full completeness card: bar + per-item breakdown (done/not-done). For detail pages.
+function strengthDetailCard(acc, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const { pct, items } = profileStrength(acc);
+  const c = strengthColor(pct);
+  const rows = items.map((it) => `<div style="display:flex;align-items:center;gap:10px;font-size:13.5px;padding:7px 0"><span style="width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:${it.on ? 'var(--ok)' : 'var(--line)'}">${it.on ? '✓' : '·'}</span><span style="${it.on ? '' : 'color:var(--muted)'}">${esc(t(it.key))}</span></div>`).join('');
+  return `<div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="muted" style="font-size:13px">${t('prof.completeness')}</span><b style="color:${c};font-size:20px">${pct}%</b></div>
+    <div style="height:9px;border-radius:999px;background:var(--line);margin-top:8px;overflow:hidden"><i style="display:block;height:100%;width:${pct}%;background:${c}"></i></div>
+    <div style="margin-top:10px">${rows}</div>
+  </div>`;
+}
+
 function eoRegBadge(status, lang) {
   const L = normLang(lang);
   const t = (k) => tr(L, k);
@@ -2677,26 +2715,33 @@ function eoApplicantsSection(e, view, aps, L) {
     </div>`;
   };
 
+  // First-choice (P1) position key + talent category — used by the filters.
+  const catInfo = (a) => {
+    const p1 = a.choices && a.choices[0];
+    const p = p1 ? posById.get(p1.position_id) : null;
+    const k = (p && p.key) || '';
+    return { k, cat: k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower') };
+  };
   // Per-talent cards
-  const talentCards = aps.map((a) => `<div class="card ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
+  const talentCards = aps.map((a) => { const ci = catInfo(a); return `<div class="card ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(ci.k)}" data-category="${ci.cat}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
       <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}</div>
-      ${talentStatusBadge(a.status, L)}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
     </div>
     ${contactLine(a)}
     ${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
     ${decisionControls(a)}
-  </div>`).join('');
+  </div>`; }).join('');
 
   // Per-position groups
   const posGroups = (view.positions || []).map((p) => {
     const rows = aps.map((a) => { const c = a.choices.find((x) => x.position_id === p.position_id); return c ? { a, c } : null; })
       .filter(Boolean).sort((x, y) => x.c.priority - y.c.priority);
-    const list = rows.length ? rows.map(({ a, c }) => `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
+    const list = rows.length ? rows.map(({ a, c }) => { const ci = catInfo(a); return `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(ci.k)}" data-category="${ci.cat}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
       <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">· ${esc(talentLabel(L, a.type))}</span>` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
       ${talentStatusBadge(a.status, L)}
-    </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
+    </div>`; }).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
     return `<div class="card" style="margin-top:12px;padding:14px 16px">
       <div style="font-weight:700">${esc(posLabel(p, L))} <span class="muted" style="font-weight:600;font-size:12.5px">(${p.quota >= 100000 ? p.filled + ' ' + t('eo.ev.acceptedLabel') : p.filled + ' / ' + p.quota})</span></div>
       <div class="dl-list" style="margin-top:8px">${list}</div>
@@ -2707,10 +2752,18 @@ function eoApplicantsSection(e, view, aps, L) {
   const statuses = Array.from(new Set(aps.map((a) => a.status)));
   const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
   const statusChips = sChip('all', t('eo.ap.filterAll'), true) + statuses.map((s) => sChip(s, t('ta.status.' + s), false)).join('');
+  // Position filter = talent's first (P1) choice; category filter groups by P1 type.
+  const posFilterOpts = `<option value="">${esc(t('filter.allPositions'))}</option>` + (view.positions || []).map((p) => `<option value="${esc(p.key)}">${esc(posLabel(p, L))}</option>`).join('');
+  const catFilterOpts = `<option value="">${esc(t('filter.allCategories'))}</option><option value="kol">${esc(t('filter.cat.kol'))}</option><option value="creative">${esc(t('filter.cat.creative'))}</option><option value="manpower">${esc(t('filter.cat.manpower'))}</option>`;
 
   return `${header}
   <div class="card" style="margin-top:14px;padding:12px 14px">
     <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="apPosFilter" style="min-width:150px">${posFilterOpts}</select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="apCatFilter" style="min-width:150px">${catFilterOpts}</select></label>
+      <button type="button" id="apReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
       <button type="button" class="ev-chip is-on" data-aptab="talent">${t('eo.ap.byTalent')}</button>
@@ -2730,21 +2783,28 @@ function eoApplicantsScript() {
   var talentBox=document.getElementById('apTalent'), posBox=document.getElementById('apPosition');
   var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
   var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
+  var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),reset=document.getElementById('apReset');
   var flt='all', tab='talent';
   function apply(){
     var q=search.value.trim().toLowerCase();
+    var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'';
     var box=tab==='talent'?talentBox:posBox;
     var items=[].slice.call(box.querySelectorAll('.ap-item'));
     var shown=0;
     items.forEach(function(it){
       var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
       var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
-      var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+      var okP=!pf||(it.getAttribute('data-p1pos')===pf);
+      var okC=!cf||(it.getAttribute('data-category')===cf);
+      var vis=okS&&okQ&&okP&&okC; it.style.display=vis?'':'none'; if(vis)shown++;
     });
-    if(noMatch)noMatch.style.display=(tab==='talent'&&shown===0)?'':'none';
+    if(noMatch)noMatch.style.display=(shown===0)?'':'none';
   }
   search.addEventListener('input',apply);
   statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  if(posSel)posSel.addEventListener('change',apply);
+  if(catSel)catSel.addEventListener('change',apply);
+  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';apply();});
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
 })();
 </script>`;
@@ -3001,15 +3061,9 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
         <a href="/sertifikat/${esc(c.id)}" class="btn btn-ghost btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a></div>`).join('')
     : `<div style="display:flex;gap:14px;align-items:center;padding:4px 0"><div style="width:44px;height:44px;border-radius:50%;border:2px dashed var(--line);flex:0 0 auto"></div><div style="min-width:0"><b style="font-size:14px">${t('cert.emptyTitle')}</b><div class="muted" style="font-size:12.5px;margin-top:3px">${t('cert.empty')}</div></div></div>`;
 
-  // Profile strength — derived from real completeness only.
-  const chk = [
-    { on: !!acc.profile_completed_at, label: t('tp.check.basic') },
-    { on: !!acc.instagram, label: t('tp.check.social') },
-    { on: !!acc.ktp, label: t('tp.check.id') },
-    { on: !!(acc.cv_path || acc.hyrox_cert_path || acc.portfolio_url), label: t('tp.check.docs') },
-  ];
-  const strengthPct = Math.round((chk.filter((c) => c.on).length / chk.length) * 100);
-  const chkHtml = chk.map((c) => `<div class="tp-check-item${c.on ? ' done' : ''}"><span class="tp-check-dot"></span><span>${esc(c.label)}</span></div>`).join('');
+  // Profile strength — from the shared helper so every surface agrees.
+  const { pct: strengthPct, items: chk } = profileStrength(acc);
+  const chkHtml = chk.map((c) => `<div class="tp-check-item${c.on ? ' done' : ''}"><span class="tp-check-dot"></span><span>${esc(t(c.key))}</span></div>`).join('');
 
   // My documents — real status per document.
   const docState = (ok, path, kind) => ok
@@ -3903,6 +3957,9 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   <div class="section-head"><h2 style="margin:0">${t('adm.profile.title')}</h2></div>
   <div class="card" style="margin-top:14px">${talentProfileBlock(talent, L)}</div>
 
+  <div class="section-head" style="margin-top:22px"><h2 style="margin:0">${t('prof.completeness')}</h2></div>
+  ${strengthDetailCard(talent, L)}
+
   <div class="section-head"><h2 style="margin:0">${t('score.history')}</h2></div>
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('th.event')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th><th>${t('score.col')}</th></tr></thead>
@@ -4339,9 +4396,9 @@ function adminEventEdit({ staff, event, lang }) {
     </div>`;
 
   const body = `<div class="wrap">
+  <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     ${staffHead(staff, t('manage.editEvent'), L)}
-    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
   </div>
   <p class="sub">${t('manage.editSub')}</p>
   <form method="post" action="/admin/events/${esc(ev.id)}/edit" enctype="multipart/form-data" class="card" style="margin-top:16px">
@@ -4392,6 +4449,9 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
+  // First-choice (P1) position key + category, for the client-side filters.
+  const p1keyOf = (a) => (a.choices && a.choices[0] && a.choices[0].key) || '';
+  const p1catOf = (a) => { const k = p1keyOf(a); return k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'); };
   // Which review tab this is (Man Power crew / KOL / Fotografer-Videografer).
   const catTitle = cat === 'kol' ? t('mpr.titleKol') : cat === 'creative' ? t('mpr.titleCreative') : t('mpr.title');
   const catActive = cat === 'kol' ? 'applications-kol' : cat === 'creative' ? 'applications-creative' : 'applications';
@@ -4481,11 +4541,12 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       </div>`;
     };
 
-    return `<div class="card" style="margin-top:14px">
+    return `<div class="card adm-ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
           <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
           ${posBlock}
         </div>
@@ -4543,6 +4604,24 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     </details>`;
   }).join('');
 
+  // Client-side filter bar over the cards: position (P1) + status + search, with
+  // Reset. Category switches the server-scoped list (mirrors the existing tabs).
+  const p1PosSeen = new Set(); const p1PosOpts = [];
+  applications.forEach((a) => { const c = a.choices && a.choices[0]; if (c && c.key && !p1PosSeen.has(c.key)) { p1PosSeen.add(c.key); p1PosOpts.push(`<option value="${esc(c.key)}">${esc(posLabel(c, L))}</option>`); } });
+  const stOpts = Array.from(new Set(applications.map((a) => a.status))).map((s) => `<option value="${esc(s)}">${esc(t('ta.status.' + s))}</option>`).join('');
+  const filterBar = `<div class="card" style="margin-top:14px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select style="min-width:160px" onchange="if(this.value)location.href='/admin/applications?cat='+this.value">
+      <option value="man_power"${cat === 'man_power' ? ' selected' : ''}>${esc(t('filter.cat.manpower'))}</option>
+      <option value="kol"${cat === 'kol' ? ' selected' : ''}>${esc(t('filter.cat.kol'))}</option>
+      <option value="creative"${cat === 'creative' ? ' selected' : ''}>${esc(t('filter.cat.creative'))}</option>
+    </select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="admPosFilter" style="min-width:150px"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.status')}<select id="admStatusFilter" style="min-width:150px"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
+    <input type="text" id="admSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" style="flex:1;min-width:150px;box-sizing:border-box">
+    <button type="button" id="admReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
+  </div>
+  <p class="muted" id="admNoMatch" style="margin-top:14px;display:none">${t('eo.ap.noMatch')}</p>`;
+
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
   ${flashBanner}
@@ -4552,10 +4631,33 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
-  ${applications.length ? folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
+  ${applications.length ? filterBar + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
 </div>
 <script>
 (function(){
+  var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
+  if(pos||st||sr){
+    var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
+    var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
+    var apply=function(){
+      var p=pos?pos.value:'',s=st?st.value:'',q=sr?sr.value.trim().toLowerCase():'',shown=0,filtering=!!(p||s||q);
+      items.forEach(function(it){
+        var okP=!p||it.getAttribute('data-p1pos')===p;
+        var okS=!s||it.getAttribute('data-status')===s;
+        var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+        var vis=okP&&okS&&okQ;it.style.display=vis?'':'none';if(vis)shown++;
+      });
+      folders.forEach(function(f){
+        var vis=[].slice.call(f.querySelectorAll('.adm-ap-item')).filter(function(x){return x.style.display!=='none';}).length;
+        f.style.display=(filtering&&vis===0)?'none':'';if(filtering&&vis>0)f.open=true;
+      });
+      if(nm)nm.style.display=shown===0?'':'none';
+    };
+    if(pos)pos.addEventListener('change',apply);
+    if(st)st.addEventListener('change',apply);
+    if(sr)sr.addEventListener('input',apply);
+    if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(sr)sr.value='';apply();});
+  }
   document.querySelectorAll('.station-save').forEach(function(btn){
     var form = btn.closest('form'); if(!form) return;
     var inputs = form.querySelectorAll('[name="station"], [name="station_loc"]');
@@ -4835,9 +4937,9 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
     : `<p class="muted" style="margin-top:14px">${esc(empty)}</p>`;
   // Search now lives in the unified header (landingNav) — no separate in-body box.
   const body = `<div class="wrap">
+    <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
       <h1 style="margin:0">${t('ta.openTitle')}</h1>
-      <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     </div>
     <p class="sub">${t('ta.openSub')}</p>
     ${(query || cityVal) ? `<p class="muted" style="font-size:13px;margin:8px 0 0">${esc(t('search.aria'))}: <b>${esc(query || cityVal)}</b></p>` : ''}
