@@ -917,7 +917,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-brand{max-width:430px}
 .ft-logo{display:block;margin-top:-14px;margin-bottom:2px}
 .ft-logo img{height:54px;width:auto;display:block}
-.ft-tag{color:var(--lp-tx3);font-size:14px;line-height:1.6;margin:0 0 20px;text-align:justify}
+.ft-tag{color:var(--lp-tx3);font-size:14px;line-height:1.6;margin:0 0 20px;text-align:left}
 .ft-social{display:flex;gap:18px}
 .ft-social a{color:var(--lp-tx3);display:inline-flex}
 .ft-social a:hover{color:var(--red)}
@@ -1142,6 +1142,10 @@ function landingNav(lang, active, account, opts = {}) {
     "var box=document.getElementById('lpSearch');if(!box)return;" +
     "var input=box.querySelector('.lp-search-in'),sel=box.querySelector('.lp-search-city'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
     "var lang=box.getAttribute('data-lang')||'id',none=box.getAttribute('data-none')||'',tm,ctrl,items=[],active=-1;" +
+    // Force the context prefill (event name / active query) AFTER the browser's
+    // own form-restoration-on-reload, which can otherwise wipe the server-set
+    // value back to empty even with autocomplete=off.
+    "var pf=box.getAttribute('data-prefill')||'';if(pf&&input){input.value=pf;if(clr)clr.hidden=false;}" +
     'function esc(s){return String(s).replace(/[&<>"\\x27]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\x22":"&quot;","\\x27":"&#39;"}[c];});}' +
     "function hide(){menu.classList.remove('show');menu.innerHTML='';items=[];active=-1;}" +
     "function paint(){var e=menu.querySelectorAll('.lp-sr');for(var i=0;i<e.length;i++)e[i].classList.toggle('active',i===active);}" +
@@ -1165,7 +1169,7 @@ function landingNav(lang, active, account, opts = {}) {
     "if(toggle)toggle.addEventListener('click',function(){box.classList.add('lp-search--open');setTimeout(function(){input.focus();},30);});" +
     "document.addEventListener('click',function(e){if(!box.contains(e.target)){hide();box.classList.remove('lp-search--open');}});" +
     '})();</script>';
-  const search = opts.search ? `<div class="lp-search" id="lpSearch" data-lang="${L}" data-none="${esc(t('search.none'))}">
+  const search = opts.search ? `<div class="lp-search" id="lpSearch" data-lang="${L}" data-none="${esc(t('search.none'))}" data-prefill="${esc(opts.searchValue || '')}">
       <button type="button" class="lp-search-toggle" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
       <form class="lp-search-form" action="/events" method="get" role="search" autocomplete="off">
         <input type="hidden" name="lang" value="${L}">
@@ -5428,7 +5432,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     <p class="sub" style="margin:7px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
     ${chips}
     <div style="max-width:820px">
-      ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(e.description)}</p>` : ''}
+      ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:left;line-height:1.6">${esc(e.description)}</p>` : ''}
       ${savedBanner}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
