@@ -419,6 +419,22 @@ const NAV_CSS = `
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 `;
 
+// FAQ accordion CSS, shared by the landing page and the auth/register page so the
+// faqSection() markup looks identical on both (the auth page pulls this in via its
+// own <style>; the landing page inlines it in its stylesheet). Uses the --lp-*
+// theme tokens, which both pages already define.
+const FAQ_CSS = `
+.au-faq{max-width:1180px;margin:0 auto;padding:24px 28px 72px}
+.au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,44px);margin:0 0 8px}
+.au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
+.au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.au-faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;font:700 16.5px/1.35 Barlow,sans-serif;color:var(--lp-tx)}
+.au-faq-item summary::-webkit-details-marker{display:none}
+.au-faq-ic{flex:0 0 auto;color:var(--red);font-size:28px;line-height:1;transition:transform .2s ease}
+.au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
+.au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
+@media(max-width:560px){.au-faq{padding:16px 18px 56px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}`;
+
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 // Dark mode removed — every page renders light (data-theme="light" on <html>).
 const THEME_HEAD = '';
@@ -960,17 +976,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 /* Mobile keeps the multi-column grid feel (2 columns) rather than a full
    1-column stack — cards just scale down. Desktop (>860px) stays 3 columns. */
 @media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
-/* FAQ accordion (shared markup with the auth page via faqSection()) */
-.au-faq{max-width:1180px;margin:0 auto;padding:24px 28px 72px}
-.au-faq h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(30px,4.4vw,44px);margin:0 0 8px}
-.au-faq-sub{color:var(--lp-tx3);max-width:640px;margin:0 0 26px;font-size:16px}
-.au-faq-item{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;margin-bottom:14px;overflow:hidden}
-.au-faq-item summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 24px;font:700 16.5px/1.35 Barlow,sans-serif;color:var(--lp-tx)}
-.au-faq-item summary::-webkit-details-marker{display:none}
-.au-faq-ic{flex:0 0 auto;color:var(--red);font-size:28px;line-height:1;transition:transform .2s ease}
-.au-faq-item[open] .au-faq-ic{transform:rotate(45deg)}
-.au-faq-a{padding:0 24px 20px;color:var(--lp-tx2);font-size:15px;line-height:1.65}
-@media(max-width:560px){.au-faq{padding:16px 18px 56px}.au-faq-item summary{padding:17px 18px;font-size:15.5px}.au-faq-a{padding:0 18px 17px}}
+/* FAQ accordion (shared markup + CSS with the auth page via faqSection()/FAQ_CSS) */${FAQ_CSS}
 /* Live opportunities grid (events + campaigns) */
 .lp-ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .lp-ev-card{display:block;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:16px;overflow:hidden;text-decoration:none;color:inherit;transition:transform .15s,box-shadow .15s}
@@ -1793,9 +1799,10 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
 
-  // Auth-specific layout CSS (the shared STYLE already carries au-faq* + the
-  // lp-nav/lp-search/lp-acct header used by publicLayout; only the hero/form
-  // pieces below are page-local).
+  // Auth-specific layout CSS. publicLayout's NAV_CSS supplies the lp-nav header +
+  // the --lp-* theme tokens; the shared FAQ_CSS (appended below) styles the
+  // faqSection() accordion so it matches the landing page; the hero/form pieces
+  // here are page-local.
   const auStyle = `<style>
 .au-wrap{max-width:1240px;margin:0 auto;padding:24px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start}
 .au-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;line-height:.94;letter-spacing:-.01em;font-size:clamp(40px,6.4vw,74px)}
@@ -1824,6 +1831,10 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
 .au-err{background:rgba(228,18,31,.08);border:1px solid rgba(228,18,31,.28);color:#b3121c;border-radius:12px;padding:12px 14px;margin-bottom:18px;font-size:14px}
 .au-err ul{margin:6px 0 0 18px}
 @media(max-width:900px){.au-wrap{grid-template-columns:1fr;gap:30px;padding:8px 22px 24px}.au-card{padding:24px}.au-hero{order:0}}
+${FAQ_CSS}
+/* Auth page: match the FAQ container width to the form column above + clear gap. */
+.au-faq{max-width:1240px;margin-top:14px}
+@media(max-width:900px){.au-faq{margin-top:6px}}
 </style>`;
   const body = `${auStyle}
   <div class="au-wrap">
