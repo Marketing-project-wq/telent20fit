@@ -539,7 +539,7 @@ function navLink(href, key, active, icon, label) {
  * on the landingNav event search; `back` overrides the header Back link (a URL, or
  * false to hide it — the browse pages keep their own in-body Back so they pass false).
  */
-function appLayout({ title, body, role, active, user, lang, search, cities, searchValue, back }) {
+function appLayout({ title, body, role, active, user, lang, search, cities, searchValue, back, isKol }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isEo = role === 'eo';
@@ -563,10 +563,13 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
+      // Post Proofs is a KOL-only feature, so it only joins the bar once the talent
+      // has confirmed the KOL category (isKol — set by the guards). Non-KOL / not-yet
+      // -confirmed talents get a 3-item bar; the flex layout re-centers automatically.
       : navLink('/acara', 'event', active, 'event', t('nav.events'))
         + navLink('/talent/applications', 'applications', active, 'applications', t('nav.myApps'))
         + navLink('/talent', 'profil', active, 'profile', t('nav.profile'))
-        + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
+        + (isKol ? navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs')) : '');
 
   // Talent pages reuse the public landingNav header (logo + ID/EN toggle + account
   // dropdown) so the dashboard matches the Events pages — so the head also pulls in
@@ -628,7 +631,7 @@ function browseLayout({ title, body, lang, account, active, cities, search, sear
   const L = normLang(lang);
   const isCreator = !!(account && account.name && account.talent_type && account.talent_type !== 'main_power');
   if (isCreator) {
-    return appLayout({ title, body, role: 'kol', active: active || 'event', user: account.name, lang: L, search: !!search, cities: cities || [], searchValue: searchValue || '', back: false });
+    return appLayout({ title, body, role: 'kol', active: active || 'event', user: account.name, lang: L, search: !!search, cities: cities || [], searchValue: searchValue || '', back: false, isKol: !!account.isKol });
   }
   return publicLayout({ title, body, lang: L, account: account || null, active: active || 'events', cities: cities || [], search: !!search, searchValue: searchValue || '' });
 }
@@ -3344,7 +3347,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   <div class="section-head"><h2 style="margin:0">${t('kol.myProofs')}</h2></div>
   ${proofCards}
 </div>`;
-  return appLayout({ title: t('kol.title') + ' — 20FIT', body, role: 'kol', active: 'proofs', user: (talent && talent.name) || '', lang: L });
+  return appLayout({ title: t('kol.title') + ' — 20FIT', body, role: 'kol', active: 'proofs', user: (talent && talent.name) || '', lang: L, isKol: !!(talent && talent.isKol) });
 }
 
 /** Talent's own profile (Data Diri) + earned certificates, in the app shell. */
@@ -3476,11 +3479,9 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   const statCells = [[sc.events, t('tp.stat.events')], [sc.approved, t('tp.stat.approved')], [sc.proofs, t('tp.stat.proofs')], [sc.certs, t('tp.stat.certs')]]
     .map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
 
-  // Application history — a short summary here (the 2 most recent); the full list
-  // with the status filter lives on the dedicated /talent/applications page.
-  const histBlock = (events && events.length)
-    ? `${applicationHistoryBlock(events, isCreator, L, { withFilter: false, limit: 2 })}<div style="margin-top:12px"><a href="/talent/applications?lang=${L}" class="btn btn-ghost btn-sm btn-block">${t('tp.viewAllApps')} →</a></div>`
-    : applicationHistoryBlock(events, isCreator, L, {});
+  // Application history is no longer shown on the Profile — it now lives on its own
+  // "Applications" bottom-nav page (/talent/applications). Kept off here to avoid the
+  // redundant summary. `events` still feeds the stat counts above.
 
   // Certificates — real list, or the "auto-issued" placeholder.
   const certBlock = (certs && certs.length)
@@ -3521,9 +3522,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
 
   <div class="tp-grid">
     <div class="tp-main">
-      <div class="tp-sec-head"><h2>${t('ta.history.title')}</h2></div>
-      ${histBlock}
-      <div class="tp-sec-head" style="margin-top:26px"><h2>${t('cert.myTitle')}</h2></div>
+      <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
       <div class="card" style="margin-top:12px">${certBlock}</div>
     </div>
     <aside class="tp-side">
@@ -3557,7 +3556,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
 
   <form method="post" action="/logout" style="margin-top:26px;max-width:340px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
-  return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
+  return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L, isKol: !!acc.isKol });
 }
 
 // Dedicated "My Applications" page for creator talents (bottom-nav item). The full
@@ -3574,7 +3573,7 @@ function talentApplicationsPage({ account, events, lang }) {
   <p class="sub" style="margin:2px 0 14px">${t('ta.applications.sub')}</p>
   ${applicationHistoryBlock(events, isCreator, L, { withFilter: true })}
 </div>`;
-  return appLayout({ title: t('ta.applications.title') + ' — 20FIT', body, role: 'kol', active: 'applications', user: acc.name, lang: L });
+  return appLayout({ title: t('ta.applications.title') + ' — 20FIT', body, role: 'kol', active: 'applications', user: acc.name, lang: L, isKol: !!acc.isKol });
 }
 
 /**
@@ -3645,7 +3644,7 @@ function talentDocuments(type, opts = {}) {
 </div>`;
 
   return type === 'kol'
-    ? appLayout({ title: t('doc.title') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L })
+    ? appLayout({ title: t('doc.title') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L, isKol: !!acc.isKol })
     : layout({ title: t('doc.title') + ' — 20FIT', body, brand: 'Main Power', home: '/talent?lang=' + L, lang: L });
 }
 
@@ -3819,7 +3818,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   ${(() => { const d = langText(event.description, event.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   ${action}
 </div>`;
-  return appLayout({ title: event.name + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+  return appLayout({ title: event.name + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L, isKol: !!(account && account.isKol) });
 }
 
 /** Dynamic registration form for one category (fields vary by category). */
@@ -3854,7 +3853,7 @@ function kolApplyForm({ account, event, cat, values, errors, lang }) {
     <button type="submit" class="btn btn-block">${t('apply.submit')}</button>
   </form>
 </div>`;
-  return appLayout({ title: t('apply.formTitle', { cat: CAT_LABEL[cat] || cat }) + ' — 20FIT', body, role: 'kol', active: 'event', user: acc.name, lang: L });
+  return appLayout({ title: t('apply.formTitle', { cat: CAT_LABEL[cat] || cat }) + ' — 20FIT', body, role: 'kol', active: 'event', user: acc.name, lang: L, isKol: !!(acc && acc.isKol) });
 }
 
 /** Confirmation after a talent submits an event registration. */
@@ -3870,7 +3869,7 @@ function kolApplyDone({ account, event, lang }) {
       <a href="/acara?lang=${L}" class="btn">${t('nav.events')} →</a>
     </div>
   </div></div>`;
-  return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+  return appLayout({ title: t('apply.doneTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L, isKol: !!(account && account.isKol) });
 }
 
 // ------------------------------------------------------------ Man Power ----

@@ -150,6 +150,7 @@ function requireTalentReady(type) {
       const acc = await st.getAccountById(req.talent.id);
       if (!acc) { auth.clearSession(res, type); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
       if (!acc.profile_completed_at) return res.redirect('/data-diri?lang=' + req.lang);
+      acc.isKol = await talentIsKol(st, acc.id);
       req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -166,6 +167,7 @@ function requireTalentBrowse(type) {
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(req.talent.id);
       if (!acc) { auth.clearSession(res, type); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
+      acc.isKol = await talentIsKol(st, acc.id);
       req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -786,6 +788,22 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 // req.account (full profile) is attached by requireTalentReady.
 // Unified talent home. Dispatches by session type: Man Power sees the
 // self-apply dashboard; KOL / photographer see the profile + history page.
+// Has this talent confirmed the KOL category yet? True once they have at least one
+// application to a KOL-category position (position.key === 'kol'). This gates the
+// "Post Proofs" bottom-nav item + the /kirim-bukti page — Post Proofs is a KOL-only
+// feature, so a fresh account (or one that only applied to non-KOL roles like Judge)
+// shouldn't see it until a KOL application confirms the category. Attached to
+// req.account.isKol by the talent guards so every dashboard page decides the same way.
+async function talentIsKol(st, talentId) {
+  const [myApps, allPositions] = await Promise.all([st.listApplicationsForTalent(talentId), st.listPositions()]);
+  if (!myApps || !myApps.length) return false;
+  const appIds = new Set(myApps.map((a) => a.id));
+  const kolPosIds = new Set((allPositions || []).filter((p) => p.key === 'kol').map((p) => String(p.id)));
+  if (!kolPosIds.size) return false;
+  const choices = await st.listApplicationChoices();
+  return choices.some((c) => appIds.has(c.application_id) && kolPosIds.has(String(c.position_id)));
+}
+
 // Build a talent's application history (one entry per application): resolve each
 // application's chosen/accepted position + ranked picks against the event. Shared
 // by the Talent Profile (summary) and the /talent/applications page.
@@ -1087,6 +1105,7 @@ function requireAnyTalentReady() {
         const rn = safeNext(req.query.next) || safeNext(req.body && req.body.next);
         return res.redirect('/data-diri?lang=' + req.lang + (rn ? '&next=' + encodeURIComponent(rn) : ''));
       }
+      acc.isKol = await talentIsKol(st, acc.id);
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -1104,6 +1123,7 @@ function requireAnyTalentBrowse() {
       if (!st) return needConfig(req, res);
       const acc = await st.getAccountById(t.id);
       if (!acc) { auth.clearSession(res, auth.TALENT_TYPES); return res.redirect('/login/talent?next=' + encodeURIComponent(req.originalUrl)); }
+      acc.isKol = await talentIsKol(st, acc.id);
       req.talent = t; req.account = acc;
       next();
     } catch (e) { next(e); }
@@ -1121,7 +1141,7 @@ function optionalTalent() {
         const st = db();
         if (st) {
           const acc = await st.getAccountById(t.id);
-          if (acc) { req.talent = t; req.account = acc; }
+          if (acc) { acc.isKol = await talentIsKol(st, acc.id); req.talent = t; req.account = acc; }
           else auth.clearSession(res, auth.TALENT_TYPES);
         }
       }
@@ -1335,6 +1355,9 @@ app.get('/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
+    // Post Proofs is KOL-only: block direct-URL access until the KOL category is
+    // confirmed (a KOL-position application), matching the hidden bottom-nav item.
+    if (!req.account.isKol) return res.redirect('/talent?lang=' + req.lang);
     const [events, allEvents, myProofs, myAssignments, settings] = await Promise.all([
       st.listActiveEvents(), st.listEvents(), st.listProofsForTalent(req.talent.id), st.listAssignmentsForTalent(req.talent.id), st.getSettings(),
     ]);
@@ -1353,6 +1376,7 @@ app.post('/kirim-bukti', requireTalentReady('kol'), upload.single('screenshot'),
   try {
     const st = db();
     if (!st) return needConfig(req, res);
+    if (!req.account.isKol) return res.redirect('/talent?lang=' + req.lang);
     const eventId = String(req.body.event_id || '').trim();
     const postLink = String(req.body.post_link || '').trim();
     const file = req.file;
