@@ -159,10 +159,9 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;margin-top:20px}
 .ev-card{overflow:hidden;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
 .ev-card:hover{transform:translateY(-3px);border-color:var(--red);box-shadow:0 10px 26px rgba(0,0,0,.28)}
-.ev-cover{position:relative;height:96px;margin:-24px -24px 16px;overflow:hidden}
+.ev-cover{position:relative;height:64px;margin:-24px -24px 16px;overflow:hidden}
 .ev-cover-tex{position:absolute;inset:0;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.06) 0,rgba(255,255,255,.06) 2px,transparent 2px,transparent 13px)}
-.ev-cover-ini{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:46px;font-weight:900;color:rgba(255,255,255,.92);letter-spacing:-.03em;text-shadow:0 2px 12px rgba(0,0,0,.28);line-height:1}
-.ev-cover-ico{position:absolute;right:-6px;bottom:-20px;font-size:82px;opacity:.2;line-height:1;transform:rotate(-8deg)}
+.ev-cover-ico{position:absolute;right:-6px;bottom:-18px;font-size:74px;opacity:.2;line-height:1;transform:rotate(-8deg)}
 .ev-cover-badge{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.94);font-size:11.5px;font-weight:800;padding:4px 11px;border-radius:100px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ev-cover-photo{height:190px;background:rgba(0,0,0,.04)}
@@ -1983,10 +1982,8 @@ function eventCover(e, lang) {
     </div>`;
   }
   const [c1, c2, icon] = evCoverPick(e.id || e.name);
-  const initial = esc(String(e.name || '?').trim().charAt(0).toUpperCase() || '?');
   return `<div class="ev-cover" style="background:linear-gradient(135deg,${c1},${c2})">
       <div class="ev-cover-tex"></div>
-      <div class="ev-cover-ini">${initial}</div>
       <div class="ev-cover-ico">${icon}</div>
       ${badge}
     </div>`;
