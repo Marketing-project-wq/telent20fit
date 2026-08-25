@@ -2585,17 +2585,19 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
         ${customName}
-        <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:${isOther ? '6px' : '0'};font-size:13px">${esc(cv('description'))}</textarea>
-        <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
-        <label style="display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-top:8px">${t('eo.pos.quotaLabel')}<input type="number" name="quota_${pid}" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:4px;font-size:13px"></label>
-        ${grp(t('eo.pos.detailGroup'))}
-        ${inp('work_hours', 'eo.pos.workHoursPh', 120)}
-        ${inp('venue_detail', 'eo.pos.venuePh', 200)}
-        <input type="text" name="fee_${pid}" maxlength="200" value="${esc(cv('fee'))}" placeholder="${t('eo.ev.feePh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">
-        <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('requirement'))}</textarea>
-        ${inp('dresscode', 'eo.pos.dresscodePh', 400)}
-        ${inp('meeting_point', 'eo.pos.meetingPh', 400)}
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:${isOther ? '6px' : '0'}">${t('eo.ev.descLabel')}</label>
+        <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('description'))}</textarea>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.ev.jobdeskLabel')}</label>
+        <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.ev.requirementLabel')}</label>
+        <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}</label>
+        <input type="number" name="quota_${pid}" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
         ${kolFields}${photoFields}
+        <!-- The optional "Position Details" inputs were removed from the form, but the columns
+             are still shown to talents in "Lihat Detail". Carry any existing values as hidden
+             fields so editing an event doesn't wipe data an EO entered before. -->
+        <input type="hidden" name="work_hours_${pid}" value="${esc(cv('work_hours'))}"><input type="hidden" name="venue_detail_${pid}" value="${esc(cv('venue_detail'))}"><input type="hidden" name="fee_${pid}" value="${esc(cv('fee'))}"><input type="hidden" name="dresscode_${pid}" value="${esc(cv('dresscode'))}"><input type="hidden" name="meeting_point_${pid}" value="${esc(cv('meeting_point'))}">
       </div>
     </div>`;
   };
@@ -2673,6 +2675,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   }
   var rows=[].slice.call(list.querySelectorAll('.posm-row'));
   rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); fillTpl(r); }); });
+  // Safety net: on load, fill templates for any already-checked position whose
+  // Description/Jobdesk/Requirement are still empty (e.g. after a validation re-render).
+  rows.forEach(function(r){ sync(r); fillTpl(r); });
   // Pick an event type -> auto-fill its default positions (still adjustable by hand).
   var cat=document.getElementById('category');
   if(cat && cat.tagName==='SELECT'){
