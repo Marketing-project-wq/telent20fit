@@ -5203,6 +5203,20 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const left = Math.max(0, (p.quota || 0) - (p.filled || 0));
     const isOpen = !p.closed_at && !p.full;
     const lock = docsMissing && CREATOR_ROLES.includes(p.key);
+    // Fall back to the role's default template (in the current language) for
+    // Description / Jobdesk / Requirement when the EO left them empty — so every
+    // card is consistent, including positions created before the template feature.
+    // 'other' (Lainnya) and any key without a template resolve to '' (t() would
+    // otherwise return the raw key string).
+    const tplText = (field) => {
+      if (!p.key || p.key === 'other') return '';
+      const k = 'pos.tpl.' + p.key + '.' + field;
+      const v = t(k);
+      return v === k ? '' : v;
+    };
+    const descText = p.description || tplText('desc');
+    const jobdeskText = p.jobdesk || tplText('job');
+    const reqText = p.requirement || tplText('req');
     // Quota / remaining-slots hint so talents gauge their odds before applying.
     // Only for positions with a real (limited) quota; unlimited & manually-closed
     // positions skip it. Counts are live (p.filled = approved, per eoEventView).
@@ -5258,9 +5272,9 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     // "Lihat Detail" so the card stays compact; empty fields are skipped.
     // Category-specific fields only for the matching type.
     const detailRows = [
-      ['📋', t('ta.jobdesk'), p.jobdesk],
+      ['📋', t('ta.jobdesk'), jobdeskText],
       ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
-      ['💰', t('ta.fee'), p.fee], ['✅', t('ta.requirement'), p.requirement],
+      ['💰', t('ta.fee'), p.fee], ['✅', t('ta.requirement'), reqText],
       ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
     ];
     if (p.key === 'kol') detailRows.push(['🎬', t('ta.d.kolContent'), p.kol_content], ['⏰', t('ta.d.kolDeadline'), p.kol_deadline], ['📈', t('ta.d.kolFollowers'), p.kol_min_followers], ['#️⃣', t('ta.d.kolHashtags'), p.kol_hashtags]);
@@ -5273,7 +5287,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
-      desc: p.description ? esc(p.description) : '', // short role description on the card face
+      desc: descText ? esc(descText) : '', // short role description on the card face (template fallback)
       corner: badge,
       foot,
       id: 'pos-' + esc(p.position_id),
