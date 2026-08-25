@@ -2015,9 +2015,11 @@ function parseEventForm(req, positionsMaster) {
   chosen.forEach((id) => {
     id = String(id);
     if (!validIds.has(id) || seen.has(id)) return;
-    // Quota was removed from the form (registration is unlimited). A ticked position
-    // is stored with a high sentinel quota so it saves (the store requires quota>0)
-    // and never reads as "full". Editing keeps any existing quota as an internal target.
+    // Quota (how many talents this position needs) is required in the form and
+    // validated in validateEventForm. We still fall back to the UNLIMITED_QUOTA
+    // sentinel here for a blank value so parsing never crashes; validation rejects
+    // it before save. Legacy positions saved before quota was required keep the
+    // sentinel and render as "no quota limit" on the card.
     const existingQ = parseInt(req.body['quota_' + id], 10);
     const q = Number.isFinite(existingQ) && existingQ > 0 ? existingQ : UNLIMITED_QUOTA;
     // Per-field getter (trim + cap length; empty -> null).
@@ -2059,6 +2061,10 @@ function validateEventForm(f, req) {
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   // The "Lainnya" (custom) role needs a name to identify it.
   if (f.positions.some((p) => p.key === 'other' && !p.custom_label)) e.push(req.t('eo.ev.err.customNameRequired'));
+  // Every selected position needs a real headcount so its card can show how many
+  // talents are wanted. An empty quota parses to the UNLIMITED_QUOTA sentinel, so
+  // any position at/above it means the EO left the field blank.
+  if (f.positions.some((p) => !(p.quota > 0 && p.quota < UNLIMITED_QUOTA))) e.push(req.t('eo.ev.err.quota'));
   return e;
 }
 
@@ -2825,36 +2831,27 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
   } catch (e) { next(e); }
 });
 
-// ---- HYROX certificate verification (Super Admin + EO) ----------------------
-// Talents upload a HYROX 360 certificate on their Dokumen page; staff review it
-// here. Verification is global (once verified it counts for every event).
-
-// EO scope for the shared HYROX / certificate review pool: the set of talent
-// ids who applied to at least one event this EO owns. Super admins are never
-// restricted; an EO may only review talents connected to their own events.
-async function eoApplicantTalentIds(st, staffId) {
-  const [events, apps] = await Promise.all([st.listEvents(), st.listApplications()]);
-  const myEvents = new Set(events.filter((e) => e.created_by === staffId).map((e) => e.id));
-  return new Set(apps.filter((a) => myEvents.has(a.event_id)).map((a) => a.talent_id));
-}
-app.get('/admin/hyrox', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+// ---- HYROX certificate verification (Super Admin only) ----------------------
+// Talents upload a HYROX 360 certificate on their Dokumen page; the super admin
+// reviews it here. Verification is global (once verified it counts for every
+// event). EOs never reach this pool — cert review is a platform-wide function,
+// not a per-event one, so it lives entirely inside the Super Admin area.
+app.get('/admin/hyrox', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const rk = (s) => (s === 'pending' ? 0 : s === 'rejected' ? 1 : 2); // pending first
     let certs = (await st.listHyroxCerts()).slice();
-    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); certs = certs.filter((c) => mine.has(c.id)); }
     certs = certs.sort((a, b) => rk(a.hyrox_cert_status) - rk(b.hyrox_cert_status) || String(a.name || '').localeCompare(String(b.name || '')));
     res.send(V.adminHyroxCerts({ staff: staffCtx(req), certs, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
-// Stream a talent's uploaded HYROX certificate to the reviewing staff member.
-app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+// Stream a talent's uploaded HYROX certificate to the reviewing super admin.
+app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); if (!mine.has(req.params.talentId)) return res.redirect('/admin/hyrox'); }
     const acc = await st.getAccountById(req.params.talentId);
     const key = acc && acc.hyrox_cert_path;
     if (!key) return res.redirect('/admin/hyrox');
@@ -2872,13 +2869,12 @@ app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin', 'eo']),
 });
 
 // Verify or reject a talent's HYROX certificate.
-app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const action = String(req.body.action || '');
     if (action !== 'verify' && action !== 'reject') return res.redirect('/admin/hyrox');
-    if (req.staff.type === 'eo') { const mine = await eoApplicantTalentIds(st, req.staff.id); if (!mine.has(req.params.talentId)) return res.redirect('/admin/hyrox'); }
     const acc = await st.getAccountById(req.params.talentId);
     if (!acc || !acc.hyrox_cert_path) return res.redirect('/admin/hyrox');
     const note = String(req.body.note || '').trim().slice(0, 300);
@@ -3085,14 +3081,13 @@ app.post('/admin/certificates/:id/revoke', auth.requireStaff(['super_admin']), a
   } catch (e) { next(e); }
 });
 
-// Staff: download a certificate PDF.
-app.get('/admin/certificates/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+// Super admin: download a certificate PDF.
+app.get('/admin/certificates/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
     if (!c) return res.redirect('/admin/applications');
-    if (req.staff.type === 'eo' && !(await eoOwnedEvent(st, req.staff.id, c.event_id))) return res.redirect('/admin/applications');
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
     const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
     res.setHeader('Content-Type', 'application/pdf');

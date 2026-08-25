@@ -493,7 +493,6 @@ function appLayout({ title, body, role, active, user, lang }) {
       + navLink('/eo/stats', 'stats', active, 'stats', t('nav.statistics'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
-      + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
@@ -2604,8 +2603,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
         ${tplField('eo.ev.requirementLabel', 'req', '8px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}</label>
-        <input type="number" name="quota_${pid}" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}${rq}</label>
+        <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}"${on ? ' required' : ''} style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
         ${kolFields}${photoFields}
         <!-- The optional "Position Details" inputs were removed from the form, but the columns
              are still shown to talents in "Lihat Detail". Carry any existing values as hidden
@@ -2679,7 +2678,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 <script>
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
-  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'); if(ex) ex.style.display=(cb&&cb.checked)?'':'none'; }
+  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'), q=r.querySelector('.posm-quota'); var on=!!(cb&&cb.checked); if(ex) ex.style.display=on?'':'none'; if(q) q.required=on; /* only a visible (checked) position requires a quota — a hidden required field can't be validated */ }
   // On tick, fill empty Deskripsi/Jobdesk/Requirement from the role's default template.
   function fillTpl(r){
     var cb=r.querySelector('.posm-cb'); if(!cb||!cb.checked) return;
@@ -5446,17 +5445,20 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const jobdeskText = p.jobdesk || tplText('job');
     const reqText = p.requirement || tplText('req');
     // Quota / remaining-slots hint so talents gauge their odds before applying.
-    // Only for positions with a real (limited) quota; unlimited & manually-closed
-    // positions skip it. Counts are live (p.filled = approved, per eoEventView).
+    // Every open card carries a line: a real quota shows "N needed · M slots left"
+    // (or "Full" once taken); a legacy position saved without a quota shows a
+    // neutral "No quota limit". Manually-closed positions skip it (the corner badge
+    // already says "Closed"). Counts are live (p.filled = approved, per eoEventView).
     const limited = (p.quota || 0) > 0 && p.quota < 100000;
     const strong = (v) => `<b style="color:var(--ink)">${v}</b>`;
     // One line, no redundancy: how many talents this position needs (the EO's
     // quota) + how many slots remain open right now (quota − approved).
-    const quotaLine = (limited && !p.closed_at)
-      ? ((p.full || left <= 0)
-          ? `<div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--err,#d32f2f);background:var(--err-soft,#fdecea);border-radius:8px;padding:5px 11px">🚫 ${t('ta.slotsFull')}</div>`
-          : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.needed', { n: strong(p.quota) })} · ${t('ta.slotsLeft')}: ${strong(left)}</div>`)
-      : '';
+    const quotaLine = p.closed_at ? ''
+      : limited
+        ? ((p.full || left <= 0)
+            ? `<div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--err,#d32f2f);background:var(--err-soft,#fdecea);border-radius:8px;padding:5px 11px">🚫 ${t('ta.slotsFull')}</div>`
+            : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.needed', { n: strong(p.quota) })} · ${t('ta.slotsLeft')}: ${strong(left)}</div>`)
+        : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.unlimited')}</div>`;
     const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
         : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
