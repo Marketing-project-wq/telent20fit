@@ -17,7 +17,7 @@ const BUCKET = 'kol-uploads';
 // Optional per-position detail fields (all nullable text). General fields apply
 // to every category; the kol_* / photo_* fields only carry data for KOL /
 // photographer positions. Shared by the read + write paths in both stores.
-const POS_DETAIL_COLS = ['description', 'custom_label', 'work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
+const POS_DETAIL_COLS = ['description', 'description_en', 'custom_label', 'custom_label_en', 'jobdesk_en', 'requirement_en', 'work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
 const pickPosDetails = (src) => { const o = {}; for (const c of POS_DETAIL_COLS) o[c] = (src && src[c]) || null; return o; };
 
 // Per-metric "reasonable per day" thresholds (green ceiling, yellow ceiling).
@@ -247,9 +247,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
+    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published' })
+        .insert({ name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published' })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -261,6 +261,8 @@ function supabaseStore() {
       patch = patch || {};
       const row = {};
       if (patch.name !== undefined) row.name = patch.name;
+      if (patch.description !== undefined) row.description = patch.description || null;
+      if (patch.description_en !== undefined) row.description_en = patch.description_en || null;
       if (patch.location !== undefined) row.location = patch.location || null;
       if (patch.starts_at !== undefined) row.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) row.ends_at = patch.ends_at || null;
@@ -634,8 +636,8 @@ function memoryStore() {
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
     async listHyroxCerts() { return accounts.filter((a) => a.hyrox_cert_path).map(accountProfile); },
-    async createEvent({ name, description, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published', reg_closed_at: null };
+    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published', reg_closed_at: null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -645,6 +647,8 @@ function memoryStore() {
       const ev = events.find((e) => e.id === id);
       if (!ev) return;
       if (patch.name !== undefined) ev.name = patch.name;
+      if (patch.description !== undefined) ev.description = patch.description || null;
+      if (patch.description_en !== undefined) ev.description_en = patch.description_en || null;
       if (patch.location !== undefined) ev.location = patch.location || null;
       if (patch.starts_at !== undefined) ev.starts_at = patch.starts_at || null;
       if (patch.ends_at !== undefined) ev.ends_at = patch.ends_at || null;

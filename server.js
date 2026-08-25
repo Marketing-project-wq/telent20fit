@@ -1972,7 +1972,7 @@ const UNLIMITED_QUOTA = 100000;
 function eoSelMap(positions) {
   const m = {};
   (positions || []).forEach((p) => {
-    const o = { quota: p.quota, description: p.description || '', custom_label: p.custom_label || '', jobdesk: p.jobdesk || '', requirement: p.requirement || '', fee: p.fee || '' };
+    const o = { quota: p.quota, description: p.description || '', description_en: p.description_en || '', custom_label: p.custom_label || '', custom_label_en: p.custom_label_en || '', jobdesk: p.jobdesk || '', jobdesk_en: p.jobdesk_en || '', requirement: p.requirement || '', requirement_en: p.requirement_en || '', fee: p.fee || '' };
     POS_DETAIL_KEYS.forEach((k) => { o[k] = p[k] || ''; });
     m[p.position_id] = o;
   });
@@ -2001,7 +2001,7 @@ function parseEventForm(req, positionsMaster) {
   const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
   const st = s('status', 12);
   const data = {
-    name: s('name', 140), description: s('description', 4000) || null, category: s('category', 80) || null,
+    name: s('name', 140), description: s('description', 4000) || null, description_en: s('description_en', 4000) || null, category: s('category', 80) || null,
     location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
     start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
@@ -2028,11 +2028,14 @@ function parseEventForm(req, positionsMaster) {
     const pos = {
       position_id: id, quota: q, key,
       // Short role description shown on the talent card face; auto-filled from a
-      // per-role template but freely editable by the EO.
-      description: g('description', 600),
+      // per-role template but freely editable by the EO. _en holds the optional
+      // English version the EO can type; display falls back across languages.
+      description: g('description', 600), description_en: g('description_en', 600),
       // Custom name for the "Lainnya" (other) slot only; ignored for fixed roles.
       custom_label: key === 'other' ? g('custom_label', 80) : null,
-      jobdesk: g('jobdesk', 1000), requirement: g('requirement', 1000), fee: g('fee', 200),
+      custom_label_en: key === 'other' ? g('custom_label_en', 80) : null,
+      jobdesk: g('jobdesk', 1000), jobdesk_en: g('jobdesk_en', 1000),
+      requirement: g('requirement', 1000), requirement_en: g('requirement_en', 1000), fee: g('fee', 200),
       // General extra fields (all categories).
       work_hours: g('work_hours', 120), venue_detail: g('venue_detail', 200),
       dresscode: g('dresscode', 400), meeting_point: g('meeting_point', 400),

@@ -2495,7 +2495,31 @@ function eoVerifyNeeded({ email, lang }) {
 
 // Registration-status badge for an EO event.
 // Localized label for a master/event position.
-function posLabel(p, lang) { if (p && p.custom_label) return p.custom_label; return normLang(lang) !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || ''); }
+function posLabel(p, lang) {
+  const L = normLang(lang);
+  // Custom "Lainnya" name: prefer the active language, silently fall back to the other.
+  if (p && (p.custom_label || p.custom_label_en)) {
+    const id = p.custom_label || '', en = p.custom_label_en || '';
+    return L === 'en' ? (en || id) : (id || en);
+  }
+  return L !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || '');
+}
+// Pick the language-appropriate text for a field that has an ID + optional EN
+// version. Order: the requested language's value -> a language-appropriate
+// template (already translated; pass '' when there is none) -> the other
+// language's value with fb=true so callers can note "translation pending".
+function langText(idVal, enVal, tpl, lang) {
+  const L = normLang(lang);
+  const id = (idVal == null ? '' : String(idVal)).trim();
+  const en = (enVal == null ? '' : String(enVal)).trim();
+  const want = L === 'en' ? en : id;
+  const other = L === 'en' ? id : en;
+  if (want) return { text: want, fb: false };
+  const tp = (tpl == null ? '' : String(tpl)).trim();
+  if (tp) return { text: tp, fb: false };
+  if (other) return { text: other, fb: true };
+  return { text: '', fb: false };
+}
 
 // Talent profile completeness — 4 equal parts (basic / social / id / docs).
 // Single source of truth for the Talent Profile page, the Talent Apply tables,
@@ -2609,6 +2633,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     // Current value for a per-position field (from the selected/edit map).
     const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
     const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
+    // Optional English version of a template field, shown right under its ID input.
+    const enSub = `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:6px">${esc(t('eo.ev.f.enSub'))}</div>`;
+    const enTa = (name, max) => `${enSub}<textarea name="${name}_en_${pid}" rows="2" maxlength="${max}" placeholder="${t('eo.ev.f.enPh')}" style="width:100%;box-sizing:border-box;margin-top:2px;font-size:13px">${esc(cv(name + '_en'))}</textarea>`;
     const grp = (txt) => `<div class="muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:12px">${txt}</div>`;
     const isOther = p.key === 'other';
     // Label row for a template field (Deskripsi/Jobdesk/Requirement) with a small
@@ -2620,6 +2647,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const tplAttrs = isOther ? ' data-other="1"'
       : ` data-tpl-desc="${esc(t('pos.tpl.' + p.key + '.desc'))}" data-tpl-job="${esc(t('pos.tpl.' + p.key + '.job'))}" data-tpl-req="${esc(t('pos.tpl.' + p.key + '.req'))}"`;
     const customName = isOther ? `<input type="text" name="custom_label_${pid}" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600">` : '';
+    const customNameEn = isOther ? `${enSub}<input type="text" name="custom_label_en_${pid}" maxlength="80" value="${esc(cv('custom_label_en'))}" placeholder="${t('eo.pos.customNameEnPh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600">` : '';
     // Category-specific fields only render (and only save) for the matching type.
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
@@ -2630,12 +2658,16 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </label>
       <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
         ${customName}
+        ${customNameEn}
         ${tplField('eo.ev.descLabel', 'desc', isOther ? '6px' : '0')}
         <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('description'))}</textarea>
+        ${enTa('description', 600)}
         ${tplField('eo.ev.jobdeskLabel', 'job', '8px')}
         <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
+        ${enTa('jobdesk', 1000)}
         ${tplField('eo.ev.requirementLabel', 'req', '8px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
+        ${enTa('requirement', 1000)}
         <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}${rq}</label>
         <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}"${on ? ' required' : ''} style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
         ${kolFields}${photoFields}
@@ -2667,7 +2699,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </select>
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
     </div>
-    <div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
+    <div class="field"><label for="description">${t('eo.ev.f.descId')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
+    <div class="field"><label for="description_en">${t('eo.ev.f.descEn')} <span class="muted" style="font-weight:400;font-size:12px">(${t('common.optional')})</span></label><textarea id="description_en" name="description_en" rows="4" maxlength="4000" placeholder="${t('eo.ev.f.descEnPh')}">${esc(e.description_en || '')}</textarea></div>
     ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
@@ -2795,7 +2828,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   </div>
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
   ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
-  ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(e.description)}</p>` : ''}
+  ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
     <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>
     <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
@@ -3685,7 +3718,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
   ${locLine}
   <div style="margin-top:10px">${eventStatusBadge(event.status, L)}</div>
-  ${event.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(event.description)}</p>` : ''}
+  ${(() => { const d = langText(event.description, event.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   ${action}
 </div>`;
   return appLayout({ title: event.name + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
@@ -5474,9 +5507,12 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       const v = t(k);
       return v === k ? '' : v;
     };
-    const descText = p.description || tplText('desc');
-    const jobdeskText = p.jobdesk || tplText('job');
-    const reqText = p.requirement || tplText('req');
+    // Language-aware: EO's typed text in the active language, else the (translated)
+    // role template, else the other language's text. Non-"other" roles always have
+    // a template, so English never falls through to Indonesian for them.
+    const descText = langText(p.description, p.description_en, tplText('desc'), L).text;
+    const jobdeskText = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L).text;
+    const reqText = langText(p.requirement, p.requirement_en, tplText('req'), L).text;
     // Quota / remaining-slots hint so talents gauge their odds before applying.
     // Every open card carries a line: a real quota shows "N needed · M slots left"
     // (or "Full" once taken); a legacy position saved without a quota shows a
@@ -5613,7 +5649,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     <p class="sub" style="margin:7px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
     ${chips}
     <div style="max-width:820px">
-      ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:left;line-height:1.6">${esc(e.description)}</p>` : ''}
+      ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:left;line-height:1.6">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
       ${savedBanner}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
