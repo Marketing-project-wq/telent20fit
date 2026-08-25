@@ -3736,16 +3736,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     </aside>
   </div>
 
-  <div class="tp-morecta" style="margin-top:28px;border-radius:18px;padding:26px 28px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px var(--red-soft)">
-    <div style="min-width:0;flex:1 1 260px">
-      <div style="font-size:21px;font-weight:800;line-height:1.15">${t('tp.moreEvents.title')}</div>
-      <div style="font-size:14px;opacity:.93;margin-top:7px;max-width:540px">${t('tp.moreEvents.sub')}</div>
-    </div>
-    <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
-  </div>
-
-  <form method="post" action="/logout" style="margin-top:26px;max-width:340px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
-</div>`;
+  </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L, isKol: !!acc.isKol });
 }
 
@@ -3763,6 +3754,14 @@ function talentApplicationsPage({ account, events, lang }) {
   <p class="sub" style="margin:2px 0 14px">${t('ta.applications.sub')}</p>
   ${confirmationBanner(events, L)}
   ${applicationHistoryBlock(events, isCreator, L, { withFilter: true })}
+
+  <div class="tp-morecta" style="margin-top:28px;border-radius:18px;padding:26px 28px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px var(--red-soft)">
+    <div style="min-width:0;flex:1 1 260px">
+      <div style="font-size:21px;font-weight:800;line-height:1.15">${t('tp.moreEvents.title')}</div>
+      <div style="font-size:14px;opacity:.93;margin-top:7px;max-width:540px">${t('tp.moreEvents.sub')}</div>
+    </div>
+    <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
+  </div>
 </div>`;
   return appLayout({ title: t('ta.applications.title') + ' — 20FIT', body, role: 'kol', active: 'applications', user: acc.name, lang: L, isKol: !!acc.isKol });
 }
