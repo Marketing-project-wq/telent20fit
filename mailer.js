@@ -522,4 +522,71 @@ async function sendSpotConfirmEmail({ to, name, eventName, positionName, eventDa
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml };
+// "Join the event talent group" — sent to a confirmed (Assigned) talent once the
+// Event Organizer has set the group link. Always English. The CTA opens the EO's
+// WhatsApp/Telegram group directly (external link).
+function groupInviteEmailHtml({ name, eventName, positionName, groupUrl }) {
+  const url = String(groupUrl || '#');
+  const row = (label, value, accent) => `<tr>
+      <td style="padding:13px 16px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8b8f97;vertical-align:top;border-top:1px solid #eceff3">${esc(label)}</td>
+      <td style="padding:13px 16px;font-size:14px;font-weight:700;text-align:right;vertical-align:top;color:${accent ? '#0e7490' : '#17171d'};border-top:1px solid #eceff3">${esc(value)}</td>
+    </tr>`;
+  const rowsHtml = [
+    row('Event', eventName, true),
+    positionName ? row('Position', positionName) : '',
+  ].filter(Boolean).join('').replace('border-top:1px solid #eceff3', 'border-top:0');
+  return `<!doctype html><html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Join the official talent group for ${esc(eventName)}.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      ${logoBar()}
+      <tr><td bgcolor="#0e7490" style="background:#0e7490;background:linear-gradient(135deg,#12a3b8,#0b6885);padding:30px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:#fffffe">You're In — Join the Group! 🎉</div>
+      </td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">Hi ${esc(name || '')},</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#4a4e57">Your spot for <b style="color:#0e7490">${esc(eventName)}</b> is confirmed. Join the official talent group to receive event updates, briefing schedules, and coordinate with the team.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafbfc;border:1px solid #eceff3;border-radius:14px">
+          ${rowsHtml}
+        </table>
+      </td></tr>
+      <tr><td style="padding:22px 30px 6px;text-align:center">
+        <a href="${esc(url)}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">Join Event Group</a>
+      </td></tr>
+      <tr><td style="padding:18px 30px 4px">
+        <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:#8b8f97">If the button doesn't work, copy and paste this link into your browser:<br><span style="color:#0e7490;word-break:break-all">${esc(url)}</span></p>
+        <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">See you there!<br><b style="color:#17171d">20FIT Talent Team</b></p>
+      </td></tr>
+      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">This is an automated email from 20FIT Talent. Please do not reply to this email.</p></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Invite an Assigned talent to the event's WhatsApp/Telegram group. Always English. Never throws. */
+async function sendGroupInviteEmail({ to, name, eventName, positionName, groupUrl }) {
+  const subject = 'Join the ' + (eventName || 'Event') + ' Talent Group';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — group-invite for ' + to + ' (' + eventName + ')');
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: groupInviteEmailHtml({ name, eventName, positionName, groupUrl }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; group-invite email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml };

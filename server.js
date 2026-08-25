@@ -838,7 +838,7 @@ async function buildAppliedEvents(st, myApps, eventById) {
       // rejectNotify: a genuine "not selected" rejection (skip self-declines + the
       // auto-decline of other picks when accepted elsewhere) → drives the pop-up.
       const rejectNotify = a.status === 'rejected' && a.note !== DECLINED_BY_TALENT && a.note !== AUTO_DECLINED_NOTE;
-      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify };
+      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, groupUrl: ev.group_url || null };
     })
     .filter(Boolean);
 }
@@ -892,6 +892,12 @@ app.post('/talent/applications/:appId/agree', requireAnyTalentBrowse(), async (r
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
     if (app && app.status === 'approved') {
       await st.updateApplication(app.id, { status: 'assigned' });
+      // Point 4: if the EO has already set the group link, email this newly-assigned
+      // talent right away (the shared helper only touches unnotified assigned rows).
+      try {
+        const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
+        if (ev && ev.group_url) await notifyGroupForAssigned(st, ev);
+      } catch (err) { console.warn('[mail] group-invite on agree failed: ' + (err && err.message)); }
     }
     res.redirect('/talent?lang=' + req.lang + '&confirmed=1');
   } catch (e) { next(e); }
@@ -2272,6 +2278,44 @@ app.post('/eo/events/:id/delete', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Point 4: EO sets/edits the event's talent-group link (WhatsApp/Telegram) from the
+// Event Detail dashboard. Saving a non-empty link emails every Assigned talent who
+// hasn't been notified yet (first save → all of them). Editing the link later does
+// NOT re-notify anyone (no re-spam) — use "Resend to All" for that. Clearing it
+// hides the link (talents see "coming soon" again).
+app.post('/eo/events/:id/group', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    let url = String(req.body.group_url || '').trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url; // tolerate a pasted bare host
+    if (url && !/^https?:\/\/[^\s.]+\.[^\s]+$/i.test(url)) return res.redirect(backTo + '&gerr=1');
+    await st.updateEvent(ev.id, { group_url: url || null });
+    if (!url) return res.redirect(backTo + '&gcleared=1');
+    ev.group_url = url;
+    const notified = await notifyGroupForAssigned(st, ev);
+    return res.redirect(backTo + '&gok=' + notified);
+  } catch (e) { next(e); }
+});
+
+// Point 4: "Resend to All" — re-email the group link to every Assigned talent for
+// this event, regardless of whether they were notified before.
+app.post('/eo/events/:id/group/resend', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    if (!ev.group_url) return res.redirect(backTo + '&gerr=1');
+    const notified = await notifyGroupForAssigned(st, ev, { force: true });
+    return res.redirect(backTo + '&gresent=' + notified);
+  } catch (e) { next(e); }
+});
+
 app.get('/eo/events/:id', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2326,7 +2370,8 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     await attachMockups(st, ev);
-    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || '') };
+    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || ''),
+      gok: req.query.gok, gcleared: req.query.gcleared, gerr: req.query.gerr, gresent: req.query.gresent };
     res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -2818,6 +2863,42 @@ async function notifyPositionAcceptance(st, app, ev, positionId) {
     positionName: posLabel,
     eventDate: eventDateStrEn(ev),
   });
+}
+
+// Point 4: email the event's WhatsApp/Telegram group link to its Assigned talents.
+// Idempotent per application via talent_applications.group_notified_at — each
+// assigned talent is emailed exactly once (unless opts.force, i.e. "Resend to All").
+// Best-effort and always English: a send that throws is not stamped, so it retries.
+// Returns how many talents were emailed. No-op when the event has no group link.
+async function notifyGroupForAssigned(st, ev, opts = {}) {
+  if (!ev || !ev.group_url) return 0;
+  const force = !!opts.force;
+  const apps = await st.listApplications();
+  const targets = apps.filter((a) => a.event_id === ev.id && a.status === 'assigned' && (force || !a.group_notified_at));
+  if (!targets.length) return 0;
+  let positions = [];
+  try { positions = await st.listEventPositions(ev.id); } catch (_) { /* label best-effort */ }
+  const choices = await st.listApplicationChoices().catch(() => []);
+  const acceptedByApp = new Map();
+  choices.forEach((c) => { if (c.accepted) acceptedByApp.set(c.application_id, c.position_id); });
+  const posById = new Map(positions.map((p) => [p.position_id, p]));
+  let sent = 0;
+  for (const a of targets) {
+    const account = await st.getAccountById(a.talent_id);
+    const to = account && account.login;
+    if (!to || !/@/.test(to)) continue; // no usable email on file
+    const pid = acceptedByApp.get(a.id);
+    const pos = pid ? posById.get(pid) : null;
+    const positionName = pos ? (pos.custom_label_en || pos.custom_label || pos.label_en || pos.label_id || '') : '';
+    try {
+      await mailer.sendGroupInviteEmail({ to, name: account.name, eventName: ev.name || 'Event 20FIT', positionName, groupUrl: ev.group_url });
+      await st.updateApplication(a.id, { group_notified_at: new Date().toISOString() });
+      sent++;
+    } catch (err) {
+      console.warn('[mail] group-invite send failed for ' + to + ': ' + (err && err.message));
+    }
+  }
+  return sent;
 }
 
 // Notify a talent their application was rejected (red email). Best-effort.

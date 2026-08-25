@@ -2874,6 +2874,28 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   const flashBanner = f.ok === 'accepted' ? `<div class="banner banner-ok">${t('eo.ap.okAccepted')}</div>`
     : f.ok === 'rejected' ? `<div class="banner banner-ok">${t('eo.ap.okRejected')}</div>`
     : f.err === 'full' ? `<div class="banner banner-err">${t('eo.ap.errFull')}</div>` : '';
+  const gN = (v) => { const n = parseInt(v, 10); return isNaN(n) ? 0 : n; };
+  const groupFlash = f.gerr ? `<div class="banner banner-err">${t('eo.grp.errUrl')}</div>`
+    : f.gcleared ? `<div class="banner banner-ok">${t('eo.grp.cleared')}</div>`
+    : f.gresent !== undefined ? `<div class="banner banner-ok">${t('eo.grp.resent', { n: gN(f.gresent) })}</div>`
+    : f.gok !== undefined ? `<div class="banner banner-ok">${t('eo.grp.saved')}${gN(f.gok) ? ' ' + t('eo.grp.notified', { n: gN(f.gok) }) : ''}</div>`
+    : '';
+  const gUrl = e.group_url || '';
+  const assignedN = aps.filter((a) => a.status === 'assigned').length;
+  const groupSection = `<div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('eo.grp.title')}</h2></div>
+  <div class="card" style="margin-top:12px;padding:16px">
+    <p class="muted" style="margin:0 0 12px;font-size:13px">${t('eo.grp.help')}</p>
+    <form method="post" action="/eo/events/${esc(e.id)}/group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="url" name="group_url" value="${esc(gUrl)}" placeholder="https://chat.whatsapp.com/…" autocomplete="off" style="flex:1 1 260px;min-width:0;box-sizing:border-box">
+      <button class="btn btn-sm" type="submit">${t('eo.grp.save')}</button>
+    </form>
+    ${gUrl ? `<div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <a href="${esc(gUrl)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">↗ ${t('eo.grp.open')}</a>
+        <form method="post" action="/eo/events/${esc(e.id)}/group/resend" style="margin:0" ${jsConfirm(t('eo.grp.resendConfirm'))}><button class="btn btn-ghost btn-sm" type="submit">↻ ${t('eo.grp.resend')}</button></form>
+        <span class="muted" style="font-size:12.5px">${esc(t('eo.grp.assignedNote', { n: assignedN }))}</span>
+      </div>`
+      : `<div class="muted" style="margin-top:10px;font-size:12.5px">${t('eo.grp.emptyNote')}</div>`}
+  </div>`;
   const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
@@ -2888,7 +2910,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   else if (view.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
   const body = `<div class="wrap">
   <a href="/eo/events?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-  ${flashBanner}
+  ${flashBanner}${groupFlash}
   ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
@@ -2904,6 +2926,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
   <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
   ${positionStatsChart(view.positions, L)}
+  ${groupSection}
   <div style="margin-top:22px"><a href="/eo/talents?event=${esc(e.id)}&lang=${L}" class="btn btn-sm">👥 ${t('eo.ev.viewApplicants')}${view.applyCount ? ` (${view.applyCount})` : ''}</a></div>
 </div>`;
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
@@ -3427,6 +3450,22 @@ const PROFILE_CSS = `
 .rj-body{font-size:14px;line-height:1.6;color:var(--muted);margin:12px 0 20px}
 .rj-cta{background:var(--red);color:#fff;border-color:var(--red);font-weight:800;width:100%}
 .rj-cta:hover{background:var(--red-hover)}
+/* Point 4: "assigned — join the group" banner (Profile) + inline join button (Applications). */
+.ag-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
+.ag-card{border:1.5px solid #0e7490;border-radius:16px;padding:18px 20px;background:linear-gradient(135deg,rgba(14,116,144,.10),rgba(14,116,144,.03));box-shadow:0 6px 20px rgba(14,116,144,.10)}
+.ag-badge{display:inline-block;font:800 11px/1 Barlow,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#0b6885;background:rgba(14,116,144,.14);border-radius:999px;padding:6px 12px}
+.ag-title{font:800 18px/1.25 Barlow,sans-serif;color:var(--ink);margin-top:10px}
+.ag-meta{font-size:13px;color:var(--muted);margin-top:6px}
+.ag-meta b{color:var(--ink)}
+.ag-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+.ag-join{background:#0e7490;border-color:#0e7490;color:#fff;font-weight:800}
+.ag-join:hover{background:#0b6885}
+.ag-soon{font-size:13px;color:var(--muted);font-style:italic}
+.tp-ev-group{margin-top:12px}
+.tp-group-btn{background:#0e7490;border-color:#0e7490;color:#fff;font-weight:700}
+.tp-group-btn:hover{background:#0b6885}
+.tp-group-soon{font-size:12.5px;color:var(--muted);font-style:italic}
+@media(max-width:520px){.ag-actions .btn{width:100%}}
 `;
 
 // One application-history card: event + position + status badge + progress
@@ -3448,6 +3487,7 @@ function applicationCard(e, isCreator, L) {
   if (e.ref && isApplied) footBtns.push([`/event/${esc(e.ref)}?lang=${L}`, t('tp.eventBrief')]);
   if (canProof) footBtns.push([`/kirim-bukti?lang=${L}`, t('tp.uploadProof')]);
   const foot = footBtns.map(([href, label]) => `<a href="${href}" class="btn btn-ghost btn-sm${footBtns.length === 1 ? ' btn-block' : ''}">${label}</a>`).join('');
+  const gj = groupJoinBtn(e, L); // "Join Event Group" / "coming soon" for assigned apps
   return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
       <div class="tp-ev-top">
         <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? `<span class="tp-ev-pos">${esc(posLbl)}</span> · ` : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
@@ -3457,6 +3497,7 @@ function applicationCard(e, isCreator, L) {
       ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
       ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
       ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
+      ${gj ? `<div class="tp-ev-group">${gj}</div>` : ''}
       ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
     </div>`;
 }
@@ -3526,6 +3567,43 @@ function rejectionPopup(events, lang) {
       <button type="submit" name="next" value="/events?lang=${L}" class="btn rj-cta">${t('reject.cta')} →</button>
     </form>
   </div>`;
+}
+
+// Point 4: "Join Event Group" CTA for an assigned application. Shows the join
+// button once the EO has set the group link, or a muted "coming soon" line while
+// it's still empty. Returns '' for any non-assigned status.
+function groupJoinBtn(e, L) {
+  const t = (k, v) => tr(L, k, v);
+  if (e.status !== 'assigned') return '';
+  return e.groupUrl
+    ? `<a href="${esc(e.groupUrl)}" target="_blank" rel="noopener" class="btn btn-sm tp-group-btn">👥 ${t('tp.group.join')}</a>`
+    : `<span class="tp-group-soon">🔗 ${t('tp.group.soon')}</span>`;
+}
+
+// Point 4: prominent "you're assigned — join the group" banner on the talent
+// dashboard (Profile). One card per assigned event with the group CTA (or the
+// "coming soon" note). The Applications page shows the same CTA inline on each card.
+function assignedGroupBanner(events, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const assigned = (events || []).filter((e) => e.status === 'assigned' && e.appId);
+  if (!assigned.length) return '';
+  const cards = assigned.map((e) => {
+    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+    const s = e.starts_at ? fmtDay(e.starts_at) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const date = s ? (en ? s + ' – ' + en : s) : '';
+    const cta = e.groupUrl
+      ? `<a href="${esc(e.groupUrl)}" target="_blank" rel="noopener" class="btn ag-join">👥 ${t('tp.group.join')}</a>`
+      : `<span class="ag-soon">🔗 ${t('tp.group.soon')}</span>`;
+    return `<div class="ag-card">
+      <div class="ag-badge">✓ ${t('assigned.badge')}</div>
+      <div class="ag-title">${esc(e.name)}</div>
+      <div class="ag-meta">${posLbl ? '<b>' + esc(posLbl) + '</b>' : ''}${date ? (posLbl ? ' · ' : '') + esc(date) : ''}</div>
+      <div class="ag-actions">${cta}</div>
+    </div>`;
+  }).join('');
+  return `<div class="ag-wrap">${cards}</div>`;
 }
 
 // Unified Talent Profile (KOL + Photographer). Man Power keeps its own dashboard.
@@ -3598,6 +3676,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   </div>
 
   ${confirmationBanner(events, L)}
+  ${assignedGroupBanner(events, L)}
   ${rejectionPopup(events, L)}
 
   <div class="tp-grid">
