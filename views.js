@@ -166,7 +166,10 @@ h2{font-size:18px;font-weight:700;margin:0 0 14px}
 .ev-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .ev-cover-photo{height:190px;background:rgba(0,0,0,.04)}
 .ev-cover-photo-img{display:block;width:100%;height:100%;object-fit:cover}
-.ev-detail-hero{display:block;width:100%;height:auto;margin:0 0 18px;border-radius:14px}
+.ev-detail-hero{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;object-position:center;margin:0 0 20px;border-radius:14px;background:var(--lp-chip,#eef1f5)}
+@media(min-width:760px){.ev-detail-hero{aspect-ratio:21/9}}
+/* Event Detail intro column: poster + title + tags + description share one width so their left/right edges line up. */
+.ev-detail-head{max-width:900px}
 .ev-mockup-thumb{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--line)}
 .ev-chip{border:1px solid var(--line);background:transparent;color:var(--ink);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:100px;cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}
 .ev-chip:hover{border-color:var(--red)}
@@ -5644,12 +5647,12 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   </style>
   <div class="wrap" style="max-width:1080px">
     <a href="${loggedIn ? '/events' : '/'}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
-    ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
-    <h1 style="margin:0;font-size:clamp(26px,3.2vw,38px);line-height:1.08">${esc(e.name)}</h1>
-    <p class="sub" style="margin:7px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
-    ${chips}
-    <div style="max-width:820px">
-      ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify;line-height:1.6">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
+    <div class="ev-detail-head">
+      ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" class="ev-detail-hero" alt="" onerror="this.style.display='none'">` : ''}
+      <h1 style="margin:0;font-size:clamp(26px,3.2vw,38px);line-height:1.1">${esc(e.name)}</h1>
+      <p class="sub" style="margin:8px 0 0;font-size:16px">${e.category ? esc(e.category) + ' · ' : ''}${date}</p>
+      ${chips}
+      ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:16px;text-align:justify;line-height:1.6">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
       ${savedBanner}${eb}${docsWarn}
     </div>
     <section class="bband" style="margin-top:26px">
