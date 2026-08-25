@@ -442,9 +442,9 @@ ${body}
  * + account menu) so the whole public flow shares one consistent sticky/blurred
  * navbar. Dashboards keep appLayout; this is only for public pages.
  */
-function publicLayout({ title, body, lang, account, active, cities, search = true }) {
+function publicLayout({ title, body, lang, account, active, cities, search = true, searchValue }) {
   const L = normLang(lang);
-  const nav = landingNav(L, active || '', account || null, { search, cities: cities || [] });
+  const nav = landingNav(L, active || '', account || null, { search, cities: cities || [], searchValue: searchValue || '' });
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
@@ -488,6 +488,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
+      + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
       + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
@@ -1170,8 +1171,8 @@ function landingNav(lang, active, account, opts = {}) {
         <input type="hidden" name="lang" value="${L}">
         <div class="lp-search-key">
           <span class="lp-search-ic" aria-hidden="true">${searchSvg}</span>
-          <input type="text" name="q" class="lp-search-in" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
-          <button type="button" class="lp-search-x" aria-label="clear" hidden>&times;</button>
+          <input type="text" name="q" class="lp-search-in" value="${esc(opts.searchValue || '')}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
+          <button type="button" class="lp-search-x" aria-label="clear"${opts.searchValue ? '' : ' hidden'}>&times;</button>
         </div>
         <div class="lp-search-loc">
           <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
@@ -2925,6 +2926,78 @@ function eoApplicantsScript() {
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
 })();
 </script>`;
+}
+
+// EO: every talent who applied to this EO's own events, filtered by category
+// (KOL / Photographer+Videographer / Manpower) across ALL their events — a
+// cross-event version of the per-event applicant panel, reached from the
+// sidebar. Read-only: accept/reject still happens inside each event.
+function eoTalents({ staff, rows, cat, counts, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const TABS = [
+    { key: 'kol', label: t('filter.cat.kol') },
+    { key: 'creative', label: t('filter.cat.creative') },
+    { key: 'man_power', label: t('filter.cat.manpower') },
+  ];
+  const tabBar = TABS.map((tb) => {
+    const on = tb.key === cat;
+    const n = counts[tb.key] || 0;
+    return `<a href="/eo/talents?cat=${tb.key}&lang=${L}" class="ev-chip${on ? ' is-on' : ''}" style="text-decoration:none">${esc(tb.label)} <span style="opacity:.65;font-weight:600">(${n})</span></a>`;
+  }).join('');
+  const rowsHtml = (rows || []).map((r) => `<div class="card ap-item" data-status="${esc(r.status)}" data-search="${esc((r.name || '').toLowerCase())}" style="margin-top:10px;padding:13px 15px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="min-width:0">
+        <b style="font-size:15px">${esc(r.name)}</b>${r.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, r.type))}</span>` : ''}
+        <div class="muted" style="font-size:12.5px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="tag" style="margin:0">${esc(posLabel(r.position, L))}${r.accepted ? ' ✓' : ''}</span>
+          <span aria-hidden="true">·</span>
+          <a href="/eo/events/${esc(r.eventId)}?lang=${L}" style="font-weight:700;color:var(--ink)">${esc(r.eventName)}</a>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(r.profile, L)}${talentStatusBadge(r.status, L)}</div>
+    </div>
+  </div>`).join('');
+  const statuses = Array.from(new Set((rows || []).map((r) => r.status)));
+  const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
+  const statusChips = sChip('all', t('eo.ap.filterAll'), true) + statuses.map((s) => sChip(s, t('ta.status.' + s), false)).join('');
+  const listBlock = (rows && rows.length)
+    ? `<div class="card" style="margin-top:14px;padding:12px 14px">
+        <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
+        <div class="muted" style="font-size:12px;margin-top:10px">${t('eo.talents.count', { n: rows.length })}</div>
+      </div>
+      <div id="apTalent">${rowsHtml}</div>
+      <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`
+    : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.talents.empty')}</p></div>`;
+  const body = `<div class="wrap">
+    <h1 style="margin:0">${t('eo.talents.title')}</h1>
+    <p class="sub" style="margin:4px 0 0">${t('eo.talents.sub')}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">${tabBar}</div>
+    ${listBlock}
+  </div>
+  <script>
+  (function(){
+    var search=document.getElementById('apSearch'); if(!search) return;
+    var noMatch=document.getElementById('apNoMatch'), box=document.getElementById('apTalent');
+    var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
+    var flt='all';
+    function apply(){
+      var q=search.value.trim().toLowerCase();
+      var items=box?[].slice.call(box.querySelectorAll('.ap-item')):[];
+      var shown=0;
+      items.forEach(function(it){
+        var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+        var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+        var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
+      });
+      if(noMatch)noMatch.style.display=(shown===0)?'':'none';
+    }
+    search.addEventListener('input',apply);
+    statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  })();
+  </script>`;
+  return appLayout({ title: t('eo.talents.title') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
 }
 
 /**
@@ -5160,7 +5233,7 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
     ${(query || cityVal) ? `<p class="muted" style="font-size:13px;margin:8px 0 0">${esc(t('search.aria'))}: <b>${esc(query || cityVal)}</b></p>` : ''}
     ${cards}
   </div>`;
-  return publicLayout({ title: t('ta.openTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities, search: true });
+  return publicLayout({ title: t('ta.openTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities, search: true, searchValue: query });
 }
 
 function talentEventApply({ account, event, ctx, lang, saved, cities }) {
@@ -5367,7 +5440,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     </div>
   </div>
   ${applyModal}`;
-  return publicLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: '', cities: cities || [], search: true });
+  return publicLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: '', cities: cities || [], search: true, searchValue: e.name || '' });
 }
 
 module.exports = {
@@ -5381,5 +5454,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoTalents, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

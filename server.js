@@ -1801,6 +1801,56 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// EO: cross-event talent directory — every applicant to this EO's own events,
+// filtered by category (KOL / Photographer+Videographer / Manpower). Read-only
+// listing reached from the sidebar; accept/reject still happens per event.
+app.get('/eo/talents', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'kol';
+    const [events, apps, choicesAll, talents, positions] = await Promise.all([
+      st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
+    ]);
+    const myEventIds = new Set(events.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
+    const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const choicesByApp = new Map();
+    (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    // Category from the primary (P1) position, falling back to talent_type —
+    // identical rule to /admin/applications and the per-event applicant filter.
+    const catOf = (key) => (key === 'kol' ? 'kol' : (key === 'fotografer' || key === 'videografer' ? 'creative' : 'man_power'));
+    const counts = { kol: 0, creative: 0, man_power: 0 };
+    const rows = [];
+    for (const a of apps) {
+      if (!myEventIds.has(a.event_id)) continue;
+      const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
+      if (!ch.length) continue;
+      const tt = talentById.get(a.talent_id) || {};
+      const p1pos = posById.get(ch[0].position_id) || {};
+      const category = catOf(p1pos.key || tt.talent_type || '');
+      counts[category] = (counts[category] || 0) + 1;
+      if (category !== cat) continue;
+      const acc = ch.find((c) => c.accepted);
+      const shown = (acc && posById.get(acc.position_id)) || p1pos;
+      rows.push({
+        name: tt.name || '—',
+        type: tt.talent_type || a.talent_type || null,
+        position: { label_id: shown.label_id, label_en: shown.label_en, key: shown.key },
+        accepted: !!acc,
+        eventId: a.event_id,
+        eventName: eventName.get(a.event_id) || '—',
+        status: a.status || 'applied',
+        profile: tt,
+        createdAt: a.created_at,
+      });
+    }
+    rows.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
+    res.send(V.eoTalents({ staff: eoCtx(req), rows, cat, counts, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 // --- EO: event management ---------------------------------------------------
 const EO_STATUSES = ['draft', 'published']; // EO-settable; 'closed' comes from the close button
 
