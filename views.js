@@ -705,7 +705,7 @@ function landingPage(lang, opts = {}) {
       : `<span>${esc(label)}</span>`;
   }).join('');
 
-  const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
+  const langBtn = (code, label) => `<a href="/lang/${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const q = `?lang=${L}`;
   // Sticky top navbar (marketplace-style). Events are login-gated, so the gated
@@ -1098,7 +1098,7 @@ function landingNav(lang, active, account, opts = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
-  const langBtn = (code, label) => `<a href="/?lang=${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
+  const langBtn = (code, label) => `<a href="/lang/${code}" class="lp-tog-b${code === L ? ' on' : ''}">${label}</a>`;
   const toggle = `<div class="lp-tog">${langBtn('id', 'ID')}${langBtn('en', 'EN')}</div>`;
   const nIc = (p) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const caret = '<svg class="lp-caret" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
@@ -3453,7 +3453,7 @@ const CAT_FIELDS = {
 };
 
 /** Talent Home: available events + which talent categories each one needs. */
-function kolEventsPage({ account, events, eoEvents, lang }) {
+function kolEventsPage({ account, events, eoEvents, lang, cities }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const evs = events || [];
@@ -3495,6 +3495,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
 
   const body = `<div class="wrap">
+  <a href="${talentHomePath(account)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <h1 style="margin-top:0">${t('ev.findTitle')}</h1>
   <p class="sub">${t('apply.homeSub')}</p>
   ${controls}
@@ -3520,7 +3521,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
   chips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
 })();
 </script>`;
-  return appLayout({ title: t('ev.findTitle') + ' — 20FIT', body, role: 'kol', active: 'event', user: (account && account.name) || '', lang: L });
+  return publicLayout({ title: t('ev.findTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities: cities || [], search: true });
 }
 
 /** Event detail: description + category the talent can register for (or their status). */

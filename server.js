@@ -579,7 +579,12 @@ app.get('/lang/:code', (req, res) => {
   const l = i18n.normLang(req.params.code);
   res.cookie('lang', l, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
   let dest = '/';
-  try { const u = new URL(req.get('referer')); dest = u.pathname + u.search; } catch (_) { /* no/invalid referer */ }
+  // Redirect back to the page the toggle was clicked on, but strip any ?lang=
+  // from it — otherwise that stale query param would override the cookie we
+  // just set (readLang prioritises ?lang over the cookie), leaving the page in
+  // the old language and making the toggle look broken on any URL that carries
+  // ?lang (e.g. the public catalog/detail links append ?lang=<L>).
+  try { const u = new URL(req.get('referer')); u.searchParams.delete('lang'); dest = u.pathname + u.search; } catch (_) { /* no/invalid referer */ }
   res.redirect(dest);
 });
 
@@ -973,7 +978,8 @@ app.get('/acara', requireTalentBrowse('kol'), async (req, res, next) => {
       .filter((e) => e.status !== 'ended' && e.cats.length > 0)
       .sort((a, b) => (rank[a.status] - rank[b.status]) || String(a.starts_at || '').localeCompare(String(b.starts_at || '')));
     await attachMockups(st, events);
-    res.send(V.kolEventsPage({ account: req.account, events, eoEvents, lang: req.lang }));
+    const cities = eventCityList([...(eoEvents || []), ...(events || [])]);
+    res.send(V.kolEventsPage({ account: req.account, events, eoEvents, lang: req.lang, cities }));
   } catch (e) { next(e); }
 });
 
