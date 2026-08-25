@@ -347,20 +347,29 @@ const NAV_CSS = `
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
 .lp-search-form{display:flex;align-items:center;gap:9px}
-.lp-search-key{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-key{flex:1 1 auto;min-width:0;box-sizing:border-box;min-height:42px;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:8px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s,box-shadow .15s}
 .lp-search-key:focus-within{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.15)}
 .lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
 .lp-search-in{flex:1;min-width:0;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-search-in::placeholder{color:var(--lp-tx4)}
 .lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
 .lp-search-x:hover{color:var(--red)}
-.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s}
-.lp-search-loc:focus-within{border-color:var(--red)}
+.lp-search-loc{position:relative;flex:0 0 auto;box-sizing:border-box;min-height:42px;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:8px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s,box-shadow .15s}
+.lp-search-loc:focus-within,.lp-search-loc.is-open{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.14)}
 .lp-search-pin{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
-.lp-search-city{appearance:none;-webkit-appearance:none;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding-right:22px;max-width:150px;text-overflow:ellipsis}
-.lp-search-city option{background:var(--lp-card);color:var(--lp-tx);padding:8px 12px}
-.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none}
-.lp-search-btn{flex:0 0 auto;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:12px 22px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.28)}
+.lp-search-city{display:inline-flex;align-items:center;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding:0 20px 0 0;max-width:150px;min-width:60px}
+.lp-search-city-lb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none;transition:transform .15s}
+.lp-search-loc.is-open .lp-search-caret{transform:rotate(180deg)}
+/* Custom Location listbox (replaces the native <select> popup) */
+.lp-loc-menu{position:absolute;left:0;top:calc(100% + 8px);min-width:210px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;z-index:70;display:none;max-height:min(60vh,360px);overflow:auto}
+.lp-search-loc.is-open .lp-loc-menu{display:block}
+.lp-loc-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;background:none;cursor:pointer;padding:10px 12px;border-radius:9px;font:600 14px/1.25 Barlow,sans-serif;color:var(--lp-tx);white-space:nowrap}
+.lp-loc-opt:hover,.lp-loc-opt:focus-visible{background:rgba(228,18,31,.10);color:var(--red);outline:0}
+.lp-loc-opt.is-active{background:rgba(228,18,31,.12);color:var(--red);font-weight:700}
+.lp-loc-check{flex:0 0 auto;opacity:0;color:var(--red)}
+.lp-loc-opt.is-active .lp-loc-check{opacity:1}
+.lp-search-btn{flex:0 0 auto;box-sizing:border-box;min-height:42px;display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:0 24px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 4px 12px rgba(228,18,31,.22)}
 .lp-search-btn:hover{background:var(--red-hover)}
 .lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
 .lp-search-menu.show{display:block}
@@ -401,7 +410,8 @@ const NAV_CSS = `
   .lp-search.lp-search--open .lp-search-loc{display:flex;width:100%}
   .lp-search.lp-search--open .lp-search-city{max-width:none;flex:1}
   .lp-search.lp-search--open .lp-search-btn{width:100%;padding:13px}
-  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}}
+  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}
+  .lp-search.lp-search--open .lp-loc-menu{position:static;box-shadow:none;border:1px solid var(--lp-line);margin-top:8px;max-height:40vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 `;
@@ -796,20 +806,29 @@ a{text-decoration:none}
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
 .lp-search-form{display:flex;align-items:center;gap:9px}
-.lp-search-key{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-key{flex:1 1 auto;min-width:0;box-sizing:border-box;min-height:42px;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:8px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s,box-shadow .15s}
 .lp-search-key:focus-within{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.15)}
 .lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
 .lp-search-in{flex:1;min-width:0;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
 .lp-search-in::placeholder{color:var(--lp-tx4)}
 .lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
 .lp-search-x:hover{color:var(--red)}
-.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s}
-.lp-search-loc:focus-within{border-color:var(--red)}
+.lp-search-loc{position:relative;flex:0 0 auto;box-sizing:border-box;min-height:42px;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:8px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s,box-shadow .15s}
+.lp-search-loc:focus-within,.lp-search-loc.is-open{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.14)}
 .lp-search-pin{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
-.lp-search-city{appearance:none;-webkit-appearance:none;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding-right:22px;max-width:150px;text-overflow:ellipsis}
-.lp-search-city option{background:var(--lp-card);color:var(--lp-tx);padding:8px 12px}
-.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none}
-.lp-search-btn{flex:0 0 auto;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:12px 22px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.28)}
+.lp-search-city{display:inline-flex;align-items:center;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding:0 20px 0 0;max-width:150px;min-width:60px}
+.lp-search-city-lb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none;transition:transform .15s}
+.lp-search-loc.is-open .lp-search-caret{transform:rotate(180deg)}
+/* Custom Location listbox (replaces the native <select> popup) */
+.lp-loc-menu{position:absolute;left:0;top:calc(100% + 8px);min-width:210px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;z-index:70;display:none;max-height:min(60vh,360px);overflow:auto}
+.lp-search-loc.is-open .lp-loc-menu{display:block}
+.lp-loc-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:0;background:none;cursor:pointer;padding:10px 12px;border-radius:9px;font:600 14px/1.25 Barlow,sans-serif;color:var(--lp-tx);white-space:nowrap}
+.lp-loc-opt:hover,.lp-loc-opt:focus-visible{background:rgba(228,18,31,.10);color:var(--red);outline:0}
+.lp-loc-opt.is-active{background:rgba(228,18,31,.12);color:var(--red);font-weight:700}
+.lp-loc-check{flex:0 0 auto;opacity:0;color:var(--red)}
+.lp-loc-opt.is-active .lp-loc-check{opacity:1}
+.lp-search-btn{flex:0 0 auto;box-sizing:border-box;min-height:42px;display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:0 24px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 4px 12px rgba(228,18,31,.22)}
 .lp-search-btn:hover{background:var(--red-hover)}
 .lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
 .lp-search-menu.show{display:block}
@@ -850,7 +869,8 @@ a{text-decoration:none}
   .lp-search.lp-search--open .lp-search-loc{display:flex;width:100%}
   .lp-search.lp-search--open .lp-search-city{max-width:none;flex:1}
   .lp-search.lp-search--open .lp-search-btn{width:100%;padding:13px}
-  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}}
+  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}
+  .lp-search.lp-search--open .lp-loc-menu{position:static;box-shadow:none;border:1px solid var(--lp-line);margin-top:8px;max-height:40vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
@@ -1141,10 +1161,18 @@ function landingNav(lang, active, account, opts = {}) {
   const searchSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>';
   const pinSvg = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
   const caretSvg = '<svg class="lp-search-caret" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
-  const cityOpts = (opts.cities || []).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const checkSvg = '<svg class="lp-loc-check" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  // Custom Location listbox: the empty-value first row = "any location". Rendered
+  // as buttons (not <option>) so the open menu is fully themeable — a native
+  // <select> popup uses the OS/browser chrome (blue highlight, no rounding) and
+  // can't be styled. A hidden input[name=city] carries the choice so the GET form
+  // still submits to /events. Marked-active row gets a check + accent background.
+  const locList = [''].concat(opts.cities || []);
+  const locOpts = locList.map((c, i) => `<button type="button" class="lp-loc-opt${i === 0 ? ' is-active' : ''}" role="option" data-val="${esc(c)}" aria-selected="${i === 0 ? 'true' : 'false'}"><span class="lp-loc-tx">${esc(c || t('search.location'))}</span>${checkSvg}</button>`).join('');
   const searchScript = '<script>(function(){' +
     "var box=document.getElementById('lpSearch');if(!box)return;" +
-    "var input=box.querySelector('.lp-search-in'),sel=box.querySelector('.lp-search-city'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
+    "var input=box.querySelector('.lp-search-in'),sel=box.querySelector('.lp-search-cityval'),menu=box.querySelector('.lp-search-menu'),toggle=box.querySelector('.lp-search-toggle'),clr=box.querySelector('.lp-search-x');" +
+    "var locWrap=box.querySelector('.lp-search-loc'),locBtn=box.querySelector('.lp-search-city'),locMenu=box.querySelector('.lp-loc-menu'),locLabel=box.querySelector('.lp-search-city-lb'),locOpts=locMenu?[].slice.call(locMenu.querySelectorAll('.lp-loc-opt')):[];" +
     "var lang=box.getAttribute('data-lang')||'id',none=box.getAttribute('data-none')||'',tm,ctrl,items=[],active=-1;" +
     // Force the context prefill (event name / active query) AFTER the browser's
     // own form-restoration-on-reload, which can otherwise wipe the server-set
@@ -1163,7 +1191,13 @@ function landingNav(lang, active, account, opts = {}) {
     "fetch('/api/events/search?lang='+lang+'&q='+encodeURIComponent(q)+'&city='+encodeURIComponent(city),ctrl?{signal:ctrl.signal}:{}).then(function(r){return r.json();}).then(function(d){render(d.results||[]);}).catch(function(){});}" +
     "input.addEventListener('input',function(){clearTimeout(tm);tm=setTimeout(run,300);});" +
     "input.addEventListener('focus',function(){if(items.length||menu.innerHTML)menu.classList.add('show');});" +
-    "if(sel)sel.addEventListener('change',run);" +
+    "function locClose(){if(!locWrap)return;locWrap.classList.remove('is-open');if(locBtn)locBtn.setAttribute('aria-expanded','false');}" +
+    "function locOpen(){if(!locWrap)return;locWrap.classList.add('is-open');if(locBtn)locBtn.setAttribute('aria-expanded','true');}" +
+    "function locPick(o){locOpts.forEach(function(x){x.classList.remove('is-active');x.setAttribute('aria-selected','false');});o.classList.add('is-active');o.setAttribute('aria-selected','true');if(sel)sel.value=o.getAttribute('data-val')||'';if(locLabel)locLabel.textContent=o.querySelector('.lp-loc-tx').textContent;locClose();if(locBtn)locBtn.focus();run();}" +
+    "if(locWrap)locWrap.addEventListener('click',function(e){if(locMenu&&locMenu.contains(e.target))return;e.stopPropagation();if(locWrap.classList.contains('is-open'))locClose();else locOpen();});" +
+    "if(locBtn)locBtn.addEventListener('keydown',function(e){if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){e.preventDefault();locOpen();var a=locMenu.querySelector('.lp-loc-opt.is-active')||locOpts[0];if(a)a.focus();}});" +
+    "locOpts.forEach(function(o,i){o.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();locPick(o);});" +
+    "o.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){e.preventDefault();(locOpts[i+1]||locOpts[0]).focus();}else if(e.key==='ArrowUp'){e.preventDefault();(locOpts[i-1]||locOpts[locOpts.length-1]).focus();}else if(e.key==='Escape'){e.preventDefault();locClose();if(locBtn)locBtn.focus();}else if(e.key==='Enter'||e.key===' '){e.preventDefault();locPick(o);}});});" +
     "input.addEventListener('keydown',function(e){" +
     "if(e.key==='ArrowDown'){e.preventDefault();if(items.length){active=(active+1)%items.length;paint();}}" +
     "else if(e.key==='ArrowUp'){e.preventDefault();if(items.length){active=(active-1+items.length)%items.length;paint();}}" +
@@ -1171,7 +1205,7 @@ function landingNav(lang, active, account, opts = {}) {
     "else if(e.key==='Escape'){hide();box.classList.remove('lp-search--open');}});" +
     "if(clr)clr.addEventListener('click',function(){input.value='';clr.hidden=true;hide();input.focus();});" +
     "if(toggle)toggle.addEventListener('click',function(){box.classList.add('lp-search--open');setTimeout(function(){input.focus();},30);});" +
-    "document.addEventListener('click',function(e){if(!box.contains(e.target)){hide();box.classList.remove('lp-search--open');}});" +
+    "document.addEventListener('click',function(e){if(!box.contains(e.target)){hide();locClose();box.classList.remove('lp-search--open');}else if(locWrap&&!locWrap.contains(e.target)){locClose();}});" +
     '})();</script>';
   const search = opts.search ? `<div class="lp-search" id="lpSearch" data-lang="${L}" data-none="${esc(t('search.none'))}" data-prefill="${esc(opts.searchValue || '')}">
       <button type="button" class="lp-search-toggle" aria-label="${esc(t('search.aria'))}">${searchSvg}</button>
@@ -1182,13 +1216,12 @@ function landingNav(lang, active, account, opts = {}) {
           <input type="text" name="q" class="lp-search-in" value="${esc(opts.searchValue || '')}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
           <button type="button" class="lp-search-x" aria-label="clear"${opts.searchValue ? '' : ' hidden'}>&times;</button>
         </div>
-        <div class="lp-search-loc">
+        <div class="lp-search-loc" data-loc>
           <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
-          <select name="city" class="lp-search-city" aria-label="${esc(t('search.location'))}">
-            <option value="">${esc(t('search.location'))}</option>
-            ${cityOpts}
-          </select>
+          <button type="button" class="lp-search-city" aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(t('search.location'))}"><span class="lp-search-city-lb">${esc(t('search.location'))}</span></button>
           ${caretSvg}
+          <input type="hidden" name="city" class="lp-search-cityval" value="">
+          <div class="lp-loc-menu" role="listbox" aria-label="${esc(t('search.location'))}">${locOpts}</div>
         </div>
         <button type="submit" class="lp-search-btn">${esc(t('search.btn'))}</button>
       </form>
