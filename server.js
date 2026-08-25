@@ -2299,13 +2299,28 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [events, assignments, talents, eos, settings, proofs] = await Promise.all([
+    const [events, assignments, talents, eos, settings, proofs, apps, choicesAll, positions] = await Promise.all([
       st.listEvents(), st.listAssignments(), st.listTalents(), st.listStaff('eo'), st.getSettings(), st.listProofs(),
+      st.listApplications(), st.listApplicationChoices(), st.listPositions(),
     ]);
     await attachMockups(st, events);
     // Attach opened positions per event so the NEEDS column reflects the shared position model.
     await Promise.all(events.map(async (e) => { e.positions = await st.listEventPositions(e.id); }));
-    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings }));
+    // Cross-event aggregate: total + approved applications per talent category (by P1 position).
+    const posKeyById = new Map(positions.map((p) => [p.id, p.key]));
+    const choicesByApp = new Map();
+    (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    const catOfApp = (a) => {
+      const chs = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
+      const primary = (chs[0] && posKeyById.get(chs[0].position_id)) || a.talent_type;
+      if (primary === 'kol') return 'kol';
+      if (primary === 'fotografer' || primary === 'videografer') return 'creative';
+      return 'manpower';
+    };
+    const agg = { manpower: { total: 0, approved: 0 }, kol: { total: 0, approved: 0 }, creative: { total: 0, approved: 0 } };
+    apps.forEach((a) => { const c = catOfApp(a); agg[c].total++; if (a.status === 'approved') agg[c].approved++; });
+    const applicantStats = ['manpower', 'kol', 'creative'].map((k) => ({ key: k, total: agg[k].total, approved: agg[k].approved }));
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings, applicantStats }));
   } catch (e) { next(e); }
 });
 
@@ -2971,6 +2986,20 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     const [positionsMaster, evPos, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes()]);
     await attachMockups(st, event);
     res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
+  } catch (e) { next(e); }
+});
+
+// Read-only event detail with per-position registration statistics (Super Admin).
+app.get('/admin/events/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const event = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!event) return res.redirect('/admin/manage');
+    const [evPos, apps, choices] = await Promise.all([st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices()]);
+    await attachMockups(st, event);
+    const view = eoEventView(event, evPos, apps, choices);
+    res.send(V.adminEventDetail({ staff: staffCtx(req), event, view, lang: req.lang }));
   } catch (e) { next(e); }
 });
 

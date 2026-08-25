@@ -545,7 +545,9 @@ function memoryStore() {
   ];
   const assignments = [];
   const positions = [
-    ['judge', 'Judge', 'Judge', 10], ['runner', 'Runner', 'Runner', 20], ['kol', 'KOL', 'KOL', 30],
+    ['judge', 'Judge', 'Judge', 10],
+    ['judge_hybrid', 'Judges Hybrid Race', 'Judges Hybrid Race', 11], ['judge_running', 'Judges Running', 'Judges Running', 12],
+    ['runner', 'Runner', 'Runner', 20], ['kol', 'KOL', 'KOL', 30],
     ['registration_staff', 'Registration Staff', 'Registration Staff', 40], ['water_station', 'Water Station', 'Water Station', 50],
     ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
     ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],

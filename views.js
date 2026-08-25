@@ -2645,6 +2645,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
     <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
+  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
+  ${positionStatsChart(view.positions, L)}
   ${eoApplicantsSection(e, view, aps, L)}
 </div>${eoApplicantsScript()}`;
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
@@ -3119,6 +3121,14 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     </aside>
   </div>
 
+  <div class="tp-morecta" style="margin-top:28px;border-radius:18px;padding:26px 28px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px var(--red-soft)">
+    <div style="min-width:0;flex:1 1 260px">
+      <div style="font-size:21px;font-weight:800;line-height:1.15">${t('tp.moreEvents.title')}</div>
+      <div style="font-size:14px;opacity:.93;margin-top:7px;max-width:540px">${t('tp.moreEvents.sub')}</div>
+    </div>
+    <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
+  </div>
+
   <form method="post" action="/logout" style="margin-top:26px;max-width:340px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
@@ -3509,6 +3519,14 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
 
   <div class="section-head"><h2 style="margin:0">${t('mp.myApps')}</h2></div>
   <div class="dl-list">${appCards}</div>
+
+  <div class="tp-morecta" style="margin-top:26px;border-radius:18px;padding:24px 26px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 14px 34px var(--red-soft)">
+    <div style="min-width:0;flex:1 1 240px">
+      <div style="font-size:20px;font-weight:800;line-height:1.15">${t('tp.moreEvents.title')}</div>
+      <div style="font-size:13.5px;opacity:.93;margin-top:7px;max-width:520px">${t('tp.moreEvents.sub')}</div>
+    </div>
+    <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
+  </div>
 </div>`;
   return layout({ title: t('mp.dash.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
@@ -3715,6 +3733,49 @@ function hBar(title, items, lang) {
       <div class="bar-val">${fmtNum(x.value)}</div>
     </div>`).join('') : `<p class="muted" style="font-size:13px">${tr(L, 'an.noData')}</p>`;
   return `<div class="chart"><div class="chart-title">${esc(title)}</div>${inner}</div>`;
+}
+
+/**
+ * Registration-statistics bars. Each row shows a total (red) with the approved
+ * portion overlaid (green), so EO/Super Admin see both overall interest and
+ * selection progress at a glance. rows: [{label, total, approved}].
+ */
+function statBars(title, sub, rows, L) {
+  const t = (k) => tr(L, k);
+  const list = (rows || []).filter((r) => (r.total || 0) > 0).sort((a, b) => b.total - a.total);
+  const max = list.reduce((m, r) => Math.max(m, r.total), 1);
+  const legend = `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:14px">
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--red)"></span>${esc(t('stat.pos.total'))}</span>
+      <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--ok)"></span>${esc(t('stat.pos.approved'))}</span>
+    </div>`;
+  const bars = list.length ? list.map((r) => {
+    const totalW = Math.round(r.total / max * 100);
+    const apprW = r.total ? Math.round((r.approved || 0) / r.total * 100) : 0;
+    return `<div style="display:grid;grid-template-columns:minmax(84px,150px) 1fr auto;align-items:center;gap:12px;margin-bottom:12px">
+      <div class="bar-label" title="${esc(r.label)}">${esc(r.label)}</div>
+      <div style="height:16px;background:var(--card2);border-radius:8px;overflow:hidden">
+        <div style="height:100%;width:${totalW}%;min-width:6px;background:var(--red);border-radius:8px;position:relative"><div style="position:absolute;top:0;left:0;height:100%;width:${apprW}%;background:var(--ok);border-radius:8px"></div></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;text-align:right;min-width:66px;font-variant-numeric:tabular-nums">${r.total}<span style="color:var(--ok)"> · ${r.approved || 0} ✓</span></div>
+    </div>`;
+  }).join('') : `<p class="muted" style="font-size:13px;margin:0">${esc(t('stat.pos.empty'))}</p>`;
+  return `<div class="card" style="margin-top:14px;padding:18px 20px">
+    <div style="font-weight:800;font-size:15px">${esc(title)}</div>
+    ${sub ? `<div class="muted" style="font-size:12.5px;margin:3px 0 14px">${esc(sub)}</div>` : '<div style="height:12px"></div>'}
+    ${legend}${bars}
+  </div>`;
+}
+/** Per-position registration stats for one event (uses view.positions counts). */
+function positionStatsChart(positions, L) {
+  const rows = (positions || []).map((p) => ({ label: posLabel(p, L), total: p.applicants || 0, approved: p.filled || 0 }));
+  return statBars(tr(L, 'stat.pos.title'), tr(L, 'stat.pos.sub'), rows, L);
+}
+/** Cross-event aggregate: total applications per talent category. rows keyed by category. */
+function aggregateStatsChart(catRows, L) {
+  const t = (k) => tr(L, k);
+  const labelOf = { manpower: t('filter.cat.manpower'), kol: t('filter.cat.kol'), creative: t('filter.cat.creative') };
+  const rows = (catRows || []).map((c) => ({ label: labelOf[c.key] || c.key, total: c.total || 0, approved: c.approved || 0 }));
+  return statBars(t('stat.agg.title'), t('stat.agg.sub'), rows, L);
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
@@ -4222,7 +4283,7 @@ function adminProofs({ staff, proofs, lang, settings }) {
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
-function adminManage({ staff, events, assignments, talents, eos, proofs, lang, settings }) {
+function adminManage({ staff, events, assignments, talents, eos, proofs, lang, settings, applicantStats }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || []; proofs = proofs || [];
@@ -4239,7 +4300,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.positions && e.positions.length) ? (e.positions.map((p) => esc(posLabel(p, L))).slice(0, 4).join(', ') + (e.positions.length > 4 ? ` <span class="muted">+${e.positions.length - 4}</span>` : '')) : ((e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>')}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
-    <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
+    <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" title="${t('stat.pos.title')}">📊 ${t('adm.event.statsLink')}</a> <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
@@ -4263,6 +4324,9 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
       <tbody>${eventRows || `<tr><td colspan="5" class="muted">${t('manage.emptyEvents')}</td></tr>`}</tbody>
     </table></div>
   </div>
+
+  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.agg.title')}</h2></div>
+  ${aggregateStatsChart(applicantStats, L)}
 
   <div class="section-head"><h2 style="margin:0">${t('manage.assignments')}</h2></div>
   <div class="card" style="margin-top:14px">
@@ -4438,6 +4502,36 @@ function adminEventEdit({ staff, event, lang }) {
   </form>
 </div>`;
   return appLayout({ title: t('manage.editEvent') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
+/**
+ * Super Admin read-only event detail: header + per-position registration
+ * statistics (total vs approved). The full applicant review lives on
+ * /admin/applications; this page is the "event detail" home for the stats.
+ */
+function adminEventDetail({ staff, event, view, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+  const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
+  const body = `<div class="wrap">
+  <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">${t('adm.event.manageApps')} →</a>
+      <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
+    </div>
+  </div>
+  ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+  <div style="display:flex;gap:12px;align-items:center;margin-top:22px">
+    <div style="font-weight:700">${t('stat.pos.title')}</div>
+    <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
+  </div>
+  ${positionStatsChart(view.positions, L)}
+</div>`;
+  return appLayout({ title: e.name + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff.name, lang: L });
 }
 
 /**
@@ -5135,7 +5229,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminApplications, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
