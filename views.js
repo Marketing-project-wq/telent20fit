@@ -503,13 +503,11 @@ function appLayout({ title, body, role, active, user, lang }) {
   const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
-      + navLink('/eo/stats', 'stats', active, 'stats', t('nav.statistics'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
-        + navLink('/admin/stats', 'stats', active, 'stats', t('nav.statistics'))
         + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
         + navLink('/admin/analytics', 'analytics', active, 'analytics', t('nav.analytics'))
         + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
@@ -2336,7 +2334,7 @@ function staffResetDone({ lang }) {
 }
 
 // --- EO: dashboard + profile ------------------------------------------------
-function eoDashboard({ staff, stats, profileComplete, lang }) {
+function eoDashboard({ staff, stats, statsData, profileComplete, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const card = (label, val, icon) => `<div class="card" style="margin:0">
@@ -2356,7 +2354,11 @@ function eoDashboard({ staff, stats, profileComplete, lang }) {
     ${card(t('eo.stat.accepted'), stats.accepted, '✅')}
     ${card(t('eo.stat.doneEvents'), stats.doneEvents, '🏁')}
   </div>
-  <div style="margin-top:16px"><a href="/eo/stats?lang=${L}" class="btn btn-ghost btn-sm">📊 ${t('stats.title')} →</a></div>
+  ${statsData ? `<section id="stats" style="margin-top:30px">
+    <h2 style="margin:0;font-size:19px">${t('stats.title')}</h2>
+    <p class="sub" style="margin:4px 0 0">${t('stats.sub')}</p>
+    ${statsSection(Object.assign({ role: 'eo', lang: L }, statsData))}
+  </section>` : ''}
 </div>`;
   return appLayout({ title: t('eo.dashTitle') + ' — 20FIT', body, role: 'eo', active: 'dashboard', user: staff.name, lang: L });
 }
@@ -4134,11 +4136,19 @@ function aggregateStatsChart(catRows, L) {
 // status breakdown and the average profile completeness of everyone who applied;
 // or "All events" for the aggregate summary (per-category bars). Detailed stats
 // live here so the Dashboard can stay a short summary.
-function staffStats({ staff, role, events, selectedId, eventStats, aggregate, lang }) {
+// Statistics section shared by the EO and Super Admin dashboards. An event
+// dropdown drives it: pick one event for its per-position registration bars, an
+// application-status breakdown and the average profile completeness of everyone
+// who applied (plus, for an EO, a "View applicants" shortcut); or "All events"
+// for the cross-event aggregate (per-category bars). Returns just the section
+// markup (selector + content) so it can sit inside a dashboard page; the event
+// dropdown is a plain GET, so it reloads whichever dashboard renders it.
+function statsSection({ role, events, selectedId, eventStats, aggregate, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isAdmin = role === 'super_admin';
   const evs = events || [];
+  if (!evs.length) return `<p class="muted" style="margin-top:14px">${t('stats.noEvents')}</p>`;
   const options = `<option value="">${esc(t('stats.allEvents'))}</option>`
     + evs.map((e) => `<option value="${esc(e.id)}"${e.id === selectedId ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
   const selector = `<form method="get" class="card" style="margin-top:16px;padding:12px 14px">
@@ -4168,21 +4178,20 @@ function staffStats({ staff, role, events, selectedId, eventStats, aggregate, la
     const STATUS_ORDER = ['applied', 'under_review', 'approved', 'assigned', 'completed', 'rejected'];
     const statusItems = STATUS_ORDER.filter((s) => merged[s]).map((s) => ({ name: t('ta.status.' + s), value: merged[s] }));
     const hasData = eventStats.applyCount > 0;
-    content = `<h2 style="margin:24px 0 0;font-size:18px">${esc(t('stats.forEvent', { event: eventStats.name }))}</h2>
+    // EO shortcut to the Applicants manager, pre-filtered to this event.
+    const viewBtn = (role === 'eo')
+      ? `<div style="margin-top:16px"><a href="/eo/talents?event=${esc(eventStats.id)}&lang=${L}" class="btn btn-sm">👥 ${t('eo.ev.viewApplicants')}${eventStats.applyCount ? ` (${eventStats.applyCount})` : ''}</a></div>`
+      : '';
+    content = `<h3 style="margin:24px 0 0;font-size:17px">${esc(t('stats.forEvent', { event: eventStats.name }))}</h3>
       ${grid(`${card(t('stats.card.applies'), eventStats.applyCount, '📝')}${card(t('stats.card.approved'), eventStats.approvedCount, '✅')}${card(t('stats.card.talents'), eventStats.talentCount, '👥')}${strengthMeter(eventStats.avgStrength)}`)}
-      ${hasData ? `${positionStatsChart(eventStats.positions, L)}<div style="margin-top:14px">${hBar(t('stats.statusTitle'), statusItems, L)}</div>` : `<p class="muted" style="margin-top:14px">${t('stats.empty')}</p>`}`;
+      ${hasData ? `${positionStatsChart(eventStats.positions, L)}<div style="margin-top:14px">${hBar(t('stats.statusTitle'), statusItems, L)}</div>` : `<p class="muted" style="margin-top:14px">${t('stats.empty')}</p>`}
+      ${viewBtn}`;
   } else {
-    content = `<h2 style="margin:24px 0 0;font-size:18px">${esc(isAdmin ? t('stats.overviewTitleAdmin') : t('stats.overviewTitle'))}</h2>
+    content = `<h3 style="margin:24px 0 0;font-size:17px">${esc(isAdmin ? t('stats.overviewTitleAdmin') : t('stats.overviewTitle'))}</h3>
       ${grid(`${card(t('stats.card.events'), aggregate.totalEvents, '📅')}${card(t('stats.card.applies'), aggregate.totalApplies, '📝')}${card(t('stats.card.approved'), aggregate.totalApproved, '✅')}${strengthMeter(aggregate.avgStrength)}`)}
       ${aggregateStatsChart(aggregate.catRows, L)}`;
   }
-
-  const body = `<div class="wrap">
-  ${staffHead(staff, t('stats.title'), L)}
-  <p class="sub">${t('stats.sub')}</p>
-  ${evs.length ? `${selector}${content}` : `<p class="muted" style="margin-top:14px">${t('stats.noEvents')}</p>`}
-</div>`;
-  return appLayout({ title: t('stats.title') + ' — 20FIT', body, role, active: 'stats', user: staff.name, lang: L });
+  return `${selector}${content}`;
 }
 
 /** Staff dashboard: post proofs (both roles) + events/assignments/EO management (super admin only). */
@@ -4216,7 +4225,7 @@ function proofTable(proofs, isSuper, lang, settings) {
 }
 
 // Tab 1 — Dashboard: role-aware activity summary + engagement overview.
-function adminDashboard({ staff, proofs, events, talents, assignments, settings, lang }) {
+function adminDashboard({ staff, proofs, events, talents, assignments, settings, statsData, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || []; events = events || []; talents = talents || []; assignments = assignments || [];
@@ -4365,6 +4374,10 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
       <tbody>${boardRows}</tbody>
     </table></div>
   </div>
+
+  ${statsData ? `<div class="section-head" id="stats"><h2 style="margin:0">📊 ${t('stats.title')}</h2></div>
+  <p class="sub" style="margin:4px 0 0">${t('stats.sub')}</p>
+  ${statsSection(Object.assign({ role: 'super_admin', lang: L }, statsData))}` : ''}
 </div>`;
   return appLayout({ title: t('dash.title') + ' — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
 }
@@ -5678,5 +5691,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, staffStats, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

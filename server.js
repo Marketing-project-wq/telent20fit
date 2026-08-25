@@ -1816,8 +1816,12 @@ app.get('/eo', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [stats, profile] = await Promise.all([eoStats(st, req.staff.id), st.getEoProfile(req.staff.id)]);
-    res.send(V.eoDashboard({ staff: eoCtx(req), stats, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+    const [stats, profile, allEvents] = await Promise.all([eoStats(st, req.staff.id), st.getEoProfile(req.staff.id), st.listEvents()]);
+    // Statistics section is now embedded in the dashboard; ?event=<id> drives it.
+    const mine = allEvents.filter((e) => e.created_by === req.staff.id)
+      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
+    const statsData = await statsPageData(st, mine, String(req.query.event || ''));
+    res.send(V.eoDashboard({ staff: eoCtx(req), stats, statsData, profileComplete: eoProfileComplete(profile), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1947,15 +1951,11 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
 });
 
 // EO: Statistics page — per-event breakdown across this EO's own events.
-app.get('/eo/stats', requireEo, async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const mine = (await st.listEvents()).filter((e) => e.created_by === req.staff.id)
-      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
-    const data = await statsPageData(st, mine, String(req.query.event || ''));
-    res.send(V.staffStats(Object.assign({ staff: eoCtx(req), role: 'eo', lang: req.lang }, data)));
-  } catch (e) { next(e); }
+// Statistics is now embedded in the EO dashboard; keep this path working for old
+// links/bookmarks by redirecting (carrying any selected event through).
+app.get('/eo/stats', requireEo, (req, res) => {
+  const ev = String(req.query.event || '');
+  res.redirect('/eo' + (ev ? '?event=' + encodeURIComponent(ev) : ''));
 });
 
 // --- EO: event management ---------------------------------------------------
@@ -2365,7 +2365,10 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
     ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null }));
-    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, lang: req.lang }));
+    // Event Statistics is embedded in the dashboard; a super admin sees every event.
+    const evSorted = events.slice().sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
+    const statsData = await statsPageData(st, evSorted, String(req.query.event || ''));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, statsData, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2400,17 +2403,10 @@ app.get('/admin/analytics', auth.requireStaff(['super_admin']), async (req, res,
   } catch (e) { next(e); }
 });
 
-// Super Admin: Statistics page — per-event breakdown across ALL events, plus a
-// cross-event aggregate summary.
-app.get('/admin/stats', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const events = (await st.listEvents())
-      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
-    const data = await statsPageData(st, events, String(req.query.event || ''));
-    res.send(V.staffStats(Object.assign({ staff: staffCtx(req), role: 'super_admin', lang: req.lang }, data)));
-  } catch (e) { next(e); }
+// Super Admin: Statistics is now embedded in the dashboard; redirect old links.
+app.get('/admin/stats', auth.requireStaff(['super_admin']), (req, res) => {
+  const ev = String(req.query.event || '');
+  res.redirect('/admin' + (ev ? '?event=' + encodeURIComponent(ev) : ''));
 });
 
 // Tab — Ringkasan Performa: per-event totals + per-KOL breakdown.
