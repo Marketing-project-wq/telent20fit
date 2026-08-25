@@ -2587,6 +2587,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         ${customName}
         <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:${isOther ? '6px' : '0'};font-size:13px">${esc(cv('description'))}</textarea>
         <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
+        <label style="display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin-top:8px">${t('eo.pos.quotaLabel')}<input type="number" name="quota_${pid}" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:4px;font-size:13px"></label>
         ${grp(t('eo.pos.detailGroup'))}
         ${inp('work_hours', 'eo.pos.workHoursPh', 120)}
         ${inp('venue_detail', 'eo.pos.venuePh', 200)}
@@ -3064,6 +3065,7 @@ const PROFILE_CSS = `
 .tp-ev-kicker{font:700 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .tp-ev-name{font:800 18px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin-top:4px;word-break:break-word}
 .tp-ev-date{color:var(--muted);font-size:12.5px;margin-top:4px}
+.tp-ev-pos{font-size:15px;font-weight:800;color:var(--ink)}
 .tp-ev-foot{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;padding-top:14px;border-top:1px solid var(--line)}
 .tp-strength-bar{height:8px;border-radius:999px;background:var(--card2);overflow:hidden;margin:12px 0 16px}
 .tp-strength-bar>i{display:block;height:100%;background:var(--red)}
@@ -3137,7 +3139,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       .join('');
     return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
       <div class="tp-ev-top">
-        <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? esc(posLbl) + ' · ' : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+        <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? `<span class="tp-ev-pos">${esc(posLbl)}</span> · ` : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
         ${talentStatusBadge(e.status, L)}
       </div>
       ${applicationTracker(e.status, L)}
@@ -5182,6 +5184,15 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const left = Math.max(0, (p.quota || 0) - (p.filled || 0));
     const isOpen = !p.closed_at && !p.full;
     const lock = docsMissing && CREATOR_ROLES.includes(p.key);
+    // Quota / remaining-slots hint so talents gauge their odds before applying.
+    // Only for positions with a real (limited) quota; unlimited & manually-closed
+    // positions skip it. Counts are live (p.filled = approved, per eoEventView).
+    const limited = (p.quota || 0) > 0 && p.quota < 100000;
+    const quotaLine = (limited && !p.closed_at)
+      ? ((p.full || left <= 0)
+          ? `<div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--err,#d32f2f);background:var(--err-soft,#fdecea);border-radius:8px;padding:5px 11px">🚫 ${t('ta.slotsFull')}</div>`
+          : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 <b style="color:var(--ink)">${t('ta.quota')}:</b> ${p.quota} · <b style="color:var(--ink)">${t('ta.slotsLeft')}:</b> ${left}</div>`)
+      : '';
     const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
         : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
@@ -5239,7 +5250,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const detailHtml = filledRows.length
       ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div>${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
       : '';
-    const foot = `${detailHtml}${action}`;
+    const foot = `${quotaLine}${detailHtml}${action}`;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
