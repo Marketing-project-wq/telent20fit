@@ -309,6 +309,101 @@ tr:last-child td{border-bottom:none}
 .tmodal-actions{display:flex;gap:10px;justify-content:flex-end}
 ${CARD_CSS}`;
 
+// Header (landingNav) CSS: the .lp-* nav/search/toggle/account rules + their --lp-* vars.
+// Mirrors the block inlined in landingPage; publicLayout injects it so every public
+// page (event detail, catalog, /events, auth) gets the styled unified header.
+const NAV_CSS = `
+:root{--red:#E4121F;--ink:#101013;--ok:#178A54;
+  --lp-bg:#101013;--lp-bg2:#0b0b0e;--lp-card:#141419;--lp-chip:#1c1c22;
+  --lp-line:#2c2c34;--lp-line2:#33333c;
+  --lp-tx:#ffffff;--lp-tx2:#b9b8bf;--lp-tx3:#8a8990;--lp-tx4:#66666d;--lp-accent:#ff5b66}
+:root[data-theme="light"]{
+  --lp-bg:#f4f6f9;--lp-bg2:#e9edf2;--lp-card:#ffffff;--lp-chip:#eef1f5;
+  --lp-line:#e3e7ed;--lp-line2:#d7dbe2;
+  --lp-tx:#17171d;--lp-tx2:#41454d;--lp-tx3:#63676e;--lp-tx4:#8b8f97;--lp-accent:#d10c17}
+.lp-logo-box{display:flex;align-items:center;height:120px;flex:0 0 auto}
+.lp-logo{display:block;height:120px;width:auto}
+.lp-logo-dark{height:90px}
+.lp-logo-light{display:none}
+:root[data-theme="light"] .lp-logo-dark{display:none}
+:root[data-theme="light"] .lp-logo-light{display:block}
+.lp-head{max-width:1180px;margin:0 auto;padding:22px 28px 8px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+.lp-toggles{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lp-submit{padding:11px 18px;background:transparent;color:var(--lp-tx);border:1px solid var(--lp-line2);border-radius:10px;font:700 14px/1 Barlow,sans-serif;white-space:nowrap}
+.lp-submit:hover{background:var(--lp-chip)}
+.theme-toggle{display:inline-flex;gap:4px;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px}
+.theme-toggle button{padding:8px 13px;border-radius:8px;font:700 18px/1 Barlow,sans-serif;border:0;cursor:pointer;background:transparent;color:var(--lp-tx3);line-height:1}
+.theme-toggle button.active{background:var(--red);color:#fff}
+@media(max-width:760px){.lp-head{gap:14px}.lp-logo-box{height:90px}.lp-logo{height:90px}.lp-logo-dark{height:68px}.lp-toggles{width:100%;justify-content:flex-start}}
+/* Sticky marketplace-style top navbar (sits above the hero so it stays on scroll) */
+.lp-nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.82);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid rgba(0,0,0,0.06);box-shadow:0 4px 24px -2px rgba(0,0,0,0.04);transition:all .2s ease}
+:root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
+.lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
+.lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
+.lp-nav-logo .lp-logo{height:68px;width:auto;display:block}
+/* Header event search — job-board style: keyword field + Location dropdown + Search button */
+.lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
+.lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
+.lp-search-form{display:flex;align-items:center;gap:9px}
+.lp-search-key{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--lp-line);border-radius:999px;padding:9px 16px;box-shadow:0 2px 10px rgba(16,16,19,.06)}
+.lp-search-key:focus-within{border-color:var(--red);box-shadow:0 4px 16px rgba(228,18,31,.15)}
+.lp-search-ic{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
+.lp-search-in{flex:1;min-width:0;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-search-in::placeholder{color:var(--lp-tx4)}
+.lp-search-x{flex:0 0 auto;border:0;background:none;color:var(--lp-tx3);font-size:20px;line-height:1;cursor:pointer;padding:0 2px}
+.lp-search-x:hover{color:var(--red)}
+.lp-search-loc{position:relative;flex:0 0 auto;display:flex;align-items:center;gap:8px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:999px;padding:9px 14px;box-shadow:0 2px 10px rgba(16,16,19,.06);transition:border-color .15s}
+.lp-search-loc:focus-within{border-color:var(--red)}
+.lp-search-pin{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--lp-tx3)}
+.lp-search-city{appearance:none;-webkit-appearance:none;border:0;outline:0;background:transparent;font:600 14.5px/1.2 Barlow,sans-serif;color:var(--lp-tx);cursor:pointer;padding-right:22px;max-width:150px;text-overflow:ellipsis}
+.lp-search-city option{background:var(--lp-card);color:var(--lp-tx);padding:8px 12px}
+.lp-search-caret{position:absolute;right:12px;color:var(--lp-tx3);pointer-events:none}
+.lp-search-btn{flex:0 0 auto;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:12px 22px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.28)}
+.lp-search-btn:hover{background:var(--red-hover)}
+.lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
+.lp-search-menu.show{display:block}
+.lp-sr{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;color:var(--lp-tx)}
+.lp-sr:hover,.lp-sr.active{background:var(--lp-chip)}
+.lp-sr-thumb{width:48px;height:34px;flex:0 0 auto;border-radius:7px;object-fit:cover;background:var(--lp-chip);display:block}
+.lp-sr-tx{min-width:0}
+.lp-sr-name{display:block;font:700 14px/1.2 Barlow,sans-serif;color:var(--lp-tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-sr-city{display:block;font-size:12px;color:var(--lp-tx3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-search-empty{padding:16px 14px;color:var(--lp-tx3);font-size:13.5px;text-align:center}
+/* Tablet: shrink the keyword field; drop the Location segment when space gets tight. */
+@media(max-width:980px){.lp-search{max-width:460px}.lp-search-city{max-width:104px}}
+@media(max-width:820px){.lp-search-loc{display:none}.lp-search{max-width:360px}}
+.lp-tog{margin-left:auto;display:flex;flex:0 0 auto;background:var(--lp-chip);border:1px solid var(--lp-line);border-radius:11px;padding:4px;gap:3px}
+.lp-tog-b{padding:9px 15px;border-radius:8px;font:700 15px/1 Barlow,sans-serif;color:var(--lp-tx3)}
+.lp-tog-b.on{color:#fff;background:var(--red)}
+.lp-acct{position:relative;flex:0 0 auto}
+.lp-acct>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:var(--red);color:#fff;border-radius:10px;padding:11px 16px;font:700 14px/1 Barlow,sans-serif;box-shadow:0 6px 18px rgba(228,18,31,.3);white-space:nowrap}
+.lp-acct>summary::-webkit-details-marker{display:none}
+.lp-acct>summary::marker{content:""}
+.lp-caret{transition:transform .2s}
+.lp-acct[open]>summary .lp-caret{transform:rotate(180deg)}
+.lp-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:190px;background:var(--lp-card);border:1px solid var(--lp-line);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.14)}
+.lp-acct-menu a{display:block;padding:11px 13px;border-radius:8px;font:600 14px/1 Barlow,sans-serif;color:var(--lp-tx)}
+.lp-acct-menu a:hover{background:var(--lp-chip)}
+/* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
+@media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){
+  /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
+  .lp-search{position:static;flex:0 0 auto;max-width:none}
+  .lp-search-form{display:none}
+  .lp-search-toggle{display:inline-flex}
+  .lp-search.lp-search--open{position:absolute;top:100%;left:0;right:0;z-index:70;background:var(--lp-card);border-bottom:1px solid var(--lp-line);box-shadow:0 20px 34px rgba(0,0,0,.14);padding:14px 16px}
+  .lp-search.lp-search--open .lp-search-toggle{display:none}
+  .lp-search.lp-search--open .lp-search-form{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  .lp-search.lp-search--open .lp-search-key{width:100%}
+  .lp-search.lp-search--open .lp-search-loc{display:flex;width:100%}
+  .lp-search.lp-search--open .lp-search-city{max-width:none;flex:1}
+  .lp-search.lp-search--open .lp-search-btn{width:100%;padding:13px}
+  .lp-search.lp-search--open .lp-search-menu{position:static;box-shadow:none;border:0;padding:8px 0 0;max-height:46vh}}
+@media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
+@media(max-width:380px){.lp-tog-b{padding:6px 9px}}
+`;
+
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 // Dark mode removed — every page renders light (data-theme="light" on <html>).
 const THEME_HEAD = '';
@@ -353,7 +448,7 @@ function publicLayout({ title, body, lang, account, active, cities, search = tru
   return `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
-<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
+<title>${esc(title)}</title><style>${STYLE}${NAV_CSS}</style>${THEME_HEAD}</head>
 <body>
 ${nav}
 ${body}
