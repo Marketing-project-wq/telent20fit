@@ -453,4 +453,73 @@ async function sendUnderReviewEmail({ to, name, eventName, positionName, eventDa
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml };
+// "You've been accepted — confirm your spot" email. Always English. Sent when an
+// EO/admin approves a talent for a position; the talent then confirms (Agree) from
+// their profile to become Assigned. 48h is informational only (no auto-expiry).
+function spotConfirmEmailHtml({ name, eventName, positionName, eventDate }) {
+  const confirmUrl = APP_BASE + '/talent';
+  const row = (label, value, accent) => `<tr>
+      <td style="padding:13px 16px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8b8f97;vertical-align:top;border-top:1px solid #eceff3">${esc(label)}</td>
+      <td style="padding:13px 16px;font-size:14px;font-weight:700;text-align:right;vertical-align:top;color:${accent ? '#E4121F' : '#17171d'};border-top:1px solid #eceff3">${esc(value)}</td>
+    </tr>`;
+  const rowsHtml = [
+    row('Event', eventName),
+    row('Position', positionName, true),
+    row('Event Date', eventDate || 'To be announced'),
+  ].join('').replace('border-top:1px solid #eceff3', 'border-top:0');
+  return `<!doctype html><html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">You've been accepted — confirm your spot to secure it.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      ${logoBar()}
+      <tr><td bgcolor="#178A54" style="background:#178A54;background:linear-gradient(135deg,#1fb268,#127a45);padding:30px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:#fffffe">You're Accepted! 🎉</div>
+      </td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">Hi ${esc(name || '')},</p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#4a4e57">Great news! You've been accepted for the <b style="color:#E4121F">${esc(positionName)}</b> role at <b>${esc(eventName)}</b>.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafbfc;border:1px solid #eceff3;border-radius:14px">
+          ${rowsHtml}
+        </table>
+        <p style="margin:18px 0 0;font-size:14px;line-height:1.65;color:#4a4e57">Please log in to your account and <b>confirm your acceptance</b> to secure your spot.</p>
+      </td></tr>
+      <tr><td style="padding:22px 30px 6px;text-align:center">
+        <a href="${esc(confirmUrl)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">Confirm My Spot</a>
+      </td></tr>
+      <tr><td style="padding:18px 30px 4px">
+        <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:#8b8f97">If we don't hear from you within 48 hours, your spot may be offered to another talent.</p>
+        <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">Best,<br><b style="color:#17171d">20FIT Talent Team</b></p>
+      </td></tr>
+      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">This is an automated email from 20FIT Talent. Please do not reply to this email.</p></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Notify an accepted talent to confirm their spot. Always English. Never throws. */
+async function sendSpotConfirmEmail({ to, name, eventName, positionName, eventDate }) {
+  const subject = "You've Been Accepted for " + (positionName || 'a role') + ' at ' + (eventName || 'an event') + '!';
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — spot-confirm for ' + to + ' (' + eventName + ')');
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: spotConfirmEmailHtml({ name, eventName, positionName, eventDate }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; spot-confirm email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml };

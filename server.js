@@ -788,6 +788,11 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 // req.account (full profile) is attached by requireTalentReady.
 // Unified talent home. Dispatches by session type: Man Power sees the
 // self-apply dashboard; KOL / photographer see the profile + history page.
+// Marker stored on an application's `note` when the TALENT declines a spot they were
+// accepted for (status → rejected). Lets us tell a self-decline apart from an
+// EO/admin rejection (e.g. Point 3's "not selected" pop-up skips self-declines).
+const DECLINED_BY_TALENT = 'Declined by talent';
+
 // Has this talent confirmed the KOL category yet? True once they have at least one
 // application to a KOL-category position (position.key === 'kol'). This gates the
 // "Post Proofs" bottom-nav item + the /kirim-bukti page — Post Proofs is a KOL-only
@@ -827,7 +832,7 @@ async function buildAppliedEvents(st, myApps, eventById) {
       const acceptedPos = accepted ? posLabelById.get(String(accepted.position_id)) : null;
       const otherPos = accepted ? chs.filter((c) => !c.accepted).map((c) => posLabelById.get(String(c.position_id))).filter(Boolean) : [];
       const ref = (chs.length && (ev.slug || ev.id)) || null;
-      return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos };
+      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos };
     })
     .filter(Boolean);
 }
@@ -868,6 +873,36 @@ app.get('/talent/applications', requireAnyTalentBrowse(), async (req, res, next)
     const eventById = new Map(events.map((e) => [e.id, e]));
     const appliedEvents = await buildAppliedEvents(st, myApps, eventById);
     res.send(V.talentApplicationsPage({ account: req.account, events: appliedEvents, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Talent confirms (Agree) the spot an EO accepted them for → status becomes
+// "assigned" (shows in the EO/Super Admin selected list). Only an application that
+// is currently "approved" and belongs to this talent can be confirmed.
+app.post('/talent/applications/:appId/agree', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
+    if (app && app.status === 'approved') {
+      await st.updateApplication(app.id, { status: 'assigned' });
+    }
+    res.redirect('/talent?lang=' + req.lang + '&confirmed=1');
+  } catch (e) { next(e); }
+});
+
+// Talent declines the spot → status "rejected" (marked as a self-decline) and the
+// reserved slot is released (accepted choice cleared) so the position reopens.
+app.post('/talent/applications/:appId/decline', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
+    if (app && app.status === 'approved') {
+      await st.clearApplicationAccepted(app.id); // free the reserved slot → position reopens
+      await st.updateApplication(app.id, { status: 'rejected', note: DECLINED_BY_TALENT });
+    }
+    res.redirect('/talent?lang=' + req.lang + '&declined=1');
   } catch (e) { next(e); }
 });
 
@@ -2744,26 +2779,24 @@ async function notifyAcceptance(st, app, patch) {
   });
 }
 
-// Email a talent whose EO accepted them into a position. The accepted position
-// (e.g. "Judge") is shown as their assignment. Sent in Indonesian since talents
-// are the audience. Best-effort — never blocks the accept response.
+// Email a talent whose EO/admin accepted them into a position, asking them to
+// confirm their spot (Agree on their profile → Assigned). Always English, per spec.
+// Best-effort — never blocks the accept response.
 async function notifyPositionAcceptance(st, app, ev, positionId) {
   const account = await st.getAccountById(app.talent_id);
   const to = account && account.login;
   if (!to || !/@/.test(to)) return; // no usable email on file
-  let posLabel = null;
+  let posLabel = 'Position';
   try {
     const positions = await st.listEventPositions(ev.id);
     const pos = positions.find((p) => p.position_id === positionId);
-    if (pos) posLabel = pos.label_id || pos.label_en || null;
+    if (pos) posLabel = pos.custom_label_en || pos.custom_label || pos.label_en || pos.label_id || 'Position';
   } catch (_) { /* position label is best-effort */ }
-  await mailer.sendAcceptanceEmail({
-    to, name: account.name, lang: 'id',
+  await mailer.sendSpotConfirmEmail({
+    to, name: account.name,
     eventName: ev.name || 'Event 20FIT',
-    eventDate: eventDateStr(ev),
-    location: ev.location || null,
-    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
-    station: posLabel, stationLoc: null,
+    positionName: posLabel,
+    eventDate: eventDateStrEn(ev),
   });
 }
 

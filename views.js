@@ -2950,9 +2950,11 @@ function eoApplicantsSection(e, view, aps, L) {
   const decisionControls = (a) => {
     const base = `/eo/events/${esc(e.id)}/applicants/${esc(a.id)}`;
     const acceptedChoice = a.choices.find((c) => c.accepted);
-    if (a.status === 'approved' && acceptedChoice) {
+    if ((a.status === 'approved' || a.status === 'assigned') && acceptedChoice) {
+      const confirmed = a.status === 'assigned';
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posLbl(acceptedChoice.position_id) }))}</span>
+        ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
         <form class="inline-form" method="post" action="${base}/reset"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
@@ -3099,9 +3101,11 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
     const base = `/eo/events/${esc(a.eventId)}/applicants/${esc(a.id)}`;
     const nx = '<input type="hidden" name="next" value="/eo/talents">';
     const acc = a.choices.find((c) => c.accepted);
-    if (a.status === 'approved' && acc) {
+    if ((a.status === 'approved' || a.status === 'assigned') && acc) {
+      const confirmed = a.status === 'assigned';
       return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posOf(acc) }))}</span>
+        <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posOf(acc) }))}</span>
+        ${confirmed ? '' : `<span class="pill pill-off" title="${esc(t('eo.ap.awaitingConfirm'))}">${t('eo.ap.awaitingConfirm')}</span>`}
         <form class="inline-form" method="post" action="${base}/reset">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
       </div>`;
     }
@@ -3400,6 +3404,19 @@ const PROFILE_CSS = `
 .tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
 @media(max-width:920px){.tp-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.tp-stats{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
+/* "Confirm your spot" banner — an EO accepted this talent; they Agree (→Assigned) or Decline. */
+.cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
+.cf-card{border:1.5px solid #178a54;border-radius:16px;padding:18px 20px;background:linear-gradient(135deg,rgba(23,138,84,.10),rgba(23,138,84,.03));box-shadow:0 6px 20px rgba(23,138,84,.10)}
+.cf-badge{display:inline-block;font:800 11px/1 Barlow,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#0f7a48;background:rgba(23,138,84,.14);border-radius:999px;padding:6px 12px}
+.cf-title{font:800 18px/1.25 Barlow,sans-serif;color:var(--ink);margin-top:10px}
+.cf-meta{font-size:13px;color:var(--muted);margin-top:6px}
+.cf-meta b{color:var(--ink)}
+.cf-sub{font-size:13px;line-height:1.55;color:var(--muted);margin-top:10px}
+.cf-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.cf-agree{background:#178a54;border-color:#178a54;color:#fff;font-weight:800}
+.cf-agree:hover{background:#0f7a48}
+.cf-decline{color:#b91c1c}
+@media(max-width:520px){.cf-actions form{flex:1}.cf-actions .btn{width:100%}}
 `;
 
 // One application-history card: event + position + status badge + progress
@@ -3449,6 +3466,33 @@ function applicationHistoryBlock(events, isCreator, L, opts = {}) {
   const cards = list.map((e) => applicationCard(e, isCreator, L)).join('');
   const script = filter ? `<script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.tp-evcard.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>` : '';
   return `${filter}${cards}${script}`;
+}
+
+// Prominent "confirm your spot" banner for applications an EO accepted (status
+// 'approved') that the talent hasn't confirmed yet. Agree → Assigned; Decline →
+// Rejected (the reserved slot reopens). Shown on the Profile + Applications pages.
+function confirmationBanner(events, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const pending = (events || []).filter((e) => e.status === 'approved' && e.appId);
+  if (!pending.length) return '';
+  const cards = pending.map((e) => {
+    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+    const s = e.starts_at ? fmtDay(e.starts_at) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const date = s ? (en ? s + ' – ' + en : s) : '';
+    return `<div class="cf-card">
+      <div class="cf-badge">🎉 ${t('confirm.badge')}</div>
+      <div class="cf-title">${esc(t('confirm.title', { pos: posLbl || '—', event: e.name }))}</div>
+      <div class="cf-meta">${esc(e.name)}${posLbl ? ' · <b>' + esc(posLbl) + '</b>' : ''}${date ? ' · ' + esc(date) : ''}</div>
+      <div class="cf-sub">${t('confirm.sub')}</div>
+      <div class="cf-actions">
+        <form method="post" action="/talent/applications/${esc(e.appId)}/agree?lang=${L}" style="margin:0"><button type="submit" class="btn cf-agree">✓ ${t('confirm.agree')}</button></form>
+        <form method="post" action="/talent/applications/${esc(e.appId)}/decline?lang=${L}" style="margin:0" onsubmit="return confirm('${esc(t('confirm.declineConfirm'))}')"><button type="submit" class="btn btn-ghost cf-decline">${t('confirm.decline')}</button></form>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="cf-wrap">${cards}</div>`;
 }
 
 // Unified Talent Profile (KOL + Photographer). Man Power keeps its own dashboard.
@@ -3520,6 +3564,8 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     <div class="tp-stats">${statCells}</div>
   </div>
 
+  ${confirmationBanner(events, L)}
+
   <div class="tp-grid">
     <div class="tp-main">
       <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
@@ -3571,6 +3617,7 @@ function talentApplicationsPage({ account, events, lang }) {
   <style>${PROFILE_CSS}</style>
   <div class="tp-sec-head" style="margin-top:4px"><h2>${t('ta.applications.title')}</h2></div>
   <p class="sub" style="margin:2px 0 14px">${t('ta.applications.sub')}</p>
+  ${confirmationBanner(events, L)}
   ${applicationHistoryBlock(events, isCreator, L, { withFilter: true })}
 </div>`;
   return appLayout({ title: t('ta.applications.title') + ' — 20FIT', body, role: 'kol', active: 'applications', user: acc.name, lang: L, isKol: !!acc.isKol });
@@ -5126,9 +5173,11 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     const posControls = () => {
       const base = `/admin/applications/${esc(a.id)}`;
       const acc = choices.find((c) => c.accepted);
-      if (a.status === 'approved' && acc) {
+      if ((a.status === 'approved' || a.status === 'assigned') && acc) {
+        const confirmed = a.status === 'assigned';
         return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
-          <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posLabel(acc, L) }))}</span>
+          <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posLabel(acc, L) }))}</span>
+          ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
           <form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
         </div>`;
       }
