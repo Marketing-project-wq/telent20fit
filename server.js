@@ -792,6 +792,9 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 // accepted for (status → rejected). Lets us tell a self-decline apart from an
 // EO/admin rejection (e.g. Point 3's "not selected" pop-up skips self-declines).
 const DECLINED_BY_TALENT = 'Declined by talent';
+// Note set on a talent's OTHER apps in an event that are auto-rejected because they
+// were accepted for a different position there — also skipped by the reject pop-up.
+const AUTO_DECLINED_NOTE = 'Otomatis: kamu diterima di posisi lain pada event ini.';
 
 // Has this talent confirmed the KOL category yet? True once they have at least one
 // application to a KOL-category position (position.key === 'kol'). This gates the
@@ -832,7 +835,10 @@ async function buildAppliedEvents(st, myApps, eventById) {
       const acceptedPos = accepted ? posLabelById.get(String(accepted.position_id)) : null;
       const otherPos = accepted ? chs.filter((c) => !c.accepted).map((c) => posLabelById.get(String(c.position_id))).filter(Boolean) : [];
       const ref = (chs.length && (ev.slug || ev.id)) || null;
-      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos };
+      // rejectNotify: a genuine "not selected" rejection (skip self-declines + the
+      // auto-decline of other picks when accepted elsewhere) → drives the pop-up.
+      const rejectNotify = a.status === 'rejected' && a.note !== DECLINED_BY_TALENT && a.note !== AUTO_DECLINED_NOTE;
+      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify };
     })
     .filter(Boolean);
 }
@@ -903,6 +909,20 @@ app.post('/talent/applications/:appId/decline', requireAnyTalentBrowse(), async 
       await st.updateApplication(app.id, { status: 'rejected', note: DECLINED_BY_TALENT });
     }
     res.redirect('/talent?lang=' + req.lang + '&declined=1');
+  } catch (e) { next(e); }
+});
+
+// Mark a rejection pop-up as seen so it shows only once (Point 3). Fired when the
+// talent dismisses / clicks through the "not selected this time" pop-up on Profile.
+app.post('/talent/applications/:appId/reject-seen', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
+    if (app && app.status === 'rejected' && !app.reject_seen_at) {
+      await st.updateApplication(app.id, { reject_seen_at: new Date().toISOString() });
+    }
+    res.redirect(safeNext(req.body.next) || ('/talent?lang=' + req.lang));
   } catch (e) { next(e); }
 });
 
@@ -2341,7 +2361,7 @@ async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, revi
   const others = (apps || []).filter((a) => a.event_id === eventId && a.talent_id === talentId && a.id !== keepAppId && !['approved', 'rejected'].includes(a.status));
   for (const o of others) {
     await st.clearApplicationAccepted(o.id);
-    await st.updateApplication(o.id, { status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), note: 'Otomatis: kamu diterima di posisi lain pada event ini.' });
+    await st.updateApplication(o.id, { status: 'rejected', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), note: AUTO_DECLINED_NOTE });
   }
   return others.length;
 }

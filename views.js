@@ -3417,6 +3417,16 @@ const PROFILE_CSS = `
 .cf-agree:hover{background:#0f7a48}
 .cf-decline{color:#b91c1c}
 @media(max-width:520px){.cf-actions form{flex:1}.cf-actions .btn{width:100%}}
+/* One-time "not selected" pop-up (Point 3). */
+.rj-overlay{position:fixed;inset:0;z-index:400;background:rgba(10,12,20,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.rj-modal{position:relative;background:var(--panel);border-radius:20px;max-width:400px;width:100%;padding:32px 26px 26px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);border:1px solid var(--line)}
+.rj-close{position:absolute;top:10px;right:12px;background:none;border:0;font-size:26px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 8px;border-radius:8px}
+.rj-close:hover{color:var(--ink);background:var(--card2)}
+.rj-emoji{font-size:40px;line-height:1}
+.rj-title{font:800 20px/1.2 Barlow,sans-serif;color:var(--ink);margin-top:10px}
+.rj-body{font-size:14px;line-height:1.6;color:var(--muted);margin:12px 0 20px}
+.rj-cta{background:var(--red);color:#fff;border-color:var(--red);font-weight:800;width:100%}
+.rj-cta:hover{background:var(--red-hover)}
 `;
 
 // One application-history card: event + position + status badge + progress
@@ -3495,6 +3505,29 @@ function confirmationBanner(events, lang) {
   return `<div class="cf-wrap">${cards}</div>`;
 }
 
+// One-time "not selected this time" pop-up (Point 3). Shows the most recent
+// rejection the talent hasn't seen yet — self-declines are skipped (they chose to
+// decline). The × and the "Browse More Events" button both POST reject-seen (with a
+// different `next`), so the pop-up never shows again for that application. No JS.
+function rejectionPopup(events, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const rej = (events || []).filter((e) => e.rejectNotify && !e.rejectSeenAt && e.appId);
+  if (!rej.length) return '';
+  const e = rej[0];
+  const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+  const action = `/talent/applications/${esc(e.appId)}/reject-seen`;
+  return `<div class="rj-overlay">
+    <form class="rj-modal" method="post" action="${action}" role="dialog" aria-modal="true" aria-labelledby="rjTitle">
+      <button type="submit" name="next" value="/talent?lang=${L}" class="rj-close" aria-label="Close">&times;</button>
+      <div class="rj-emoji" aria-hidden="true">💪</div>
+      <div class="rj-title" id="rjTitle">${t('reject.title')}</div>
+      <p class="rj-body">${esc(t('reject.body', { pos: posLbl || '—', event: e.name }))}</p>
+      <button type="submit" name="next" value="/events?lang=${L}" class="btn rj-cta">${t('reject.cta')} →</button>
+    </form>
+  </div>`;
+}
+
 // Unified Talent Profile (KOL + Photographer). Man Power keeps its own dashboard.
 // Two-column: header band + real stat counts, then My events (with the shared
 // application tracker) + Certificates on the left, and Profile strength +
@@ -3565,6 +3598,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   </div>
 
   ${confirmationBanner(events, L)}
+  ${rejectionPopup(events, L)}
 
   <div class="tp-grid">
     <div class="tp-main">
