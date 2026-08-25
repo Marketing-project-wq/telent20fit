@@ -1308,7 +1308,7 @@ ${landingNav(lang, 'about')}
 </div></section>
 <div class="ab-body">${sectionsHtml}</div>
 <section class="ab-cta"><a href="/register${q}">${esc(t('land.join'))}</a></section>
-<footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/login/eo">Login EO</a></footer>
+<footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/login/eo">${esc(t('foot.eoLogin'))}</a></footer>
 </body></html>`;
 }
 
@@ -5021,27 +5021,29 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
   return layout({ title: s.title + ' — 20FIT', body, brand: 'TALENT', lang: L });
 }
 
-function performancePage(board, totalSubs) {
+function performancePage(board, totalSubs, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const rows = board.length ? board.map((e, i) => `<tr>
-    <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
-    <td data-label="KOL"><b>${esc(e.kol_name)}</b></td>
-    <td data-label="Submission">${e.submissions}</td>
-    <td data-label="Link Postingan">${e.posts}</td>
-    <td data-label="Gambar">${e.images}</td>
-    <td class="muted" data-label="Terakhir">${fmtDate(e.last)}</td>
-  </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">Belum ada data.</td></tr>`;
+    <td class="rank rank-${i + 1}" data-label="${t('perf.rank')}">${i + 1}</td>
+    <td data-label="${t('perf.kol')}"><b>${esc(e.kol_name)}</b></td>
+    <td data-label="${t('perf.submission')}">${e.submissions}</td>
+    <td data-label="${t('perf.postLink')}">${e.posts}</td>
+    <td data-label="${t('perf.image')}">${e.images}</td>
+    <td class="muted" data-label="${t('perf.last')}">${fmtDate(e.last)}</td>
+  </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">${t('perf.empty')}</td></tr>`;
 
   const body = `<div class="wrap">
-  <h1>Leaderboard KOL</h1>
-  <p class="sub">Peringkat KOL berdasarkan jumlah submission. ${totalSubs} total submission dari ${board.length} KOL.</p>
+  <h1>${t('perf.title')}</h1>
+  <p class="sub">${t('perf.sub', { subs: totalSubs, kol: board.length })}</p>
   <div class="card" style="margin-top:18px">
     <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>KOL</th><th>Submission</th><th>Link postingan</th><th>Gambar</th><th>Terakhir</th></tr></thead>
+      <thead><tr><th>#</th><th>${t('perf.kol')}</th><th>${t('perf.submission')}</th><th>${t('perf.postLink')}</th><th>${t('perf.image')}</th><th>${t('perf.last')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Leaderboard — 20FIT KOL', body, admin: 'perf' });
+  return layout({ title: 'Leaderboard — 20FIT KOL', body, admin: 'perf', lang: L });
 }
 
 /** Shown when required env config is missing. */
@@ -5055,22 +5057,25 @@ function configError(missing, lang) {
   return layout({ title: t('cfg.title') + ' — 20FIT', body, lang: L });
 }
 
-function adminNoService() {
+function adminNoService(lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const body = `<div class="wrap narrow"><div class="card">
-    <h1>Service key belum di-set</h1>
-    <div class="banner banner-warn">Halaman admin butuh <b>SUPABASE_SERVICE_ROLE_KEY</b> untuk membaca data.
-    Ambil dari Supabase dashboard → Project Settings → API → <i>service_role</i> key, lalu set di Railway.</div>
+    <h1>${t('adm.noService.title')}</h1>
+    <div class="banner banner-warn">${t('adm.noService.body')}</div>
   </div></div>`;
-  return layout({ title: 'Admin — 20FIT KOL', body, admin: 'admin' });
+  return layout({ title: 'Admin — 20FIT KOL', body, admin: 'admin', lang: L });
 }
 
-function page500(msg) {
+function page500(msg, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const body = `<div class="wrap narrow"><div class="card">
-    <h1>Terjadi kesalahan</h1>
-    <div class="banner banner-err">${esc(msg || 'Unknown error')}</div>
-    <a href="/" class="btn btn-ghost" style="margin-top:16px">Kembali ke Beranda</a>
+    <h1>${t('err500.title')}</h1>
+    <div class="banner banner-err">${esc(msg || t('err500.generic'))}</div>
+    <a href="/" class="btn btn-ghost" style="margin-top:16px">${t('err500.back')}</a>
   </div></div>`;
-  return layout({ title: 'Error — 20FIT KOL', body });
+  return layout({ title: 'Error — 20FIT KOL', body, lang: L });
 }
 
 // Badge for the prioritised-application status flow (applied → … → completed / rejected).
@@ -5221,10 +5226,13 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     // Only for positions with a real (limited) quota; unlimited & manually-closed
     // positions skip it. Counts are live (p.filled = approved, per eoEventView).
     const limited = (p.quota || 0) > 0 && p.quota < 100000;
+    const strong = (v) => `<b style="color:var(--ink)">${v}</b>`;
+    // One line, no redundancy: how many talents this position needs (the EO's
+    // quota) + how many slots remain open right now (quota − approved).
     const quotaLine = (limited && !p.closed_at)
       ? ((p.full || left <= 0)
           ? `<div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--err,#d32f2f);background:var(--err-soft,#fdecea);border-radius:8px;padding:5px 11px">🚫 ${t('ta.slotsFull')}</div>`
-          : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 <b style="color:var(--ink)">${t('ta.quota')}:</b> ${p.quota} · <b style="color:var(--ink)">${t('ta.slotsLeft')}:</b> ${left}</div>`)
+          : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.needed', { n: strong(p.quota) })} · ${t('ta.slotsLeft')}: ${strong(left)}</div>`)
       : '';
     const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`

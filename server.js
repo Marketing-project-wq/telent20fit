@@ -3171,7 +3171,7 @@ app.get('/performance', auth.requireStaff(['super_admin']), async (req, res, nex
       map.set(s.kol_name, e);
     });
     const board = [...map.values()].sort((a, b) => b.submissions - a.submissions || b.posts - a.posts);
-    res.send(V.performancePage(board, subs.length));
+    res.send(V.performancePage(board, subs.length, req.lang));
   } catch (e) { next(e); }
 });
 
@@ -3182,11 +3182,12 @@ app.get('/__mockimg/*', (req, res) => { res.type('png').send(PX); });
 // -------------------------------------------------------------- fallbacks ----
 
 app.use((err, req, res, next) => {
-  let msg = err.message || 'Terjadi kesalahan.';
-  if (err.code === 'LIMIT_FILE_SIZE') msg = 'Ukuran gambar terlalu besar (maks 6 MB per file).';
-  if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') msg = 'Maksimal ' + MAX_IMAGES + ' gambar.';
+  const t = req.t || ((k, v) => i18n.t('id', k, v));
+  let msg = err.message || t('err500.generic');
+  if (err.code === 'LIMIT_FILE_SIZE') msg = t('err500.fileSize');
+  if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') msg = t('err500.fileCount', { n: MAX_IMAGES });
   console.error('[error]', err.code || '', err.message);
-  res.status(500).send(V.page500(msg));
+  res.status(500).send(V.page500(msg, req && req.lang));
 });
 
 app.listen(PORT, HOST, () => {
