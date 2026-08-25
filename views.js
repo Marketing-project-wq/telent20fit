@@ -417,6 +417,18 @@ const NAV_CSS = `
   .lp-search.lp-search--open .lp-loc-menu{position:static;box-shadow:none;border:1px solid var(--lp-line);margin-top:8px;max-height:40vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
+/* Account dropdown — logged-in state: initial avatar + name, plus the menu's logout button.
+   (These mirror the landing page's inline copy so publicLayout + the talent dashboard header
+   render the signed-in account control identically.) */
+.lp-acct-av{width:24px;height:24px;flex:0 0 auto;border-radius:50%;background:#fff;color:var(--red);font:800 12px/1 Barlow,sans-serif;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
+.lp-acct-name{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-acct-menu form{margin:0}
+.lp-acct-menu button{display:block;width:100%;text-align:left;padding:11px 13px;margin-top:4px;border:0;border-top:1px solid var(--lp-line);background:none;cursor:pointer;font:600 14px/1 Barlow,sans-serif;color:var(--red);border-radius:0 0 7px 7px}
+.lp-acct-menu button:hover{background:var(--lp-chip)}
+/* Optional Back control (dashboard header): far left of the nav row. */
+.lp-nav-back{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:10px;font:700 14px/1 Barlow,sans-serif;white-space:nowrap}
+.lp-nav-back:hover{background:var(--lp-chip);color:var(--lp-tx)}
+@media(max-width:600px){.lp-acct-name{display:none}.lp-acct-user>summary .lp-acct-av{display:flex}.lp-nav-back span{display:none}.lp-nav-back{padding:9px 11px}}
 `;
 
 // FAQ accordion CSS, shared by the landing page and the auth/register page so the
@@ -538,15 +550,13 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/talent', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
-  // Top bar carries the brand + the user/logout that used to sit in the sidebar
-  // foot; navigation itself lives in the bottom bar. Exit/Logout and (for staff)
-  // the language toggle move up here since the bottom is now for nav only.
-  const acctBtn = isStaff
-    ? `<form method="post" action="${logoutAction}"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>`
-    : `<a href="/?lang=${L}" class="btn btn-ghost btn-sm" aria-label="${t('sidebar.back')}"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>${t('sidebar.back')}</a>`;
+  // Talent pages reuse the public landingNav header (logo + ID/EN toggle + account
+  // dropdown) so the dashboard matches the Events pages — so the head also pulls in
+  // NAV_CSS (the .lp-* header rules) + Barlow. Both are inert on staff pages.
   const head = `<!doctype html><html lang="${L}" data-theme="light"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>`;
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<title>${esc(title)}</title><style>${STYLE}${NAV_CSS}</style>${THEME_HEAD}</head>`;
   if (isStaff) {
     // Admin / EO keep the original left sidebar (off-canvas drawer on mobile).
     return `${head}
@@ -574,14 +584,7 @@ function appLayout({ title, body, role, active, user, lang }) {
   // Talent: sticky top bar + bottom nav bar (mobile-app style).
   return `${head}
 <body class="app-body talent-app">
-<header class="app-top">
-  <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
-  <div class="app-top-right">
-    ${langToggle(L)}
-    <div class="app-user"><b>${esc(user || '')}</b><span>${roleLabel}</span></div>
-    ${acctBtn}
-  </div>
-</header>
+${landingNav(L, active, user ? { name: user } : null, { search: false, home: `${homeHref}?lang=${L}`, back: `/?lang=${L}` })}
 <div class="app-main">
   ${body}
 </div>
@@ -1235,8 +1238,13 @@ function landingNav(lang, active, account, opts = {}) {
       </form>
       <div class="lp-search-menu" role="listbox" aria-label="${esc(t('search.aria'))}"></div>
     </div>${searchScript}` : '';
+  // Optional Back control (opt-in via opts.back) sits at the far left — used by the
+  // talent dashboard header. Optional opts.home overrides the logo link (default: landing).
+  const back = opts.back ? `<a href="${opts.back}" class="lp-nav-back" aria-label="${esc(t('sidebar.back'))}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>${esc(t('sidebar.back'))}</span></a>` : '';
+  const logoHref = opts.home || `/${q}`;
   return `<header class="lp-nav"><div class="lp-nav-in">
-    <a href="/${q}" class="lp-nav-logo" aria-label="20FIT">
+    ${back}
+    <a href="${logoHref}" class="lp-nav-logo" aria-label="20FIT">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </a>
