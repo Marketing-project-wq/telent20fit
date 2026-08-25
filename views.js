@@ -534,6 +534,7 @@ function appLayout({ title, body, role, active, user, lang }) {
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
       : navLink('/acara', 'event', active, 'event', t('nav.events'))
+        + navLink('/talent/applications', 'applications', active, 'applications', t('nav.myApps'))
         + navLink('/talent', 'profil', active, 'profile', t('nav.profile'))
         + navLink('/kirim-bukti', 'proofs', active, 'proofs', t('nav.proofs'));
 
@@ -3350,6 +3351,55 @@ const PROFILE_CSS = `
 @media(max-width:620px){.tp-stats{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
 `;
 
+// One application-history card: event + position + status badge + progress
+// tracker + any explanation note, and a footer with "View event" (while still at
+// the Applied stage) or the KOL-only "Upload proof". Shared by the Talent Profile
+// summary and the Applications page so both look identical.
+function applicationCard(e, isCreator, L) {
+  const t = (k, v) => tr(L, k, v);
+  const evDate = (x) => { const s = x.starts_at ? fmtDay(x.starts_at) : ''; const en = x.ends_at && String(x.ends_at) !== String(x.starts_at) ? fmtDay(x.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
+  const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
+  // Upload proof is a KOL-only feature (social-media post proof via OCR+LLM), so
+  // only for applications whose position category is KOL — not Man Power / Photographer.
+  const catIsKol = e.position ? (e.position.key === 'kol') : (String(e.role || '').trim().toLowerCase() === 'kol');
+  const canProof = isCreator && catIsKol && ['approved', 'assigned', 'completed'].includes(e.status);
+  // "View event" only shows while still at the initial "Applied" stage.
+  const isApplied = !e.status || ['applied', 'pending'].includes(e.status);
+  const footBtns = [];
+  if (e.ref && isApplied) footBtns.push([`/event/${esc(e.ref)}?lang=${L}`, t('tp.eventBrief')]);
+  if (canProof) footBtns.push([`/kirim-bukti?lang=${L}`, t('tp.uploadProof')]);
+  const foot = footBtns.map(([href, label]) => `<a href="${href}" class="btn btn-ghost btn-sm${footBtns.length === 1 ? ' btn-block' : ''}">${label}</a>`).join('');
+  return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
+      <div class="tp-ev-top">
+        <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? `<span class="tp-ev-pos">${esc(posLbl)}</span> · ` : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
+        ${talentStatusBadge(e.status, L)}
+      </div>
+      ${applicationTracker(e.status, L)}
+      ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
+      ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
+      ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
+      ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
+    </div>`;
+}
+// Application-history list: optional status-filter chips (+ client script) and the
+// cards. `opts.withFilter` toggles the filter; `opts.limit` caps the card count
+// (profile summary shows 2). Shared by the profile and /talent/applications.
+function applicationHistoryBlock(events, isCreator, L, opts = {}) {
+  const t = (k, v) => tr(L, k, v);
+  const evs = events || [];
+  if (!evs.length) return `<div class="card" style="margin-top:12px"><p class="muted" style="margin:0">${t('ta.history.empty')}</p></div>`;
+  const withFilter = opts.withFilter !== false;
+  const list = opts.limit ? evs.slice(0, opts.limit) : evs;
+  const histStatuses = [...new Set(evs.map((e) => e.status).filter(Boolean))];
+  const filter = (withFilter && evs.length > 3 && histStatuses.length > 1)
+    ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div>`
+    : '';
+  const cards = list.map((e) => applicationCard(e, isCreator, L)).join('');
+  const script = filter ? `<script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.tp-evcard.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>` : '';
+  return `${filter}${cards}${script}`;
+}
+
 // Unified Talent Profile (KOL + Photographer). Man Power keeps its own dashboard.
 // Two-column: header band + real stat counts, then My events (with the shared
 // application tracker) + Certificates on the left, and Profile strength +
@@ -3378,46 +3428,11 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   const statCells = [[sc.events, t('tp.stat.events')], [sc.approved, t('tp.stat.approved')], [sc.proofs, t('tp.stat.proofs')], [sc.certs, t('tp.stat.certs')]]
     .map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
 
-  // My events (application history) — one card per application, newest first.
-  const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
-  const histStatuses = [...new Set((events || []).map((e) => e.status).filter(Boolean))];
-  const histFilter = (events && events.length > 3 && histStatuses.length > 1)
-    ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div>`
-    : '';
-  const histCards = (events || []).map((e) => {
-    const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
-    const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
-    // Upload proof is a KOL-only feature (social-media post proof via OCR+LLM),
-    // so only offer it for applications whose position category is KOL — not for
-    // Man Power / Photographer positions.
-    const catIsKol = e.position ? (e.position.key === 'kol') : (String(e.role || '').trim().toLowerCase() === 'kol');
-    const canProof = isCreator && catIsKol && ['approved', 'assigned', 'completed'].includes(e.status);
-    // "View event" only shows while the application is still at the initial
-    // "Applied" stage. Once it moves past that (under review / approved /
-    // assigned / completed / rejected), the card shows just the status-relevant
-    // action (e.g. Upload proof) — or nothing if none applies yet.
-    const isApplied = !e.status || ['applied', 'pending'].includes(e.status);
-    const footBtns = [];
-    if (e.ref && isApplied) footBtns.push([`/event/${esc(e.ref)}?lang=${L}`, t('tp.eventBrief')]);
-    if (canProof) footBtns.push([`/kirim-bukti?lang=${L}`, t('tp.uploadProof')]);
-    const foot = footBtns
-      .map(([href, label]) => `<a href="${href}" class="btn btn-ghost btn-sm${footBtns.length === 1 ? ' btn-block' : ''}">${label}</a>`)
-      .join('');
-    return `<div class="tp-evcard ta-hist" data-status="${esc(e.status || '')}">
-      <div class="tp-ev-top">
-        <div style="min-width:0">${kicker ? `<div class="tp-ev-kicker">${kicker}</div>` : ''}<div class="tp-ev-name">${esc(e.name)}</div><div class="tp-ev-date">${posLbl ? `<span class="tp-ev-pos">${esc(posLbl)}</span> · ` : ''}${esc(evDate(e))}${e.station ? ' · ' + esc(e.station) : ''}</div></div>
-        ${talentStatusBadge(e.status, L)}
-      </div>
-      ${applicationTracker(e.status, L)}
-      ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
-      ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
-      ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
-      ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
-    </div>`;
-  }).join('');
+  // Application history — a short summary here (the 2 most recent); the full list
+  // with the status filter lives on the dedicated /talent/applications page.
   const histBlock = (events && events.length)
-    ? `${histFilter}${histCards}<script>(function(){var chips=[].slice.call(document.querySelectorAll('.ta-hist-filter .ev-chip')),rows=[].slice.call(document.querySelectorAll('.tp-evcard.ta-hist'));chips.forEach(function(c){c.addEventListener('click',function(){var f=c.getAttribute('data-f');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});rows.forEach(function(r){r.style.display=(!f||r.getAttribute('data-status')===f)?'':'none';});});});})();</script>`
-    : `<div class="card" style="margin-top:12px"><p class="muted" style="margin:0">${t('ta.history.empty')}</p></div>`;
+    ? `${applicationHistoryBlock(events, isCreator, L, { withFilter: false, limit: 2 })}<div style="margin-top:12px"><a href="/talent/applications?lang=${L}" class="btn btn-ghost btn-sm btn-block">${t('tp.viewAllApps')} →</a></div>`
+    : applicationHistoryBlock(events, isCreator, L, {});
 
   // Certificates — real list, or the "auto-issued" placeholder.
   const certBlock = (certs && certs.length)
@@ -3495,6 +3510,23 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   <form method="post" action="/logout" style="margin-top:26px;max-width:340px"><button class="btn btn-ghost btn-block">${t('nav.logout')}</button></form>
 </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L });
+}
+
+// Dedicated "My Applications" page for creator talents (bottom-nav item). The full
+// application history + status filter, moved out of the profile (which now shows a
+// 2-item summary + a link here). Reuses applicationHistoryBlock() so cards match.
+function talentApplicationsPage({ account, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const acc = account || {};
+  const isCreator = acc.talent_type === 'kol';
+  const body = `<div class="wrap" style="max-width:860px">
+  <style>${PROFILE_CSS}</style>
+  <div class="tp-sec-head" style="margin-top:4px"><h2>${t('ta.applications.title')}</h2></div>
+  <p class="sub" style="margin:2px 0 14px">${t('ta.applications.sub')}</p>
+  ${applicationHistoryBlock(events, isCreator, L, { withFilter: true })}
+</div>`;
+  return appLayout({ title: t('ta.applications.title') + ' — 20FIT', body, role: 'kol', active: 'applications', user: acc.name, lang: L });
 }
 
 /**
@@ -5693,7 +5725,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 
 module.exports = {
   talentStatusBadge, talentOpenEvents, talentEventApply,
-  esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, kolEventsPage,
+  esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,

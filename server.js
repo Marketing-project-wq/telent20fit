@@ -786,6 +786,34 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
 // req.account (full profile) is attached by requireTalentReady.
 // Unified talent home. Dispatches by session type: Man Power sees the
 // self-apply dashboard; KOL / photographer see the profile + history page.
+// Build a talent's application history (one entry per application): resolve each
+// application's chosen/accepted position + ranked picks against the event. Shared
+// by the Talent Profile (summary) and the /talent/applications page.
+async function buildAppliedEvents(st, myApps, eventById) {
+  const choices = await st.listApplicationChoices();
+  const choicesByApp = new Map();
+  choices.forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+  const posLabelById = new Map();
+  for (const evId of [...new Set(myApps.map((a) => a.event_id))]) {
+    (await st.listEventPositions(evId)).forEach((p) => posLabelById.set(String(p.position_id), p));
+  }
+  return myApps
+    .map((a) => {
+      const ev = eventById.get(a.event_id);
+      if (!ev) return null;
+      const chs = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
+      const accepted = chs.find((c) => c.accepted) || null;
+      const primary = accepted || chs[0] || null;
+      const position = primary ? posLabelById.get(String(primary.position_id)) : null;
+      const picks = chs.map((c) => ({ priority: c.priority, accepted: !!c.accepted, pos: posLabelById.get(String(c.position_id)) || null }));
+      const acceptedPos = accepted ? posLabelById.get(String(accepted.position_id)) : null;
+      const otherPos = accepted ? chs.filter((c) => !c.accepted).map((c) => posLabelById.get(String(c.position_id))).filter(Boolean) : [];
+      const ref = (chs.length && (ev.slug || ev.id)) || null;
+      return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos };
+    })
+    .filter(Boolean);
+}
+
 app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
@@ -797,32 +825,8 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
     await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
     const [certs, proofs] = await Promise.all([st.listCertificatesForTalent(req.talent.id), st.listProofsForTalent(req.talent.id)]);
     // Per-position application history (one application = one position now):
-    // resolve each application's single chosen position label for the profile list.
-    const choices = await st.listApplicationChoices();
-    const choicesByApp = new Map();
-    choices.forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
-    const posLabelById = new Map();
-    for (const evId of [...new Set(myApps.map((a) => a.event_id))]) {
-      (await st.listEventPositions(evId)).forEach((p) => posLabelById.set(String(p.position_id), p));
-    }
-    const appliedEvents = myApps
-      .map((a) => {
-        const ev = eventById.get(a.event_id);
-        if (!ev) return null;
-        // One application now holds 1-3 ranked choices. Display the accepted
-        // position when approved, else the top (choice 1) pick; expose the full
-        // ranked list + which picks were dropped for the dashboard explanation.
-        const chs = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
-        const accepted = chs.find((c) => c.accepted) || null;
-        const primary = accepted || chs[0] || null;
-        const position = primary ? posLabelById.get(String(primary.position_id)) : null;
-        const picks = chs.map((c) => ({ priority: c.priority, accepted: !!c.accepted, pos: posLabelById.get(String(c.position_id)) || null }));
-        const acceptedPos = accepted ? posLabelById.get(String(accepted.position_id)) : null;
-        const otherPos = accepted ? chs.filter((c) => !c.accepted).map((c) => posLabelById.get(String(c.position_id))).filter(Boolean) : [];
-        const ref = (chs.length && (ev.slug || ev.id)) || null;
-        return { name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos };
-      })
-      .filter(Boolean);
+    // resolve each application's chosen position + ranked picks against the event.
+    const appliedEvents = await buildAppliedEvents(st, myApps, eventById);
     // Real, countable profile stats (no fabricated ratings).
     const stats = {
       events: appliedEvents.length,
@@ -831,6 +835,21 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
       certs: certs.length,
     };
     res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Dedicated "Applications" page (creator talents): the full application history
+// timeline moved out of the Profile page, with a status filter. Man Power keeps
+// its self-apply list on /talent, so bounce it back there.
+app.get('/talent/applications', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    if (req.talent.type === 'main_power') return res.redirect('/talent?lang=' + req.lang);
+    const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
+    const eventById = new Map(events.map((e) => [e.id, e]));
+    const appliedEvents = await buildAppliedEvents(st, myApps, eventById);
+    res.send(V.talentApplicationsPage({ account: req.account, events: appliedEvents, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
