@@ -1869,53 +1869,80 @@ app.post('/eo/profile', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// EO: cross-event talent directory — every applicant to this EO's own events,
-// filtered by category (KOL / Photographer+Videographer / Manpower). Read-only
-// listing reached from the sidebar; accept/reject still happens per event.
+// EO: the Applicants manager (sidebar "Talents"). Gathers every applicant to
+// this EO's own events, with their ranked position choices, live status,
+// contact + profile, and per-position quota (for the accept buttons). Opening
+// this page also moves this EO's fresh applications to "under review", mirroring
+// the old per-event applicant list. ?event=<id> pre-selects that event's filter.
 app.get('/eo/talents', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'kol';
-    const [events, apps, choicesAll, talents, positions] = await Promise.all([
+    const [allEvents, apps, choicesAll, talents, master] = await Promise.all([
       st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
     ]);
-    const myEventIds = new Set(events.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
-    const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const mine = allEvents.filter((e) => e.created_by === req.staff.id)
+      .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
+    const myIds = new Set(mine.map((e) => e.id));
+    const eventName = new Map(mine.map((e) => [e.id, e.name]));
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
-    const posById = new Map(positions.map((p) => [p.id, p]));
+    const posMaster = new Map(master.map((p) => [p.id, p]));
     const choicesByApp = new Map();
     (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
-    // Category from the primary (P1) position, falling back to talent_type —
-    // identical rule to /admin/applications and the per-event applicant filter.
-    const catOf = (key) => (key === 'kol' ? 'kol' : (key === 'fotografer' || key === 'videografer' ? 'creative' : 'man_power'));
-    const counts = { kol: 0, creative: 0, man_power: 0 };
-    const rows = [];
+
+    // Move applied/pending -> under_review for this EO's applications that carry
+    // choices (idempotent; same transition the per-event list used to do), and
+    // notify each talent once.
+    const nowUR = [];
     for (const a of apps) {
-      if (!myEventIds.has(a.event_id)) continue;
+      if (myIds.has(a.event_id) && (a.status === 'applied' || a.status === 'pending') && (choicesByApp.get(a.id) || []).length) {
+        await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review'; nowUR.push(a);
+      }
+    }
+    for (const a of nowUR) {
+      const tt = talentById.get(a.talent_id) || {}; const to = tt.login; if (!to || !/@/.test(to)) continue;
+      const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
+      const pos = top && posMaster.get(top.position_id);
+      const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
+      mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: eventName.get(a.event_id) || 'Event 20FIT', positionName, eventDate: eventDateStrEn(mine.find((e) => e.id === a.event_id) || {}) })
+        .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
+    }
+
+    // accepted count per (event|position) so full positions disable their accept button.
+    const acceptedCount = new Map();
+    const appEvent = new Map(apps.map((a) => [a.id, a.event_id]));
+    (choicesAll || []).forEach((c) => { if (!c.accepted) return; const eid = appEvent.get(c.application_id); if (!myIds.has(eid)) return; const k = eid + '|' + c.position_id; acceptedCount.set(k, (acceptedCount.get(k) || 0) + 1); });
+    const evPositions = new Map();
+    await Promise.all([...myIds].map(async (eid) => evPositions.set(eid, await st.listEventPositions(eid))));
+
+    const applicants = [];
+    const posKeySeen = new Map();
+    for (const a of apps) {
+      if (!myIds.has(a.event_id)) continue;
       const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
       if (!ch.length) continue;
       const tt = talentById.get(a.talent_id) || {};
-      const p1pos = posById.get(ch[0].position_id) || {};
-      const category = catOf(p1pos.key || tt.talent_type || '');
-      counts[category] = (counts[category] || 0) + 1;
-      if (category !== cat) continue;
-      const acc = ch.find((c) => c.accepted);
-      const shown = (acc && posById.get(acc.position_id)) || p1pos;
-      rows.push({
-        name: tt.name || '—',
-        type: tt.talent_type || a.talent_type || null,
-        position: { label_id: shown.label_id, label_en: shown.label_en, key: shown.key },
-        accepted: !!acc,
-        eventId: a.event_id,
-        eventName: eventName.get(a.event_id) || '—',
-        status: a.status || 'applied',
-        profile: tt,
-        createdAt: a.created_at,
+      const evPosById = new Map((evPositions.get(a.event_id) || []).map((p) => [p.position_id, p]));
+      const choices = ch.map((c) => {
+        const mp = posMaster.get(c.position_id) || {};
+        const ep = evPosById.get(c.position_id) || {};
+        const quota = ep.quota || 0;
+        const full = quota > 0 && !c.accepted && (acceptedCount.get(a.event_id + '|' + c.position_id) || 0) >= quota;
+        const key = mp.key || '';
+        if (key && !posKeySeen.has(key)) posKeySeen.set(key, { key, label_id: mp.label_id, label_en: mp.label_en });
+        return { priority: c.priority, position_id: c.position_id, key, label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
+      });
+      applicants.push({
+        id: a.id, eventId: a.event_id, eventName: eventName.get(a.event_id) || '—',
+        name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
+        phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
+        hyroxStatus: tt.hyrox_cert_status || 'none', profile: tt,
+        status: a.status || 'applied', createdAt: a.created_at, choices,
       });
     }
-    rows.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
-    res.send(V.eoTalents({ staff: eoCtx(req), rows, cat, counts, lang: req.lang }));
+    applicants.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
+    const selectedEvent = myIds.has(String(req.query.event || '')) ? String(req.query.event) : '';
+    res.send(V.eoApplicantsPage({ staff: eoCtx(req), events: mine.map((e) => ({ id: e.id, name: e.name })), applicants, positionsUnion: [...posKeySeen.values()], selectedEvent, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2238,6 +2265,7 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     const found = await eoOwnedApplication(st, req.staff.id, req.params.id, req.params.appId);
     if (!found) return res.redirect('/eo/events');
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
+    const next = safeNext(req.body.next); // e.g. /eo/talents when acting from the Applicants page
     const positionId = String(req.body.position_id || '');
     const outcome = await withEventLock(found.ev.id, async () => {
       const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -2258,9 +2286,9 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
       if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
       return 'ok';
     });
-    if (outcome === 'full') return res.redirect(backTo + '&err=full');
-    if (outcome === 'skip') return res.redirect(backTo);
-    res.redirect(backTo + '&ok=accepted');
+    if (outcome === 'full') return res.redirect(next || (backTo + '&err=full'));
+    if (outcome === 'skip') return res.redirect(next || backTo);
+    res.redirect(next || (backTo + '&ok=accepted'));
   } catch (e) { next(e); }
 });
 
@@ -2275,7 +2303,7 @@ app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, 
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     if (!wasRejected) notifyPositionRejection(st, found.app, found.ev).catch((e) => console.error('[mail] EO rejection email failed:', e && e.message));
-    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected');
+    res.redirect(safeNext(req.body.next) || ('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected'));
   } catch (e) { next(e); }
 });
 
@@ -2288,7 +2316,7 @@ app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, n
     if (!found) return res.redirect('/eo/events');
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
-    res.redirect('/eo/events/' + found.ev.id + '?lang=' + req.lang);
+    res.redirect(safeNext(req.body.next) || ('/eo/events/' + found.ev.id + '?lang=' + req.lang));
   } catch (e) { next(e); }
 });
 

@@ -266,8 +266,11 @@ tr:last-child td{border-bottom:none}
 .linklist a{display:block;font-size:13px;word-break:break-all;margin-bottom:2px}
 .inline-form{display:inline}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:36px 0 0}
-@media(max-width:899px){
-  /* Staff (admin/EO) only: the sidebar collapses into an off-canvas drawer with a hamburger top bar */
+@media(max-width:767px){
+  /* Staff (admin/EO) only: the sidebar collapses into an off-canvas drawer with a hamburger top bar.
+     Kept as high as tablet-portrait only — every wider screen (small laptops, split-screen windows,
+     tablet landscape) keeps the full sidebar visible on EVERY dashboard page, so no menu ever
+     "disappears" when navigating between Dashboard / Events / Talents / etc. */
   .sidebar{transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 0 44px rgba(0,0,0,.6);width:252px}
   .nav-cb:checked ~ .sidebar{transform:none}
   .nav-scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150}
@@ -2768,8 +2771,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
   <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
   ${positionStatsChart(view.positions, L)}
-  ${eoApplicantsSection(e, view, aps, L)}
-</div>${eoApplicantsScript()}`;
+  <div style="margin-top:22px"><a href="/eo/talents?event=${esc(e.id)}&lang=${L}" class="btn btn-sm">👥 ${t('eo.ev.viewApplicants')}${view.applyCount ? ` (${view.applyCount})` : ''}</a></div>
+</div>`;
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'eo', active: 'events', user: staff.name, lang: L });
 }
 
@@ -2933,76 +2936,161 @@ function eoApplicantsScript() {
 </script>`;
 }
 
-// EO: every talent who applied to this EO's own events, filtered by category
-// (KOL / Photographer+Videographer / Manpower) across ALL their events — a
-// cross-event version of the per-event applicant panel, reached from the
-// sidebar. Read-only: accept/reject still happens inside each event.
-function eoTalents({ staff, rows, cat, counts, lang }) {
+// EO: the single Applicants manager — every talent who applied to this EO's own
+// events, across ALL of them, reached from the sidebar "Talents" item. Full
+// review controls (approve / reject / undo) plus filters: Event, Position,
+// Talent Category, status, and a By-talent / By-position toggle. This is now the
+// one place applicants are managed; the per-event detail page just links here.
+function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const TABS = [
-    { key: 'kol', label: t('filter.cat.kol') },
-    { key: 'creative', label: t('filter.cat.creative') },
-    { key: 'man_power', label: t('filter.cat.manpower') },
-  ];
-  const tabBar = TABS.map((tb) => {
-    const on = tb.key === cat;
-    const n = counts[tb.key] || 0;
-    return `<a href="/eo/talents?cat=${tb.key}&lang=${L}" class="ev-chip${on ? ' is-on' : ''}" style="text-decoration:none">${esc(tb.label)} <span style="opacity:.65;font-weight:600">(${n})</span></a>`;
+  const aps = applicants || [];
+  const evs = events || [];
+  const selEv = selectedEvent || '';
+  const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
+  const catOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'));
+
+  const choiceChips = (choices, status) => choices.map((c) => {
+    const on = c.accepted;
+    const closed = !on && status === 'approved';
+    const style = on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : (closed ? ';opacity:.5;text-decoration:line-through' : '');
+    const title = on ? esc(t('eo.ap.acceptedHere')) : (closed ? esc(t('ta.autoClosed')) : '');
+    return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}" title="${title}">P${c.priority} · ${esc(posOf(c))}${on ? ' ✓' : ''}</span>`;
   }).join('');
-  const rowsHtml = (rows || []).map((r) => `<div class="card ap-item" data-status="${esc(r.status)}" data-search="${esc((r.name || '').toLowerCase())}" style="margin-top:10px;padding:13px 15px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div style="min-width:0">
-        <b style="font-size:15px">${esc(r.name)}</b>${r.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, r.type))}</span>` : ''}
-        <div class="muted" style="font-size:12.5px;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <span class="tag" style="margin:0">${esc(posLabel(r.position, L))}${r.accepted ? ' ✓' : ''}</span>
-          <span aria-hidden="true">·</span>
-          <a href="/eo/events/${esc(r.eventId)}?lang=${L}" style="font-weight:700;color:var(--ink)">${esc(r.eventName)}</a>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(r.profile, L)}${talentStatusBadge(r.status, L)}</div>
-    </div>
-  </div>`).join('');
-  const statuses = Array.from(new Set((rows || []).map((r) => r.status)));
-  const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
-  const statusChips = sChip('all', t('eo.ap.filterAll'), true) + statuses.map((s) => sChip(s, t('ta.status.' + s), false)).join('');
-  const listBlock = (rows && rows.length)
-    ? `<div class="card" style="margin-top:14px;padding:12px 14px">
-        <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
-        <div class="muted" style="font-size:12px;margin-top:10px">${t('eo.talents.count', { n: rows.length })}</div>
-      </div>
-      <div id="apTalent">${rowsHtml}</div>
-      <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`
-    : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.talents.empty')}</p></div>`;
-  const body = `<div class="wrap">
-    <h1 style="margin:0">${t('eo.talents.title')}</h1>
-    <p class="sub" style="margin:4px 0 0">${t('eo.talents.sub')}</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">${tabBar}</div>
-    ${listBlock}
-  </div>
-  <script>
-  (function(){
-    var search=document.getElementById('apSearch'); if(!search) return;
-    var noMatch=document.getElementById('apNoMatch'), box=document.getElementById('apTalent');
-    var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
-    var flt='all';
-    function apply(){
-      var q=search.value.trim().toLowerCase();
-      var items=box?[].slice.call(box.querySelectorAll('.ap-item')):[];
-      var shown=0;
-      items.forEach(function(it){
-        var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
-        var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
-        var vis=okS&&okQ; it.style.display=vis?'':'none'; if(vis)shown++;
-      });
-      if(noMatch)noMatch.style.display=(shown===0)?'':'none';
+  const contactLine = (a) => { const b = []; if (a.phone) b.push(`📱 ${esc(a.phone)}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; };
+  const hyroxBadge = (a) => { if (a.hyroxStatus === 'verified') return `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>`; if (a.hyroxStatus === 'pending') return `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>`; return ''; };
+  // Approve (per still-open chosen position) / reject / undo. The forms post to
+  // the event-scoped routes using the applicant's own event id, with next=
+  // /eo/talents so the EO returns to this page.
+  const decision = (a) => {
+    const base = `/eo/events/${esc(a.eventId)}/applicants/${esc(a.id)}`;
+    const nx = '<input type="hidden" name="next" value="/eo/talents">';
+    const acc = a.choices.find((c) => c.accepted);
+    if (a.status === 'approved' && acc) {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <span class="pill pill-ok">✓ ${esc(t('eo.ap.acceptedAs', { pos: posOf(acc) }))}</span>
+        <form class="inline-form" method="post" action="${base}/reset">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
     }
-    search.addEventListener('input',apply);
-    statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
-  })();
-  </script>`;
-  return appLayout({ title: t('eo.talents.title') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
+    if (a.status === 'rejected') {
+      return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <form class="inline-form" method="post" action="${base}/reset">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      </div>`;
+    }
+    const acceptBtns = a.choices.map((c) => c.full
+      ? `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posOf(c))} · ${t('eo.ap.posFull')}</button>`
+      : `<form class="inline-form" method="post" action="${base}/accept"><input type="hidden" name="position_id" value="${esc(c.position_id)}">${nx}<button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posOf(c))}</button></form>`).join('');
+    return `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${acceptBtns}
+        <form class="inline-form" method="post" action="${base}/reject" ${jsConfirm(t('eo.ap.rejectConfirm'))}>${nx}<button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
+      </div>
+    </div>`;
+  };
+  const dataAttrs = (a) => { const k = (a.choices[0] && a.choices[0].key) || ''; return `data-status="${esc(a.status)}" data-p1pos="${esc(k)}" data-category="${catOf(k)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`; };
+
+  const talentCards = aps.map((a) => `<div class="card ap-item" ${dataAttrs(a)} style="margin-top:12px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}
+        <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
+    </div>
+    ${contactLine(a)}${hyroxBadge(a)}
+    <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
+    ${decision(a)}
+  </div>`).join('');
+
+  // By-position: group across events by position key.
+  const posGroups = (positionsUnion || []).map((p) => {
+    const rows = [];
+    aps.forEach((a) => { const c = a.choices.find((x) => x.key === p.key); if (c) rows.push({ a, c }); });
+    rows.sort((x, y) => x.c.priority - y.c.priority);
+    const list = rows.length ? rows.map(({ a, c }) => `<div class="dl-item ap-item" ${dataAttrs(a)} style="align-items:center">
+      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b> <span class="muted" style="font-size:12px">· ${esc(a.eventName)}</span>${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
+      ${talentStatusBadge(a.status, L)}
+    </div>`).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
+    return `<div class="card pos-group" style="margin-top:12px;padding:14px 16px">
+      <div style="font-weight:700">${esc(posLabel(p, L))}</div>
+      <div class="dl-list" style="margin-top:8px">${list}</div>
+    </div>`;
+  }).join('');
+
+  const present = new Set(aps.map((a) => a.status));
+  const STATUS_ORDER = ['under_review', 'pending', 'applied', 'approved', 'assigned', 'completed', 'rejected'];
+  const sChip = (v, label, on) => `<button type="button" class="ev-chip${on ? ' is-on' : ''}" data-apstatus="${esc(v)}">${esc(label)}</button>`;
+  const statusChips = sChip('all', t('eo.ap.filterAll'), true) + STATUS_ORDER.filter((s) => present.has(s)).map((s) => sChip(s, t('ta.status.' + s), false)).join('');
+  const evOpts = `<option value="">${esc(t('filter.allEvents'))}</option>` + evs.map((e) => `<option value="${esc(e.id)}"${e.id === selEv ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+  const posOpts = `<option value="">${esc(t('filter.allPositions'))}</option>` + (positionsUnion || []).map((p) => `<option value="${esc(p.key)}">${esc(posLabel(p, L))}</option>`).join('');
+  const catOpts = `<option value="">${esc(t('filter.allCategories'))}</option><option value="kol">${esc(t('filter.cat.kol'))}</option><option value="creative">${esc(t('filter.cat.creative'))}</option><option value="manpower">${esc(t('filter.cat.manpower'))}</option>`;
+
+  const controls = `<div class="card" style="margin-top:16px;padding:12px 14px">
+    <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.event')}<select id="apEventFilter" style="min-width:170px;max-width:240px">${evOpts}</select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="apPosFilter" style="min-width:140px">${posOpts}</select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="apCatFilter" style="min-width:140px">${catOpts}</select></label>
+      <button type="button" id="apReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button type="button" class="ev-chip is-on" data-aptab="talent">${t('eo.ap.byTalent')}</button>
+      <button type="button" class="ev-chip" data-aptab="position">${t('eo.ap.byPosition')}</button>
+    </div>
+  </div>`;
+
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('nav.talents'), L)}
+  <p class="sub">${t('eo.ap.pageSub')}</p>
+  ${!aps.length
+    ? `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.ap.noneAll')}</p></div>`
+    : `${controls}
+  <div id="apTalent">${talentCards}</div>
+  <div id="apPosition" style="display:none">${posGroups}</div>
+  <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`}
+</div>${eoApplicantsPageScript()}`;
+  return appLayout({ title: t('nav.talents') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
+}
+
+// Client-side filtering for the Applicants page: search + Event + Position +
+// Category + status, all combinable, plus the By-talent / By-position toggle.
+// Runs once on load so a pre-selected Event (via ?event=) applies immediately.
+function eoApplicantsPageScript() {
+  return `<script>
+(function(){
+  var search=document.getElementById('apSearch'); if(!search) return;
+  var noMatch=document.getElementById('apNoMatch');
+  var talentBox=document.getElementById('apTalent'), posBox=document.getElementById('apPosition');
+  var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
+  var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
+  var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),reset=document.getElementById('apReset');
+  var flt='all', tab='talent';
+  function apply(){
+    var q=search.value.trim().toLowerCase();
+    var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'', ef=evSel?evSel.value:'';
+    var box=tab==='talent'?talentBox:posBox;
+    var items=[].slice.call(box.querySelectorAll('.ap-item'));
+    var shown=0;
+    items.forEach(function(it){
+      var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+      var okP=!pf||(it.getAttribute('data-p1pos')===pf);
+      var okC=!cf||(it.getAttribute('data-category')===cf);
+      var okE=!ef||(it.getAttribute('data-event')===ef);
+      var vis=okS&&okQ&&okP&&okC&&okE; it.style.display=vis?'':'none'; if(vis)shown++;
+    });
+    if(tab==='position'){[].slice.call(posBox.querySelectorAll('.pos-group')).forEach(function(g){var any=[].slice.call(g.querySelectorAll('.ap-item')).some(function(it){return it.style.display!=='none';});g.style.display=any?'':'none';});}
+    if(noMatch)noMatch.style.display=(shown===0)?'':'none';
+  }
+  search.addEventListener('input',apply);
+  statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  if(posSel)posSel.addEventListener('change',apply);
+  if(catSel)catSel.addEventListener('change',apply);
+  if(evSel)evSel.addEventListener('change',apply);
+  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';apply();});
+  tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
+  apply();
+})();
+</script>`;
 }
 
 /**
@@ -5516,5 +5604,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoTalents, staffStats, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, staffStats, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };
