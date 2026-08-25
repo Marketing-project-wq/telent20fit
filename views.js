@@ -484,6 +484,11 @@ ${body}
  * landing-page header (landingNav: logo + optional event search + ID/EN toggle
  * + account menu) so the whole public flow shares one consistent sticky/blurred
  * navbar. Dashboards keep appLayout; this is only for public pages.
+ *
+ * NOTE: publicLayout has NO bottom navbar. Never render a talent DASHBOARD page
+ * with it — that is what made the Events page drop the navbar. Talent dashboard
+ * pages use appLayout; multi-audience browse pages use browseLayout (which falls
+ * back here only for main_power / logged-out visitors).
  */
 function publicLayout({ title, body, lang, account, active, cities, search = true, searchValue }) {
   const L = normLang(lang);
@@ -520,8 +525,21 @@ function navLink(href, key, active, icon, label) {
  * App shell for authenticated pages. Menu adapts to role (talent / eo /
  * super_admin). Navigation is a bottom bar on every screen size (the old left
  * sidebar); the brand, the signed-in user and Exit/Logout sit in the top bar.
+ *
+ * THIS IS THE TALENT DASHBOARD SHELL — it is the ONLY thing that renders the
+ * bottom navbar (Events · Applications · Profile · Post Proofs). Every talent
+ * dashboard page MUST render through appLayout so the bottom nav is always
+ * present. Do NOT render a talent dashboard page with publicLayout — publicLayout
+ * has no bottom nav, and that mismatch is exactly what made the Events page drop
+ * the navbar. Multi-audience browse pages (also viewable by main_power / logged-out
+ * visitors) go through browseLayout(), which picks appLayout for logged-in creators
+ * and publicLayout for everyone else.
+ *
+ * Talent header options (ignored for staff): `search`/`cities`/`searchValue` turn
+ * on the landingNav event search; `back` overrides the header Back link (a URL, or
+ * false to hide it — the browse pages keep their own in-body Back so they pass false).
  */
-function appLayout({ title, body, role, active, user, lang }) {
+function appLayout({ title, body, role, active, user, lang, search, cities, searchValue, back }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isEo = role === 'eo';
@@ -584,13 +602,35 @@ function appLayout({ title, body, role, active, user, lang }) {
   // Talent: sticky top bar + bottom nav bar (mobile-app style).
   return `${head}
 <body class="app-body talent-app">
-${landingNav(L, active, user ? { name: user } : null, { search: false, home: `${homeHref}?lang=${L}`, back: `/?lang=${L}` })}
+${landingNav(L, active, user ? { name: user } : null, { search: !!search, cities: cities || [], searchValue: searchValue || '', home: `${homeHref}?lang=${L}`, back: back === undefined ? `/?lang=${L}` : back })}
 <div class="app-main">
   ${body}
 </div>
 <nav class="tab-bar"><div class="tab-inner">${items}</div></nav>
 <script>(function(){var b=document.querySelector('.tab-bar'),a=b&&b.querySelector('a.active');if(b&&a){b.scrollLeft=Math.max(0,a.offsetLeft-(b.clientWidth-a.offsetWidth)/2);}})();</script>
 </body></html>`;
+}
+
+/**
+ * Layout chooser for talent-facing BROWSE pages — the event list (/acara), the
+ * open-positions catalog (/events) and the event detail (/event/:id). These are
+ * reachable BOTH from inside the creator dashboard AND by main_power / logged-out
+ * visitors, so the shell can't be fixed at the page level:
+ *   - a logged-in creator (any talent type except main_power) gets the full
+ *     dashboard shell (appLayout) WITH the bottom navbar, so the nav never drops
+ *     when they browse events;
+ *   - main_power (own nav-less dashboard) and the public get the plain publicLayout.
+ * Centralising the decision here means every browse page — and any future one —
+ * stays consistent without a per-page conditional. Browse pages keep their own
+ * in-body Back link, so this passes back:false to appLayout to avoid a double Back.
+ */
+function browseLayout({ title, body, lang, account, active, cities, search, searchValue }) {
+  const L = normLang(lang);
+  const isCreator = !!(account && account.name && account.talent_type && account.talent_type !== 'main_power');
+  if (isCreator) {
+    return appLayout({ title, body, role: 'kol', active: active || 'event', user: account.name, lang: L, search: !!search, cities: cities || [], searchValue: searchValue || '', back: false });
+  }
+  return publicLayout({ title, body, lang: L, account: account || null, active: active || 'events', cities: cities || [], search: !!search, searchValue: searchValue || '' });
 }
 
 /**
@@ -3731,7 +3771,9 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
   chips.forEach(function(c){c.addEventListener('click',function(){flt=c.getAttribute('data-filter');chips.forEach(function(x){x.classList.toggle('is-on',x===c);});apply();});});
 })();
 </script>`;
-  return publicLayout({ title: t('ev.findTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities: cities || [], search: true });
+  // Browse page → browseLayout so a logged-in creator keeps the bottom navbar
+  // (the Events nav must not drop when opening this page from Profile).
+  return browseLayout({ title: t('ev.findTitle') + ' — 20FIT', body, lang: L, account, active: 'event', cities: cities || [], search: true });
 }
 
 /** Event detail: description + category the talent can register for (or their status). */
@@ -5515,7 +5557,8 @@ function talentOpenEvents({ account, events, lang, q, city, cities }) {
     ${(query || cityVal) ? `<p class="muted" style="font-size:13px;margin:8px 0 0">${esc(t('search.aria'))}: <b>${esc(query || cityVal)}</b></p>` : ''}
     ${cards}
   </div>`;
-  return publicLayout({ title: t('ta.openTitle') + ' — 20FIT', body, lang: L, account, active: 'events', cities, search: true, searchValue: query });
+  // Browse page → browseLayout (keeps the bottom navbar for logged-in creators).
+  return browseLayout({ title: t('ta.openTitle') + ' — 20FIT', body, lang: L, account, active: 'event', cities, search: true, searchValue: query });
 }
 
 function talentEventApply({ account, event, ctx, lang, saved, cities }) {
@@ -5728,7 +5771,9 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     </div>
   </div>
   ${applyModal}`;
-  return publicLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: '', cities: cities || [], search: true, searchValue: e.name || '' });
+  // Browse page → browseLayout: a logged-in creator keeps the bottom navbar; the
+  // public / main_power get the plain publicLayout (this route is optionalTalent).
+  return browseLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: 'event', cities: cities || [], search: true, searchValue: e.name || '' });
 }
 
 module.exports = {
