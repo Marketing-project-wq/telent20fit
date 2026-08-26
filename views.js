@@ -1025,7 +1025,7 @@ a{text-decoration:none}
    Photo are the reference (scale 1). FIRST-PASS values — tune per brand against
    the live logos. */
 .eco-card.eco-card-logo[data-eco="shop"] .eco-logo{--eco-scale:1.4}
-.eco-card.eco-card-logo[data-eco="arena"] .eco-logo{--eco-scale:1.7}
+.eco-card.eco-card-logo[data-eco="arena"] .eco-logo{--eco-scale:2.5}
 .eco-card.eco-card-logo[data-eco="event"] .eco-logo{--eco-scale:1.4}
 .eco-card.eco-card-logo[data-eco="sport-clinic"] .eco-logo{--eco-scale:1.35}
 a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
