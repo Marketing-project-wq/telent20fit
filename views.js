@@ -727,14 +727,16 @@ function landingPage(lang, opts = {}) {
   // 20FIT Group ecosystem brands. To add a brand later, drop in one entry:
   //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
   //   text only -> { name, accent }              (placeholder until its logo is ready)
-  // Per-logo size tweaks for artwork whose built-in padding makes it render
-  // off from the rest: `mw` caps width (shrink a tightly-cropped logo), `scale`
-  // multiplies the rendered size — >1 enlarges a heavily-padded logo, <1 shrinks
-  // one that still comes out too big. Both optional; tuned to match 20FIT Shop.
+  // Every logo is normalized to the SAME max-height (see `.eco-logo` CSS and the
+  // `--eco-h` var), with width following each logo's own aspect ratio — so all six
+  // render at a uniform visual height (calibrated to the 20FIT Cafe logo) without
+  // stretching. `scale` is an optional per-logo nudge for artwork whose baked-in
+  // padding still makes it read a touch large/small (>1 enlarges, <1 shrinks);
+  // none is needed by default — leave it off to keep the sizes uniform.
   const BRANDS = [
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
-    { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena', scale: 1.8 },
-    { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe', mw: '56%', scale: 0.8 },
+    { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena' },
+    { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe' },
     { logoD: EVENT_LIGHT, logoL: EVENT_LIGHT, href: 'https://www.instagram.com/20fit.event', name: '20FIT Event' },
     { logoD: PHOTO_LIGHT, logoL: PHOTO_LIGHT, href: 'https://www.instagram.com/20fit_photo', name: '20FIT Photo' },
     { logoD: SPORTCLINIC_LIGHT, logoL: SPORTCLINIC_LIGHT, href: 'https://www.instagram.com/20fit.sportsclinic', name: '20FIT Sport Clinic' },
@@ -765,7 +767,7 @@ function landingPage(lang, opts = {}) {
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
     if (b.logoD) {
-      const st = (b.mw || b.scale) ? ` style="${b.mw ? `max-width:${b.mw};` : ''}${b.scale ? `transform:scale(${b.scale});` : ''}"` : '';
+      const st = b.scale ? ` style="transform:scale(${b.scale})"` : '';
       const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"${st}><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"${st}></span>`;
       return b.href
         ? `<a href="${b.href}" target="_blank" rel="noopener noreferrer" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
@@ -999,12 +1001,17 @@ a{text-decoration:none}
 .coach-group{font-size:12.5px;color:var(--lp-tx3);margin-top:6px}
 .eco-card{background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;padding:26px 10px;font:800 18px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);text-align:center;display:flex;align-items:center;justify-content:center;min-height:92px}
 .eco-card b{color:var(--red);margin-left:.32em}
-.eco-card-logo{padding:14px 10px}
+/* Logo cards: one shared max-height (the --eco-h custom property) drives both
+   the wrap and every logo image, so all six render at a uniform height whatever
+   their aspect ratio. Selecting on both classes (.eco-card.eco-card-logo)
+   outranks any single-class .eco-card padding rule, including the responsive
+   ones, so the padding around the logo stays consistent at every breakpoint. */
+.eco-card.eco-card-logo{--eco-h:34px;padding:18px 14px}
 a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
 a.eco-card-logo:hover{border-color:var(--red);transform:translateY(-4px) scale(1.035);box-shadow:0 12px 28px rgba(228,18,31,.18)}
 a.eco-card-logo:active{transform:translateY(-1px) scale(1.01)}
-.eco-logo-wrap{display:flex;align-items:center;justify-content:center;height:52px;width:100%}
-.eco-logo{max-height:100%;max-width:86%;width:auto;height:auto;display:block;object-fit:contain;transition:opacity .2s ease}
+.eco-logo-wrap{display:flex;align-items:center;justify-content:center;height:var(--eco-h,34px);width:100%}
+.eco-logo{max-height:var(--eco-h,34px);max-width:94%;width:auto;height:auto;display:block;object-fit:contain;transition:opacity .2s ease}
 a.eco-card-logo:hover .eco-logo{opacity:.88}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
@@ -1028,10 +1035,14 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-bottom a{color:var(--lp-tx3)}
 .ft-bottom a:hover{color:var(--red)}
 @media(max-width:860px){.ft-top{grid-template-columns:1fr 1fr;gap:34px 24px}.ft-brand{grid-column:1/-1;max-width:none}}
-@media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}}
+@media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}.eco-card.eco-card-logo{--eco-h:30px}}
 /* Mobile keeps the multi-column grid feel (2 columns) rather than a full
    1-column stack — cards just scale down. Desktop (>860px) stays 3 columns. */
-@media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
+@media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.eco-card.eco-card-logo{--eco-h:26px;padding:14px 12px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
+/* Narrowest phones: stack the ecosystem cards one-per-row so even the widest
+   logos (Cafe, Photo) get the full card width and still reach the uniform
+   --eco-h height instead of being clipped short by a cramped 2-column card. */
+@media(max-width:400px){.eco-grid{grid-template-columns:1fr !important}}
 /* FAQ accordion (shared markup + CSS with the auth page via faqSection()/FAQ_CSS) */${FAQ_CSS}
 /* Live opportunities grid (events + campaigns) */
 .lp-ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
