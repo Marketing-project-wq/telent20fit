@@ -3753,6 +3753,11 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       <div class="tp-hero-actions"><a href="/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('tp.editProfile')}</a></div>
     </div>
     <div class="tp-stats${statDefs.length !== 4 ? ' n' + statDefs.length : ''}">${statCells}</div>
+
+    <details class="tp-details" style="border-top:1px solid var(--line);margin-top:20px;padding-top:16px">
+      <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
+      <div style="margin-top:14px;padding-bottom:20px">${talentProfileBlock(acc, L)}</div>
+    </details>
   </div>
 
   ${confirmationBanner(events, L)}
@@ -3771,11 +3776,6 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
       <div class="card" style="margin-top:12px">${certBlock}</div>
     </div>
-
-    <details class="card tp-details">
-      <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
-      <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
-    </details>
 
     <div class="card">
       <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
