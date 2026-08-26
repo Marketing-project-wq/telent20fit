@@ -3475,10 +3475,8 @@ const PROFILE_CSS = `
 .tp-stat:first-child{border-left:0}
 .tp-stat-n{font:800 30px/1 'Barlow Condensed',sans-serif}
 .tp-stat-l{font:700 11px/1 Barlow,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:6px}
-.tp-grid{display:grid;grid-template-columns:minmax(0,1.85fr) minmax(0,1fr);gap:22px;margin-top:24px;align-items:start}
-.tp-main,.tp-side{min-width:0}
-.tp-side{display:flex;flex-direction:column;gap:18px}
-.tp-side .card,.tp-main .card{margin-top:0}
+.tp-stack{display:flex;flex-direction:column;gap:18px;margin-top:24px}
+.tp-stack .card{margin-top:0}
 .tp-sec-head h2{font:800 19px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0}
 .tp-evcard{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:14px;padding:18px 20px;margin-top:12px}
 .tp-ev-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -3500,7 +3498,6 @@ const PROFILE_CSS = `
 .tp-details[open] .tp-caret::after{transform:rotate(180deg)}
 .tp-docrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
-@media(max-width:920px){.tp-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.tp-stats{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
 /* "Confirm your spot" banner — an EO accepted this talent; they Agree (→Assigned) or Decline. */
 .cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
@@ -3754,8 +3751,15 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   ${assignedGroupBanner(events, L)}
   ${rejectionPopup(events, L)}
 
-  <div class="tp-grid">
-    <div class="tp-main">
+  <div class="tp-stack">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="tp-card-kicker">${t('tp.strength')}</span><b style="color:var(--red)">${strengthPct}%</b></div>
+      <div class="tp-strength-bar"><i style="width:${strengthPct}%"></i></div>
+      <div class="tp-check">${chkHtml}</div>
+      ${strengthPct < 100 ? `<a href="/data-diri?lang=${L}" class="btn btn-sm btn-block" style="margin-top:16px">${t('prof.completeCta')}</a>` : ''}
+    </div>
+
+    <div>
       <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
       <div class="card" style="margin-top:12px">${certBlock}</div>
 
@@ -3767,25 +3771,17 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
         <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
       </div>
     </div>
-    <aside class="tp-side">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="tp-card-kicker">${t('tp.strength')}</span><b style="color:var(--red)">${strengthPct}%</b></div>
-        <div class="tp-strength-bar"><i style="width:${strengthPct}%"></i></div>
-        <div class="tp-check">${chkHtml}</div>
-        ${strengthPct < 100 ? `<a href="/data-diri?lang=${L}" class="btn btn-sm btn-block" style="margin-top:16px">${t('prof.completeCta')}</a>` : ''}
-      </div>
 
-      <details class="card tp-details">
-        <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
-        <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
-      </details>
+    <details class="card tp-details">
+      <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
+      <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
+    </details>
 
-      <div class="card">
-        <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
-        ${docRows}
-        <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
-      </div>
-    </aside>
+    <div class="card">
+      <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
+      ${docRows}
+      <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
+    </div>
   </div>
 
   </div>`;
