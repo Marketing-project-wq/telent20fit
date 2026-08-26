@@ -3226,7 +3226,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
 
   const talentCards = aps.map((a) => `<div class="card ap-item" ${dataAttrs(a)} style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}
+      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>
         <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div></div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
     </div>
