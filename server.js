@@ -1144,6 +1144,7 @@ app.post('/acara/:id/apply', requireTalentReady('kol'), async (req, res, next) =
       if (e.code === 'DUP') return res.redirect('/acara/' + ev.id + '?lang=' + req.lang);
       throw e;
     }
+    notifyApplicationReceived(req.account); // new application (Applied) → email a receipt
     res.send(V.kolApplyDone({ account: req.account, event: ev, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -1384,6 +1385,7 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
       const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
       await st.updateApplication(app.id, { status: 'applied' });
       appId = app.id;
+      notifyApplicationReceived(req.account); // new application (Applied) → email a receipt; adding more choices reuses this app, so it fires once
     }
     await st.addApplicationChoices(appId, [{ position_id: positionId, priority: (ctx.myChoices || []).length + 1 }]);
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
@@ -1571,6 +1573,7 @@ app.post('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, n
     const dupMp = (await st.listApplicationsForTalent(req.talent.id)).some((a) => a.event_id === ev.id && a.role);
     if (dupMp) return res.redirect('/talent?lang=' + req.lang);
     await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: 'main_power', role, answers });
+    notifyApplicationReceived(req.account); // new application (Applied) → email a receipt
     res.send(V.mainPowerApplyDone({ event: ev, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -2847,6 +2850,21 @@ async function notifyAcceptance(st, app, patch) {
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
     station: patch.station, stationLoc: patch.station_loc,
   });
+}
+
+// Fire-and-forget "Application Received" email the moment a talent submits a NEW
+// application (status Applied). Always English + generic (no event/position).
+// Logs the outcome clearly — sent / not-delivered / failed — so a send that fails
+// is never silent, and it never blocks or fails the apply response.
+function notifyApplicationReceived(account) {
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) { console.warn('[mail] application-received skipped: talent has no email on file'); return; }
+  mailer.sendApplicationReceivedEmail({ to, name: account.name || '' })
+    .then((r) => {
+      if (!r || r.delivered === false) console.warn('[mail] application-received NOT delivered to ' + to + ' — email service not configured (RESEND_API_KEY / MAIL_MOCK) or the send was rejected');
+      else console.log('[mail] application-received sent to ' + to);
+    })
+    .catch((err) => console.error('[mail] application-received send FAILED for ' + to + ': ' + (err && err.message)));
 }
 
 // Email a talent whose EO/admin accepted them into a position, asking them to
