@@ -834,7 +834,7 @@ function landingPage(lang, opts = {}) {
     ${cities.map((c) => `<button type="button" class="lp-city-chip" data-city="${esc(c.toLowerCase())}">${esc(c)}</button>`).join('')}
   </div>` : '';
   const eventsSection = (evList.length) ? `
-  <section style="max-width:1180px;margin:0 auto;padding:64px 28px">
+  <section class="lp-events" style="max-width:1180px;margin:0 auto">
     <h2 style="font:800 clamp(30px,4.5vw,44px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0 0 12px;text-align:center">${esc(t('land.eventsTitle'))}</h2>
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 24px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
     ${cityFilter}
@@ -987,9 +987,15 @@ a{text-decoration:none}
 .hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(42px,calc(6vw - 8px),76px)}
 .hero-title .accent-shimmer{display:block}
 @media(max-width:860px){.hero-title{font-size:calc(8.2vw - 2px)}}
-/* Mobile: shorten the hero so the centered headline isn't stranded in a tall
-   photo. Desktop (>600px) keeps the base clamp(560px,86vh,900px) untouched. */
-@media(max-width:600px){.hero-stage{min-height:clamp(420px,62vh,500px)}}
+/* Hero copy padding + the events section directly below the hero: desktop values
+   live here (moved off inline styles, byte-for-byte the same) so the mobile block
+   can trim them without touching desktop. */
+.hero-copy{padding:clamp(92px,11vw,155px) 28px clamp(84px,10vw,150px)}
+.lp-events{padding:64px 28px}
+/* Mobile: shorten the hero (less photo zoom + headline not stranded in a tall
+   photo), tighten the hero copy, and close the gap to the events section so the
+   dark photo hero meets the light section cleanly. Desktop (>600px) untouched. */
+@media(max-width:600px){.hero-stage{min-height:clamp(380px,52vh,430px)}.hero-copy{padding:48px 24px 44px}.lp-events{padding-top:28px}}
 @keyframes shimmer{to{background-position:-220% 0}}
 @media(prefers-reduced-motion:reduce){.hero-bg i{animation:none}.hero-in{animation:none;opacity:1}.accent-shimmer{animation:none;-webkit-text-fill-color:#E4121F;color:#E4121F}}
 .stripe{background-image:repeating-linear-gradient(135deg,#eceae5 0 10px,#f4f2ee 10px 20px)}
@@ -1130,7 +1136,7 @@ ${CARD_CSS}
   <div class="hero-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i></div>
   ${heroPhotos}
 
-  <section style="max-width:1180px;width:100%;margin:0 auto;padding:clamp(92px,11vw,155px) 28px clamp(84px,10vw,150px)">
+  <section class="hero-copy" style="max-width:1180px;width:100%;margin:0 auto">
     <div>
       <h1 class="hero-in d1 hero-title" style="margin:0 0 20px">${esc(tr(L, 'hero.headlineLead'))}<span class="accent-shimmer">${esc(tr(L, 'hero.headlineAccent'))}</span></h1>
       <p class="hero-in d2" style="font-size:clamp(19px,2.5vw,30px);line-height:1.5;color:var(--lp-tx2);max-width:640px;margin:0">${esc(tr(L, 'hero.subheadline'))}</p>
