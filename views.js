@@ -3722,7 +3722,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
 
   // Profile strength — from the shared helper so every surface agrees.
   const { pct: strengthPct, items: chk } = profileStrength(acc);
-  const chkHtml = chk.map((c) => `<div class="tp-check-item${c.on ? ' done' : ''}"><span class="tp-check-dot"></span><span>${esc(t(c.key))}</span></div>`).join('');
+  const chkHtml = chk.map((c) => `<div class="tp-check-item${c.on ? ' done' : ''}" style="justify-content:space-between"><span style="display:flex;align-items:center;gap:10px"><span class="tp-check-dot"></span><span>${esc(t(c.key))}</span></span><span class="muted" style="font-size:12px;font-weight:700;flex-shrink:0">${c.weight}%</span></div>`).join('');
 
   // My documents — real status per document.
   const docState = (ok, path, kind) => ok
