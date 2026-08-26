@@ -3084,7 +3084,7 @@ function eoApplicantsSection(e, view, aps, L) {
   // Per-talent cards
   const talentCards = aps.map((a) => { const ci = catInfo(a); return `<div class="card ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(ci.k)}" data-category="${ci.cat}" data-search="${esc((a.name || '').toLowerCase())}" style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12.5px">· ${esc(talentLabel(L, a.type))}</span>` : ''}</div>
+      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b></div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
     </div>
     ${contactLine(a)}
