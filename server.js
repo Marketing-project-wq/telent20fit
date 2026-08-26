@@ -370,7 +370,7 @@ app.get('/health', (req, res) => res.type('text').send('ok'));
 
 function readLang(req, res) {
   let lang = req.query.lang;
-  if (lang !== 'id' && lang !== 'en') lang = (req.cookies && req.cookies.lang) || 'id';
+  if (lang !== 'id' && lang !== 'en') lang = (req.cookies && req.cookies.lang) || 'en';
   if (req.query.lang === 'id' || req.query.lang === 'en') {
     res.cookie('lang', lang, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
   }
@@ -3529,7 +3529,7 @@ app.get('/__mockimg/*', (req, res) => { res.type('png').send(PX); });
 // -------------------------------------------------------------- fallbacks ----
 
 app.use((err, req, res, next) => {
-  const t = req.t || ((k, v) => i18n.t('id', k, v));
+  const t = req.t || ((k, v) => i18n.t('en', k, v));
   let msg = err.message || t('err500.generic');
   if (err.code === 'LIMIT_FILE_SIZE') msg = t('err500.fileSize');
   if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') msg = t('err500.fileCount', { n: MAX_IMAGES });

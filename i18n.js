@@ -10,10 +10,12 @@
 const en = require('./i18n/en.json');
 const id = require('./i18n/id.json');
 const DICT = { en, id };
-const DEFAULT = 'id';
+// English is the default UI language: a new visitor with no saved preference sees
+// EN, and any unrecognised/absent lang coerces to EN (never a mixed ID/EN page).
+const DEFAULT = 'en';
 
 function normLang(l) {
-  return l === 'en' ? 'en' : 'id';
+  return l === 'id' ? 'id' : 'en';
 }
 
 function t(lang, key, vars) {

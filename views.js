@@ -641,7 +641,7 @@ function browseLayout({ title, body, lang, account, active, cities, search, sear
  * Modern, clean, sporty 20FIT-branded component with 3 benefit cards and clear CTA.
  */
 function joinEventSection(lang, opts = {}) {
-  const L = (lang === 'en') ? 'en' : 'id';
+  const L = (lang === 'id') ? 'id' : 'en';
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
 
@@ -689,7 +689,7 @@ function joinEventSection(lang, opts = {}) {
  * CTAs lead to sign up (/register) and log in (/login/talent).
  */
 function landingPage(lang, opts = {}) {
-  const L = (lang === 'en') ? 'en' : 'id';
+  const L = (lang === 'id') ? 'id' : 'en';
   const t = (k, v) => tr(L, k, v);
   // Optional hero background photos (0-2). With 2 they crossfade; with 1 it's static.
   const bgPhotos = Array.isArray(opts.bg) ? opts.bg.filter(Boolean) : [];
@@ -1484,7 +1484,7 @@ function adminLanding({ staff, lang, urls, saved }) {
 
 /** Talent-type picker shown for sign up (mode='register') and log in (mode='login'). */
 function talentPicker(mode, lang) {
-  const L = (lang === 'en') ? 'en' : 'id';
+  const L = (lang === 'id') ? 'id' : 'en';
   const T = {
     id: { reg: 'Daftar sebagai', log: 'Masuk sebagai', regSub: 'Pilih tipe talent kamu untuk membuat akun.', logSub: 'Pilih tipe talent kamu untuk masuk.', soon: 'Segera hadir', go: mode === 'register' ? 'Daftar' : 'Masuk', back: '← Kembali', adminLink: 'Masuk sebagai Admin / EO', adminNote: 'Untuk staf 20FIT & Event Organizer' },
     en: { reg: 'Sign up as', log: 'Log in as', regSub: 'Choose your talent type to create an account.', logSub: 'Choose your talent type to sign in.', soon: 'Coming soon', go: mode === 'register' ? 'Sign up' : 'Log in', back: '← Back', adminLink: 'Log in as Admin / EO', adminNote: 'For 20FIT staff & Event Organizers' },
