@@ -3755,7 +3755,16 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     <div class="tp-stats${statDefs.length !== 4 ? ' n' + statDefs.length : ''}">${statCells}</div>
 
     <details class="tp-details" style="border-top:1px solid var(--line);margin-top:20px;padding-top:16px">
-      <summary><span class="tp-card-kicker">${t('prof.dataTitle')}</span><span class="muted tp-caret" style="font-size:12px">${t('prof.showDetail')}</span></summary>
+      <summary>
+        <span style="display:flex;align-items:center;gap:10px;min-width:0">
+          <span style="width:30px;height:30px;border-radius:9px;background:var(--red-soft);color:var(--red);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c.5-2 2-3 3-3s2.5 1 3 3"/><path d="M14 9h4M14 13h4"/></svg></span>
+          <span style="min-width:0">
+            <span class="tp-card-kicker" style="display:block">${t('prof.dataTitle')}</span>
+            <span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:320px">${acc.profile_completed_at ? esc([acc.city, acc.phone].filter(Boolean).join(' · ')) : t('adm.profile.incomplete')}</span>
+          </span>
+        </span>
+        <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
+      </summary>
       <div style="margin-top:14px;padding-bottom:20px">${talentProfileBlock(acc, L)}</div>
     </details>
   </div>
