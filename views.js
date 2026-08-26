@@ -728,10 +728,11 @@ function landingPage(lang, opts = {}) {
   //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
   //   text only -> { name, accent }              (placeholder until its logo is ready)
   // Every logo sits in an identical fixed-size box (--eco-w x --eco-h in the
-  // `.eco-logo` CSS) and is drawn with object-fit:contain, so all six share one
-  // medium container size and stay whole (never cropped or stretched). `scale` is
-  // an optional per-logo nudge for artwork whose baked-in padding makes it read a
-  // touch small in the box (>1 enlarges, <1 shrinks); none is needed by default.
+  // `.eco-logo` CSS) and is drawn with object-fit:contain. The brand PNGs bake in
+  // DIFFERENT amounts of whitespace, so a uniform box alone renders tight-cropped
+  // logos (Cafe, Photo) larger than heavily-padded ones (Arena, Shop, Event, Sport
+  // Clinic). Each logo's *content* is therefore scaled per brand (--eco-scale in
+  // the CSS) so all six read the same visual size regardless of file whitespace.
   const BRANDS = [
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
     { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena' },
@@ -770,8 +771,7 @@ function landingPage(lang, opts = {}) {
       // own in the CSS (e.g. .eco-card-logo[data-eco="shop"]) without touching the
       // other five, which keep the shared default box.
       const slug = b.name.replace(/^20FIT\s*/i, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      const st = b.scale ? ` style="transform:scale(${b.scale})"` : '';
-      const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"${st}><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"${st}></span>`;
+      const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"></span>`;
       return b.href
         ? `<a href="${b.href}" target="_blank" rel="noopener noreferrer" class="eco-card eco-card-logo" data-eco="${slug}" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
         : `<div class="eco-card eco-card-logo" data-eco="${slug}">${imgs}</div>`;
@@ -1017,11 +1017,22 @@ a{text-decoration:none}
 .eco-card.eco-card-logo[data-eco="shop"]{--eco-w:140px;--eco-h:40px}
 .eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:140px;--eco-h:40px}
 .eco-card.eco-card-logo[data-eco="arena"]{--eco-w:140px;--eco-h:40px}
+/* Content-scale normalization. The brand PNGs bake in DIFFERENT amounts of
+   whitespace, so object-fit:contain alone renders tight-cropped logos (Cafe,
+   Photo) bigger than heavily-padded ones. Scale each logo's rendered content up
+   to match the tight-cropped reference. One value per brand, breakpoint-
+   independent (a file's whitespace ratio doesn't change with viewport). Cafe &
+   Photo are the reference (scale 1). FIRST-PASS values — tune per brand against
+   the live logos. */
+.eco-card.eco-card-logo[data-eco="shop"] .eco-logo{--eco-scale:1.4}
+.eco-card.eco-card-logo[data-eco="arena"] .eco-logo{--eco-scale:1.7}
+.eco-card.eco-card-logo[data-eco="event"] .eco-logo{--eco-scale:1.4}
+.eco-card.eco-card-logo[data-eco="sport-clinic"] .eco-logo{--eco-scale:1.35}
 a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
 a.eco-card-logo:hover{border-color:var(--red);transform:translateY(-4px) scale(1.035);box-shadow:0 12px 28px rgba(228,18,31,.18)}
 a.eco-card-logo:active{transform:translateY(-1px) scale(1.01)}
 .eco-logo-wrap{display:flex;align-items:center;justify-content:center;width:var(--eco-w,140px);height:var(--eco-h,40px);max-width:100%}
-.eco-logo{width:100%;height:100%;object-fit:contain;display:block;transition:opacity .2s ease}
+.eco-logo{width:100%;height:100%;object-fit:contain;display:block;transform:scale(var(--eco-scale,1));transition:opacity .2s ease}
 a.eco-card-logo:hover .eco-logo{opacity:.88}
 .eco-logo-light{display:none}
 :root[data-theme="light"] .eco-logo-dark{display:none}
