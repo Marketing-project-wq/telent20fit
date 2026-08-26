@@ -2639,13 +2639,16 @@ function langText(idVal, enVal, tpl, lang) {
 // renders the item labels in its own language.
 function profileStrength(acc) {
   const a = acc || {};
+  // Weighted, not evenly split: Basic details + ID (KTP) carry the most (they gate
+  // verification), Documents matter for applying to creator roles, Social account
+  // is the lightest since it's optional for non-KOL talents. Weights sum to 100.
   const items = [
-    { on: !!a.profile_completed_at, key: 'tp.check.basic' },
-    { on: !!a.instagram, key: 'tp.check.social' },
-    { on: !!a.ktp, key: 'tp.check.id' },
-    { on: !!(a.cv_path || a.hyrox_cert_path || a.portfolio_url), key: 'tp.check.docs' },
+    { on: !!a.profile_completed_at, key: 'tp.check.basic', weight: 30 },
+    { on: !!a.instagram, key: 'tp.check.social', weight: 15 },
+    { on: !!a.ktp, key: 'tp.check.id', weight: 30 },
+    { on: !!(a.cv_path || a.hyrox_cert_path || a.portfolio_url), key: 'tp.check.docs', weight: 25 },
   ];
-  const pct = Math.round((items.filter((i) => i.on).length / items.length) * 100);
+  const pct = items.reduce((sum, i) => sum + (i.on ? i.weight : 0), 0);
   return { pct, items };
 }
 // Completeness colour band: red <50%, amber 50-99%, green 100%.
