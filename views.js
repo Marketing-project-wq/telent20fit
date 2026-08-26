@@ -3758,6 +3758,14 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     <div class="tp-main">
       <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
       <div class="card" style="margin-top:12px">${certBlock}</div>
+
+      <div class="tp-morecta" style="margin-top:20px;border-radius:18px;padding:26px 28px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px var(--red-soft)">
+        <div style="min-width:0;flex:1 1 260px">
+          <div style="font-size:21px;font-weight:800;line-height:1.15">${t('tp.moreEvents.title')}</div>
+          <div style="font-size:14px;opacity:.93;margin-top:7px;max-width:540px">${t('tp.moreEvents.sub')}</div>
+        </div>
+        <a href="/events?lang=${L}" class="btn" style="background:#fff;color:var(--red);font-weight:800;border:none;flex-shrink:0">${t('tp.moreEvents.btn')} →</a>
+      </div>
     </div>
     <aside class="tp-side">
       <div class="card">
