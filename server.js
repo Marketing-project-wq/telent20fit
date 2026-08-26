@@ -2249,7 +2249,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     const view = eoEventView(ev, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
     view.positions.forEach((p) => {
-      if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
+      if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang }));
@@ -3381,7 +3381,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     const view = eoEventView(event, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
     view.positions.forEach((p) => {
-      if (p.applicants > 0 && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
+      if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang, admin: true }));
