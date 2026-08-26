@@ -5817,7 +5817,6 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   };
   const posIcon = (key) => POS_ICONS[key] || _svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.4h6V7H9z"/><path d="M8.5 11h7M8.5 15h4.5"/>');
   const card = (p) => {
-    const left = Math.max(0, (p.quota || 0) - (p.filled || 0));
     const isOpen = !p.closed_at && !p.full;
     const lock = docsMissing && CREATOR_ROLES.includes(p.key);
     // Fall back to the role's default template (in the current language) for
@@ -5837,21 +5836,10 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const descText = langText(p.description, p.description_en, tplText('desc'), L).text;
     const jobdeskText = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L).text;
     const reqText = langText(p.requirement, p.requirement_en, tplText('req'), L).text;
-    // Quota / remaining-slots hint so talents gauge their odds before applying.
-    // Every open card carries a line: a real quota shows "N needed · M slots left"
-    // (or "Full" once taken); a legacy position saved without a quota shows a
-    // neutral "No quota limit". Manually-closed positions skip it (the corner badge
-    // already says "Closed"). Counts are live (p.filled = approved, per eoEventView).
-    const limited = (p.quota || 0) > 0 && p.quota < 100000;
-    const strong = (v) => `<b style="color:var(--ink)">${v}</b>`;
-    // One line, no redundancy: how many talents this position needs (the EO's
-    // quota) + how many slots remain open right now (quota − approved).
-    const quotaLine = p.closed_at ? ''
-      : limited
-        ? ((p.full || left <= 0)
-            ? `<div style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--err,#d32f2f);background:var(--err-soft,#fdecea);border-radius:8px;padding:5px 11px">🚫 ${t('ta.slotsFull')}</div>`
-            : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.needed', { n: strong(p.quota) })} · ${t('ta.slotsLeft')}: ${strong(left)}</div>`)
-        : `<div style="margin-top:12px;font-size:12.5px;color:var(--muted,#6b6b70)">👥 ${t('ta.unlimited')}</div>`;
+    // Talent-facing cards intentionally hide the quota / slots-left numbers so
+    // applicants can't gauge scarcity and rush to apply. The Open / Full / Closed
+    // status still shows via the corner badge below, and EO + Super Admin keep the
+    // real counts on their own pages (event detail, applicants, stats).
     const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
         : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
@@ -5909,7 +5897,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const detailHtml = filledRows.length
       ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div>${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
       : '';
-    const foot = `${quotaLine}${detailHtml}${action}`;
+    const foot = `${detailHtml}${action}`;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
