@@ -5847,7 +5847,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
 
   // Per-position "job listing" cards.
-  const HIDDEN_POSITION_KEYS = ['judge', 'judge_hybrid', 'judge_running'];
+  const HIDDEN_POSITION_KEYS = ['judge'];
   const posSorted = (ctx.positions || []).filter((p) => !HIDDEN_POSITION_KEYS.includes(p.key)).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
   const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
   const sec = (icon, label, txt) => `<div style="margin-top:12px"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
