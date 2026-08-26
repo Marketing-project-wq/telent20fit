@@ -1012,10 +1012,11 @@ a{text-decoration:none}
 .eco-card.eco-card-logo{--eco-w:140px;--eco-h:40px;padding:18px 14px}
 /* Per-brand container overrides (data-eco slug). Higher specificity than the
    shared default above, so a single brand's box can be tuned in isolation
-   without affecting the others. 20FIT Shop and 20FIT Cafe are each pinned to
-   their own fixed size (same values, kept consistent). */
+   without affecting the others. 20FIT Shop, 20FIT Cafe and 20FIT Arena are each
+   pinned to their own fixed size (same values, kept consistent). */
 .eco-card.eco-card-logo[data-eco="shop"]{--eco-w:140px;--eco-h:40px}
 .eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:140px;--eco-h:40px}
+.eco-card.eco-card-logo[data-eco="arena"]{--eco-w:140px;--eco-h:40px}
 a.eco-card-logo{text-decoration:none;cursor:pointer;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
 a.eco-card-logo:hover{border-color:var(--red);transform:translateY(-4px) scale(1.035);box-shadow:0 12px 28px rgba(228,18,31,.18)}
 a.eco-card-logo:active{transform:translateY(-1px) scale(1.01)}
@@ -1044,10 +1045,10 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-bottom a{color:var(--lp-tx3)}
 .ft-bottom a:hover{color:var(--red)}
 @media(max-width:860px){.ft-top{grid-template-columns:1fr 1fr;gap:34px 24px}.ft-brand{grid-column:1/-1;max-width:none}}
-@media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}.eco-card.eco-card-logo{--eco-w:120px;--eco-h:36px}.eco-card.eco-card-logo[data-eco="shop"]{--eco-w:120px;--eco-h:36px}.eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:120px;--eco-h:36px}}
+@media(max-width:860px){.resp3{grid-template-columns:1fr 1fr !important}.eco-grid{grid-template-columns:1fr 1fr !important}.eco-card.eco-card-logo{--eco-w:120px;--eco-h:36px}.eco-card.eco-card-logo[data-eco="shop"]{--eco-w:120px;--eco-h:36px}.eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:120px;--eco-h:36px}.eco-card.eco-card-logo[data-eco="arena"]{--eco-w:120px;--eco-h:36px}}
 /* Mobile keeps the multi-column grid feel (2 columns) rather than a full
    1-column stack — cards just scale down. Desktop (>860px) stays 3 columns. */
-@media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.eco-card.eco-card-logo{--eco-w:100px;--eco-h:32px;padding:14px 12px}.eco-card.eco-card-logo[data-eco="shop"]{--eco-w:100px;--eco-h:32px}.eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:100px;--eco-h:32px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
+@media(max-width:560px){.resp3{grid-template-columns:1fr 1fr !important;gap:12px}.eco-card{font-size:15px;min-height:74px;padding:18px 8px}.eco-card.eco-card-logo{--eco-w:100px;--eco-h:32px;padding:14px 12px}.eco-card.eco-card-logo[data-eco="shop"]{--eco-w:100px;--eco-h:32px}.eco-card.eco-card-logo[data-eco="cafe"]{--eco-w:100px;--eco-h:32px}.eco-card.eco-card-logo[data-eco="arena"]{--eco-w:100px;--eco-h:32px}.coach-grid{gap:12px}.coach-card{flex:1 1 calc(50% - 6px);min-width:0;max-width:calc(50% - 6px)}}
 /* FAQ accordion (shared markup + CSS with the auth page via faqSection()/FAQ_CSS) */${FAQ_CSS}
 /* Live opportunities grid (events + campaigns) */
 .lp-ev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
