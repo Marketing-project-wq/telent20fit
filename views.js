@@ -715,17 +715,14 @@ function landingPage(lang, opts = {}) {
   const ARENA_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/Logo-20FIT-Arena-black-3.png';
   const CAFE_DARK = 'https://media.20fit.id/wp-content/uploads/2026/07/20fit-cafe-redwhite-1-scaled.png';
   const CAFE_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/07/20fit-cafe-2-scaled.png';
-  // 20FIT Photo — only the black/red (light-mode) artwork is available for now, so
-  // it doubles as the dark-mode logo until a white version is provided. No Instagram
-  // link yet, so the card renders as a non-clickable logo (add `href` when available).
+  // 20FIT Photo — only the black/red (light-mode) artwork is available for now, so it
+  // doubles as the dark-mode logo until a white version is provided. (Instagram link in BRANDS.)
   const PHOTO_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/08/Copy-of-20FIT-PHOTO-BLACK-RED-1-1-scaled.png';
   // 20FIT Event — only the black (light-mode) artwork is available for now, so it
-  // doubles as the dark-mode logo until a white version is provided. No Instagram
-  // link yet, so the card renders as a non-clickable logo (add `href` when available).
+  // doubles as the dark-mode logo until a white version is provided. (Instagram link in BRANDS.)
   const EVENT_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/08/04-20FIT-EVENT-BLACK-3-scaled.png';
   // 20FIT Sport Clinic — only the black (light-mode) artwork is available for now,
-  // so it doubles as the dark-mode logo until a white version is provided. No
-  // Instagram link yet, so the card renders as a non-clickable logo.
+  // so it doubles as the dark-mode logo until a white version is provided. (Instagram link in BRANDS.)
   const SPORTCLINIC_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/08/06-20FIT-SPORT-CLINIC-BLACK-1-scaled.png';
   // 20FIT Group ecosystem brands. To add a brand later, drop in one entry:
   //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
@@ -738,9 +735,9 @@ function landingPage(lang, opts = {}) {
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
     { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena', scale: 1.8 },
     { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe', mw: '56%', scale: 0.8 },
-    { logoD: EVENT_LIGHT, logoL: EVENT_LIGHT, name: '20FIT Event' },
-    { logoD: PHOTO_LIGHT, logoL: PHOTO_LIGHT, name: '20FIT Photo' },
-    { logoD: SPORTCLINIC_LIGHT, logoL: SPORTCLINIC_LIGHT, name: '20FIT Sport Clinic' },
+    { logoD: EVENT_LIGHT, logoL: EVENT_LIGHT, href: 'https://www.instagram.com/20fit.event', name: '20FIT Event' },
+    { logoD: PHOTO_LIGHT, logoL: PHOTO_LIGHT, href: 'https://www.instagram.com/20fit_photo', name: '20FIT Photo' },
+    { logoD: SPORTCLINIC_LIGHT, logoL: SPORTCLINIC_LIGHT, href: 'https://www.instagram.com/20fit.sportsclinic', name: '20FIT Sport Clinic' },
   ];
 
   const featHtml = FEATS.map(([icon, key]) => benefitCard({ icon, title: esc(t(key + '.title')), desc: esc(t(key + '.description')) })).join('');
@@ -771,7 +768,7 @@ function landingPage(lang, opts = {}) {
       const st = (b.mw || b.scale) ? ` style="${b.mw ? `max-width:${b.mw};` : ''}${b.scale ? `transform:scale(${b.scale});` : ''}"` : '';
       const imgs = `<span class="eco-logo-wrap"><img src="${b.logoD}" alt="${esc(b.name)}" class="eco-logo eco-logo-dark" loading="lazy" decoding="async"${st}><img src="${b.logoL}" alt="${esc(b.name)}" class="eco-logo eco-logo-light" loading="lazy" decoding="async"${st}></span>`;
       return b.href
-        ? `<a href="${b.href}" target="_blank" rel="noopener" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
+        ? `<a href="${b.href}" target="_blank" rel="noopener noreferrer" class="eco-card eco-card-logo" aria-label="${esc(b.name)} · Instagram" title="${esc(b.name)} · Instagram">${imgs}</a>`
         : `<div class="eco-card eco-card-logo">${imgs}</div>`;
     }
     return `<div class="eco-card">${esc(b.name)}<b>${esc(b.accent)}</b></div>`;
