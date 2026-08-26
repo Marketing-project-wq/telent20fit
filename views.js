@@ -1234,6 +1234,7 @@ function landingNav(lang, active, account, opts = {}) {
     acct = `<details class="lp-acct lp-acct-user">
       <summary><span class="lp-acct-av" aria-hidden="true">${initial}</span><span class="lp-acct-name">${esc(account.name)}</span>${caret}</summary>
       <div class="lp-acct-menu">
+        <a href="/${q}">${esc(t('nav.home'))}</a>
         <a href="/talent${q}">${esc(t('nav.viewProfile'))}</a>
         <a href="/events${q}">${esc(t('nav.applyEvent'))}</a>
         <form method="post" action="/logout"><button type="submit" class="lp-acct-out">${esc(t('nav.logout'))}</button></form>
