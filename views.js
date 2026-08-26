@@ -719,6 +719,10 @@ function landingPage(lang, opts = {}) {
   // it doubles as the dark-mode logo until a white version is provided. No Instagram
   // link yet, so the card renders as a non-clickable logo (add `href` when available).
   const PHOTO_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/08/Copy-of-20FIT-PHOTO-BLACK-RED-1-1-scaled.png';
+  // 20FIT Event — only the black (light-mode) artwork is available for now, so it
+  // doubles as the dark-mode logo until a white version is provided. No Instagram
+  // link yet, so the card renders as a non-clickable logo (add `href` when available).
+  const EVENT_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/08/04-20FIT-EVENT-BLACK-3-scaled.png';
   // 20FIT Group ecosystem brands. To add a brand later, drop in one entry:
   //   with logo -> { logoD, logoL, href, name }  (href optional; makes the card a clickable Instagram link)
   //   text only -> { name, accent }              (placeholder until its logo is ready)
@@ -730,7 +734,7 @@ function landingPage(lang, opts = {}) {
     { logoD: SHOP_DARK, logoL: SHOP_LIGHT, href: 'https://www.instagram.com/20fit.shop/', name: '20FIT Shop' },
     { logoD: ARENA_DARK, logoL: ARENA_LIGHT, href: 'https://www.instagram.com/20fit.arena/', name: '20FIT Arena', scale: 1.8 },
     { logoD: CAFE_DARK, logoL: CAFE_LIGHT, href: 'https://www.instagram.com/20fit.cafe/', name: '20FIT Cafe', mw: '56%', scale: 0.8 },
-    { name: '20FIT', accent: 'Event' },
+    { logoD: EVENT_LIGHT, logoL: EVENT_LIGHT, name: '20FIT Event' },
     { logoD: PHOTO_LIGHT, logoL: PHOTO_LIGHT, name: '20FIT Photo' },
     { name: '20FIT', accent: 'Sport Clinic' },
   ];
