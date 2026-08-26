@@ -2731,7 +2731,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
 // KOL / Photographer / Videographer / "Lainnya" are never filtered by event type.
 // NOTE: the Lari sub-role list will grow — add new keys here (and the position to
 // the master list in store.js) to surface them under Lari.
-const MANPOWER_SHARED = ['judge', 'runner', 'registration_staff', 'water_station', 'time_chip_management', 'marshal', 'drop_bag'];
+const MANPOWER_SHARED = ['runner', 'registration_staff', 'water_station', 'time_chip_management', 'marshal', 'drop_bag'];
 const MANPOWER_TYPE_ONLY = {
   lari: ['judge_running'],
   hyrox: ['judge_hybrid'],
