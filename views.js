@@ -3474,6 +3474,7 @@ const PROFILE_CSS = `
 .tp-bio{font-size:14px;line-height:1.6;margin:12px 0 0;max-width:640px;white-space:pre-wrap}
 .tp-hero-actions{display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap}
 .tp-stats{display:grid;grid-template-columns:repeat(4,1fr);margin:24px -26px 0;border-top:1px solid var(--line)}
+.tp-stats.n3{grid-template-columns:repeat(3,1fr)}
 .tp-stat{padding:16px 26px;border-left:1px solid var(--line)}
 .tp-stat:first-child{border-left:0}
 .tp-stat-n{font:800 30px/1 'Barlow Condensed',sans-serif}
@@ -3501,7 +3502,7 @@ const PROFILE_CSS = `
 .tp-details[open] .tp-caret::after{transform:rotate(180deg)}
 .tp-docrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
-@media(max-width:620px){.tp-stats{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
+@media(max-width:620px){.tp-stats,.tp-stats.n3{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
 /* "Confirm your spot" banner — an EO accepted this talent; they Agree (→Assigned) or Decline. */
 .cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
 .cf-card{border:1.5px solid #178a54;border-radius:16px;padding:18px 20px;background:linear-gradient(135deg,rgba(23,138,84,.10),rgba(23,138,84,.03));box-shadow:0 6px 20px rgba(23,138,84,.10)}
@@ -3705,9 +3706,13 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   const metaBits = [handle, cityLine, joined].filter(Boolean).join(' · ');
   const bio = acc.experience || '';
 
-  // Stats row — real counts only.
-  const statCells = [[sc.events, t('tp.stat.events')], [sc.approved, t('tp.stat.approved')], [sc.proofs, t('tp.stat.proofs')], [sc.certs, t('tp.stat.certs')]]
-    .map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
+  // Stats row — real counts only. Post Proofs is a KOL-only feature. `isCreator`
+  // (talent_type==='kol') is just the registration default and doesn't mean the
+  // talent actually applied as KOL, so gate on acc.isKol instead — that's set
+  // from their real accepted/applied position choices (see talentIsKol in server.js).
+  const statDefs = [[sc.events, t('tp.stat.events')], [sc.approved, t('tp.stat.approved')],
+    ...(acc.isKol ? [[sc.proofs, t('tp.stat.proofs')]] : []), [sc.certs, t('tp.stat.certs')]];
+  const statCells = statDefs.map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
 
   // Application history is no longer shown on the Profile — it now lives on its own
   // "Applications" bottom-nav page (/talent/applications). Kept off here to avoid the
@@ -3747,7 +3752,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       </div>
       <div class="tp-hero-actions"><a href="/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('tp.editProfile')}</a></div>
     </div>
-    <div class="tp-stats">${statCells}</div>
+    <div class="tp-stats${statDefs.length !== 4 ? ' n' + statDefs.length : ''}">${statCells}</div>
   </div>
 
   ${confirmationBanner(events, L)}
