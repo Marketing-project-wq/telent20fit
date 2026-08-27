@@ -5955,11 +5955,11 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const detailHtml = filledRows.length
       ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div>${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
       : '';
-    const foot = `${detailHtml}${action}`;
+    const foot = action;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
-      desc: descText ? esc(descText) : '', // short role description on the card face (template fallback)
+      desc: (descText ? esc(descText) : '') + detailHtml,
       corner: badge,
       foot,
       id: 'pos-' + esc(p.position_id),
