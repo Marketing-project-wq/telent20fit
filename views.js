@@ -5959,9 +5959,9 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
-      desc: (descText ? esc(descText) : '') + detailHtml,
+      desc: descText ? esc(descText) : '',
       corner: badge,
-      foot,
+      foot: detailHtml + action,
       id: 'pos-' + esc(p.position_id),
     });
   };
