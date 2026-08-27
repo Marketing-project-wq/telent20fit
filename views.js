@@ -62,7 +62,7 @@ const CARD_CSS = `
 .bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 @media(max-width:860px){.bgrid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.bgrid{grid-template-columns:1fr}}
-.bcard{min-width:0;background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(16,16,19,.05)}
+.bcard{min-width:0;background:#fff;border:1px solid #e6e9ef;border-radius:14px;padding:24px;box-shadow:0 6px 20px rgba(16,16,19,.05);display:flex;flex-direction:column}
 .bcard-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .bcard-ico{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#E4121F;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.30);border-radius:10px}
 .bcard-ico svg{width:22px;height:22px}
