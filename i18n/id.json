@@ -1081,6 +1081,7 @@
   "dd.ktpPh": "Nomor sesuai KTP",
   "dd.ktpHint": "Cukup masukkan nomor KTP (NIK) kamu.",
   "dd.instagram": "Instagram",
+  "dd.instagramPh": "username",
   "dd.instagramHint": "Username tanpa tanda @.",
   "dd.followers": "Perkiraan followers IG",
   "dd.experience": "Pengalaman singkat",
