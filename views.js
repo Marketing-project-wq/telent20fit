@@ -5953,7 +5953,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     if (p.key === 'fotografer') detailRows.push(['🖼️', t('ta.d.photoOutput'), p.photo_output], ['⏰', t('ta.d.photoDeadline'), p.photo_deadline], ['📷', t('ta.d.photoEquip'), p.photo_equipment]);
     const filledRows = detailRows.filter(([, , v]) => v && String(v).trim());
     const detailHtml = filledRows.length
-      ? `<div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div>`
+      ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
       : '';
     const foot = action;
     return benefitCard({
