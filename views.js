@@ -67,7 +67,7 @@ const CARD_CSS = `
 .bcard-ico{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#E4121F;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.30);border-radius:10px}
 .bcard-ico svg{width:22px;height:22px}
 .bcard-h{font:700 19px/1.15 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.01em;margin-top:15px}
-.bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0}
+.bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0;flex:1}
 .bband{background:#eef1f5;border:1px solid #e6e9ef;border-radius:20px;padding:28px}
 .bband-h{font:800 clamp(23px,3vw,31px)/1 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.005em;margin:0 0 20px}
 @media(max-width:560px){.bband{padding:20px 15px}.bcard{padding:16px}.bcard-ico{width:40px;height:40px}.bcard-ico svg{width:20px;height:20px}.bcard-h{font-size:16px;margin-top:12px}.bcard-d{font-size:13px;line-height:1.5}}
