@@ -76,7 +76,7 @@ function benefitCard({ icon, title, desc = '', corner = '', foot = '', id = '' }
   return `<div class="bcard"${id ? ` id="${id}" style="scroll-margin-top:84px"` : ''}>
     <div class="bcard-top"><div class="bcard-ico">${icon}</div>${corner}</div>
     <div class="bcard-h">${title}</div>
-    ${desc ? `<p class="bcard-d">${desc}</p>` : ''}
+    <div style="flex:1">${desc ? `<p class="bcard-d">${desc}</p>` : ''}</div>
     ${foot}
   </div>`;
 }
