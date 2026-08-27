@@ -2182,6 +2182,17 @@ function validateEventForm(f, req) {
   if (f.positions.some((p) => !(p.quota > 0 && p.quota < UNLIMITED_QUOTA))) e.push(req.t('eo.ev.err.quota'));
   return e;
 }
+// Non-blocking warning (not a validation error — save still goes through): true
+// when a position has exactly one side of an ID/EN text pair filled in. That's
+// the exact condition that makes a talent-facing card mix languages, since the
+// empty side then has to fall back to whatever the other language says.
+function positionsMissingLang(positions) {
+  const halfFilled = (id, en) => !!(id && !en) || !!(en && !id);
+  return (positions || []).some((p) => halfFilled(p.description, p.description_en)
+    || halfFilled(p.jobdesk, p.jobdesk_en)
+    || halfFilled(p.requirement, p.requirement_en)
+    || (p.key === 'other' && halfFilled(p.custom_label, p.custom_label_en)));
+}
 
 app.get('/eo/events', requireEo, async (req, res, next) => {
   try {
@@ -2192,7 +2203,7 @@ app.get('/eo/events', requireEo, async (req, res, next) => {
     const withView = await Promise.all(mine.map(async (e) => Object.assign(e, { view: eoEventView(e, await st.listEventPositions(e.id), apps, choices) })));
     await attachMockups(st, withView);
     const profile = await st.getEoProfile(req.staff.id);
-    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), langWarn: req.query.langWarn === '1', lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2220,7 +2231,7 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
       await st.setEventPositions(ev.id, f.positions);
       const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
     }
-    res.redirect('/eo/events');
+    res.redirect('/eo/events' + (positionsMissingLang(f.positions) ? '?langWarn=1' : ''));
   } catch (e) { next(e); }
 });
 
@@ -2257,7 +2268,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
     await st.setEventPositions(ev.id, f.positions);
-    res.redirect('/eo/events');
+    res.redirect('/eo/events' + (positionsMissingLang(f.positions) ? '?langWarn=1' : ''));
   } catch (e) { next(e); }
 });
 
@@ -2930,7 +2941,7 @@ async function notifyPositionRejection(st, app, ev) {
   const to = account && account.login;
   if (!to || !/@/.test(to)) return; // no usable email on file
   await mailer.sendRejectionEmail({
-    to, name: account.name, lang: 'id',
+    to, name: account.name, lang: 'en',
     eventName: (ev && ev.name) || 'Event 20FIT',
     eventDate: ev ? eventDateStr(ev) : null,
     location: (ev && ev.location) || null,
@@ -2980,7 +2991,7 @@ async function runDueReminders(st) {
         if (!to || !/@/.test(to)) continue;
         const ev = dueEvents.get(a.event_id);
         const r = await mailer.sendReminderEmail({
-          to, name: account.name, lang: 'id',
+          to, name: account.name, lang: 'en',
           eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
           location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
           station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,

@@ -583,7 +583,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
     // Admin / EO keep the original left sidebar (off-canvas drawer on mobile).
     return `${head}
 <body class="app-body staff-app">
-<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="${esc(t('a11y.menu'))}">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
@@ -596,7 +596,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
 <label for="nav-cb" class="nav-scrim"></label>
 <div class="app-main">
   <div class="app-top">
-    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
+    <label for="nav-cb" class="hamburger" role="button" aria-label="${esc(t('a11y.menu'))}">&#9776;</label>
     <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   </div>
   ${body}
@@ -763,7 +763,7 @@ function landingPage(lang, opts = {}) {
   ];
   const COACH_GROUP = { arena: '20FIT Arena', gym: '20FIT Gym' };
   const coachHtml = COACHES.filter((c) => c.photo).map((c) => `<div class="coach-card">
-      <div class="coach-photo"><img src="${esc(c.photo)}" alt="Coach ${esc(c.name)}" loading="lazy" decoding="async"></div>
+      <div class="coach-photo"><img src="${esc(c.photo)}" alt="${esc(t('common.coachAlt'))} ${esc(c.name)}" loading="lazy" decoding="async"></div>
       <div class="coach-body"><div class="coach-name">${esc(c.name)}</div><div class="coach-group">${esc(COACH_GROUP[c.group] || '20FIT')}</div></div>
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
@@ -1171,7 +1171,7 @@ ${CARD_CSS}
       <div class="ft-brand">
         <a href="/${q}" class="ft-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
         <p class="ft-tag">${esc(t('foot.tagline'))}</p>
-        <div class="ft-social" role="group" aria-label="Social media">${socialHtml}</div>
+        <div class="ft-social" role="group" aria-label="${esc(t('a11y.socialMedia'))}">${socialHtml}</div>
       </div>
       <nav class="ft-col" aria-label="${esc(t('foot.eco'))}">
         <div class="ft-h">${esc(t('foot.eco'))}</div>
@@ -1313,7 +1313,7 @@ function landingNav(lang, active, account, opts = {}) {
         <div class="lp-search-key">
           <span class="lp-search-ic" aria-hidden="true">${searchSvg}</span>
           <input type="text" name="q" class="lp-search-in" value="${esc(opts.searchValue || '')}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
-          <button type="button" class="lp-search-x" aria-label="clear"${opts.searchValue ? '' : ' hidden'}>&times;</button>
+          <button type="button" class="lp-search-x" aria-label="${esc(t('a11y.clearSearch'))}"${opts.searchValue ? '' : ' hidden'}>&times;</button>
         </div>
         <div class="lp-search-loc" data-loc>
           <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
@@ -1881,7 +1881,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
       <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
     <div class="au-f"><label for="su-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
+        <button type="button" class="au-eye" data-eye="su-pass" aria-label="${esc(t('a11y.togglePassword'))}">${EYE}</button></div>
       <div class="au-hint">${t('hint.min6')}</div></div>
     <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
@@ -1891,7 +1891,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
       <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
     <div class="au-f"><label for="si-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="si-pass" name="password" required autocomplete="current-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="si-pass" aria-label="show/hide password">${EYE}</button></div></div>
+        <button type="button" class="au-eye" data-eye="si-pass" aria-label="${esc(t('a11y.togglePassword'))}">${EYE}</button></div></div>
     <button type="submit" class="au-submit">${t('btn.signin')}</button>
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
@@ -2610,12 +2610,23 @@ function eoVerifyNeeded({ email, lang }) {
 // Localized label for a master/event position.
 function posLabel(p, lang) {
   const L = normLang(lang);
-  // Custom "Lainnya" name: prefer the active language, silently fall back to the other.
+  // Custom "Lainnya" name: prefer the active language, fall back to the other
+  // (see posLabelIsFallback below for surfacing that fallback to the user).
   if (p && (p.custom_label || p.custom_label_en)) {
     const id = p.custom_label || '', en = p.custom_label_en || '';
     return L === 'en' ? (en || id) : (id || en);
   }
   return L !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || '');
+}
+// True when posLabel() above had to borrow the OTHER language's custom name
+// because the active language's custom_label/custom_label_en was left empty.
+function posLabelIsFallback(p, lang) {
+  const L = normLang(lang);
+  if (!(p && (p.custom_label || p.custom_label_en))) return false;
+  const id = p.custom_label || '', en = p.custom_label_en || '';
+  const want = L === 'en' ? en : id;
+  const other = L === 'en' ? id : en;
+  return !want && !!other;
 }
 // Pick the language-appropriate text for a field that has an ID + optional EN
 // version. Order: the requested language's value -> a language-appropriate
@@ -2684,7 +2695,7 @@ function eoRegBadge(status, lang) {
   return `<span class="pill pill-ok">${t('eo.ev.status.published')}</span>`;
 }
 
-function eoEvents({ staff, events, profileComplete, lang }) {
+function eoEvents({ staff, events, profileComplete, langWarn, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const rows = (events && events.length) ? events.map((e) => {
@@ -2708,6 +2719,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
     </tr>`;
   }).join('') : `<tr><td colspan="6" class="muted">${t('eo.ev.empty')}</td></tr>`;
   const blocker = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
+  const langWarnBanner = langWarn ? `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('eo.ev.langWarnBanner')}</div>` : '';
   const createBtn = profileComplete ? `<a href="/eo/events/new?lang=${L}" class="btn btn-sm">+ ${t('eo.ev.create')}</a>` : '';
   const body = `<div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -2716,6 +2728,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   </div>
   <p class="sub">${t('eo.ev.sub')}</p>
   ${blocker}
+  ${langWarnBanner}
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('eo.ev.th.name')}</th><th>${t('eo.ev.th.date')}</th><th>${t('eo.ev.th.loc')}</th><th>${t('eo.ev.th.status')}</th><th>${t('eo.ev.th.applies')}</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
@@ -3637,7 +3650,7 @@ function rejectionPopup(events, lang) {
   const action = `/talent/applications/${esc(e.appId)}/reject-seen`;
   return `<div class="rj-overlay">
     <form class="rj-modal" method="post" action="${action}" role="dialog" aria-modal="true" aria-labelledby="rjTitle">
-      <button type="submit" name="next" value="/talent?lang=${L}" class="rj-close" aria-label="Close">&times;</button>
+      <button type="submit" name="next" value="/talent?lang=${L}" class="rj-close" aria-label="${esc(t('a11y.close'))}">&times;</button>
       <div class="rj-emoji" aria-hidden="true">💪</div>
       <div class="rj-title" id="rjTitle">${t('reject.title')}</div>
       <p class="rj-body">${esc(t('reject.body', { pos: posLbl || '—', event: e.name }))}</p>
@@ -5778,7 +5791,7 @@ function applicationTracker(status, lang) {
     const dot = cls === 'done' ? '✓' : String(i + 1);
     return `<div class="trk-step ${cls}${fill}"><span class="trk-dot">${dot}</span><span class="trk-lbl">${esc(t('ta.status.' + s))}</span></div>`;
   }).join('');
-  return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
+  return `<div class="trk" role="list" aria-label="${esc(t('a11y.applicationProgress'))}">${html}</div>`;
 }
 
 function talentHomePath(account) { return '/talent'; }
@@ -5890,11 +5903,21 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       return v === k ? '' : v;
     };
     // Language-aware: EO's typed text in the active language, else the (translated)
-    // role template, else the other language's text. Non-"other" roles always have
-    // a template, so English never falls through to Indonesian for them.
-    const descText = langText(p.description, p.description_en, tplText('desc'), L).text;
-    const jobdeskText = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L).text;
-    const reqText = langText(p.requirement, p.requirement_en, tplText('req'), L).text;
+    // role template, else the other language's text (fb:true). Non-"other" roles
+    // always have a template, so this only actually falls through to the other
+    // language's raw text for the custom "Lainnya" role, which has none.
+    const descRes = langText(p.description, p.description_en, tplText('desc'), L);
+    const jobdeskRes = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L);
+    const reqRes = langText(p.requirement, p.requirement_en, tplText('req'), L);
+    const descText = descRes.text, jobdeskText = jobdeskRes.text, reqText = reqRes.text;
+    const nameFallback = posLabelIsFallback(p, L);
+    const anyFallback = nameFallback || descRes.fb || jobdeskRes.fb || reqRes.fb;
+    if (anyFallback) {
+      // Surfaced to the talent as a small marker on the card (below); logged here
+      // so an admin/EO can find and fill in the missing translation.
+      const missing = [nameFallback && 'name', descRes.fb && 'description', jobdeskRes.fb && 'jobdesk', reqRes.fb && 'requirement'].filter(Boolean).join(',');
+      console.warn('[i18n] position ' + p.position_id + ' (' + p.key + ') showing ' + L + ' fallback for: ' + missing);
+    }
     // Talent-facing cards intentionally hide the quota / slots-left numbers so
     // applicants can't gauge scarcity and rush to apply. The Open / Full / Closed
     // status still shows via the corner badge below, and EO + Super Admin keep the
@@ -5960,9 +5983,12 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     const detailHtml = filledRows.length
       ? `<details class="pos-detail"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v, cls]) => sec(ic, lb, v, cls)).join('')}</div></details>`
       : '';
+    // A clear, visible marker (not a silent mix) when any field above had to
+    // borrow the other language's text — small inline icon, no layout change.
+    const fallbackMark = anyFallback ? ` <abbr title="${esc(t('common.transPending'))}" aria-label="${esc(t('common.transPending'))}" style="cursor:help;text-decoration:none">⚠️</abbr>` : '';
     return benefitCard({
       icon: posIcon(p.key),
-      title: esc(posLabel(p, L)),
+      title: esc(posLabel(p, L)) + fallbackMark,
       desc: descText ? esc(descText) : '',
       corner: badge,
       foot: detailHtml + (action ? `<div class="pos-foot">${action}</div>` : ''),
