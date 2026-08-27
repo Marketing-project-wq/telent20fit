@@ -67,7 +67,8 @@ const CARD_CSS = `
 .bcard-ico{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#E4121F;background:rgba(228,18,31,.14);border:1px solid rgba(228,18,31,.30);border-radius:10px}
 .bcard-ico svg{width:22px;height:22px}
 .bcard-h{font:700 19px/1.15 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.01em;margin-top:15px}
-.bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0;flex:1}
+.bcard-body{flex:1;min-width:0}
+.bcard-d{color:#5b6069;font-size:14px;line-height:1.6;white-space:pre-wrap;margin:8px 0 0}
 .bband{background:#eef1f5;border:1px solid #e6e9ef;border-radius:20px;padding:28px}
 .bband-h{font:800 clamp(23px,3vw,31px)/1 'Barlow Condensed','Barlow',-apple-system,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.005em;margin:0 0 20px}
 @media(max-width:560px){.bband{padding:20px 15px}.bcard{padding:16px}.bcard-ico{width:40px;height:40px}.bcard-ico svg{width:20px;height:20px}.bcard-h{font-size:16px;margin-top:12px}.bcard-d{font-size:13px;line-height:1.5}}
@@ -76,7 +77,7 @@ function benefitCard({ icon, title, desc = '', corner = '', foot = '', id = '' }
   return `<div class="bcard"${id ? ` id="${id}" style="scroll-margin-top:84px"` : ''}>
     <div class="bcard-top"><div class="bcard-ico">${icon}</div>${corner}</div>
     <div class="bcard-h">${title}</div>
-    <div style="flex:1">${desc ? `<p class="bcard-d">${desc}</p>` : ''}</div>
+    <div class="bcard-body">${desc ? `<p class="bcard-d">${desc}</p>` : ''}</div>
     ${foot}
   </div>`;
 }
@@ -5863,7 +5864,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const HIDDEN_POSITION_KEYS = ['judge'];
   const posSorted = (ctx.positions || []).filter((p) => !HIDDEN_POSITION_KEYS.includes(p.key)).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
   const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
-  const sec = (icon, label, txt) => `<div style="margin-top:12px"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
+  const sec = (icon, label, txt, cls) => `<div class="pos-sec${cls ? ' ' + cls : ''}"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
   // Soft-red line icon per position family (falls back to a clipboard), shown in
   // the tile atop each card — mirrors the "Why Choose" benefit-card style.
   const _svg = (d) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -5915,19 +5916,19 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       const state = myChoice.accepted
         ? `<span class="pill pill-ok">✓ ${t('ta.acceptedHere')}</span>`
         : (appStatus === 'approved' ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.notContinued')}</span>` : talentStatusBadge(appStatus, L));
-      action = `<div style="margin-top:14px;display:flex;flex-direction:column;gap:9px">
+      action = `<div style="display:flex;flex-direction:column;gap:9px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${rankChip}${state}</div>
         ${canCancel ? `<form method="post" action="/event/${esc(e.slug || e.id)}/cancel" ${jsConfirm(t('ta.cancelConfirm'))}><input type="hidden" name="position_id" value="${esc(p.position_id)}"><button type="submit" class="btn btn-ghost btn-sm" style="width:100%">${t('ta.cancel')}</button></form>` : ''}
       </div>`;
     } else if (appStatus === 'approved') {
       action = ''; // talent already secured a position in this event — no more applying
     } else if (lock) {
-      action = `<div class="muted" style="margin-top:12px;font-size:12px">🔒 <a href="/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
+      action = `<div class="muted" style="font-size:12px">🔒 <a href="/dokumen?need=1&lang=${L}" style="font-weight:700">${t('doc.lockHint')}</a></div>`;
     } else if (ctx.regOpen && isOpen) {
       if (numChoices >= 3) {
-        action = `<div class="muted" style="margin-top:12px;font-size:12px">${t('ta.max3reached')}</div>`;
+        action = `<div class="muted" style="font-size:12px">${t('ta.max3reached')}</div>`;
       } else if (loggedIn) {
-        action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="margin-top:14px;width:100%">${t('ta.applyThis')} · ${esc(t('ta.asChoice', { n: numChoices + 1 }))}</button>`;
+        action = `<button type="button" class="pos-apply btn btn-sm" data-pos="${esc(p.position_id)}" data-label="${esc(posLabel(p, L))}" style="width:100%">${t('ta.applyThis')} · ${esc(t('ta.asChoice', { n: numChoices + 1 }))}</button>`;
       } else {
         // Visitor not logged in: send them to create an account first, remembering
         // the exact event + position to resume after auth (?apply=<id> auto-opens the
@@ -5935,33 +5936,36 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
         // "sign in" tab carrying the same next, for people who already have an account.
         const ref = e.slug || e.id;
         const back = encodeURIComponent('/event/' + ref + '?apply=' + p.position_id + '#pos-' + p.position_id);
-        action = `<a href="/register?next=${back}" class="btn btn-sm" style="margin-top:14px;width:100%;box-sizing:border-box">${t('ta.signupToApply')}</a>`;
+        action = `<a href="/register?next=${back}" class="btn btn-sm" style="width:100%;box-sizing:border-box">${t('ta.signupToApply')}</a>`;
       }
     } else {
       action = '';
     }
     // The full jobdesk + every EO-filled extra detail sit in ONE expandable
     // "Lihat Detail" so the card stays compact; empty fields are skipped.
-    // Category-specific fields only for the matching type.
+    // Category-specific fields only for the matching type. Jobdesk and Requirement
+    // lead the list (each given a fixed min-height via 'pos-sec-fixed') so the
+    // "Requirements" heading lands on the same row across cards regardless of how
+    // long each card's Jobdesk text is.
     const detailRows = [
-      ['📋', t('ta.jobdesk'), jobdeskText],
+      ['📋', t('ta.jobdesk'), jobdeskText, 'pos-sec-fixed'],
+      ['✅', t('ta.requirement'), reqText, 'pos-sec-fixed'],
       ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
-      ['💰', t('ta.fee'), p.fee], ['✅', t('ta.requirement'), reqText],
+      ['💰', t('ta.fee'), p.fee],
       ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
     ];
     if (p.key === 'kol') detailRows.push(['🎬', t('ta.d.kolContent'), p.kol_content], ['⏰', t('ta.d.kolDeadline'), p.kol_deadline], ['📈', t('ta.d.kolFollowers'), p.kol_min_followers], ['#️⃣', t('ta.d.kolHashtags'), p.kol_hashtags]);
     if (p.key === 'fotografer') detailRows.push(['🖼️', t('ta.d.photoOutput'), p.photo_output], ['⏰', t('ta.d.photoDeadline'), p.photo_deadline], ['📷', t('ta.d.photoEquip'), p.photo_equipment]);
     const filledRows = detailRows.filter(([, , v]) => v && String(v).trim());
     const detailHtml = filledRows.length
-      ? `<details class="pos-detail" style="margin-top:12px"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v]) => sec(ic, lb, v)).join('')}</div></details>`
+      ? `<details class="pos-detail"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v, cls]) => sec(ic, lb, v, cls)).join('')}</div></details>`
       : '';
-    const foot = action;
     return benefitCard({
       icon: posIcon(p.key),
       title: esc(posLabel(p, L)),
       desc: descText ? esc(descText) : '',
       corner: badge,
-      foot: detailHtml + action,
+      foot: detailHtml + (action ? `<div class="pos-foot">${action}</div>` : ''),
       id: 'pos-' + esc(p.position_id),
     });
   };
@@ -6006,6 +6010,18 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
   const body = `<style>
+    /* Role cards (#posCards): keep "View details", Jobdesk, Requirements and the
+       Apply button lined up across cards in the same grid row, whatever the
+       length of each card's own text. The grid row is already stretched to the
+       tallest card (.bgrid{align-items:stretch}); within each card (flex column)
+       .pos-foot uses margin-top:auto to soak up the remaining space so Apply
+       always sits flush at the bottom. */
+    #posCards .bcard-body{flex:none;min-height:4.8em}
+    #posCards .bcard-d{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:4.8em}
+    #posCards .pos-sec{margin-top:14px}
+    #posCards .pos-sec-fixed{min-height:96px}
+    #posCards .pos-detail{margin-top:14px}
+    #posCards .pos-foot{margin-top:auto;padding-top:14px}
     .pos-detail>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:700;color:var(--red,#e11d48);display:inline-flex;align-items:center;gap:6px;user-select:none}
     .pos-detail>summary::-webkit-details-marker{display:none}
     .pos-detail>summary::after{content:"\\203A";font-weight:800;font-size:15px;line-height:1;transition:transform .2s;display:inline-block}
