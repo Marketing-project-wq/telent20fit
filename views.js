@@ -12,22 +12,29 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
-/** Format an ISO timestamp as a short Indonesian date-time. */
-function fmtDate(iso) {
+// Short month names per language (index 0 = January). English abbreviations for
+// EN, Indonesian for ID, so dates switch with the language toggle.
+const MONTHS_SHORT = {
+  id: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+};
+
+/** Format an ISO timestamp as a short date-time. `lang` picks the month names (default ID). */
+function fmtDate(iso, lang) {
   if (!iso) return '-';
   const d = new Date(iso);
   if (isNaN(d)) return '-';
-  const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const bulan = MONTHS_SHORT[normLang(lang)] || MONTHS_SHORT.id;
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Format a date-only value ("YYYY-MM-DD") as a short Indonesian date, no time. */
-function fmtDay(d) {
+/** Format a date-only value ("YYYY-MM-DD") as a short date, no time. `lang` picks month names (default ID). */
+function fmtDay(d, lang) {
   if (!d) return '-';
   const p = String(d).slice(0, 10).split('-');
   if (p.length !== 3) return String(d);
-  const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const bulan = MONTHS_SHORT[normLang(lang)] || MONTHS_SHORT.id;
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
 // WIB day+time from an epoch-ms value (used for the attendance link window).
@@ -413,7 +420,7 @@ function appLayout({ title, body, role, active, user, lang }) {
     // Admin / EO keep the original left sidebar (off-canvas drawer on mobile).
     return `${head}
 <body class="app-body staff-app">
-<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="${t('aria.menu')}">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
@@ -426,7 +433,7 @@ function appLayout({ title, body, role, active, user, lang }) {
 <label for="nav-cb" class="nav-scrim"></label>
 <div class="app-main">
   <div class="app-top">
-    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
+    <label for="nav-cb" class="hamburger" role="button" aria-label="${t('aria.menu')}">&#9776;</label>
     <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   </div>
   ${body}
@@ -610,7 +617,7 @@ function landingPage(lang, opts = {}) {
   // positions). Cards link to the event detail page; the /event/:id gate sends
   // logged-out visitors through login/register and redirects them back.
   const evList = Array.isArray(opts.events) ? opts.events : [];
-  const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at, L) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at, L) : ''; return en ? s + ' – ' + en : s; };
   const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
   // Group each still-open position into one of three public badge categories.
   const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
@@ -944,7 +951,7 @@ ${CARD_CSS}
       <div class="ft-brand">
         <a href="/${q}" class="ft-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
         <p class="ft-tag">${esc(t('foot.tagline'))}</p>
-        <div class="ft-social" role="group" aria-label="Social media">${socialHtml}</div>
+        <div class="ft-social" role="group" aria-label="${t('aria.social')}">${socialHtml}</div>
       </div>
       <nav class="ft-col" aria-label="${esc(t('foot.eco'))}">
         <div class="ft-h">${esc(t('foot.eco'))}</div>
@@ -1067,7 +1074,7 @@ function landingNav(lang, active, account, opts = {}) {
         <div class="lp-search-key">
           <span class="lp-search-ic" aria-hidden="true">${searchSvg}</span>
           <input type="text" name="q" class="lp-search-in" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
-          <button type="button" class="lp-search-x" aria-label="clear" hidden>&times;</button>
+          <button type="button" class="lp-search-x" aria-label="${t('aria.clear')}" hidden>&times;</button>
         </div>
         <div class="lp-search-loc">
           <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
@@ -1633,7 +1640,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
       <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
     <div class="au-f"><label for="su-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
+        <button type="button" class="au-eye" data-eye="su-pass" aria-label="${t('aria.togglePassword')}">${EYE}</button></div>
       <div class="au-hint">${t('hint.min6')}</div></div>
     <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
@@ -1643,7 +1650,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName } = {}) {
       <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
     <div class="au-f"><label for="si-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="si-pass" name="password" required autocomplete="current-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="si-pass" aria-label="show/hide password">${EYE}</button></div></div>
+        <button type="button" class="au-eye" data-eye="si-pass" aria-label="${t('aria.togglePassword')}">${EYE}</button></div></div>
     <button type="submit" class="au-submit">${t('btn.signin')}</button>
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
@@ -1952,7 +1959,7 @@ function talentProfileBlock(profile, lang) {
     [t('adm.profile.phone'), wa],
     [t('adm.profile.city'), esc(profile.city || '—')],
     [t('adm.profile.ktp'), esc(profile.ktp || '—')],
-    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
+    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate, L)) : '—'],
     [t('adm.profile.gender'), esc(genderLabel)],
     [t('adm.profile.instagram'), ig],
     [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
@@ -1990,7 +1997,7 @@ function talentDataDiri(type, opts = {}) {
   const events = opts.events || [];
   const eventList = events.length
     ? `<div class="dl-list">${events.map((e) => {
-        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
         return `<div class="dl-item" style="align-items:flex-start">
           <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>
           ${eventStatusBadge(e.status, L)}
@@ -2412,7 +2419,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   const t = (k, v) => tr(L, k, v);
   const rows = (events && events.length) ? events.map((e) => {
     const v = e.view;
-    const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+    const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—';
     let closeBtn = '';
     if (v.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
     else if (v.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
@@ -2647,7 +2654,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
       </form>
       ${attWindow ? `<div class="muted" style="font-size:12px;margin-top:8px">🕒 ${attWindow}</div>` : ''}`}
   </div>`;
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -2677,7 +2684,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang, cancelAler
     <div style="display:flex;gap:8px;align-items:center">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
   </div>
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
-  ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+  ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline, L)}</div>` : ''}
   ${e.description ? `<p style="white-space:pre-wrap;margin-top:14px">${esc(e.description)}</p>` : ''}
   <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
     <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>
@@ -2744,10 +2751,10 @@ function attReliabilityPanel(ar, lang) {
   ].join('');
   const stTag = (st0) => `<span class="pill" style="font-size:10.5px;background:${st0 === 'present' ? '#d8f3e3' : st0 === 'absent_notified' ? '#fdeccd' : '#fde2e2'};color:${st0 === 'present' ? '#0f7a45' : st0 === 'absent_notified' ? '#8a5a00' : '#b91c1c'}">${esc(s.statusShort[st0] || st0)}</span>`;
   const ownList = ar.own && ar.own.length ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">${esc(s.ownDetail)} · ${ar.own.length}</summary>
-    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.own.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date))}</span><span class="muted">· ${esc(o.positionLabel || '—')}</span>${o.eventName ? `<span class="muted">· ${esc(o.eventName)}</span>` : ''}${o.note ? `<span class="muted">· ${esc(s.note)}: ${esc(o.note)}</span>` : ''}</div>`).join('')}</div></details>` : '';
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.own.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date, L))}</span><span class="muted">· ${esc(o.positionLabel || '—')}</span>${o.eventName ? `<span class="muted">· ${esc(o.eventName)}</span>` : ''}${o.note ? `<span class="muted">· ${esc(s.note)}: ${esc(o.note)}</span>` : ''}</div>`).join('')}</div></details>` : '';
   const otherList = ar.other && ar.other.length ? `<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">${esc(s.otherDetail)} · ${ar.other.length}</summary>
     <div style="margin-top:4px;font-size:11px;color:var(--muted)">🔒 ${esc(s.hidden)}</div>
-    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.other.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date))}</span><span class="muted">· ${esc(o.positionCategory || '—')}</span></div>`).join('')}</div></details>` : '';
+    <div style="margin-top:6px;display:flex;flex-direction:column;gap:5px">${ar.other.map((o) => `<div style="font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stTag(o.status)}<span>${esc(fmtDay(o.date, L))}</span><span class="muted">· ${esc(o.positionCategory || '—')}</span></div>`).join('')}</div></details>` : '';
   const sn = g.noNoticeActive || 0;
   const sanctionBanner = sn >= 1 ? `<div style="margin-top:6px;font-size:12px;font-weight:600;padding:6px 9px;border-radius:8px;background:${sn >= 3 ? '#fde2e2' : sn === 2 ? '#fdeccd' : '#fff7ed'};color:${sn >= 3 ? '#b91c1c' : '#8a5a00'}">${esc(s.sanction(sn))}</div>` : '';
   return `<div style="margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px">
@@ -3011,7 +3018,7 @@ function assignmentCards(assignments, lang) {
       else if (diff !== null && diff <= 3) badge = `<span class="dl-when dl-near">${t('dash.dueIn', { n: diff })}</span>`;
       else badge = `<span class="dl-when" style="${neutral}">${t('kol.notUploaded')}</span>`;
     }
-    const deadline = a.ends_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${t('kol.deadlineLabel', { date: fmtDay(a.ends_at) })}</div>` : '';
+    const deadline = a.ends_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${t('kol.deadlineLabel', { date: fmtDay(a.ends_at, L) })}</div>` : '';
     return `<div class="dl-item"><div><b>${esc(a.event_name)}</b>${deadline}</div>${badge}</div>`;
   }).join('');
   return `<div class="section-head" style="margin-top:22px"><h2 style="margin:0">📋 ${t('kol.myCampaigns')}</h2></div>
@@ -3035,7 +3042,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
         <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L, days, settings)}</div>
-        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at, L)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
         <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div>
       </div>
     </div>`;
@@ -3146,7 +3153,7 @@ function kolProfilePage({ account, certs, events, stats, lang, cancelFlash }) {
   const roleLabel = talentLabel(L, acc.talent_type);
   const verified = acc.hyrox_cert_status === 'verified';
   const cityLine = acc.city ? esc(acc.city) + ', ID' : '';
-  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at)) }) : '';
+  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at, L)) }) : '';
   const metaBits = [handle, cityLine, joined].filter(Boolean).join(' · ');
   const bio = acc.experience || '';
 
@@ -3155,7 +3162,7 @@ function kolProfilePage({ account, certs, events, stats, lang, cancelFlash }) {
     .map(([n, l]) => `<div class="tp-stat"><div class="tp-stat-n">${n}</div><div class="tp-stat-l">${esc(l)}</div></div>`).join('');
 
   // My events (application history) — one card per application, newest first.
-  const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const evDate = (e) => { const s = e.starts_at ? fmtDay(e.starts_at, L) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at, L) : ''; return en ? s + ' – ' + en : s; };
   const histStatuses = [...new Set((events || []).map((e) => e.status).filter(Boolean))];
   const histFilter = (events && events.length > 3 && histStatuses.length > 1)
     ? `<div class="ta-hist-filter" style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px"><button type="button" class="ev-chip is-on" data-f="">${t('ta.history.all')}</button>${histStatuses.map((s) => `<button type="button" class="ev-chip" data-f="${esc(s)}">${esc(t('ta.status.' + s))}</button>`).join('')}</div>`
@@ -3406,7 +3413,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
   // EO position-based events show inline in the same list (newest reg-deadline first).
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, true)).join('');
   const cards = evs.map((e) => {
-    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
     const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
     const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
     let applied = '';
@@ -3414,7 +3421,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
       const ap = e.applied;
       const stn = (ap.status === 'approved' && ap.station)
         ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
-      applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
+      applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(talentLabel(L, ap.category)) })}</span>${stn}</div>`;
     }
     const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
     return `<a href="/acara/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
@@ -3472,7 +3479,7 @@ function kolEventsPage({ account, events, eoEvents, lang }) {
 function kolEventDetail({ account, event, cats, myApplication, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at, L)}${event.ends_at ? ' – ' + fmtDay(event.ends_at, L) : ''}` : '';
   const locLine = event.location ? `<div class="muted" style="font-size:13.5px;margin-top:6px">📍 ${esc(event.location)}</div>` : '';
   let action;
   if (myApplication && myApplication.status === 'approved') {
@@ -3483,14 +3490,14 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
       : `<div class="muted" style="font-size:13px;margin-top:10px">🎯 ${t('apply.stationPending')}</div>`;
     action = `<div class="card" style="margin-top:16px;border:1px solid var(--ok);background:var(--ok-soft)">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge('approved', L)} <b style="font-size:16px">${t('apply.acceptedTitle')}</b></div>
-      ${detailRow('🏷️', t('apply.category'), esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type))}
+      ${detailRow('🏷️', t('apply.category'), esc(talentLabel(L, myApplication.talent_type)))}
       ${locRow}
       ${stationRow}
     </div>`;
   } else if (myApplication) {
     action = `<div class="card" style="margin-top:16px">
       <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('apply.yourApp')}</div>
-      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge(myApplication.status, L)} <b>${esc(CAT_LABEL[myApplication.talent_type] || myApplication.talent_type)}</b></div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${mpStatusBadge(myApplication.status, L)} <b>${esc(talentLabel(L, myApplication.talent_type))}</b></div>
       ${['rejected', 'not_selected', 'not_continued'].includes(myApplication.status) && myApplication.note ? `<div class="muted" style="font-size:13px;margin-top:8px">${esc(myApplication.note)}</div>` : ''}
     </div>`;
   } else if (cats && cats.length) {
@@ -3531,7 +3538,7 @@ function kolApplyForm({ account, event, cat, values, errors, lang }) {
     </div>`).join('');
   const body = `<div class="wrap narrow">
   <a href="/acara/${esc(event.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-  <h1 style="margin-top:0">${t('apply.formTitle', { cat: esc(CAT_LABEL[cat] || cat) })}</h1>
+  <h1 style="margin-top:0">${t('apply.formTitle', { cat: esc(talentLabel(L, cat)) })}</h1>
   <p class="sub">${esc(event.name)}</p>
   ${errorBanner}
   <form class="card" method="post" action="/acara/${esc(event.id)}/apply">
@@ -3546,7 +3553,7 @@ function kolApplyForm({ account, event, cat, values, errors, lang }) {
     <button type="submit" class="btn btn-block">${t('apply.submit')}</button>
   </form>
 </div>`;
-  return appLayout({ title: t('apply.formTitle', { cat: CAT_LABEL[cat] || cat }) + ' — 20FIT', body, role: 'kol', active: 'event', user: acc.name, lang: L });
+  return appLayout({ title: t('apply.formTitle', { cat: talentLabel(L, cat) }) + ' — 20FIT', body, role: 'kol', active: 'event', user: acc.name, lang: L });
 }
 
 /** Confirmation after a talent submits an event registration. */
@@ -3616,7 +3623,7 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
     const full = e.slotsLeft <= 0;
     // Slot counts are hidden from talents; only mark when registration is full.
     const slot = full ? `<div style="margin-top:8px"><span class="dl-when dl-late">${t('mp.slotFull')}</span></div>` : '';
-    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
       <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}${slot}</div>
       ${full ? '' : `<a href="/lamar/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
@@ -3709,7 +3716,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
       <input type="radio" name="${name}" value="${val}" ${v[name] === val || (!v[name] && i === 0) ? 'checked' : ''} style="width:auto"> ${esc(t(key))}</label>`).join('')
     + `</div>`;
 
-  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at, L)}${event.ends_at ? ' – ' + fmtDay(event.ends_at, L) : ''}` : '';
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
@@ -3877,7 +3884,7 @@ function proofTable(proofs, isSuper, lang, settings) {
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at, L)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -4076,7 +4083,7 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   </div>`;
 
   const histRows = history.length ? history.map((h) => `<tr>
-    <td data-label="${t('th.event')}"><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${fmtDate(h.when)}</div></td>
+    <td data-label="${t('th.event')}"><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${fmtDate(h.when, L)}</div></td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${h.list.length}</td>
     <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(h.views)}</td>
     <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(h.eng)}</td>
@@ -4381,7 +4388,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
   const eventRows = events.map((e) => `<tr>
     <td data-label="${t('th.event')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<b>${esc(e.name)}</b></div></td>
-    <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
+    <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at, L) : '…'} – ${e.ends_at ? fmtDay(e.ends_at, L) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
     <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}/absensi?lang=${L}" class="btn btn-ghost btn-sm" title="${t('nav.corrections')}">🗓️</a> <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
@@ -4394,7 +4401,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const assignRows = assignments.map((a) => `<tr>
     <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${talentLabel(L, a.talent_type)})</span></td>
     <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
-    <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at)}</td>
+    <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at, L)}</td>
   </tr>`).join('');
 
   const body = `<div class="wrap">
@@ -4443,7 +4450,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at, L)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -4501,7 +4508,7 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
         <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.status')}</th><th style="text-align:right">${t('eo.detail.applicants')}</th></tr></thead>
         <tbody>${events.map((e) => `<tr>
           <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
-          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—'}</td>
+          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—'}</td>
           <td data-label="${t('th.status')}">${eoRegBadge(e.displayStatus || e.status, L)}</td>
           <td data-label="${t('eo.detail.applicants')}" style="text-align:right"><b>${e.applyCount || 0}</b></td>
         </tr>`).join('')}</tbody>
@@ -4512,7 +4519,7 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <h1 style="margin:0">${esc(eo.name || '')}</h1>${statusPill}
     </div>
-    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at)}</p>
+    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at, L)}</p>
     ${suspended ? `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.suspendedNote')}</div>` : ''}
 
     <div class="section-head"><h2 style="margin:0">${t('eo.detail.profile')}</h2></div>
@@ -4698,7 +4705,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
-          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at, L) })}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
           ${posBlock}
         </div>
@@ -4888,7 +4895,7 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
   const dayList = days || [];
   const daySel = (dayList.length > 1) ? `
   <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
-    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d, L))}</a>`).join('')}
   </div>` : '';
   const total = rows.length;
   const doneCount = rows.filter((r) => r.checked).length;
@@ -5023,7 +5030,7 @@ function leaderAttendancePage(o) {
   const dayList = days || [];
   const daySel = (dayList.length > 1) ? `
   <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
-    ${dayList.map((d, i) => `<a href="/absen/${esc(token)}?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+    ${dayList.map((d, i) => `<a href="/absen/${esc(token)}?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d, L))}</a>`).join('')}
   </div>` : '';
   const whenWib = (iso) => { try { return new Date(iso).toLocaleString(L === 'en' ? 'en-GB' : 'id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }) + ' WIB'; } catch (_) { return ''; } };
   const btnFor = (r, key) => {
@@ -5180,7 +5187,7 @@ function eoAttendancePage(o) {
     : active ? `<span class="pill pill-ok">${esc(s.active)}</span>`
     : `<span class="pill pill-off">${esc(s.notYet)}</span>`;
   const daySel = (days.length > 1) ? `<div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch">
-    ${days.map((d, i) => `<a href="/eo/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+    ${days.map((d, i) => `<a href="/eo/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d, L))}</a>`).join('')}
   </div>` : '';
   const countPill = (cls, label, n) => `<div class="card" style="margin:0;padding:10px 12px;text-align:center;border-top:3px solid ${cls}">
     <div style="font-size:24px;font-weight:800">${n}</div><div class="muted" style="font-size:11.5px">${esc(label)}</div></div>`;
@@ -5234,7 +5241,7 @@ function eoAttendancePage(o) {
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap">
         <b style="font-size:14px">${esc(c.talentName)}</b>${corrStateTag(c.state)}
       </div>
-      <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.posLabel || '')}${c.posLabel ? ' · ' : ''}${esc(fmtDay(c.day))} · ${esc(c.status ? (meta[c.status] ? meta[c.status].label : c.status) : s.unmarked)}</div>
+      <div class="muted" style="font-size:12px;margin-top:3px">${esc(c.posLabel || '')}${c.posLabel ? ' · ' : ''}${esc(fmtDay(c.day, L))} · ${esc(c.status ? (meta[c.status] ? meta[c.status].label : c.status) : s.unmarked)}</div>
       <div style="font-size:13.5px;margin-top:6px;background:var(--bg-soft,#f5f5f7);border-radius:8px;padding:8px 11px">${esc(s.corrReason)}: ${esc(c.reason || '—')}</div>
       ${c.decisionNote ? `<div class="muted" style="font-size:12px;margin-top:4px">↳ ${esc(c.decisionNote)}</div>` : ''}
     </div>`).join('')}
@@ -5296,7 +5303,7 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
       <div><b style="font-size:15px">${esc(i.talentName)}</b> <span class="muted" style="font-size:12.5px">· ${esc(i.eventName)}</span></div>
       ${tag(i.status)}
     </div>
-    <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(s.pos)}: ${esc(i.posLabel)} · ${esc(s.day)}: ${esc(fmtDay(i.day))}</div>
+    <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(s.pos)}: ${esc(i.posLabel)} · ${esc(s.day)}: ${esc(fmtDay(i.day, L))}</div>
     <div style="margin-top:8px;font-size:13.5px;background:var(--bg-soft,#f5f5f7);border-radius:8px;padding:9px 11px"><b>${esc(s.reason)}:</b> ${esc(i.reason || '—')}</div>
     <form method="post" action="/admin/koreksi/${esc(i.id)}/decide" style="margin-top:12px;display:flex;flex-direction:column;gap:9px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -5315,7 +5322,7 @@ function adminCorrections({ staff, pending, decided, lang, flash }) {
   </div>`;
   const decidedRow = (i) => `<div class="card" style="margin-top:10px;padding:12px 14px">
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
-      <div><b style="font-size:14px">${esc(i.talentName)}</b> <span class="muted" style="font-size:12px">· ${esc(i.eventName)} · ${esc(fmtDay(i.day))}</span></div>
+      <div><b style="font-size:14px">${esc(i.talentName)}</b> <span class="muted" style="font-size:12px">· ${esc(i.eventName)} · ${esc(fmtDay(i.day, L))}</span></div>
       <span class="pill ${i.state === 'approved' ? 'pill-ok' : 'pill-off'}">${i.state === 'approved' ? esc(s.approved) : esc(s.rejected)}</span>
     </div>
     ${i.decisionNote ? `<div class="muted" style="font-size:12.5px;margin-top:4px">${esc(s.decidedNote)}: ${esc(i.decisionNote)}</div>` : ''}
@@ -5381,7 +5388,7 @@ function adminAttendancePage(o) {
     : f.err === 'needreason' ? `<div class="banner banner-err">${esc(s.errNeed)}</div>`
     : f.err === 'bad' ? `<div class="banner banner-err">${esc(s.errBad)}</div>` : '';
   const daySel = (days.length > 1) ? `<div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px">
-    ${days.map((d, i) => `<a href="/admin/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+    ${days.map((d, i) => `<a href="/admin/events/${esc(e.id)}/absensi?lang=${L}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d, L))}</a>`).join('')}
   </div>` : '';
   const lbl = (st0) => st0 ? meta[st0].label : s.unmarked;
   const histFor = (attId) => {
@@ -5541,27 +5548,29 @@ function offerConfirmPage({ account, event, eventDate, app, posLabel, lang, flas
   return shell(inner);
 }
 
-function performancePage(board, totalSubs) {
+function performancePage(board, totalSubs, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const rows = board.length ? board.map((e, i) => `<tr>
-    <td class="rank rank-${i + 1}" data-label="Peringkat">${i + 1}</td>
+    <td class="rank rank-${i + 1}" data-label="${t('perf.rank')}">${i + 1}</td>
     <td data-label="KOL"><b>${esc(e.kol_name)}</b></td>
-    <td data-label="Submission">${e.submissions}</td>
-    <td data-label="Link Postingan">${e.posts}</td>
-    <td data-label="Gambar">${e.images}</td>
-    <td class="muted" data-label="Terakhir">${fmtDate(e.last)}</td>
-  </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">Belum ada data.</td></tr>`;
+    <td data-label="${t('perf.submission')}">${e.submissions}</td>
+    <td data-label="${t('perf.postLink')}">${e.posts}</td>
+    <td data-label="${t('perf.image')}">${e.images}</td>
+    <td class="muted" data-label="${t('perf.last')}">${fmtDate(e.last, L)}</td>
+  </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">${t('perf.empty')}</td></tr>`;
 
   const body = `<div class="wrap">
-  <h1>Leaderboard KOL</h1>
-  <p class="sub">Peringkat KOL berdasarkan jumlah submission. ${totalSubs} total submission dari ${board.length} KOL.</p>
+  <h1>${t('perf.title')}</h1>
+  <p class="sub">${t('perf.sub', { total: totalSubs, count: board.length })}</p>
   <div class="card" style="margin-top:18px">
     <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>KOL</th><th>Submission</th><th>Link postingan</th><th>Gambar</th><th>Terakhir</th></tr></thead>
+      <thead><tr><th>#</th><th>KOL</th><th>${t('perf.submission')}</th><th>${t('perf.postLink')}</th><th>${t('perf.image')}</th><th>${t('perf.last')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Leaderboard — 20FIT KOL', body, admin: 'perf' });
+  return layout({ title: t('perf.pageTitle'), body, admin: 'perf', lang: L });
 }
 
 /** Shown when required env config is missing. */
@@ -5584,13 +5593,15 @@ function adminNoService() {
   return layout({ title: 'Admin — 20FIT KOL', body, admin: 'admin' });
 }
 
-function page500(msg) {
+function page500(msg, lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
   const body = `<div class="wrap narrow"><div class="card">
-    <h1>Terjadi kesalahan</h1>
-    <div class="banner banner-err">${esc(msg || 'Unknown error')}</div>
-    <a href="/" class="btn btn-ghost" style="margin-top:16px">Kembali ke Beranda</a>
+    <h1>${t('err.pageTitle')}</h1>
+    <div class="banner banner-err">${esc(msg || t('err.unknown'))}</div>
+    <a href="/" class="btn btn-ghost" style="margin-top:16px">${t('err.backHome')}</a>
   </div></div>`;
-  return layout({ title: 'Error — 20FIT KOL', body });
+  return layout({ title: t('err.pageTitle') + ' — 20FIT', body, lang: L });
 }
 
 // Badge for the prioritised-application status flow (applied → … → completed / rejected).
@@ -5626,7 +5637,7 @@ function applicationTracker(status, lang) {
     const dot = cls === 'done' ? '✓' : String(i + 1);
     return `<div class="trk-step ${cls}${fill}"><span class="trk-dot">${dot}</span><span class="trk-lbl">${esc(t('ta.status.' + s))}</span></div>`;
   }).join('');
-  return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
+  return `<div class="trk" role="list" aria-label="${t('aria.progress')}">${html}</div>`;
 }
 
 function talentHomePath(account) { return '/talent'; }
@@ -5637,7 +5648,7 @@ function talentHomePath(account) { return '/talent'; }
 function talentPositionCard(e, lang, filterable) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '';
   // Each position chip deep-links to that position's jobdesk on the detail page.
   // Chips sit above the whole-card "stretched" link (higher z-index) so they win the click.
   const posLine = (e.openPositions || []).map((p) => `<a href="/event/${esc(e.id)}?lang=${L}#pos-${esc(p.position_id)}" class="tag" style="margin:0 6px 6px 0;display:inline-block;text-decoration:none;color:inherit">${esc(posLabel(p, L))}</a>`).join('');
@@ -5651,7 +5662,7 @@ function talentPositionCard(e, lang, filterable) {
     ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
     ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
     ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
-    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline, L)}</div>` : ''}
     <div style="margin-top:10px;position:relative;z-index:2">${posLine}</div>
     ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
   </div>`;
@@ -5787,7 +5798,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
       }
       return `<div style="padding:12px 0;border-top:${i ? '1px solid var(--line)' : '0'}">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-          <b style="font-size:13.5px">${att.days.length > 1 ? esc(aStr.dayN(i + 1)) + ' · ' : ''}${esc(fmtDay(d))}</b>${tagFor(status)}
+          <b style="font-size:13.5px">${att.days.length > 1 ? esc(aStr.dayN(i + 1)) + ' · ' : ''}${esc(fmtDay(d, L))}</b>${tagFor(status)}
         </div>${noteLine}${marked}${corr}</div>`;
     }).join('');
     const submittedBanner = corrFlash === 'sent' ? `<div class="banner banner-ok" style="margin:0 0 12px">${esc(aStr.submitted)}</div>` : '';
@@ -5804,7 +5815,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
   const loggedIn = !!account;
   const errors = ctx.errors || [];
   const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '';
   // Work type derived from the event's duration (single day = daily; else N days).
   let days = 1;
   if (e.starts_at) { const s = String(e.starts_at).slice(0, 10); const en = e.ends_at ? String(e.ends_at).slice(0, 10) : s; const d = Math.round((new Date(en + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1; days = d > 0 ? d : 1; }
@@ -5818,7 +5829,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cancelFlash, stand
 
   // Event-level info chips (shared by every position).
   const chip = (icon, txt) => txt ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:999px;padding:5px 11px;margin:5px 6px 0 0">${icon} ${esc(txt)}</span>` : '';
-  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
+  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at, L)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline, L)) : ''}</div>`;
 
   // Per-position "job listing" cards.
   const posSorted = (ctx.positions || []).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));

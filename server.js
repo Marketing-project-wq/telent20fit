@@ -568,7 +568,7 @@ app.get('/lang/:code', (req, res) => {
 });
 
 app.get('/prototype', (req, res) => {
-  if (!prototypeHtml) return res.status(404).type('text').send('No prototype file found.');
+  if (!prototypeHtml) return res.status(404).type('text').send(req.t('err.noPrototype'));
   res.type('html').send(prototypeHtml);
 });
 
@@ -4145,7 +4145,7 @@ app.get('/performance', auth.requireStaff(['super_admin']), async (req, res, nex
       map.set(s.kol_name, e);
     });
     const board = [...map.values()].sort((a, b) => b.submissions - a.submissions || b.posts - a.posts);
-    res.send(V.performancePage(board, subs.length));
+    res.send(V.performancePage(board, subs.length, req.lang));
   } catch (e) { next(e); }
 });
 
@@ -4156,11 +4156,12 @@ app.get('/__mockimg/*', (req, res) => { res.type('png').send(PX); });
 // -------------------------------------------------------------- fallbacks ----
 
 app.use((err, req, res, next) => {
-  let msg = err.message || 'Terjadi kesalahan.';
-  if (err.code === 'LIMIT_FILE_SIZE') msg = 'Ukuran gambar terlalu besar (maks 6 MB per file).';
-  if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') msg = 'Maksimal ' + MAX_IMAGES + ' gambar.';
+  const lang = (req && req.lang) || 'id';
+  let msg = err.message || i18n.t(lang, 'err.generic');
+  if (err.code === 'LIMIT_FILE_SIZE') msg = i18n.t(lang, 'err.imgTooBig');
+  if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') msg = i18n.t(lang, 'err.tooManyImgs', { max: MAX_IMAGES });
   console.error('[error]', err.code || '', err.message);
-  res.status(500).send(V.page500(msg));
+  res.status(500).send(V.page500(msg, lang));
 });
 
 // Start listening only when run directly; requiring this module (e.g. for tests)

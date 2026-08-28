@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="id" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preview — Tahap 1 (Teks Antarmuka ID/EN) · 20FIT Talent</title>
+<style>
+  :root{ --red:#E4121F; --bg:#f3f5f8; --card:#ffffff; --line:#e2e6ec; --ink:#17171d; --muted:#63676e; --ok:#0a7d33; --ok-soft:#e7f6ec; --warn-soft:#fff4e5; --err:#c81e1e; --err-soft:#fdecec; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Barlow',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); line-height:1.5; }
+  .wrap{ max-width:1100px; margin:0 auto; padding:22px 18px 60px; }
+  .mock-banner{ background:repeating-linear-gradient(45deg,#111,#111 12px,#1c1c1c 12px,#1c1c1c 24px); color:#fff; padding:14px 18px; font-size:13.5px; text-align:center; border-bottom:3px solid var(--red); }
+  .mock-banner b{ color:#ffd7d9; }
+  h1{ font-family:'Barlow Condensed',sans-serif; font-weight:800; text-transform:uppercase; letter-spacing:.5px; font-size:30px; margin:26px 0 4px; }
+  h2{ font-family:'Barlow Condensed',sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:.4px; font-size:20px; margin:34px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--line); }
+  .sub{ color:var(--muted); font-size:14px; margin:0 0 8px; }
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media(max-width:760px){ .cols{ grid-template-columns:1fr; } }
+  .col-h{ font-weight:800; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin:0 0 8px; }
+  .col-h.id{ color:var(--red); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .hero{ background:#0c0c0f; color:#f3f3f6; border-radius:14px; padding:26px 22px; }
+  .hero .lead{ font-family:'Barlow Condensed',sans-serif; font-weight:800; text-transform:uppercase; font-size:26px; line-height:1.05; }
+  .hero .accent{ color:#ff5a63; }
+  .hero .subh{ color:#c9c9d2; font-size:14px; margin:12px 0 18px; }
+  .btn{ display:inline-block; background:var(--red); color:#fff; text-decoration:none; font-weight:700; padding:10px 18px; border-radius:9px; font-size:14px; border:none; }
+  .btn-ghost{ background:transparent; color:var(--red); border:1px solid var(--red); }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pill{ font-size:12px; font-weight:700; padding:4px 11px; border-radius:999px; background:#eef0f4; color:#3a3a42; }
+  .pill.ok{ background:var(--ok-soft); color:var(--ok); }
+  .pill.warn{ background:var(--warn-soft); color:#a15c00; }
+  .pill.err{ background:var(--err-soft); color:var(--err); }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th,td{ text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); }
+  th{ font-size:12px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); }
+  .err-card{ border:1px solid var(--line); border-radius:14px; padding:18px; background:#fff; }
+  .banner-err{ background:var(--err-soft); color:var(--err); border-radius:9px; padding:11px 13px; font-size:13px; margin:10px 0 14px; }
+  .note{ font-size:12.5px; color:var(--muted); margin-top:6px; }
+  .diff{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px; }
+  .del{ color:#b42318; text-decoration:line-through; }
+  .add{ color:#0a7d33; font-weight:700; }
+  .phones{ display:flex; gap:24px; flex-wrap:wrap; }
+  .phone{ width:300px; border:10px solid #111; border-radius:34px; overflow:hidden; background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.18); }
+  .phone .bar{ background:#fff; border-bottom:1px solid var(--line); padding:10px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .phone .logo{ font-family:'Barlow Condensed',sans-serif; font-weight:800; }
+  .phone .logo b{ color:var(--red); }
+  .lang-toggle{ display:inline-flex; gap:3px; background:#f0f1f4; border:1px solid var(--line); border-radius:8px; padding:3px; }
+  .lang-toggle span{ font-size:11px; font-weight:800; padding:3px 9px; border-radius:6px; color:var(--muted); }
+  .lang-toggle .on{ background:var(--red); color:#fff; }
+  .phone .body{ padding:14px; }
+  .tab{ display:flex; justify-content:space-around; border-top:1px solid var(--line); padding:8px 0; font-size:10.5px; color:var(--muted); text-align:center; }
+  .tab .on{ color:var(--red); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="mock-banner">⚠️ <b>PREVIEW / MOCKUP</b> — ini hanya gambaran tampilan hasil Tahap 1 (perbaikan teks antarmuka ID/EN). <b>Bukan aplikasi yang berjalan.</b> Data contoh. Untuk melihat versi asli, jalankan project & buka URL lokal yang tercantum di chat.</div>
+<div class="wrap">
+
+  <h1>Tahap 1 — Teks Antarmuka (Jenis A)</h1>
+  <p class="sub">Perbandingan langsung versi <b style="color:var(--red)">ID</b> vs <b>EN</b> untuk teks yang tadinya tidak ikut berubah saat toggle bahasa. Warna & token mengikuti brand 20FIT (hitam/putih/merah).</p>
+
+  <h2>1 · Hero Landing</h2>
+  <div class="cols">
+    <div><div class="col-h id">Bahasa Indonesia</div>
+      <div class="hero">
+        <div class="lead">SATU PLATFORM. <span class="accent">PELUANG EVENT TAK TERBATAS.</span></div>
+        <div class="subh">Temukan proyek yang cocok dengan keahlianmu dan jadi bagian dari event olahraga yang seru</div>
+        <a class="btn" href="#">Daftar</a> <a class="btn btn-ghost" href="#">Masuk</a>
+      </div>
+      <div class="note">Sebelumnya ID masih berbunyi Inggris: “ONE PLATFORM.”, “Sign Up”.</div>
+    </div>
+    <div><div class="col-h">English</div>
+      <div class="hero">
+        <div class="lead">ONE PLATFORM. <span class="accent">ENDLESS EVENT OPPORTUNITIES.</span></div>
+        <div class="subh">Find projects that match your skills and be part of exciting sports events</div>
+        <a class="btn" href="#">Sign Up</a> <a class="btn btn-ghost" href="#">Login</a>
+      </div>
+    </div>
+  </div>
+
+  <h2>2 · Status Lamaran Talent</h2>
+  <div class="cols">
+    <div><div class="col-h id">Bahasa Indonesia</div>
+      <div class="card"><div class="chips">
+        <span class="pill">Dilamar</span><span class="pill warn">Sedang Ditinjau</span>
+        <span class="pill ok">Diterima</span><span class="pill">Ditugaskan</span>
+        <span class="pill ok">Selesai</span><span class="pill err">Ditolak</span>
+      </div></div>
+      <div class="note">Sebelumnya semua tampil Inggris walau toggle di “ID”.</div>
+    </div>
+    <div><div class="col-h">English</div>
+      <div class="card"><div class="chips">
+        <span class="pill">Applied</span><span class="pill warn">Under Review</span>
+        <span class="pill ok">Approved</span><span class="pill">Assigned</span>
+        <span class="pill ok">Completed</span><span class="pill err">Rejected</span>
+      </div></div>
+    </div>
+  </div>
+
+  <h2>3 · Leaderboard KOL (+ Format Tanggal)</h2>
+  <div class="cols">
+    <div><div class="col-h id">Bahasa Indonesia</div>
+      <div class="card">
+        <div style="font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;font-size:18px">Leaderboard KOL</div>
+        <p class="sub">Peringkat KOL berdasarkan jumlah submission. 3 total submission dari 1 KOL.</p>
+        <table><thead><tr><th>#</th><th>KOL</th><th>Submission</th><th>Link postingan</th><th>Gambar</th><th>Terakhir</th></tr></thead>
+        <tbody><tr><td>1</td><td><b>Sely</b></td><td>3</td><td>2</td><td>4</td><td>10 Mei 2026, 16:00</td></tr></tbody></table>
+      </div>
+    </div>
+    <div><div class="col-h">English</div>
+      <div class="card">
+        <div style="font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;font-size:18px">KOL Leaderboard</div>
+        <p class="sub">KOL ranking by number of submissions. 3 total submissions from 1 KOL.</p>
+        <table><thead><tr><th>#</th><th>KOL</th><th>Submissions</th><th>Post links</th><th>Images</th><th>Last</th></tr></thead>
+        <tbody><tr><td>1</td><td><b>Sely</b></td><td>3</td><td>2</td><td>4</td><td>10 May 2026, 16:00</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="col-h">Perubahan format tanggal</div>
+    <div class="diff">ID: 10 <span class="add">Mei</span> 2026 &nbsp;·&nbsp; EN: 10 <span class="add">May</span> 2026 &nbsp; <span class="note">(dulu bulan selalu “Mei/Agu/Okt/Des” walau bahasa EN — <span class="del">10 Mei 2026</span> di EN)</span></div>
+  </div>
+
+  <h2>4 · Halaman Error 500</h2>
+  <div class="cols">
+    <div><div class="col-h id">Bahasa Indonesia</div>
+      <div class="err-card"><div style="font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;font-size:18px">Terjadi kesalahan</div>
+        <div class="banner-err">Ukuran gambar terlalu besar (maks 6 MB per file).</div>
+        <a class="btn btn-ghost" href="#">Kembali ke Beranda</a></div>
+    </div>
+    <div><div class="col-h">English</div>
+      <div class="err-card"><div style="font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;font-size:18px">Something went wrong</div>
+        <div class="banner-err">Image too large (max 6 MB per file).</div>
+        <a class="btn btn-ghost" href="#">Back to Home</a></div>
+    </div>
+  </div>
+
+  <h2>5 · Tampilan Layar HP</h2>
+  <div class="phones">
+    <div class="phone">
+      <div class="bar"><span class="logo">2<b>0</b>FIT</span><span class="lang-toggle"><span class="on">ID</span><span>EN</span></span></div>
+      <div class="body">
+        <div class="hero" style="padding:16px"><div class="lead" style="font-size:20px">SATU PLATFORM. <span class="accent">PELUANG EVENT TAK TERBATAS.</span></div>
+        <div class="subh" style="font-size:12px">Temukan proyek yang cocok dengan keahlianmu…</div><a class="btn" href="#" style="font-size:12px">Daftar</a></div>
+        <div style="margin-top:12px" class="chips"><span class="pill">Dilamar</span><span class="pill warn">Sedang Ditinjau</span><span class="pill ok">Diterima</span></div>
+      </div>
+      <div class="tab"><span class="on">📅 Event</span><span>🗂️ Lamaran</span><span>👤 Profil</span></div>
+    </div>
+    <div class="phone">
+      <div class="bar"><span class="logo">2<b>0</b>FIT</span><span class="lang-toggle"><span>ID</span><span class="on">EN</span></span></div>
+      <div class="body">
+        <div class="hero" style="padding:16px"><div class="lead" style="font-size:20px">ONE PLATFORM. <span class="accent">ENDLESS EVENT OPPORTUNITIES.</span></div>
+        <div class="subh" style="font-size:12px">Find projects that match your skills…</div><a class="btn" href="#" style="font-size:12px">Sign Up</a></div>
+        <div style="margin-top:12px" class="chips"><span class="pill">Applied</span><span class="pill warn">Under Review</span><span class="pill ok">Approved</span></div>
+      </div>
+      <div class="tab"><span class="on">📅 Event</span><span>🗂️ Applications</span><span>👤 Profile</span></div>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:30px">Catatan: preview ini menampilkan hasil Tahap 1 (Jenis A) saja. Teks isi data (Jenis B) — mis. deskripsi/persyaratan posisi yang masih campur bahasa di kartu — ditangani terpisah di Tahap 2.</p>
+</div>
+</body>
+</html>
