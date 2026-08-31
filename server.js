@@ -464,6 +464,16 @@ app.get('/login', (req, res) => {
   if (req.query.lang) q.push('lang=' + req.query.lang);
   res.redirect('/login/talent' + (q.length ? '?' + q.join('&') : ''));
 });
+// Cross-device language sync: a talent's explicit language choice (made via the
+// toggle while logged in — see app.get('/lang/:code')) is saved to their account.
+// On login elsewhere, seed the `lang` cookie from it so a new device/browser
+// picks up their preference instead of falling back to the site default.
+function applyPreferredLang(req, res, account) {
+  const pref = account && i18n.normLang(account.preferred_lang || '');
+  if (account && account.preferred_lang && pref !== req.lang) {
+    res.cookie('lang', pref, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
+  }
+}
 const talentLoginPost = async (req, res, next) => {
   try {
     const st = db();
@@ -477,6 +487,7 @@ const talentLoginPost = async (req, res, next) => {
     //    is down. Auto-provisioned app users also land here on later logins.
     if (account && auth.verifyPassword(password, account.password_hash)) {
       auth.setSession(res, account);
+      applyPreferredLang(req, res, account);
       return res.redirect(nxt || '/talent');
     }
     // 2) Fall back to the 20FIT app account directory (only when configured).
@@ -502,6 +513,7 @@ const talentLoginPost = async (req, res, next) => {
         }
         if (account) {
           auth.setSession(res, account);
+          applyPreferredLang(req, res, account);
           return res.redirect(nxt || '/talent');
         }
       }
@@ -576,10 +588,18 @@ app.post('/submit', uploadPublic, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Change language anytime (from any page's switcher); persists via cookie.
+// Change language anytime (from any page's switcher); persists via cookie, and
+// — for a logged-in talent — to their account too (see applyPreferredLang),
+// so the choice follows them to a new device/browser on next login. Best-effort
+// and fire-and-forget: never let a DB hiccup make the toggle itself fail.
 app.get('/lang/:code', (req, res) => {
   const l = i18n.normLang(req.params.code);
   res.cookie('lang', l, { maxAge: 365 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
+  const talentSession = auth.currentTalent(req);
+  if (talentSession) {
+    const st = db();
+    if (st) st.updateAccountProfile(talentSession.id, { preferred_lang: l }).catch((e) => console.warn('[lang] preferred_lang save failed: ' + (e && e.message)));
+  }
   let dest = '/';
   // Redirect back to the page the toggle was clicked on, but strip any ?lang=
   // from it — otherwise that stale query param would override the cookie we
@@ -1002,6 +1022,12 @@ function eventDateStrEn(ev) {
   }
   return `${mn} ${d1}, ${y}`;
 }
+// Locale-dispatching event-date string — use this (not eventDateStr/eventDateStrEn
+// directly) anywhere the string is shown to whoever is actively viewing a page in
+// a given language, so it isn't stuck in Indonesian regardless of their locale.
+// eventDateStr/eventDateStrEn stay as explicit choices for content that's
+// intentionally fixed-language (an English-only email, an ID business record).
+function eventDateStrLoc(ev, lang) { return lang === 'en' ? eventDateStrEn(ev) : eventDateStr(ev); }
 
 // Issue certificates for eligible applications: attended + event finished +
 // cert_auto (not explicitly off). Idempotent via the unique (talent,event)
@@ -2019,7 +2045,7 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
       const tt = talentById.get(a.talent_id) || {}; const to = tt.login; if (!to || !/@/.test(to)) continue;
       const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
       const pos = top && posMaster.get(top.position_id);
-      const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
+      const positionName = pos ? (V.getLocalizedName(pos, 'en').text || 'Position') : 'Position';
       mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: eventName.get(a.event_id) || 'Event 20FIT', positionName, eventDate: eventDateStrEn(mine.find((e) => e.id === a.event_id) || {}) })
         .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
     }
@@ -2182,6 +2208,17 @@ function validateEventForm(f, req) {
   if (f.positions.some((p) => !(p.quota > 0 && p.quota < UNLIMITED_QUOTA))) e.push(req.t('eo.ev.err.quota'));
   return e;
 }
+// Non-blocking warning (not a validation error — save still goes through): true
+// when a position has exactly one side of an ID/EN text pair filled in. That's
+// the exact condition that makes a talent-facing card mix languages, since the
+// empty side then has to fall back to whatever the other language says.
+function positionsMissingLang(positions) {
+  const halfFilled = (id, en) => !!(id && !en) || !!(en && !id);
+  return (positions || []).some((p) => halfFilled(p.description, p.description_en)
+    || halfFilled(p.jobdesk, p.jobdesk_en)
+    || halfFilled(p.requirement, p.requirement_en)
+    || (p.key === 'other' && halfFilled(p.custom_label, p.custom_label_en)));
+}
 
 app.get('/eo/events', requireEo, async (req, res, next) => {
   try {
@@ -2192,7 +2229,7 @@ app.get('/eo/events', requireEo, async (req, res, next) => {
     const withView = await Promise.all(mine.map(async (e) => Object.assign(e, { view: eoEventView(e, await st.listEventPositions(e.id), apps, choices) })));
     await attachMockups(st, withView);
     const profile = await st.getEoProfile(req.staff.id);
-    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), lang: req.lang }));
+    res.send(V.eoEvents({ staff: eoCtx(req), events: withView, profileComplete: eoProfileComplete(profile), langWarn: req.query.langWarn === '1', lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2220,7 +2257,7 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
       await st.setEventPositions(ev.id, f.positions);
       const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
     }
-    res.redirect('/eo/events');
+    res.redirect('/eo/events' + (positionsMissingLang(f.positions) ? '?langWarn=1' : ''));
   } catch (e) { next(e); }
 });
 
@@ -2257,7 +2294,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
     await st.setEventPositions(ev.id, f.positions);
-    res.redirect('/eo/events');
+    res.redirect('/eo/events' + (positionsMissingLang(f.positions) ? '?langWarn=1' : ''));
   } catch (e) { next(e); }
 });
 
@@ -2358,7 +2395,7 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         if (!to || !/@/.test(to)) continue;
         const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
         const pos = top && posById.get(top.position_id);
-        const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
+        const positionName = pos ? (V.getLocalizedName(pos, 'en').text || 'Position') : 'Position';
         mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: ev.name || 'Event 20FIT', positionName, eventDate: eventDateStrEn(ev) })
           .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
       }
@@ -2878,7 +2915,7 @@ async function notifyPositionAcceptance(st, app, ev, positionId) {
   try {
     const positions = await st.listEventPositions(ev.id);
     const pos = positions.find((p) => p.position_id === positionId);
-    if (pos) posLabel = pos.custom_label_en || pos.custom_label || pos.label_en || pos.label_id || 'Position';
+    if (pos) posLabel = V.getLocalizedName(pos, 'en').text || 'Position';
   } catch (_) { /* position label is best-effort */ }
   await mailer.sendSpotConfirmEmail({
     to, name: account.name,
@@ -2912,7 +2949,7 @@ async function notifyGroupForAssigned(st, ev, opts = {}) {
     if (!to || !/@/.test(to)) continue; // no usable email on file
     const pid = acceptedByApp.get(a.id);
     const pos = pid ? posById.get(pid) : null;
-    const positionName = pos ? (pos.custom_label_en || pos.custom_label || pos.label_en || pos.label_id || '') : '';
+    const positionName = pos ? V.getLocalizedName(pos, 'en').text : '';
     try {
       await mailer.sendGroupInviteEmail({ to, name: account.name, eventName: ev.name || 'Event 20FIT', positionName, groupUrl: ev.group_url });
       await st.updateApplication(a.id, { group_notified_at: new Date().toISOString() });
@@ -2930,9 +2967,9 @@ async function notifyPositionRejection(st, app, ev) {
   const to = account && account.login;
   if (!to || !/@/.test(to)) return; // no usable email on file
   await mailer.sendRejectionEmail({
-    to, name: account.name, lang: 'id',
+    to, name: account.name, lang: 'en',
     eventName: (ev && ev.name) || 'Event 20FIT',
-    eventDate: ev ? eventDateStr(ev) : null,
+    eventDate: ev ? eventDateStrEn(ev) : null,
     location: (ev && ev.location) || null,
     category: V.CAT_LABEL[app.talent_type] || app.talent_type,
   });
@@ -2970,7 +3007,7 @@ async function runDueReminders(st) {
     // Accepted position label per app, so position-based talents get an assignment line too.
     const posById = new Map(positions.map((p) => [p.id, p]));
     const acceptedPos = new Map();
-    choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_en || p.label_id || null); } });
+    choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, V.getLocalizedName(p, 'en').text || null); } });
     const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
     let sent = 0;
     for (const a of due) {
@@ -2980,8 +3017,8 @@ async function runDueReminders(st) {
         if (!to || !/@/.test(to)) continue;
         const ev = dueEvents.get(a.event_id);
         const r = await mailer.sendReminderEmail({
-          to, name: account.name, lang: 'id',
-          eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
+          to, name: account.name, lang: 'en',
+          eventName: ev.name || 'Event 20FIT', eventDate: eventDateStrEn(ev),
           location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
           station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
         });
@@ -3143,13 +3180,13 @@ function eventDays(ev) {
 }
 
 // Approved Man Power for an event, sorted by name, with per-day + total attendance.
-async function attendanceRows(st, eventId, day) {
+async function attendanceRows(st, eventId, day, lang) {
   const [apps, talents, choices, positions] = await Promise.all([st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions()]);
   const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
   const posById = new Map(positions.map((p) => [p.id, p]));
   // For position-based apps the "station" is the accepted position (Man Power apps keep a.station).
   const acceptedPos = new Map();
-  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_id || p.label_en || null); } });
+  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, V.getLocalizedName(p, lang).text || null); } });
   return apps
     .filter((a) => a.event_id === eventId && a.status === 'approved')
     .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: acceptedPos.get(a.id) || a.station || null, station_loc: a.station_loc || null, count: dates.length, checked: day ? dates.includes(day) : false }; })
@@ -3169,8 +3206,8 @@ app.get('/absensi/:eventId', async (req, res, next) => {
     const today = jakartaDateStr();
     let day = String(req.query.day || '');
     if (!days.includes(day)) day = days.includes(today) ? today : (days[0] || today);
-    const rows = await attendanceRows(st, eventId, day);
-    res.send(V.attendancePage({ event: ev, eventDate: eventDateStr(ev), rows, days, day, token, lang: req.lang, done: String(req.query.done || '') }));
+    const rows = await attendanceRows(st, eventId, day, req.lang);
+    res.send(V.attendancePage({ event: ev, eventDate: eventDateStrLoc(ev, req.lang), rows, days, day, token, lang: req.lang, done: String(req.query.done || '') }));
   } catch (e) { next(e); }
 });
 

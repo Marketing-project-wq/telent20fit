@@ -3,8 +3,11 @@
 /**
  * Minimal key-based i18n for the server-rendered app.
  * Translations live in ./i18n/en.json and ./i18n/id.json (key -> string).
- * t(lang, key, vars) looks up the key, falls back to ID then to the raw key,
- * and interpolates {placeholder} tokens from `vars`.
+ * t(lang, key, vars) looks up the key, falls back to EN (the app default,
+ * see DEFAULT below) then to the raw key, and interpolates {placeholder}
+ * tokens from `vars`. Keep en.json/id.json in 100% key parity — this
+ * fallback exists only for a key added to one file and not the other, and
+ * it will silently render English on the Indonesian site if that happens.
  */
 
 const en = require('./i18n/en.json');

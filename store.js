@@ -122,14 +122,14 @@ function supabaseStore() {
     },
     async findAccount(talentType, login) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,password_hash')
+        .select('id,talent_type,name,login,password_hash,preferred_lang')
         .eq('talent_type', talentType).eq('login', login).maybeSingle();
       return data || null;
     },
     // Unified login: find a talent account by email across all talent types.
     async findAccountByLogin(login) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,password_hash')
+        .select('id,talent_type,name,login,password_hash,preferred_lang')
         .eq('login', login).order('created_at', { ascending: true }).limit(1);
       return (data && data[0]) || null;
     },

@@ -2,6 +2,17 @@
 
 const { t: tr, normLang } = require('./i18n');
 
+// Outside production, wrap any getLocalized()/langText() fallback text (the
+// OTHER language's raw value shown because the active language's was empty)
+// in a visible dashed outline — so a developer sees exactly which text on
+// screen isn't actually translated, not just the subtle ⚠️ marker shown to
+// real users in every environment. `html` must already be HTML-escaped.
+const IS_PROD = process.env.NODE_ENV === 'production';
+function devFallbackWrap(html, isFallback, lang) {
+  if (!isFallback || IS_PROD) return html;
+  return `<span style="outline:2px dashed #e4121f;outline-offset:2px;background:rgba(228,18,31,.08);border-radius:3px" title="DEV ONLY: fallback text — no ${normLang(lang)} translation">${html}</span>`;
+}
+
 /** HTML-escape a value for safe interpolation. */
 function esc(s) {
   return String(s == null ? '' : s)
@@ -12,22 +23,33 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
-/** Format an ISO timestamp as a short Indonesian date-time. */
-function fmtDate(iso) {
+// Short month abbreviations per locale. Both lists are 3-letter and mostly
+// overlap, which is exactly why a hardcoded single list silently reads as
+// "fine" in either language until someone checks Mei/Agu/Okt/Des vs
+// May/Aug/Oct/Dec — keep this the ONLY place either list is defined.
+const MONTH_ABBR = {
+  id: ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'],
+  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+};
+/** Format an ISO timestamp as a short date-time in the given locale (default id,
+ * matching every call site pre-dating the `lang` param — pass the active
+ * locale explicitly everywhere this is called). */
+function fmtDate(iso, lang) {
   if (!iso) return '-';
   const d = new Date(iso);
   if (isNaN(d)) return '-';
-  const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const bulan = MONTH_ABBR[lang === 'en' ? 'en' : 'id'];
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getDate()} ${bulan[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Format a date-only value ("YYYY-MM-DD") as a short Indonesian date, no time. */
-function fmtDay(d) {
+/** Format a date-only value ("YYYY-MM-DD") as a short date in the given locale
+ * (default id — see fmtDate above), no time. */
+function fmtDay(d, lang) {
   if (!d) return '-';
   const p = String(d).slice(0, 10).split('-');
   if (p.length !== 3) return String(d);
-  const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const bulan = MONTH_ABBR[lang === 'en' ? 'en' : 'id'];
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
 
@@ -464,7 +486,72 @@ const FAQ_CSS = `
 
 // Head script: apply the saved theme before first paint (no flash), and wire the toggle pills.
 // Dark mode removed — every page renders light (data-theme="light" on <html>).
-const THEME_HEAD = '';
+//
+// Also wires the ID/EN language toggle (langToggle()) to swap the page in place
+// instead of a hard navigation: fetch the same /lang/:code the link already
+// points to (the server redirects it back to the current page, now with the
+// cookie set — see app.get('/lang/:code') in server.js), swap <body> for the
+// freshly-rendered one, re-run its inline <script> tags (innerHTML doesn't
+// execute them), and restore scroll position + any open "View details"
+// panels by their stable `pos-<id>` container id. Falls back to a normal
+// navigation on any failure, so the toggle always works even if this JS
+// doesn't run. Delegated on `document` (not a body element) so it survives
+// every subsequent swap without needing to be re-wired; guarded by
+// window.__langSwitchWired since this very script tag gets re-inserted (and
+// would otherwise re-run) on every swap along with the rest of the new body.
+const THEME_HEAD = `<script>(function(){
+  if (window.__langSwitchWired) return;
+  window.__langSwitchWired = true;
+  function openIds(){
+    return Array.prototype.slice.call(document.querySelectorAll('.pos-detail[open]')).map(function(d){
+      var host = d.closest('[id^="pos-"]');
+      return host ? host.id : null;
+    }).filter(Boolean);
+  }
+  function reopen(ids){
+    ids.forEach(function(id){
+      var host = document.getElementById(id);
+      var d = host && host.querySelector('.pos-detail');
+      if (d) d.open = true;
+    });
+  }
+  function execScripts(root){
+    Array.prototype.slice.call(root.querySelectorAll('script')).forEach(function(old){
+      var s = document.createElement('script');
+      for (var i = 0; i < old.attributes.length; i++) s.setAttribute(old.attributes[i].name, old.attributes[i].value);
+      s.textContent = old.textContent;
+      old.parentNode.replaceChild(s, old);
+    });
+  }
+  function switchLang(code){
+    var scrollY = window.scrollY;
+    var ids = openIds();
+    try { localStorage.setItem('lang', code); } catch (e) { /* private mode / storage disabled — cookie still covers persistence */ }
+    fetch('/lang/' + code, { credentials: 'same-origin' }).then(function(res){
+      if (!res.ok) throw new Error('bad status');
+      return res.text().then(function(html){ return { html: html, url: res.url }; });
+    }).then(function(r){
+      var doc = new DOMParser().parseFromString(r.html, 'text/html');
+      if (!doc.body || !doc.documentElement) throw new Error('bad doc');
+      document.title = doc.title;
+      document.documentElement.setAttribute('lang', doc.documentElement.getAttribute('lang') || code);
+      document.body.className = doc.body.className;
+      document.body.innerHTML = doc.body.innerHTML;
+      execScripts(document.body);
+      reopen(ids);
+      window.scrollTo(0, scrollY);
+      try { history.replaceState(null, '', r.url); } catch (e) {}
+    }).catch(function(){
+      location.href = '/lang/' + code; // never leave the toggle non-functional
+    });
+  }
+  document.addEventListener('click', function(ev){
+    var a = ev.target && ev.target.closest ? ev.target.closest('a[href^="/lang/"]') : null;
+    if (!a) return;
+    ev.preventDefault();
+    switchLang(a.getAttribute('href').split('/lang/')[1]);
+  });
+})();</script>`;
 
 /** Theme toggle removed — the app is light-only. */
 function themeToggle() {
@@ -597,7 +684,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
     // Admin / EO keep the original left sidebar (off-canvas drawer on mobile).
     return `${head}
 <body class="app-body staff-app">
-<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="Menu">
+<input type="checkbox" id="nav-cb" class="nav-cb" aria-label="${esc(t('a11y.menu'))}">
 <aside class="sidebar">
   <a href="${homeHref}" class="side-logo brand">${brandMark('TALENT')}</a>
   <nav class="side-nav">${items}</nav>
@@ -610,7 +697,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
 <label for="nav-cb" class="nav-scrim"></label>
 <div class="app-main">
   <div class="app-top">
-    <label for="nav-cb" class="hamburger" role="button" aria-label="Menu">&#9776;</label>
+    <label for="nav-cb" class="hamburger" role="button" aria-label="${esc(t('a11y.menu'))}">&#9776;</label>
     <a href="${homeHref}" class="app-top-logo brand">${brandMark('TALENT')}</a>
   </div>
   ${body}
@@ -777,7 +864,7 @@ function landingPage(lang, opts = {}) {
   ];
   const COACH_GROUP = { arena: '20FIT Arena', gym: '20FIT Gym' };
   const coachHtml = COACHES.filter((c) => c.photo).map((c) => `<div class="coach-card">
-      <div class="coach-photo"><img src="${esc(c.photo)}" alt="Coach ${esc(c.name)}" loading="lazy" decoding="async"></div>
+      <div class="coach-photo"><img src="${esc(c.photo)}" alt="${esc(t('common.coachAlt'))} ${esc(c.name)}" loading="lazy" decoding="async"></div>
       <div class="coach-body"><div class="coach-name">${esc(c.name)}</div><div class="coach-group">${esc(COACH_GROUP[c.group] || '20FIT')}</div></div>
     </div>`).join('');
   const ecoHtml = BRANDS.map((b) => {
@@ -823,7 +910,7 @@ function landingPage(lang, opts = {}) {
   // positions). Cards link to the event detail page; the /event/:id gate sends
   // logged-out visitors through login/register and redirects them back.
   const evList = Array.isArray(opts.events) ? opts.events : [];
-  const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const evDate2 = (e) => { const s = e.starts_at ? fmtDay(e.starts_at, L) : ''; const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at, L) : ''; return en ? s + ' – ' + en : s; };
   const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
   // Group each still-open position into one of three public badge categories.
   const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
@@ -1185,7 +1272,7 @@ ${CARD_CSS}
       <div class="ft-brand">
         <a href="/${q}" class="ft-logo" aria-label="20FIT"><img src="${LOGO_LIGHT}" alt="20FIT"></a>
         <p class="ft-tag">${esc(t('foot.tagline'))}</p>
-        <div class="ft-social" role="group" aria-label="Social media">${socialHtml}</div>
+        <div class="ft-social" role="group" aria-label="${esc(t('a11y.socialMedia'))}">${socialHtml}</div>
       </div>
       <nav class="ft-col" aria-label="${esc(t('foot.eco'))}">
         <div class="ft-h">${esc(t('foot.eco'))}</div>
@@ -1327,7 +1414,7 @@ function landingNav(lang, active, account, opts = {}) {
         <div class="lp-search-key">
           <span class="lp-search-ic" aria-hidden="true">${searchSvg}</span>
           <input type="text" name="q" class="lp-search-in" value="${esc(opts.searchValue || '')}" placeholder="${esc(t('search.ph'))}" aria-label="${esc(t('search.aria'))}" autocomplete="off" maxlength="80">
-          <button type="button" class="lp-search-x" aria-label="clear"${opts.searchValue ? '' : ' hidden'}>&times;</button>
+          <button type="button" class="lp-search-x" aria-label="${esc(t('a11y.clearSearch'))}"${opts.searchValue ? '' : ' hidden'}>&times;</button>
         </div>
         <div class="lp-search-loc" data-loc>
           <span class="lp-search-pin" aria-hidden="true">${pinSvg}</span>
@@ -1895,7 +1982,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
       <input class="au-in" type="tel" id="su-phone" name="phone" required maxlength="20" autocomplete="tel" placeholder="${esc(t('authp.phonePh'))}" value="${esc(v.phone || '')}"></div>
     <div class="au-f"><label for="su-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="su-pass" name="password" required minlength="6" autocomplete="new-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="su-pass" aria-label="show/hide password">${EYE}</button></div>
+        <button type="button" class="au-eye" data-eye="su-pass" aria-label="${esc(t('a11y.togglePassword'))}">${EYE}</button></div>
       <div class="au-hint">${t('hint.min6')}</div></div>
     <button type="submit" class="au-submit">${t('auth.account.registerTitle')}</button>
   </form>`;
@@ -1905,7 +1992,7 @@ function talentAuthPage({ mode, lang, errors, values, next, eventName, cities } 
       <input class="au-in" type="email" id="si-email" name="login" required autocomplete="username" placeholder="${esc(t('authp.emailPh'))}" value="${esc(isLogin ? (v.login || '') : '')}"></div>
     <div class="au-f"><label for="si-pass">${t('common.password')}</label>
       <div class="au-pass"><input class="au-in" type="password" id="si-pass" name="password" required autocomplete="current-password" placeholder="••••••••">
-        <button type="button" class="au-eye" data-eye="si-pass" aria-label="show/hide password">${EYE}</button></div></div>
+        <button type="button" class="au-eye" data-eye="si-pass" aria-label="${esc(t('a11y.togglePassword'))}">${EYE}</button></div></div>
     <button type="submit" class="au-submit">${t('btn.signin')}</button>
     <a class="au-forgot" href="${forgotHref}">${t('auth.forgot.link')}</a>
   </form>`;
@@ -2173,10 +2260,10 @@ function talentProfileBlock(profile, lang) {
     [t('adm.profile.phone'), wa],
     [t('adm.profile.city'), esc(profile.city || '—')],
     [t('adm.profile.ktp'), esc(profile.ktp || '—')],
-    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
+    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate, L)) : '—'],
     [t('adm.profile.gender'), esc(genderLabel)],
     [t('adm.profile.instagram'), ig],
-    [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
+    [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers, L) : '—'],
   ];
   const grid = rows.map(([k, v]) => `<div style="min-width:110px">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(k)}</div>
@@ -2211,7 +2298,7 @@ function talentDataDiri(type, opts = {}) {
   const events = opts.events || [];
   const eventList = events.length
     ? `<div class="dl-list">${events.map((e) => {
-        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+        const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
         return `<div class="dl-item" style="align-items:flex-start">
           <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>
           ${eventStatusBadge(e.status, L)}
@@ -2250,7 +2337,7 @@ function talentDataDiri(type, opts = {}) {
     </div>
     <div class="field">
       <label for="instagram">${t('dd.instagram')}${opt}</label>
-      <input type="text" id="instagram" name="instagram" maxlength="60" placeholder="username" value="${esc(v.instagram || '')}">
+      <input type="text" id="instagram" name="instagram" maxlength="60" placeholder="${esc(t('dd.instagramPh'))}" value="${esc(v.instagram || '')}">
       <div class="hint" style="margin-top:6px">${t('dd.instagramHint')}</div>
     </div>
     <div class="field">
@@ -2461,7 +2548,7 @@ function eoDashboard({ staff, stats, statsData, profileComplete, lang }) {
   const t = (k, v) => tr(L, k, v);
   const card = (label, val, icon) => `<div class="card" style="margin:0">
     <div style="font-size:24px;line-height:1">${icon}</div>
-    <div style="font-size:30px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
+    <div style="font-size:30px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val, L)}</div>
     <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(label)}</div>
   </div>`;
   const reminder = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:14px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
@@ -2620,33 +2707,51 @@ function eoVerifyNeeded({ email, lang }) {
   return layout({ title: t('eo.verify.neededTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }
 
-// Registration-status badge for an EO event.
-// Localized label for a master/event position.
-function posLabel(p, lang) {
+// ---------------------------------------------------------------------------
+// SINGLE canonical per-locale content resolver. Every place in this app that
+// renders role/event/position text content MUST go through getLocalized()
+// (or getLocalizedName() for a display name) instead of touching a `field`/
+// `field_en` (or `field_id`/`field_en`) column pair directly — that keeps the
+// fallback behavior AND the "translation pending" marker consistent no
+// matter which table or naming convention the data comes from.
+//
+// record: any row with `field` (or `field_id`) plus `field_en` columns.
+// fallbackText: an already-locale-appropriate default (e.g. a role template)
+// to try before resorting to the other language's raw text.
+// Returns { text, fb } — fb is true when the OTHER language's raw text had to
+// be borrowed because both the active language's value and fallbackText were
+// empty. Callers that show fb-flagged text to a user must surface that (see
+// the ⚠️ marker + console.warn in card() below) — never mix it in silently.
+function getLocalized(record, field, lang, fallbackText) {
   const L = normLang(lang);
-  // Custom "Lainnya" name: prefer the active language, silently fall back to the other.
-  if (p && (p.custom_label || p.custom_label_en)) {
-    const id = p.custom_label || '', en = p.custom_label_en || '';
-    return L === 'en' ? (en || id) : (id || en);
-  }
-  return L !== 'en' ? (p.label_id || p.key || '') : (p.label_en || p.key || '');
-}
-// Pick the language-appropriate text for a field that has an ID + optional EN
-// version. Order: the requested language's value -> a language-appropriate
-// template (already translated; pass '' when there is none) -> the other
-// language's value with fb=true so callers can note "translation pending".
-function langText(idVal, enVal, tpl, lang) {
-  const L = normLang(lang);
+  const idVal = record ? (record[field] != null ? record[field] : record[field + '_id']) : null;
+  const enVal = record ? record[field + '_en'] : null;
   const id = (idVal == null ? '' : String(idVal)).trim();
   const en = (enVal == null ? '' : String(enVal)).trim();
   const want = L === 'en' ? en : id;
   const other = L === 'en' ? id : en;
   if (want) return { text: want, fb: false };
-  const tp = (tpl == null ? '' : String(tpl)).trim();
+  const tp = (fallbackText == null ? '' : String(fallbackText)).trim();
   if (tp) return { text: tp, fb: false };
   if (other) return { text: other, fb: true };
   return { text: '', fb: false };
 }
+// Display name for a master/event position: the custom "Lainnya" name takes
+// priority when set (custom_label/custom_label_en), else the master role's
+// translated label (label_id/label_en); p.key is the absolute last resort
+// when a role has no name in either language at all (bad data, not a
+// language issue, so this last step is never marked as a fallback).
+function getLocalizedName(p, lang) {
+  if (p && (p.custom_label || p.custom_label_en)) return getLocalized(p, 'custom_label', lang);
+  const r = getLocalized(p, 'label', lang);
+  return r.text ? r : { text: (p && p.key) || '', fb: false };
+}
+// Back-compat thin wrappers — kept so the ~20 existing posLabel(p, L) call
+// sites across the app don't all need touching; they already go through this
+// one shared resolver underneath, which is what actually matters.
+function posLabel(p, lang) { return getLocalizedName(p, lang).text; }
+function posLabelIsFallback(p, lang) { return getLocalizedName(p, lang).fb; }
+function langText(idVal, enVal, tpl, lang) { return getLocalized({ f: idVal, f_en: enVal }, 'f', lang, tpl); }
 
 // Talent profile completeness — 4 equal parts (basic / social / id / docs).
 // Single source of truth for the Talent Profile page, the Talent Apply tables,
@@ -2698,12 +2803,12 @@ function eoRegBadge(status, lang) {
   return `<span class="pill pill-ok">${t('eo.ev.status.published')}</span>`;
 }
 
-function eoEvents({ staff, events, profileComplete, lang }) {
+function eoEvents({ staff, events, profileComplete, langWarn, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const rows = (events && events.length) ? events.map((e) => {
     const v = e.view;
-    const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+    const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—';
     let closeBtn = '';
     if (v.status === 'closed') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm">${t('eo.ev.reopen')}</button></form>`;
     else if (v.status === 'published') closeBtn = `<form class="inline-form" method="post" action="/eo/events/${esc(e.id)}/close" ${jsConfirm(t('eo.ev.closeConfirm'))}><button class="btn btn-ghost btn-sm">${t('eo.ev.close')}</button></form>`;
@@ -2722,6 +2827,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
     </tr>`;
   }).join('') : `<tr><td colspan="6" class="muted">${t('eo.ev.empty')}</td></tr>`;
   const blocker = profileComplete ? '' : `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('eo.profileIncomplete')} <a href="/eo/profile?lang=${L}" style="font-weight:700;text-decoration:underline">${t('eo.completeNow')}</a></div>`;
+  const langWarnBanner = langWarn ? `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('eo.ev.langWarnBanner')}</div>` : '';
   const createBtn = profileComplete ? `<a href="/eo/events/new?lang=${L}" class="btn btn-sm">+ ${t('eo.ev.create')}</a>` : '';
   const body = `<div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -2730,6 +2836,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
   </div>
   <p class="sub">${t('eo.ev.sub')}</p>
   ${blocker}
+  ${langWarnBanner}
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
     <thead><tr><th>${t('eo.ev.th.name')}</th><th>${t('eo.ev.th.date')}</th><th>${t('eo.ev.th.loc')}</th><th>${t('eo.ev.th.status')}</th><th>${t('eo.ev.th.applies')}</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
@@ -2849,8 +2956,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     <div class="field"><label for="category">${t('eo.ev.f.eventType')}${rq}</label>
       <select id="category" name="category" required>
         <option value="">${t('eo.ev.f.eventTypePick')}</option>
-        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; const mk = manpowerKeysForType(ty.key); return `<option value="${esc(lab)}" data-mpkeys="${esc(mk ? mk.join(',') : '')}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
-        ${(e.category && !(eventTypes || []).some((ty) => ((L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '') === e.category)) ? `<option value="${esc(e.category)}" data-mpkeys="" selected>${esc(e.category)}</option>` : ''}
+        ${(eventTypes || []).map((ty) => { const lab = getLocalized(ty, 'label', L).text; const mk = manpowerKeysForType(ty.key); return `<option value="${esc(lab)}" data-mpkeys="${esc(mk ? mk.join(',') : '')}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
+        ${(e.category && !(eventTypes || []).some((ty) => getLocalized(ty, 'label', L).text === e.category)) ? `<option value="${esc(e.category)}" data-mpkeys="" selected>${esc(e.category)}</option>` : ''}
       </select>
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
     </div>
@@ -2989,7 +3096,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
       </div>`
       : `<div class="muted" style="margin-top:10px;font-size:12.5px">${t('eo.grp.emptyNote')}</div>`}
   </div>`;
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const posCards = view.positions.length ? view.positions.map((p) => `<div class="card" style="margin:0;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -3010,7 +3117,7 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
     <div style="display:flex;gap:8px;align-items:center">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
   </div>
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
-  ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+  ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline, L)}</div>` : ''}
   ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
     <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>
@@ -3351,9 +3458,12 @@ function eoApplicantsPageScript() {
  *   super_admin: EO management + campaign management + all talent submissions.
  *   eo:          read-only view of talent submissions (no EO/super-admin visibility).
  */
-function fmtNum(v) {
+/** Thousands-group a number per locale: id-ID groups with '.' (1.000), en-US
+ * with ',' (1,000). Default 'id' matches every call site pre-dating the `lang`
+ * param — pass the active locale explicitly everywhere this is called. */
+function fmtNum(v, lang) {
   if (v === null || v === undefined || v === '') return '–';
-  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, lang === 'en' ? ',' : '.');
 }
 function statusBadge(status, lang) {
   const cls = { extracted: 'pill-ok', verified: 'pill-ok' }[status] || 'pill-off';
@@ -3369,7 +3479,7 @@ function statsLine(x, lang, days, settings) {
     .filter(([k]) => x[k] !== null && x[k] !== undefined && x[k] !== '')
     .map(([k, icon]) => {
       const c = slaColor(metricClass(k, x[k], days, settings));
-      return `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(lang, 'stats.' + k)}</span><b${c ? ` style="color:${c}"` : ''}>${fmtNum(x[k])}</b></div>`;
+      return `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(lang, 'stats.' + k)}</span><b${c ? ` style="color:${c}"` : ''}>${fmtNum(x[k], lang)}</b></div>`;
     });
   const plat = x.platform
     ? `<div style="text-transform:capitalize;font-weight:700;margin-bottom:2px">${esc(x.platform)}</div>` : '';
@@ -3406,7 +3516,7 @@ function assignmentCards(assignments, lang) {
       else if (diff !== null && diff <= 3) badge = `<span class="dl-when dl-near">${t('dash.dueIn', { n: diff })}</span>`;
       else badge = `<span class="dl-when" style="${neutral}">${t('kol.notUploaded')}</span>`;
     }
-    const deadline = a.ends_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${t('kol.deadlineLabel', { date: fmtDay(a.ends_at) })}</div>` : '';
+    const deadline = a.ends_at ? `<div class="muted" style="font-size:12px;margin-top:3px">${t('kol.deadlineLabel', { date: fmtDay(a.ends_at, L) })}</div>` : '';
     return `<div class="dl-item"><div><b>${esc(a.event_name)}</b>${deadline}</div>${badge}</div>`;
   }).join('');
   return `<div class="section-head" style="margin-top:22px"><h2 style="margin:0">📋 ${t('kol.myCampaigns')}</h2></div>
@@ -3430,7 +3540,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
         <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L, days, settings)}</div>
-        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at, L)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
         <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div>
       </div>
     </div>`;
@@ -3588,7 +3698,7 @@ const PROFILE_CSS = `
 // summary and the Applications page so both look identical.
 function applicationCard(e, isCreator, L) {
   const t = (k, v) => tr(L, k, v);
-  const evDate = (x) => { const s = x.starts_at ? fmtDay(x.starts_at) : ''; const en = x.ends_at && String(x.ends_at) !== String(x.starts_at) ? fmtDay(x.ends_at) : ''; return en ? s + ' – ' + en : s; };
+  const evDate = (x) => { const s = x.starts_at ? fmtDay(x.starts_at, L) : ''; const en = x.ends_at && String(x.ends_at) !== String(x.starts_at) ? fmtDay(x.ends_at, L) : ''; return en ? s + ' – ' + en : s; };
   const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
   const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
   // Upload proof is a KOL-only feature (social-media post proof via OCR+LLM), so
@@ -3643,8 +3753,8 @@ function confirmationBanner(events, lang) {
   if (!pending.length) return '';
   const cards = pending.map((e) => {
     const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
-    const s = e.starts_at ? fmtDay(e.starts_at) : '';
-    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const s = e.starts_at ? fmtDay(e.starts_at, L) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at, L) : '';
     const date = s ? (en ? s + ' – ' + en : s) : '';
     return `<div class="cf-card">
       <div class="cf-badge">🎉 ${t('confirm.badge')}</div>
@@ -3674,7 +3784,7 @@ function rejectionPopup(events, lang) {
   const action = `/talent/applications/${esc(e.appId)}/reject-seen`;
   return `<div class="rj-overlay">
     <form class="rj-modal" method="post" action="${action}" role="dialog" aria-modal="true" aria-labelledby="rjTitle">
-      <button type="submit" name="next" value="/talent?lang=${L}" class="rj-close" aria-label="Close">&times;</button>
+      <button type="submit" name="next" value="/talent?lang=${L}" class="rj-close" aria-label="${esc(t('a11y.close'))}">&times;</button>
       <div class="rj-emoji" aria-hidden="true">💪</div>
       <div class="rj-title" id="rjTitle">${t('reject.title')}</div>
       <p class="rj-body">${esc(t('reject.body', { pos: posLbl || '—', event: e.name }))}</p>
@@ -3704,8 +3814,8 @@ function assignedGroupBanner(events, lang) {
   if (!assigned.length) return '';
   const cards = assigned.map((e) => {
     const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
-    const s = e.starts_at ? fmtDay(e.starts_at) : '';
-    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const s = e.starts_at ? fmtDay(e.starts_at, L) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at, L) : '';
     const date = s ? (en ? s + ' – ' + en : s) : '';
     const cta = e.groupUrl
       ? `<a href="${esc(e.groupUrl)}" target="_blank" rel="noopener" class="btn ag-join">👥 ${t('tp.group.join')}</a>`
@@ -3740,7 +3850,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   const roleLabel = talentLabel(L, acc.talent_type);
   const verified = acc.hyrox_cert_status === 'verified';
   const cityLine = acc.city ? esc(acc.city) + ', ID' : '';
-  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at)) }) : '';
+  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at, L)) }) : '';
   const metaBits = [handle, cityLine, joined].filter(Boolean).join(' · ');
   const bio = acc.experience || '';
 
@@ -4003,7 +4113,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
   // EO position-based events show inline in the same list (newest reg-deadline first).
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, true)).join('');
   const cards = evs.map((e) => {
-    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
     const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
     const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
     let applied = '';
@@ -4083,7 +4193,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
 function kolEventDetail({ account, event, cats, myApplication, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at, L)}${event.ends_at ? ' – ' + fmtDay(event.ends_at, L) : ''}` : '';
   const locLine = event.location ? `<div class="muted" style="font-size:13.5px;margin-top:6px">📍 ${esc(event.location)}</div>` : '';
   let action;
   if (myApplication && myApplication.status === 'approved') {
@@ -4227,7 +4337,7 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
     const full = e.slotsLeft <= 0;
     // Slot counts are hidden from talents; only mark when registration is full.
     const slot = full ? `<div style="margin-top:8px"><span class="dl-when dl-late">${t('mp.slotFull')}</span></div>` : '';
-    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
+    const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at, L)}${e.ends_at ? ' – ' + fmtDay(e.ends_at, L) : ''}</div>` : '';
     return `<div class="dl-item" style="align-items:flex-start">
       <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}${slot}</div>
       ${full ? '' : `<a href="/lamar/${esc(e.id)}?lang=${L}" class="btn btn-sm" style="flex-shrink:0">${t('mp.viewSow')}</a>`}
@@ -4328,7 +4438,7 @@ function mainPowerApply({ talent, event, customSow, jobdesks, lang, errors, valu
       <input type="radio" name="${name}" value="${val}" ${v[name] === val || (!v[name] && i === 0) ? 'checked' : ''} style="width:auto"> ${esc(t(key))}</label>`).join('')
     + `</div>`;
 
-  const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
+  const dateLine = event.starts_at ? `${fmtDay(event.starts_at, L)}${event.ends_at ? ' – ' + fmtDay(event.ends_at, L) : ''}` : '';
 
   const body = `<div class="wrap narrow">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
@@ -4476,10 +4586,10 @@ function hBar(title, items, lang) {
   const L = normLang(lang);
   const rows = (items || []).filter((x) => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 12);
   const max = rows.length ? rows[0].value : 0;
-  const inner = rows.length ? rows.map((x) => `<div class="bar-row" title="${esc(x.name)}: ${fmtNum(x.value)}">
+  const inner = rows.length ? rows.map((x) => `<div class="bar-row" title="${esc(x.name)}: ${fmtNum(x.value, L)}">
       <div class="bar-label">${esc(x.name)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.max(3, Math.round(x.value / max * 100))}%"></div></div>
-      <div class="bar-val">${fmtNum(x.value)}</div>
+      <div class="bar-val">${fmtNum(x.value, L)}</div>
     </div>`).join('') : `<p class="muted" style="font-size:13px">${tr(L, 'an.noData')}</p>`;
   return `<div class="chart"><div class="chart-title">${esc(title)}</div>${inner}</div>`;
 }
@@ -4567,7 +4677,7 @@ function statsSection({ role, events, selectedId, eventStats, aggregate, lang, t
   if (!evs.length) return `${selector}<p class="muted" style="margin-top:14px">${t('stats.noEventsType')}</p>`;
   const card = (label, val, icon) => `<div class="card" style="margin:0">
     <div style="font-size:22px;line-height:1">${icon}</div>
-    <div style="font-size:28px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val)}</div>
+    <div style="font-size:28px;font-weight:800;margin-top:8px;line-height:1">${fmtNum(val, L)}</div>
     <div class="muted" style="font-size:12px;margin-top:4px">${esc(label)}</div>
   </div>`;
   const strengthMeter = (pct) => `<div class="card" style="margin:0">
@@ -4614,7 +4724,7 @@ function proofTable(proofs, isSuper, lang, settings) {
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at, L)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -4708,8 +4818,8 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
     <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
     <td data-label="${t('dash.kolCount')}" style="text-align:right">${e.kols.size}</td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${e.posts}</td>
-    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
-    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(e.eng)}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views, L)}</td>
+    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(e.eng, L)}</td>
   </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${t('an.noData')}</td></tr>`;
 
   const boardRows = board.length ? board.map((e, i) => `<tr>
@@ -4717,11 +4827,11 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
     <td data-label="${t('th.kol')}">${e.id ? `<a href="/admin/kol/${esc(e.id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(e.name)}</a>` : `<b>${esc(e.name)}</b>`}<div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
     <td data-label="${t('score.col')}">${scoreBadge(e.sc, L)}</td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${e.proofs}</td>
-    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
-    <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes)}</td>
-    <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments)}</td>
-    <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves)}</td>
-    <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares)}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views, L)}</td>
+    <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes, L)}</td>
+    <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments, L)}</td>
+    <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves, L)}</td>
+    <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares, L)}</td>
   </tr>`).join('') : `<tr><td colspan="9" class="muted" style="padding:22px;text-align:center">${t('dash.emptyKol')}</td></tr>`;
 
   const widget = (icon, label, num, sub, extra = '') => `<div class="wcard${extra ? ' wcard-muted' : ''}">
@@ -4756,11 +4866,11 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
 
   <div class="section-head"><h2 style="margin:0">${t('dash.totalEngagement')}</h2></div>
   <div class="stat-grid">
-    <div class="stat"><div class="n">${fmtNum(tot.views)}</div><div class="l">👁 ${t('stats.views')}</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.likes)}</div><div class="l">❤️ ${t('stats.likes')}</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.comments)}</div><div class="l">💬 ${t('stats.comments')}</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.saves)}</div><div class="l">🔖 ${t('stats.saves')}</div></div>
-    <div class="stat"><div class="n">${fmtNum(tot.shares)}</div><div class="l">📤 ${t('stats.shares')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.views, L)}</div><div class="l">👁 ${t('stats.views')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.likes, L)}</div><div class="l">❤️ ${t('stats.likes')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.comments, L)}</div><div class="l">💬 ${t('stats.comments')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.saves, L)}</div><div class="l">🔖 ${t('stats.saves')}</div></div>
+    <div class="stat"><div class="n">${fmtNum(tot.shares, L)}</div><div class="l">📤 ${t('stats.shares')}</div></div>
   </div>
 
   <div class="section-head"><h2 style="margin:0">${t('dash.perEvent')}</h2></div>
@@ -4817,10 +4927,10 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   </div>`;
 
   const histRows = history.length ? history.map((h) => `<tr>
-    <td data-label="${t('th.event')}"><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${fmtDate(h.when)}</div></td>
+    <td data-label="${t('th.event')}"><b>${esc(h.name)}</b><div class="muted" style="font-size:12px">${fmtDate(h.when, L)}</div></td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${h.list.length}</td>
-    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(h.views)}</td>
-    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(h.eng)}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(h.views, L)}</td>
+    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(h.eng, L)}</td>
     <td data-label="${t('score.col')}">${scoreBadge(h.sc, L)}</td>
   </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${t('score.noHistory')}</td></tr>`;
 
@@ -4895,9 +5005,9 @@ function adminAnalysis({ staff, proofs, lang }) {
 
   const metricRows = METRICS.map((k) => `<tr>
     <td data-label="${t('an.metric')}">${ICON[k]} ${t('stats.' + k)}</td>
-    <td data-label="${t('an.total')}" style="text-align:right"><b>${fmtNum(m[k].total)}</b></td>
-    <td data-label="${t('an.avg')}" style="text-align:right">${m[k].count ? fmtNum(Math.round(m[k].total / m[k].count)) : '–'}</td>
-    <td data-label="${t('an.max')}" style="text-align:right">${fmtNum(m[k].max)}</td>
+    <td data-label="${t('an.total')}" style="text-align:right"><b>${fmtNum(m[k].total, L)}</b></td>
+    <td data-label="${t('an.avg')}" style="text-align:right">${m[k].count ? fmtNum(Math.round(m[k].total / m[k].count), L) : '–'}</td>
+    <td data-label="${t('an.max')}" style="text-align:right">${fmtNum(m[k].max, L)}</td>
   </tr>`).join('');
 
   const bars = (list, key) => {
@@ -4905,7 +5015,7 @@ function adminAnalysis({ staff, proofs, lang }) {
     if (!rows.length) return `<p class="muted">${t('an.noData')}</p>`;
     const max = rows[0][key];
     return rows.map((r) => `<div style="margin-bottom:13px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;gap:10px"><span>${esc(r.name)}</span><b>${fmtNum(r[key])}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;gap:10px"><span>${esc(r.name)}</span><b>${fmtNum(r[key], L)}</b></div>
       <div style="background:var(--card2);border-radius:6px;height:10px;overflow:hidden"><div style="background:var(--red);height:100%;border-radius:6px;width:${Math.max(4, Math.round(r[key] / max * 100))}%"></div></div>
     </div>`).join('');
   };
@@ -4914,7 +5024,7 @@ function adminAnalysis({ staff, proofs, lang }) {
   const eventList = [...byEvent.values()].sort((a, b) => b.views - a.views);
   const platformList = [...byPlatform.values()].sort((a, b) => (b.views + b.likes) - (a.views + a.likes));
 
-  const engTd = (e) => fmtNum(e.likes + e.comments + e.saves + e.shares);
+  const engTd = (e) => fmtNum(e.likes + e.comments + e.saves + e.shares, L);
 
   const body = `<div class="wrap">
   ${staffHead(staff, t('an.title'))}
@@ -4941,11 +5051,11 @@ function adminAnalysis({ staff, proofs, lang }) {
       <tbody>${eventList.length ? eventList.map((e) => `<tr>
         <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
         <td data-label="${t('th.proofs')}" style="text-align:right">${e.posts}</td>
-        <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
-        <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes)}</td>
-        <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments)}</td>
-        <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves)}</td>
-        <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares)}</td>
+        <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views, L)}</td>
+        <td data-label="${t('stats.likes')}" style="text-align:right">${fmtNum(e.likes, L)}</td>
+        <td data-label="${t('stats.comments')}" style="text-align:right">${fmtNum(e.comments, L)}</td>
+        <td data-label="${t('stats.saves')}" style="text-align:right">${fmtNum(e.saves, L)}</td>
+        <td data-label="${t('stats.shares')}" style="text-align:right">${fmtNum(e.shares, L)}</td>
       </tr>`).join('') : `<tr><td colspan="7" class="muted" style="text-align:center;padding:22px">${t('an.noData')}</td></tr>`}</tbody>
     </table></div>
   </div>
@@ -4957,7 +5067,7 @@ function adminAnalysis({ staff, proofs, lang }) {
       <tbody>${platformList.length ? platformList.map((e) => `<tr>
         <td data-label="${t('an.platform')}" style="text-transform:capitalize"><b>${esc(e.name)}</b></td>
         <td data-label="${t('th.proofs')}" style="text-align:right">${e.posts}</td>
-        <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
+        <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views, L)}</td>
         <td data-label="${t('an.engTotal')}" style="text-align:right">${engTd(e)}</td>
       </tr>`).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:22px">${t('an.noData')}</td></tr>`}</tbody>
     </table></div>
@@ -4994,12 +5104,12 @@ function adminOverview({ staff, proofs, lang }) {
   // KPI stat tiles for the event headline totals.
   const kpiTiles = (o) => {
     const tiles = [
-      ['👁', t('stats.views'), fmtNum(o.views)],
-      ['📡', t('stats.reach'), fmtNum(o.reach)],
-      ['📊', t('stats.impressions'), fmtNum(o.impressions)],
-      ['🔥', t('ov.engagement'), fmtNum(eng(o))],
+      ['👁', t('stats.views'), fmtNum(o.views, L)],
+      ['📡', t('stats.reach'), fmtNum(o.reach, L)],
+      ['📊', t('stats.impressions'), fmtNum(o.impressions, L)],
+      ['🔥', t('ov.engagement'), fmtNum(eng(o), L)],
       ['📈', t('ov.engRate'), pct(o)],
-      ['🔗', t('stats.linkClicks'), fmtNum(o.link_clicks)],
+      ['🔗', t('stats.linkClicks'), fmtNum(o.link_clicks, L)],
     ];
     return `<div class="stat-grid" style="margin-top:14px">${tiles.map(([ic, lab, val]) => `<div class="stat"><div class="n">${val}</div><div class="l">${ic} ${lab}</div></div>`).join('')}</div>`;
   };
@@ -5012,7 +5122,7 @@ function adminOverview({ staff, proofs, lang }) {
     ['ov.engagement', '_eng'], ['ov.engRate', '_er'], ['stats.likes', 'likes'],
     ['stats.comments', 'comments'], ['stats.shares', 'shares'], ['stats.saves', 'saves'], ['stats.linkClicks', 'link_clicks'],
   ];
-  const cell = (o, key) => key === '_eng' ? fmtNum(eng(o)) : key === '_er' ? pct(o) : fmtNum(o[key]);
+  const cell = (o, key) => key === '_eng' ? fmtNum(eng(o), L) : key === '_er' ? pct(o) : fmtNum(o[key], L);
   const rawCell = (o, key) => key === '_eng' ? eng(o) : key === '_er' ? (erate(o) || 0) : (o[key] || 0);
   const kolTable = (ev) => {
     const list = [...ev.kols.values()].sort((a, b) => eng(b) - eng(a));
@@ -5125,7 +5235,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
 
   const eventRows = events.map((e) => `<tr>
     <td data-label="${t('th.event')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<b>${esc(e.name)}</b></div></td>
-    <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at) : '…'} – ${e.ends_at ? fmtDay(e.ends_at) : '…'}` : '—'}</td>
+    <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at || e.ends_at ? `${e.starts_at ? fmtDay(e.starts_at, L) : '…'} – ${e.ends_at ? fmtDay(e.ends_at, L) : '…'}` : '—'}</td>
     <td data-label="${t('th.needs')}">${(e.positions && e.positions.length) ? (e.positions.map((p) => esc(posLabel(p, L))).slice(0, 4).join(', ') + (e.positions.length > 4 ? ` <span class="muted">+${e.positions.length - 4}</span>` : '')) : ((e.needs || []).map((n) => `${talentLabel(L, n.talent_type)}${n.headcount > 1 ? ' ×' + n.headcount : ''}`).join(', ') || '<span class="muted">—</span>')}</td>
     <td data-label="${t('th.status')}"><span class="pill ${e.is_active ? 'pill-ok' : 'pill-off'}">${e.is_active ? t('ev.active') : t('ev.inactive')}</span>${e.completed_at ? ` <span class="pill pill-off">✓ ${t('ev.done')}</span>` : ''}</td>
     <td style="text-align:right;white-space:nowrap"><a href="/admin/events/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" title="${t('stat.pos.title')}">📊 ${t('adm.event.statsLink')}</a> <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm" title="${t('title.edit')}">✎ ${t('btn.edit')}</a> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/complete"><input type="hidden" name="completed" value="${e.completed_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${e.completed_at ? t('btn.reopen') : t('btn.markDone')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/toggle"><button class="btn btn-ghost btn-sm">${e.is_active ? t('btn.deactivate') : t('btn.activate')}</button></form> <form class="inline-form" method="post" action="/admin/events/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEvent'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td>
@@ -5138,7 +5248,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const assignRows = assignments.map((a) => `<tr>
     <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${talentLabel(L, a.talent_type)})</span></td>
     <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
-    <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at)}</td>
+    <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at, L)}</td>
   </tr>`).join('');
 
   const body = `<div class="wrap">
@@ -5179,7 +5289,7 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
     </form>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.name')}</th><th>${t('common.email')}</th><th>${t('th.created')}</th><th></th></tr></thead>
-      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
+      <tbody>${eos.length ? eos.map((e) => `<tr><td data-label="${t('th.name')}"><a href="/admin/eos/${esc(e.id)}?lang=${L}" style="font-weight:700;color:var(--red);text-decoration:none">${esc(e.name)}</a>${e.status === 'suspended' ? ` <span class="pill pill-off" style="font-size:11px">${t('eo.status.suspended')}</span>` : ''}</td><td data-label="${t('common.email')}">${esc(e.login)}</td><td data-label="${t('th.created')}" class="muted">${fmtDate(e.created_at, L)}</td><td style="text-align:right;white-space:nowrap"><a href="/admin/eos/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('eo.detail.view')}</a> <form class="inline-form" method="post" action="/admin/eos/${esc(e.id)}/delete" ${jsConfirm(t('confirm.deleteEo'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form></td></tr>`).join('') : `<tr><td colspan="4" class="muted">${t('manage.emptyEos')}</td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -5237,7 +5347,7 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
         <thead><tr><th>${t('th.event')}</th><th>${t('th.schedule')}</th><th>${t('th.status')}</th><th style="text-align:right">${t('eo.detail.applicants')}</th></tr></thead>
         <tbody>${events.map((e) => `<tr>
           <td data-label="${t('th.event')}"><b>${esc(e.name)}</b></td>
-          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—'}</td>
+          <td data-label="${t('th.schedule')}" class="muted" style="font-size:13px;white-space:nowrap">${e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—'}</td>
           <td data-label="${t('th.status')}">${eoRegBadge(e.displayStatus || e.status, L)}</td>
           <td data-label="${t('eo.detail.applicants')}" style="text-align:right"><b>${e.applyCount || 0}</b></td>
         </tr>`).join('')}</tbody>
@@ -5248,7 +5358,7 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <h1 style="margin:0">${esc(eo.name || '')}</h1>${statusPill}
     </div>
-    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at)}</p>
+    <p class="sub" style="margin:4px 0 0">${esc(eo.login || '')} · ${t('th.created')} ${fmtDate(eo.created_at, L)}</p>
     ${suspended ? `<div class="banner banner-warn" style="margin-top:14px">${t('eo.detail.suspendedNote')}</div>` : ''}
 
     <div class="section-head"><h2 style="margin:0">${t('eo.detail.profile')}</h2></div>
@@ -5341,7 +5451,7 @@ function adminEventDetail({ staff, event, view, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '—';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '—';
   const timeLine = e.start_time ? ` · ${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}` : '';
   const body = `<div class="wrap">
   <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
@@ -5469,7 +5579,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
-          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at, L) })}</div>
           <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
           ${posBlock}
@@ -5693,7 +5803,7 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
   const dayList = days || [];
   const daySel = (dayList.length > 1) ? `
   <div style="display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;-webkit-overflow-scrolling:touch">
-    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d))}</a>`).join('')}
+    ${dayList.map((d, i) => `<a href="/absensi/${esc(event.id)}?k=${esc(token)}&day=${esc(d)}" class="btn btn-sm ${d === day ? '' : 'btn-ghost'}" style="flex-shrink:0;white-space:nowrap">${esc(s.dayN(i + 1))} · ${esc(fmtDay(d, L))}</a>`).join('')}
   </div>` : '';
   const total = rows.length;
   const doneCount = rows.filter((r) => r.checked).length;
@@ -5744,7 +5854,7 @@ function performancePage(board, totalSubs, lang) {
     <td data-label="${t('perf.submission')}">${e.submissions}</td>
     <td data-label="${t('perf.postLink')}">${e.posts}</td>
     <td data-label="${t('perf.image')}">${e.images}</td>
-    <td class="muted" data-label="${t('perf.last')}">${fmtDate(e.last)}</td>
+    <td class="muted" data-label="${t('perf.last')}">${fmtDate(e.last, L)}</td>
   </tr>`).join('') : `<tr><td colspan="6" class="muted" style="padding:22px;text-align:center">${t('perf.empty')}</td></tr>`;
 
   const body = `<div class="wrap">
@@ -5757,7 +5867,7 @@ function performancePage(board, totalSubs, lang) {
     </table></div>
   </div>
 </div>`;
-  return layout({ title: 'Leaderboard — 20FIT KOL', body, admin: 'perf', lang: L });
+  return layout({ title: t('perf.title') + ' — 20FIT KOL', body, admin: 'perf', lang: L });
 }
 
 /** Shown when required env config is missing. */
@@ -5778,7 +5888,7 @@ function adminNoService(lang) {
     <h1>${t('adm.noService.title')}</h1>
     <div class="banner banner-warn">${t('adm.noService.body')}</div>
   </div></div>`;
-  return layout({ title: 'Admin — 20FIT KOL', body, admin: 'admin', lang: L });
+  return layout({ title: t('adm.noService.title') + ' — 20FIT KOL', body, admin: 'admin', lang: L });
 }
 
 function page500(msg, lang) {
@@ -5789,7 +5899,7 @@ function page500(msg, lang) {
     <div class="banner banner-err">${esc(msg || t('err500.generic'))}</div>
     <a href="/" class="btn btn-ghost" style="margin-top:16px">${t('err500.back')}</a>
   </div></div>`;
-  return layout({ title: 'Error — 20FIT KOL', body, lang: L });
+  return layout({ title: t('err500.title') + ' — 20FIT KOL', body, lang: L });
 }
 
 // Badge for the prioritised-application status flow (applied → … → completed / rejected).
@@ -5823,7 +5933,7 @@ function applicationTracker(status, lang) {
     const dot = cls === 'done' ? '✓' : String(i + 1);
     return `<div class="trk-step ${cls}${fill}"><span class="trk-dot">${dot}</span><span class="trk-lbl">${esc(t('ta.status.' + s))}</span></div>`;
   }).join('');
-  return `<div class="trk" role="list" aria-label="Application progress">${html}</div>`;
+  return `<div class="trk" role="list" aria-label="${esc(t('a11y.applicationProgress'))}">${html}</div>`;
 }
 
 function talentHomePath(account) { return '/talent'; }
@@ -5834,7 +5944,7 @@ function talentHomePath(account) { return '/talent'; }
 function talentPositionCard(e, lang, filterable) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '';
   // Each position chip deep-links to that position's jobdesk on the detail page.
   // Chips sit above the whole-card "stretched" link (higher z-index) so they win the click.
   const posLine = (e.openPositions || []).map((p) => `<a href="/event/${esc(e.id)}?lang=${L}#pos-${esc(p.position_id)}" class="tag" style="margin:0 6px 6px 0;display:inline-block;text-decoration:none;color:inherit">${esc(posLabel(p, L))}</a>`).join('');
@@ -5848,7 +5958,7 @@ function talentPositionCard(e, lang, filterable) {
     ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
     ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
     ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
-    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
+    ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline, L)}</div>` : ''}
     <div style="margin-top:10px;position:relative;z-index:2">${posLine}</div>
     ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
   </div>`;
@@ -5889,7 +5999,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const loggedIn = !!account;
   const errors = ctx.errors || [];
   const eb = errors.length ? `<div class="banner banner-err" style="margin-top:14px"><b>${t('err.header')}</b><ul>${errors.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
-  const date = e.starts_at ? fmtDay(e.starts_at) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at) : '') : '';
+  const date = e.starts_at ? fmtDay(e.starts_at, L) + (e.ends_at && e.ends_at !== e.starts_at ? ' – ' + fmtDay(e.ends_at, L) : '') : '';
   // Work type derived from the event's duration (single day = daily; else N days).
   let days = 1;
   if (e.starts_at) { const s = String(e.starts_at).slice(0, 10); const en = e.ends_at ? String(e.ends_at).slice(0, 10) : s; const d = Math.round((new Date(en + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1; days = d > 0 ? d : 1; }
@@ -5903,13 +6013,13 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 
   // Event-level info chips (shared by every position).
   const chip = (icon, txt) => txt ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:999px;padding:5px 11px;margin:5px 6px 0 0">${icon} ${esc(txt)}</span>` : '';
-  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
+  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at, L)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline, L)) : ''}</div>`;
 
   // Per-position "job listing" cards.
   const HIDDEN_POSITION_KEYS = ['judge'];
   const posSorted = (ctx.positions || []).filter((p) => !HIDDEN_POSITION_KEYS.includes(p.key)).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
   const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
-  const sec = (icon, label, txt, cls) => `<div class="pos-sec${cls ? ' ' + cls : ''}"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
+  const sec = (icon, label, txt, cls, fb) => `<div class="pos-sec${cls ? ' ' + cls : ''}"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${devFallbackWrap(esc(txt), fb, L)}</div></div>`;
   // Soft-red line icon per position family (falls back to a clipboard), shown in
   // the tile atop each card — mirrors the "Why Choose" benefit-card style.
   const _svg = (d) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
@@ -5935,11 +6045,21 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       return v === k ? '' : v;
     };
     // Language-aware: EO's typed text in the active language, else the (translated)
-    // role template, else the other language's text. Non-"other" roles always have
-    // a template, so English never falls through to Indonesian for them.
-    const descText = langText(p.description, p.description_en, tplText('desc'), L).text;
-    const jobdeskText = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L).text;
-    const reqText = langText(p.requirement, p.requirement_en, tplText('req'), L).text;
+    // role template, else the other language's text (fb:true). Non-"other" roles
+    // always have a template, so this only actually falls through to the other
+    // language's raw text for the custom "Lainnya" role, which has none.
+    const descRes = langText(p.description, p.description_en, tplText('desc'), L);
+    const jobdeskRes = langText(p.jobdesk, p.jobdesk_en, tplText('job'), L);
+    const reqRes = langText(p.requirement, p.requirement_en, tplText('req'), L);
+    const descText = descRes.text, jobdeskText = jobdeskRes.text, reqText = reqRes.text;
+    const nameFallback = posLabelIsFallback(p, L);
+    const anyFallback = nameFallback || descRes.fb || jobdeskRes.fb || reqRes.fb;
+    if (anyFallback) {
+      // Surfaced to the talent as a small marker on the card (below); logged here
+      // so an admin/EO can find and fill in the missing translation.
+      const missing = [nameFallback && 'name', descRes.fb && 'description', jobdeskRes.fb && 'jobdesk', reqRes.fb && 'requirement'].filter(Boolean).join(',');
+      console.warn('[i18n] position ' + p.position_id + ' (' + p.key + ') showing ' + L + ' fallback for: ' + missing);
+    }
     // Talent-facing cards intentionally hide the quota / slots-left numbers so
     // applicants can't gauge scarcity and rush to apply. The Open / Full / Closed
     // status still shows via the corner badge below, and EO + Super Admin keep the
@@ -5993,8 +6113,8 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     // "Requirements" heading lands on the same row across cards regardless of how
     // long each card's Jobdesk text is.
     const detailRows = [
-      ['📋', t('ta.jobdesk'), jobdeskText, 'pos-sec-fixed'],
-      ['✅', t('ta.requirement'), reqText, 'pos-sec-fixed'],
+      ['📋', t('ta.jobdesk'), jobdeskText, 'pos-sec-fixed', jobdeskRes.fb],
+      ['✅', t('ta.requirement'), reqText, 'pos-sec-fixed', reqRes.fb],
       ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
       ['💰', t('ta.fee'), p.fee],
       ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
@@ -6003,12 +6123,15 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     if (p.key === 'fotografer') detailRows.push(['🖼️', t('ta.d.photoOutput'), p.photo_output], ['⏰', t('ta.d.photoDeadline'), p.photo_deadline], ['📷', t('ta.d.photoEquip'), p.photo_equipment]);
     const filledRows = detailRows.filter(([, , v]) => v && String(v).trim());
     const detailHtml = filledRows.length
-      ? `<details class="pos-detail"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v, cls]) => sec(ic, lb, v, cls)).join('')}</div></details>`
+      ? `<details class="pos-detail"><summary>${t('ta.viewDetail')}</summary><div style="margin-top:8px">${filledRows.map(([ic, lb, v, cls, fb]) => sec(ic, lb, v, cls, fb)).join('')}</div></details>`
       : '';
+    // A clear, visible marker (not a silent mix) when any field above had to
+    // borrow the other language's text — small inline icon, no layout change.
+    const fallbackMark = anyFallback ? ` <abbr title="${esc(t('common.transPending'))}" aria-label="${esc(t('common.transPending'))}" style="cursor:help;text-decoration:none">⚠️</abbr>` : '';
     return benefitCard({
       icon: posIcon(p.key),
-      title: esc(posLabel(p, L)),
-      desc: descText ? esc(descText) : '',
+      title: devFallbackWrap(esc(posLabel(p, L)), nameFallback, L) + fallbackMark,
+      desc: descText ? devFallbackWrap(esc(descText), descRes.fb, L) : '',
       corner: badge,
       foot: detailHtml + (action ? `<div class="pos-foot">${action}</div>` : ''),
       id: 'pos-' + esc(p.position_id),
@@ -6098,6 +6221,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 }
 
 module.exports = {
+  getLocalized, getLocalizedName,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
