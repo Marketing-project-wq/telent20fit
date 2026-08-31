@@ -5393,7 +5393,6 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     rem0: okBanner(t('mpr.remNone')),
     remerr: errBanner(t('mpr.mailError')),
     certsent: okBanner(t('mpr.certSent')),
-    certmock: warnBanner(t('mpr.certMock')),
     cert0: okBanner(t('mpr.certNone')),
     certerr: errBanner(t('mpr.mailError')),
   }[flash] || '';
