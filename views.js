@@ -3761,7 +3761,10 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
     ? certs.map((c) => `<div class="tp-cert">
         <div class="tp-cert-ico">🎖</div>
         <div class="tp-cert-main"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''} · ${esc(c.cert_no)}</div></div>
-        <a href="/sertifikat/${esc(c.id)}" class="btn btn-ghost btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a></div>`).join('')
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <a href="/sertifikat/${esc(c.id)}?view=1" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('cert.open')}</a>
+          <a href="/sertifikat/${esc(c.id)}" class="btn btn-ghost btn-sm">⬇ ${t('cert.download')}</a>
+        </div></div>`).join('')
     : `<div style="display:flex;gap:14px;align-items:center;padding:4px 0"><div style="width:44px;height:44px;border-radius:50%;border:2px dashed var(--line);flex:0 0 auto"></div><div style="min-width:0"><b style="font-size:14px">${t('cert.emptyTitle')}</b><div class="muted" style="font-size:12.5px;margin-top:3px">${t('cert.empty')}</div></div></div>`;
 
   // Profile strength — from the shared helper so every surface agrees.
@@ -5389,6 +5392,9 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     remmock: warnBanner(t('mpr.remMock')),
     rem0: okBanner(t('mpr.remNone')),
     remerr: errBanner(t('mpr.mailError')),
+    certsent: okBanner(t('mpr.certSent')),
+    cert0: okBanner(t('mpr.certNone')),
+    certerr: errBanner(t('mpr.mailError')),
   }[flash] || '';
   // Labels for application answer keys (new category forms + legacy MP q1–q4).
   const ANSWER_LABEL = {

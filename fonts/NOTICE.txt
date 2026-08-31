@@ -1,0 +1,10 @@
+Fonts bundled for server-side certificate rendering (cert.js).
+All four families are licensed under the SIL Open Font License 1.1 (OFL),
+which permits bundling and redistribution with the software:
+
+  Barlow Condensed  — © The Barlow Project Authors
+  Great Vibes       — © TypeSETit, LLC
+  Manrope           — © Mikhail Sharanda / the Manrope Project Authors
+  JetBrains Mono    — © 2020 The JetBrains Mono Project Authors
+
+Full license text: https://openfontlicense.org

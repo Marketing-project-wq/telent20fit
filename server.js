@@ -940,9 +940,11 @@ app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
     const c = await st.getCertificate(req.params.id);
     if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/talent?lang=' + req.lang);
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderCertificatePDF(await buildCertRenderData(st, c, base));
+    // ?view=1 opens inline (in-tab preview); default downloads as an attachment.
+    const inline = req.query.view === '1' || req.query.view === 'inline';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="Sertifikat-${c.cert_no}.pdf"`);
     res.send(buf);
   } catch (e) { next(e); }
 });
@@ -1001,6 +1003,19 @@ function eventDateStrEn(ev) {
     return `${mn} ${d1}, ${y} – ${EN_MONTHS[m2] || ''} ${d2}, ${y2}`;
   }
   return `${mn} ${d1}, ${y}`;
+}
+
+// Build the payload for cert.renderCertificatePDF. Enriches the stored snapshot
+// with the event's English date + location (looked up live so old certs render
+// consistently too); falls back to the stored date if the event is gone.
+async function buildCertRenderData(st, c, base) {
+  let event_date = c.event_date || null;
+  let location = null;
+  try {
+    const ev = (await st.listEvents()).find((e) => e.id === c.event_id);
+    if (ev) { event_date = eventDateStrEn(ev); location = ev.location || null; }
+  } catch (e) { /* keep stored snapshot */ }
+  return { ...c, event_date, location, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no };
 }
 
 // Issue certificates for eligible applications: attended + event finished +
@@ -2999,16 +3014,60 @@ async function runDueReminders(st) {
   }
 }
 
-// Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
-// is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
-// even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
+// Auto-finish events whose end date has passed (WIB), which is what enables
+// certificate issuance. Bounded to a 7-day catch-up window so the first run
+// never retroactively sweeps the entire event history; going forward each event
+// finishes at H+1. cert_auto === false opts an event out. Returns { completed }.
+async function autoCompleteEndedEvents(st) {
+  if (!st) return { completed: 0 };
+  try {
+    const today = jakartaDateStr();
+    const floor = addDaysYMD(today, -7); // never reach back further than 7 days
+    const events = await st.listEvents().catch((err) => {
+      console.warn('[auto-complete] could not fetch events:', err && err.message);
+      return [];
+    });
+    const ended = events.filter((e) => {
+      if (e.completed_at || e.cert_auto === false) return false;
+      const end = String(e.ends_at || e.starts_at || '').slice(0, 10);
+      return end && end < today && end >= floor; // ended 1–7 days ago (WIB)
+    });
+    if (!ended.length) return { completed: 0 };
+    for (const e of ended) { await st.completeEvent(e.id, true); }
+    // Re-fetch so completed_at is set, then issue certs for the finished events.
+    const events2 = await st.listEvents().catch(() => []);
+    const eventById = new Map(events2.map((e) => [e.id, e]));
+    const [apps, talents] = await Promise.all([st.listApplications().catch(() => []), st.listTalents().catch(() => [])]);
+    const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+    const endedIds = new Set(ended.map((e) => e.id));
+    await issueCertsForApps(st, apps.filter((a) => endedIds.has(a.event_id)), eventById, nameById);
+    console.log('[auto-complete] finished ' + ended.length + ' ended event(s): ' + ended.map((e) => e.name).join(', '));
+    return { completed: ended.length };
+  } catch (err) {
+    console.warn('[auto-complete] skipped:', err && err.message);
+    return { completed: 0 };
+  }
+}
+
+// One scheduler pass: H-1 reminders, then auto-finish ended events — which
+// issues certificates for attended talents so they appear automatically in each
+// talent's dashboard (no email; the talent opens/downloads it there).
+async function runDailyJobs(st) {
+  await runDueReminders(st).catch((e) => console.warn('[reminders] skipped:', e && e.message));
+  await autoCompleteEndedEvents(st).catch((e) => console.warn('[auto-complete] skipped:', e && e.message));
+}
+
+// Hourly scheduler (daytime WIB, so nobody is pinged at 3am): H-1 reminders and
+// auto-finishing ended events (which issues certificates). Each job is
+// idempotent (reminder_sent_at / completed_at) so running every hour never
+// double-acts. Disable all with REMINDERS_DISABLED=1.
 let _remTimer = null;
 function startReminderScheduler() {
   if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
   const tick = () => {
     const h = jakartaHour();
-    if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
-    runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
+    if (h < 8 || h >= 21) return; // only run between 08:00–20:59 WIB
+    runDailyJobs(db()).catch((e) => console.warn('[scheduler] tick skipped:', e && e.message));
   };
   _remTimer = setInterval(tick, 60 * 60 * 1000); // hourly
   if (_remTimer.unref) _remTimer.unref();
@@ -3026,6 +3085,21 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
       const { due, sent } = await runDueReminders(st);
       flash = due === 0 ? 'rem0' : (sent > 0 ? 'remsent' : 'remmock');
     } catch (e) { console.error('[reminders] manual run failed:', e && e.message); flash = 'remerr'; }
+    res.redirect('/admin/applications?mail=' + flash);
+  } catch (e) { next(e); }
+});
+
+// Super admin: run the certificate automation on demand — auto-finish any ended
+// events, which issues certificates for attended talents. For testing / catch-up.
+app.post('/admin/certs/run', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    let flash = 'certerr';
+    try {
+      const { completed } = await autoCompleteEndedEvents(st);
+      flash = completed > 0 ? 'certsent' : 'cert0';
+    } catch (e) { console.error('[auto-complete] manual run failed:', e && e.message); flash = 'certerr'; }
     res.redirect('/admin/applications?mail=' + flash);
   } catch (e) { next(e); }
 });
@@ -3288,7 +3362,7 @@ app.get('/admin/certificates/:id', auth.requireStaff(['super_admin']), async (re
     const c = await st.getCertificate(req.params.id);
     if (!c) return res.redirect('/admin/applications');
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderCertificatePDF(await buildCertRenderData(st, c, base));
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
     res.send(buf);
