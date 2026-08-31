@@ -3497,13 +3497,22 @@ const PROFILE_CSS = `
 .tp-check-item{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted)}
 .tp-check-item.done{color:var(--ink)}
 .tp-check-dot{width:15px;height:15px;border-radius:50%;flex:0 0 auto;border:2px solid var(--line);background:var(--card)}
-.tp-check-item.done .tp-check-dot{background:var(--red);border-color:var(--red)}
+.tp-check-item.done .tp-check-dot{background:#0f7a45;border-color:#0f7a45;position:relative}
+.tp-check-item.done .tp-check-dot::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font:900 9px/1 Barlow,sans-serif}
 .tp-details>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .tp-details>summary::-webkit-details-marker{display:none}
 .tp-caret::after{content:' ⌄';display:inline-block;transition:transform .2s}
 .tp-details[open] .tp-caret::after{transform:rotate(180deg)}
 .tp-docrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
+.tp-cert{display:flex;align-items:center;gap:13px;padding:13px 0;border-top:1px solid var(--line)}
+.tp-cert:first-child{border-top:0}
+.tp-cert-ico{width:42px;height:42px;border-radius:11px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 auto}
+.tp-cert-main{min-width:0;flex:1}
+.tp-cert-main b{display:block;font-size:14px}
+.tp-cta{position:relative;overflow:hidden;background:radial-gradient(120% 160% at 90% 0%,rgba(228,18,31,.30),transparent 46%),linear-gradient(160deg,#171319,#0d0d10);border-radius:20px;padding:22px 24px;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;text-decoration:none}
+.tp-cta h2{font:800 20px/1.05 'Barlow Condensed',sans-serif;text-transform:uppercase;color:#fff;margin:0}
+.tp-cta p{color:rgba(255,255,255,.7);font-size:13.5px;margin:4px 0 0}
 @media(max-width:620px){.tp-stats,.tp-stats.n3{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid rgba(255,255,255,.12)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
 /* "Confirm your spot" banner — an EO accepted this talent; they Agree (→Assigned) or Decline. */
 .cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
@@ -3722,8 +3731,9 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
 
   // Certificates — real list, or the "auto-issued" placeholder.
   const certBlock = (certs && certs.length)
-    ? certs.map((c, i) => `<div class="tp-docrow"${i ? ' style="border-top:1px solid var(--line)"' : ''}>
-        <div style="min-width:0"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''} · ${esc(c.cert_no)}</div></div>
+    ? certs.map((c) => `<div class="tp-cert">
+        <div class="tp-cert-ico">🎖</div>
+        <div class="tp-cert-main"><b>${esc(c.event_name)}</b><div class="muted" style="font-size:12px;margin-top:2px">${esc(c.role || '')}${c.event_date ? ' · ' + esc(c.event_date) : ''} · ${esc(c.cert_no)}</div></div>
         <a href="/sertifikat/${esc(c.id)}" class="btn btn-ghost btn-sm" style="flex-shrink:0">⬇ ${t('cert.download')}</a></div>`).join('')
     : `<div style="display:flex;gap:14px;align-items:center;padding:4px 0"><div style="width:44px;height:44px;border-radius:50%;border:2px dashed var(--line);flex:0 0 auto"></div><div style="min-width:0"><b style="font-size:14px">${t('cert.emptyTitle')}</b><div class="muted" style="font-size:12.5px;margin-top:3px">${t('cert.empty')}</div></div></div>`;
 
@@ -3795,6 +3805,11 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
         <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
       </details>
     </div>
+
+    <a class="tp-cta" href="/events?lang=${L}">
+      <div><h2>${t('prof.cta.title')}</h2><p>${t('prof.cta.sub')}</p></div>
+      <span class="btn btn-sm">${t('prof.cta.btn')} →</span>
+    </a>
   </div>
 
   </div>`;
