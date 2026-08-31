@@ -1004,6 +1004,7 @@
   "cert.empty": "No certificates yet. They appear automatically after you're marked attended and the event is finished.",
   "cert.emptyTitle": "No certificates yet",
   "cert.download": "Download",
+  "cert.open": "Open",
   "cert.issue": "Issue Certificate",
   "cert.revoke": "Revoke",
   "cert.restore": "Restore",

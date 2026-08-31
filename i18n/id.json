@@ -1004,6 +1004,7 @@
   "cert.empty": "Belum ada sertifikat. Sertifikat muncul otomatis setelah kamu ditandai hadir & event selesai.",
   "cert.emptyTitle": "Belum ada sertifikat",
   "cert.download": "Download",
+  "cert.open": "Buka",
   "cert.issue": "Terbitkan Sertifikat",
   "cert.revoke": "Cabut",
   "cert.restore": "Pulihkan",

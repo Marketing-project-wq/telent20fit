@@ -940,9 +940,11 @@ app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
     const c = await st.getCertificate(req.params.id);
     if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/talent?lang=' + req.lang);
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderCertificatePDF(await buildCertRenderData(st, c, base));
+    // ?view=1 opens inline (in-tab preview); default downloads as an attachment.
+    const inline = req.query.view === '1' || req.query.view === 'inline';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="Sertifikat-${c.cert_no}.pdf"`);
     res.send(buf);
   } catch (e) { next(e); }
 });
@@ -1001,6 +1003,19 @@ function eventDateStrEn(ev) {
     return `${mn} ${d1}, ${y} – ${EN_MONTHS[m2] || ''} ${d2}, ${y2}`;
   }
   return `${mn} ${d1}, ${y}`;
+}
+
+// Build the payload for cert.renderCertificatePDF. Enriches the stored snapshot
+// with the event's English date + location (looked up live so old certs render
+// consistently too); falls back to the stored date if the event is gone.
+async function buildCertRenderData(st, c, base) {
+  let event_date = c.event_date || null;
+  let location = null;
+  try {
+    const ev = (await st.listEvents()).find((e) => e.id === c.event_id);
+    if (ev) { event_date = eventDateStrEn(ev); location = ev.location || null; }
+  } catch (e) { /* keep stored snapshot */ }
+  return { ...c, event_date, location, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no };
 }
 
 // Issue certificates for eligible applications: attended + event finished +
@@ -3288,7 +3303,7 @@ app.get('/admin/certificates/:id', auth.requireStaff(['super_admin']), async (re
     const c = await st.getCertificate(req.params.id);
     if (!c) return res.redirect('/admin/applications');
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderCertificatePDF(await buildCertRenderData(st, c, base));
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
     res.send(buf);
