@@ -3460,26 +3460,27 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
 const PROFILE_CSS = `
 .tp-wrap{max-width:1120px}
 .tp-card-kicker{font:800 11px/1 Barlow,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.tp-hero{position:relative;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px 26px 0;overflow:hidden}
-.tp-hero::before{content:"";position:absolute;inset:0 0 auto 0;height:170px;background:linear-gradient(160deg,var(--red-soft),transparent 72%);pointer-events:none}
+.tp-hero{position:relative;background:radial-gradient(120% 150% at 88% 0%,rgba(228,18,31,.30),transparent 44%),linear-gradient(160deg,#171319,#0d0d10);border:1px solid #26232b;border-radius:20px;padding:26px 26px 0;overflow:hidden;color:#fff}
+.tp-hero::before{content:none}
 .tp-hero-main,.tp-stats{position:relative}
 .tp-hero-main{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
 .tp-avatar{width:92px;height:92px;border-radius:22px;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;font:800 40px/1 'Barlow Condensed',sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.16)}
 .tp-id{flex:1 1 260px;min-width:0}
 .tp-kicker{font:800 11px/1 Barlow,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
 .tp-nameline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
-.tp-name{font:800 clamp(28px,3.6vw,40px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0;word-break:break-word}
+.tp-name{font:800 clamp(28px,3.6vw,40px)/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0;word-break:break-word;color:#fff}
 .tp-pill-cat{background:var(--red);color:#fff;font:800 12px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.03em;padding:6px 12px;border-radius:999px}
-.tp-pill-verified{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);color:var(--muted);font:700 11px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.05em;padding:5px 11px;border-radius:999px;background:var(--card)}
-.tp-meta{color:var(--muted);font-size:13.5px;margin-top:10px;word-break:break-word}
-.tp-bio{font-size:14px;line-height:1.6;margin:12px 0 0;max-width:640px;white-space:pre-wrap}
+.tp-pill-verified{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.85);font:700 11px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.05em;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.06)}
+.tp-meta{color:rgba(255,255,255,.62);font-size:13.5px;margin-top:10px;word-break:break-word}
+.tp-bio{font-size:14px;line-height:1.6;margin:12px 0 0;max-width:640px;white-space:pre-wrap;color:rgba(255,255,255,.82)}
+.tp-hero-actions .btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.28);color:#fff}
 .tp-hero-actions{display:flex;gap:10px;flex-shrink:0;flex-wrap:wrap}
-.tp-stats{display:grid;grid-template-columns:repeat(4,1fr);margin:24px -26px 0;border-top:1px solid var(--line)}
+.tp-stats{display:grid;grid-template-columns:repeat(4,1fr);margin:24px -26px 0;border-top:1px solid rgba(255,255,255,.12)}
 .tp-stats.n3{grid-template-columns:repeat(3,1fr)}
-.tp-stat{padding:16px 26px;border-left:1px solid var(--line)}
+.tp-stat{padding:16px 26px;border-left:1px solid rgba(255,255,255,.12)}
 .tp-stat:first-child{border-left:0}
-.tp-stat-n{font:800 30px/1 'Barlow Condensed',sans-serif}
-.tp-stat-l{font:700 11px/1 Barlow,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.tp-stat-n{font:800 30px/1 'Barlow Condensed',sans-serif;color:#fff}
+.tp-stat-l{font:700 11px/1 Barlow,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-top:6px}
 .tp-stack{display:flex;flex-direction:column;gap:18px;margin-top:24px}
 .tp-stack .card{margin-top:0}
 .tp-sec-head h2{font:800 19px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0}
@@ -3503,7 +3504,7 @@ const PROFILE_CSS = `
 .tp-details[open] .tp-caret::after{transform:rotate(180deg)}
 .tp-docrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .tp-doc-ok{color:#178a54;font-size:12.5px;font-weight:700}
-@media(max-width:620px){.tp-stats,.tp-stats.n3{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid var(--line)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
+@media(max-width:620px){.tp-stats,.tp-stats.n3{grid-template-columns:repeat(2,1fr)}.tp-stat:nth-child(odd){border-left:0}.tp-stat:nth-child(n+3){border-top:1px solid rgba(255,255,255,.12)}.tp-hero{padding:20px 18px 0}.tp-stats{margin:20px -18px 0}.tp-stat{padding:14px 18px}.tp-hero-actions{width:100%}.tp-hero-actions .btn{flex:1}}
 /* "Confirm your spot" banner — an EO accepted this talent; they Agree (→Assigned) or Decline. */
 .cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
 .cf-card{border:1.5px solid #178a54;border-radius:16px;padding:18px 20px;background:linear-gradient(135deg,rgba(23,138,84,.10),rgba(23,138,84,.03));box-shadow:0 6px 20px rgba(23,138,84,.10)}
@@ -3754,20 +3755,6 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       <div class="tp-hero-actions"><a href="/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('tp.editProfile')}</a></div>
     </div>
     <div class="tp-stats${statDefs.length !== 4 ? ' n' + statDefs.length : ''}">${statCells}</div>
-
-    <details class="tp-details" style="border-top:1px solid var(--line);margin-top:20px;padding-top:16px">
-      <summary>
-        <span style="display:flex;align-items:center;gap:10px;min-width:0">
-          <span style="width:30px;height:30px;border-radius:9px;background:var(--red-soft);color:var(--red);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c.5-2 2-3 3-3s2.5 1 3 3"/><path d="M14 9h4M14 13h4"/></svg></span>
-          <span style="min-width:0">
-            <span class="tp-card-kicker" style="display:block">${t('prof.dataTitle')}</span>
-            <span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:320px">${acc.profile_completed_at ? esc([acc.city, acc.phone].filter(Boolean).join(' · ')) : t('adm.profile.incomplete')}</span>
-          </span>
-        </span>
-        <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
-      </summary>
-      <div style="margin-top:14px;padding-bottom:20px">${talentProfileBlock(acc, L)}</div>
-    </details>
   </div>
 
   ${confirmationBanner(events, L)}
@@ -3791,6 +3778,22 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
       <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
       ${docRows}
       <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
+    </div>
+
+    <div class="card">
+      <details class="tp-details">
+        <summary>
+          <span style="display:flex;align-items:center;gap:10px;min-width:0">
+            <span style="width:30px;height:30px;border-radius:9px;background:var(--red-soft);color:var(--red);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c.5-2 2-3 3-3s2.5 1 3 3"/><path d="M14 9h4M14 13h4"/></svg></span>
+            <span style="min-width:0">
+              <span class="tp-card-kicker" style="display:block">${t('prof.dataTitle')}</span>
+              <span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:320px">${acc.profile_completed_at ? esc([acc.city, acc.phone].filter(Boolean).join(' · ')) : t('adm.profile.incomplete')}</span>
+            </span>
+          </span>
+          <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
+        </summary>
+        <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
+      </details>
     </div>
   </div>
 
