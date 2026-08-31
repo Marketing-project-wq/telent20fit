@@ -3014,16 +3014,101 @@ async function runDueReminders(st) {
   }
 }
 
-// Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
-// is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
-// even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
+// Auto-finish events whose end date has passed (WIB), which is what enables
+// certificate issuance. Bounded to a 7-day catch-up window so the first run
+// never retroactively sweeps the entire event history; going forward each event
+// finishes at H+1. cert_auto === false opts an event out. Returns { completed }.
+async function autoCompleteEndedEvents(st) {
+  if (!st) return { completed: 0 };
+  try {
+    const today = jakartaDateStr();
+    const floor = addDaysYMD(today, -7); // never reach back further than 7 days
+    const events = await st.listEvents().catch((err) => {
+      console.warn('[auto-complete] could not fetch events:', err && err.message);
+      return [];
+    });
+    const ended = events.filter((e) => {
+      if (e.completed_at || e.cert_auto === false) return false;
+      const end = String(e.ends_at || e.starts_at || '').slice(0, 10);
+      return end && end < today && end >= floor; // ended 1–7 days ago (WIB)
+    });
+    if (!ended.length) return { completed: 0 };
+    for (const e of ended) { await st.completeEvent(e.id, true); }
+    // Re-fetch so completed_at is set, then issue certs for the finished events.
+    const events2 = await st.listEvents().catch(() => []);
+    const eventById = new Map(events2.map((e) => [e.id, e]));
+    const [apps, talents] = await Promise.all([st.listApplications().catch(() => []), st.listTalents().catch(() => [])]);
+    const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+    const endedIds = new Set(ended.map((e) => e.id));
+    await issueCertsForApps(st, apps.filter((a) => endedIds.has(a.event_id)), eventById, nameById);
+    console.log('[auto-complete] finished ' + ended.length + ' ended event(s): ' + ended.map((e) => e.name).join(', '));
+    return { completed: ended.length };
+  } catch (err) {
+    console.warn('[auto-complete] skipped:', err && err.message);
+    return { completed: 0 };
+  }
+}
+
+// Email any issued-but-not-yet-emailed certificates, PDF attached. Idempotent
+// via cert_emailed_at (only marked on genuine delivery), and capped per run so a
+// backlog drains gradually instead of bursting against the mail API. The cert
+// already shows in the talent's dashboard immediately; this just delivers it.
+const CERT_EMAIL_MAX_PER_RUN = 40;
+async function emailPendingCertificates(st) {
+  if (!st) return { due: 0, sent: 0 };
+  try {
+    const pending = await st.listCertificatesPendingEmail().catch((err) => {
+      console.warn('[cert-mail] could not fetch pending certs:', err && err.message);
+      return [];
+    });
+    if (!pending.length) return { due: 0, sent: 0 };
+    const base = (process.env.APP_BASE_URL || 'https://talent.20fit.id').replace(/\/+$/, '');
+    let sent = 0;
+    for (const c of pending.slice(0, CERT_EMAIL_MAX_PER_RUN)) {
+      try {
+        if (c.revoked_at) continue;
+        const account = await st.getAccountById(c.talent_id);
+        const to = account && account.login;
+        if (!to || !/@/.test(to)) { console.warn('[cert-mail] no email for talent ' + c.talent_id + ' (cert ' + c.cert_no + ')'); continue; }
+        const data = await buildCertRenderData(st, c, base);
+        const pdf = await cert.renderCertificatePDF(data);
+        const r = await mailer.sendCertificateEmail({
+          to, name: account.name || c.talent_name || '',
+          eventName: c.event_name, eventDate: data.event_date,
+          certNo: c.cert_no, verifyUrl: data.verifyUrl, pdfBuffer: pdf,
+        });
+        // Mark emailed only once genuinely delivered, so a missing/invalid mail
+        // key retries next run instead of silently burning the notification.
+        if (r && r.delivered) { await st.markCertificateEmailed(c.id); sent++; }
+      } catch (e) { console.error('[cert-mail] failed for cert ' + c.id + ':', e && e.message); }
+    }
+    if (sent) console.log('[cert-mail] sent ' + sent + ' certificate email(s)');
+    return { due: pending.length, sent };
+  } catch (err) {
+    console.warn('[cert-mail] check skipped:', err && err.message);
+    return { due: 0, sent: 0 };
+  }
+}
+
+// One scheduler pass, in order: H-1 reminders, then auto-finish ended events,
+// then email freshly-issued certificates (so a same-pass issue also goes out).
+async function runDailyJobs(st) {
+  await runDueReminders(st).catch((e) => console.warn('[reminders] skipped:', e && e.message));
+  await autoCompleteEndedEvents(st).catch((e) => console.warn('[auto-complete] skipped:', e && e.message));
+  await emailPendingCertificates(st).catch((e) => console.warn('[cert-mail] skipped:', e && e.message));
+}
+
+// Hourly scheduler (daytime WIB, so nobody is pinged at 3am): H-1 reminders,
+// auto-finishing ended events, and emailing issued certificates. Each job is
+// idempotent (reminder_sent_at / completed_at / cert_emailed_at) so running
+// every hour never double-sends. Disable all with REMINDERS_DISABLED=1.
 let _remTimer = null;
 function startReminderScheduler() {
   if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
   const tick = () => {
     const h = jakartaHour();
-    if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
-    runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
+    if (h < 8 || h >= 21) return; // only run between 08:00–20:59 WIB
+    runDailyJobs(db()).catch((e) => console.warn('[scheduler] tick skipped:', e && e.message));
   };
   _remTimer = setInterval(tick, 60 * 60 * 1000); // hourly
   if (_remTimer.unref) _remTimer.unref();
@@ -3041,6 +3126,22 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
       const { due, sent } = await runDueReminders(st);
       flash = due === 0 ? 'rem0' : (sent > 0 ? 'remsent' : 'remmock');
     } catch (e) { console.error('[reminders] manual run failed:', e && e.message); flash = 'remerr'; }
+    res.redirect('/admin/applications?mail=' + flash);
+  } catch (e) { next(e); }
+});
+
+// Super admin: run the certificate automation on demand — auto-finish any ended
+// events (issuing certs) then email pending certificates. For testing / catch-up.
+app.post('/admin/certs/run', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    let flash = 'certerr';
+    try {
+      const { completed } = await autoCompleteEndedEvents(st);
+      const { due, sent } = await emailPendingCertificates(st);
+      flash = (due === 0 && completed === 0) ? 'cert0' : (sent > 0 ? 'certsent' : 'certmock');
+    } catch (e) { console.error('[cert-mail] manual run failed:', e && e.message); flash = 'certerr'; }
     res.redirect('/admin/applications?mail=' + flash);
   } catch (e) { next(e); }
 });

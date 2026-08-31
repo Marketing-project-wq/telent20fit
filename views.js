@@ -5392,6 +5392,10 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     remmock: warnBanner(t('mpr.remMock')),
     rem0: okBanner(t('mpr.remNone')),
     remerr: errBanner(t('mpr.mailError')),
+    certsent: okBanner(t('mpr.certSent')),
+    certmock: warnBanner(t('mpr.certMock')),
+    cert0: okBanner(t('mpr.certNone')),
+    certerr: errBanner(t('mpr.mailError')),
   }[flash] || '';
   // Labels for application answer keys (new category forms + legacy MP q1–q4).
   const ANSWER_LABEL = {

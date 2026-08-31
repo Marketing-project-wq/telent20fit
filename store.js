@@ -445,6 +445,18 @@ function supabaseStore() {
       const { error } = await sb.from('talent_certificates').update({ revoked_at: revoked ? new Date().toISOString() : null }).eq('id', id);
       if (error) throw new Error(error.message);
     },
+    // Certificates issued but not yet auto-emailed to the talent (oldest first).
+    async listCertificatesPendingEmail() {
+      const { data, error } = await sb.from('talent_certificates')
+        .select('*').is('revoked_at', null).is('cert_emailed_at', null)
+        .order('issued_at', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async markCertificateEmailed(id) {
+      const { error } = await sb.from('talent_certificates').update({ cert_emailed_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
     async createProof(row) {
       const { data, error } = await sb.from('talent_post_proofs').insert(row).select('id').maybeSingle();
       if (error) throw new Error(error.message);
@@ -708,7 +720,7 @@ function memoryStore() {
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
-      const rec = { id: 'cert-' + (++seq), revoked_at: null, issued_at: now(), ...row };
+      const rec = { id: 'cert-' + (++seq), revoked_at: null, cert_emailed_at: null, issued_at: now(), ...row };
       certificates.push(rec);
       return { id: rec.id, cert_no: rec.cert_no };
     },
@@ -717,6 +729,8 @@ function memoryStore() {
     async listCertificatesForTalent(talentId) { return certificates.filter((c) => c.talent_id === talentId && !c.revoked_at).slice().reverse(); },
     async listCertificates() { return certificates.slice().reverse(); },
     async revokeCertificate(id, revoked) { const c = certificates.find((c) => c.id === id); if (c) c.revoked_at = revoked ? now() : null; },
+    async listCertificatesPendingEmail() { return certificates.filter((c) => !c.revoked_at && !c.cert_emailed_at).slice(); },
+    async markCertificateEmailed(id) { const c = certificates.find((c) => c.id === id); if (c) c.cert_emailed_at = now(); },
     async createProof(row) { const p = { id: 'pf-' + (++seq), ...row, status: row.status || 'pending', created_at: now() }; proofs.push(p); return { id: p.id }; },
     async updateProof(id, patch) { const p = proofs.find((p) => p.id === id); if (p) Object.assign(p, patch); },
     async listProofs() { return proofs.slice().reverse(); },
