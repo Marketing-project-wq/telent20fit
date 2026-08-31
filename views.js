@@ -3798,50 +3798,46 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   ${assignedGroupBanner(events, L)}
   ${rejectionPopup(events, L)}
 
-  <div class="tp-grid">
-    <div class="tp-side">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="tp-card-kicker">${t('tp.strength')}</span><b style="color:var(--red)">${strengthPct}%</b></div>
-        <div class="tp-strength-bar"><i style="width:${strengthPct}%"></i></div>
-        <div class="tp-check">${chkHtml}</div>
-        ${strengthPct < 100 ? `<a href="/data-diri?lang=${L}" class="btn btn-sm btn-block" style="margin-top:16px">${t('prof.completeCta')}</a>` : ''}
-      </div>
+  <div class="tp-stack">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="tp-card-kicker">${t('tp.strength')}</span><b style="color:var(--red)">${strengthPct}%</b></div>
+      <div class="tp-strength-bar"><i style="width:${strengthPct}%"></i></div>
+      <div class="tp-check">${chkHtml}</div>
+      ${strengthPct < 100 ? `<a href="/data-diri?lang=${L}" class="btn btn-sm btn-block" style="margin-top:16px">${t('prof.completeCta')}</a>` : ''}
+    </div>
 
-      <div class="card">
-        <details class="tp-details">
-          <summary>
-            <span style="display:flex;align-items:center;gap:10px;min-width:0">
-              <span style="width:30px;height:30px;border-radius:9px;background:var(--red-soft);color:var(--red);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c.5-2 2-3 3-3s2.5 1 3 3"/><path d="M14 9h4M14 13h4"/></svg></span>
-              <span style="min-width:0">
-                <span class="tp-card-kicker" style="display:block">${t('prof.dataTitle')}</span>
-                <span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:320px">${acc.profile_completed_at ? esc([acc.city, acc.phone].filter(Boolean).join(' · ')) : t('adm.profile.incomplete')}</span>
-              </span>
+    <div>
+      <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
+      <div class="card" style="margin-top:12px">${certBlock}</div>
+    </div>
+
+    <div class="card">
+      <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
+      ${docRows}
+      <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
+    </div>
+
+    <div class="card">
+      <details class="tp-details">
+        <summary>
+          <span style="display:flex;align-items:center;gap:10px;min-width:0">
+            <span style="width:30px;height:30px;border-radius:9px;background:var(--red-soft);color:var(--red);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c.5-2 2-3 3-3s2.5 1 3 3"/><path d="M14 9h4M14 13h4"/></svg></span>
+            <span style="min-width:0">
+              <span class="tp-card-kicker" style="display:block">${t('prof.dataTitle')}</span>
+              <span class="muted" style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:320px">${acc.profile_completed_at ? esc([acc.city, acc.phone].filter(Boolean).join(' · ')) : t('adm.profile.incomplete')}</span>
             </span>
-            <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
-          </summary>
-          <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
-        </details>
-      </div>
+          </span>
+          <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
+        </summary>
+        <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
+      </details>
     </div>
 
-    <div class="tp-main">
-      <div>
-        <div class="tp-sec-head"><h2>${t('cert.myTitle')}</h2></div>
-        <div class="card" style="margin-top:12px">${certBlock}</div>
-      </div>
-
-      <div class="card">
-        <div class="tp-card-kicker" style="margin-bottom:4px">${t('doc.title')}</div>
-        ${docRows}
-        <a href="/dokumen?lang=${L}" class="btn btn-ghost btn-sm btn-block" style="margin-top:14px">${t('doc.manage')}</a>
-      </div>
-    </div>
+    <a class="tp-cta" href="/events?lang=${L}">
+      <div><h2>${t('prof.cta.title')}</h2><p>${t('prof.cta.sub')}</p></div>
+      <span class="btn btn-sm">${t('prof.cta.btn')} →</span>
+    </a>
   </div>
-
-  <a class="tp-cta" href="/events?lang=${L}">
-    <div><h2>${t('prof.cta.title')}</h2><p>${t('prof.cta.sub')}</p></div>
-    <span class="btn btn-sm">${t('prof.cta.btn')} →</span>
-  </a>
 
   </div>`;
   return appLayout({ title: t('nav.profile') + ' — 20FIT', body, role: 'kol', active: 'profil', user: acc.name, lang: L, isKol: !!acc.isKol });
