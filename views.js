@@ -154,19 +154,13 @@ a{color:var(--red)}
 .tab-bar a:hover{background:var(--card2);color:var(--ink)}
 .tab-bar a.active{background:var(--red-soft);color:var(--red)}
 .tab-bar a.active svg{color:var(--red)}
-/* Desktop/tablet nav strip: on >=768px the mobile bottom bar is hidden and the
-   same links (Events · Applications · Profile · Proofs) move to a horizontal bar
-   under the header, so every destination stays reachable on wide screens. */
-.talent-app .tab-desk{display:none}
+/* On wide screens (>=768px) the bottom bar stops spanning the full width and
+   becomes a centered floating pill, lifted off the bottom edge; on phones it
+   stays a full-width bar pinned to the edge. env(safe-area-inset-bottom) keeps
+   it clear of the iOS home indicator / Android gesture bar in both modes. */
 @media(min-width:768px){
-  .talent-app .tab-bar{display:none}
-  .talent-app .app-main{padding-bottom:28px}
-  .talent-app .tab-desk{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 20px}
-  .tab-desk a{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:10px;color:var(--muted);text-decoration:none;font:700 13.5px/1 Barlow,sans-serif;white-space:nowrap}
-  .tab-desk a svg{width:18px;height:18px;flex-shrink:0}
-  .tab-desk a:hover{background:var(--card2);color:var(--ink)}
-  .tab-desk a.active{background:var(--red-soft);color:var(--red)}
-  .tab-desk a.active svg{color:var(--red)}
+  .talent-app .tab-bar{left:50%;right:auto;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:max-content;max-width:calc(100% - 40px);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(0,0,0,.20)}
+  .talent-app .tab-inner{gap:20px;padding:8px 14px}
 }
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
@@ -621,7 +615,6 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
   return `${head}
 <body class="app-body talent-app">
 ${landingNav(L, active, user ? { name: user } : null, { search: !!search, cities: cities || [], searchValue: searchValue || '', home: `${homeHref}?lang=${L}`, back: back === undefined ? `/?lang=${L}` : back })}
-<nav class="tab-desk">${items}</nav>
 <div class="app-main">
   ${body}
 </div>
