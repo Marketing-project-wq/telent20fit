@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>20FIT Talent Profile — Revisi (Mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --red:#E4121F; --red-2:#f5314f;
+    --ink:#17171d; --bg:#EFE7E4; --card:#ffffff; --card2:#f4f6f9; --line:#e4e2df;
+    --muted:#6b6b70;
+    --hero:#0d0d10; --hero-2:#171319;
+    /* on-black secondary text — brightened for contrast (fix #5) */
+    --on-black:#ffffff; --on-black-2:rgba(255,255,255,.78); --on-black-3:rgba(255,255,255,.55);
+    --ok:#0f7a45; --ok-bg:#d8f3e3; --warn:#8a5a00; --warn-bg:#fdeccd; --info:#1857c4; --info-bg:#dbe7ff;
+    --r:16px; --r-sm:11px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:Barlow,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+  .cond{font-family:'Barlow Condensed',sans-serif}
+  h1,h2,h3{font-family:'Barlow Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em}
+  .mock-banner{background:repeating-linear-gradient(45deg,#111,#111 12px,#1c1c1c 12px,#1c1c1c 24px);color:#fff;padding:13px 18px;font-size:13px;text-align:center;border-bottom:3px solid var(--red)}
+  .mock-banner b{color:#ffd7d9}
+  .wrap{max-width:1500px;margin:0 auto;padding:26px 20px 80px}
+  .sec-title{font-size:26px;margin:34px 0 4px}
+  .sec-sub{color:var(--muted);font-size:14px;margin:0 0 16px}
+  .changed{display:inline-block;font-size:11px;font-weight:700;color:var(--red);border:1px solid var(--red);border-radius:999px;padding:1px 8px;margin-left:6px;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:26px;align-items:start}
+
+  /* ---------- shared card components ---------- */
+  .hero{background:radial-gradient(120% 140% at 88% 0%,rgba(228,18,31,.28),transparent 42%),linear-gradient(160deg,var(--hero-2),var(--hero));color:var(--on-black);border-radius:var(--r);padding:20px}
+  .hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .kicker{font-family:'Barlow Condensed';font-weight:800;text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--red-2)}
+  .edit-btn{border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.06);color:#fff;font-weight:700;font-size:12px;border-radius:999px;padding:9px 16px;min-height:40px;display:inline-flex;align-items:center;cursor:pointer}
+  .idrow{display:flex;gap:16px;align-items:flex-start;margin-top:10px}
+  .avatar{width:84px;height:84px;border-radius:20px;background:linear-gradient(135deg,#8ee06a,#3f8f2c);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:44px;color:#fff;position:relative;flex:0 0 auto}
+  .avatar .vf{position:absolute;right:-4px;bottom:-4px;width:26px;height:26px;border-radius:50%;background:var(--ok);border:3px solid var(--hero);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px}
+  .name{font-size:40px;line-height:.92;color:#fff}
+  .handle{color:var(--on-black-2);font-size:14px;margin-top:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .chip{font-weight:700;font-size:12px;padding:6px 13px;border-radius:999px;background:rgba(255,255,255,.10);color:#fff;white-space:nowrap;min-height:32px;display:inline-flex;align-items:center}
+  .chip.on{background:var(--red);color:#fff}
+  .chip.more{background:transparent;border:1px dashed rgba(255,255,255,.5);color:#fff;cursor:pointer;min-width:44px;justify-content:center}
+  .metaline{color:var(--on-black-3);font-size:12.5px;margin-top:12px}
+  .metaline b{color:var(--on-black-2);font-weight:600}
+  .hstats{display:flex;gap:10px;margin-top:16px}
+  .hstat{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px 13px}
+  .hstat .n{font-family:'Barlow Condensed';font-weight:800;font-size:26px;line-height:1;color:#fff}
+  .hstat .l{font-size:11px;letter-spacing:.02em;color:var(--on-black-2);margin-top:3px;text-transform:uppercase;font-weight:600}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+  .sec-head{display:flex;justify-content:space-between;align-items:center;margin:22px 0 10px}
+  .sec-head h3{font-size:15px}
+  .sec-head a{color:var(--red);font-weight:700;font-size:12px;text-decoration:none;text-transform:uppercase;letter-spacing:.04em}
+
+  /* profile strength — % ALWAYS shown (fix #2) */
+  .strength .top{display:flex;gap:14px;align-items:center}
+  .ring{width:56px;height:56px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed';font-weight:800;font-size:17px;background:conic-gradient(var(--ok) 0 75%,#e4e6ea 75% 100%)}
+  .ring span{background:var(--card);width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .prow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card2);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 13px;margin-top:8px;font-size:14px;font-weight:600}
+  .prow.miss{border-color:rgba(228,18,31,.4);background:#fff}
+  .prow .pct{font-size:12px;color:var(--muted);font-weight:700}
+  .prow.miss .pct{color:var(--red)}
+  .prow .dot{width:20px;height:20px;border-radius:50%;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+  .prow .dot.done{background:var(--ok-bg);color:var(--ok)}
+  .prow .dot.todo{border:2px dashed #c8c8cc}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--red);color:#fff;font-weight:700;border:none;border-radius:var(--r-sm);padding:13px 18px;font-size:14px;cursor:pointer;min-height:48px;text-decoration:none}
+  .btn-block{width:100%}
+
+  .cert{display:flex;flex-direction:column;gap:8px}
+  .cert-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 14px;display:flex;align-items:center;gap:12px}
+  .cert-ico{width:40px;height:40px;border-radius:10px;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .cert-ico.rev{background:var(--warn-bg);color:var(--warn)}
+  .cert-main{min-width:0;flex:1}
+  .cert-main b{font-size:14px;display:block}
+  .cert-main .d{color:var(--muted);font-size:12px;font-family:'JetBrains Mono'}
+  .badge{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em;flex:0 0 auto}
+  .b-ok{background:var(--ok-bg);color:var(--ok)} .b-rev{background:var(--warn-bg);color:var(--warn)}
+  .b-done{background:var(--ok-bg);color:var(--ok)} .b-prog{background:var(--info-bg);color:var(--info)}
+
+  .hrow{display:flex;align-items:center;gap:12px;padding:12px 2px;border-top:1px solid var(--line)}
+  .hrow:first-child{border-top:none}
+  .hrow .dt{font-family:'JetBrains Mono';font-size:12px;color:var(--muted);width:64px;flex:0 0 auto}
+  .hrow .nm{font-weight:700;font-size:14px;min-width:0;flex:1}
+  .hrow .role{color:var(--muted);font-size:12.5px}
+
+  /* personal details — labeled, masked, own card (fix #9) */
+  .pd .pd-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+  .pd .pd-row:first-of-type{border-top:none}
+  .pd .pd-k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  .pd .pd-v{font-family:'JetBrains Mono';font-size:14px;margin-top:2px}
+  .pd .show{color:var(--red);font-weight:700;font-size:12px;cursor:pointer;min-height:40px;display:flex;align-items:center;padding:0 4px}
+  .pd .note{font-size:12px;color:var(--muted);margin-top:12px}
+
+  .cta{background:radial-gradient(120% 160% at 90% 0%,rgba(228,18,31,.3),transparent 46%),linear-gradient(160deg,#171319,#0d0d10);color:#fff;border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:6px}
+  .cta h3{font-size:22px;color:#fff}
+  .cta p{color:var(--on-black-2);font-size:13.5px}
+
+  .empty{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:13px;padding:6px 2px}
+  .empty .ph{width:44px;height:44px;border-radius:12px;border:2px dashed var(--line);flex:0 0 auto}
+
+  /* ---------- phone frame with safe areas (fix #6) ---------- */
+  .phone{width:390px;border:10px solid #0b0b0d;border-radius:38px;overflow:hidden;background:var(--bg);box-shadow:0 18px 44px rgba(0,0,0,.20);position:relative}
+  .phone .notch{height:34px;background:#fff;display:flex;align-items:flex-end;justify-content:space-between;padding:6px 22px 4px}
+  .phone .notch .t{font-weight:700;font-size:13px}
+  .phone .island{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:96px;height:26px;background:#0b0b0d;border-radius:999px;z-index:5}
+  .phone .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#fff}
+  .logo{font-family:'Barlow Condensed';font-weight:800;font-size:20px}.logo b{color:var(--red)}
+  .lang{display:inline-flex;gap:3px;background:#eef0f4;border:1px solid var(--line);border-radius:8px;padding:3px}
+  .lang span{font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;color:var(--muted)}
+  .lang .on{background:var(--red);color:#fff}
+  .phone .scroll{padding:14px 14px 8px;display:flex;flex-direction:column;gap:16px;max-height:720px;overflow:auto}
+  .phone .tabbar{display:flex;justify-content:space-around;background:#fff;border-top:1px solid var(--line);padding:9px 0 calc(9px + env(safe-area-inset-bottom,20px))}
+  .tab{font-size:10.5px;color:var(--muted);text-align:center;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .tab.on{color:var(--red)}
+  .tab .ic{width:22px;height:22px;border:2px solid currentColor;border-radius:6px}
+  .device-cap{font-family:'JetBrains Mono';font-size:12px;color:var(--muted);margin:0 0 8px}
+
+  /* desktop frame */
+  .browser{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--card)}
+  .browser .bar{background:#e9e7e3;padding:9px 14px;display:flex;gap:7px;align-items:center}
+  .browser .bar i{width:11px;height:11px;border-radius:50%;background:#c9c6c1;display:inline-block}
+  .browser .body{padding:20px;background:var(--bg)}
+  .dtopbar{display:flex;align-items:center;justify-content:space-between;background:#fff;border-radius:12px;padding:12px 18px;margin-bottom:16px;border:1px solid var(--line)}
+  .dnav{display:flex;gap:22px;font-weight:700;font-size:13px;color:var(--muted)}
+  .dnav .on{color:var(--ink);border-bottom:2px solid var(--red);padding-bottom:3px}
+  .drow{display:grid;grid-template-columns:1.6fr 1fr;gap:16px}
+
+  /* compare strip (fix #8) */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+  .cmp>div{padding:14px 16px}
+  .cmp>div:first-child{border-right:1px solid var(--line)}
+  .cmp .lab{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+  .note-list{font-size:13.5px;color:#333;line-height:1.7}
+  .note-list b{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="mock-banner">⚠️ <b>PREVIEW / MOCKUP</b> — gambaran tampilan revisi profil talent 20FIT. <b>Bukan aplikasi berjalan.</b> Menerapkan temuan yang disetujui; bagian yang sudah bagus dipertahankan. Varian EO belum dibuat (menunggu keputusanmu).</div>
+<div class="wrap">
+
+  <h1 class="sec-title">Revisi Profil Talent 20FIT</h1>
+  <p class="sec-sub">Tanda <span class="changed">diubah</span> menandai perbaikan dari temuan. Palet & tipografi (hitam/putih/merah, judul kondensat) dipertahankan.</p>
+
+  <!-- ============ MOBILE: FULL vs EMPTY ============ -->
+  <h2 style="font-size:20px;margin:30px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px">Mobile 390px — Profil Penuh vs Profil Kosong <span class="changed">state baru</span></h2>
+  <div class="grid2">
+
+    <!-- FULL -->
+    <div>
+      <p class="device-cap">iPhone · profil lengkap · ID · safe-area atas & bawah</p>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="notch"><span class="t mono">9:41</span><span class="mono" style="font-size:12px">＊ ▤ ▮</span></div>
+        <div class="topbar"><span class="logo">20<b>●</b>FIT</span><span class="lang"><span class="on">ID</span><span>EN</span></span></div>
+        <div class="scroll">
+          <div class="hero">
+            <div class="hero-top"><span class="kicker">Profil Talent</span><button class="edit-btn">✎ Edit</button></div>
+            <div class="idrow">
+              <div class="avatar">C<span class="vf">✓</span></div>
+              <div style="min-width:0"><div class="name cond">CLIO</div><div class="handle mono">@selypascalin</div></div>
+            </div>
+            <!-- 7 categories → overflow to a clear, tappable +N (fix #7) -->
+            <div class="chips">
+              <span class="chip on">KOL</span><span class="chip">Juri</span><span class="chip">Fotografer</span>
+              <span class="chip more" title="Videografer, Runner, Water Station, Registrasi">+4</span>
+            </div>
+            <div class="metaline mono">Gading Serpong, ID · gabung 11 Agu 2026</div>
+            <div class="hstats">
+              <div class="hstat"><div class="n">12</div><div class="l">Event diikuti</div></div>
+              <div class="hstat"><div class="n">9</div><div class="l">Disetujui EO</div></div>
+              <div class="hstat"><div class="n">4</div><div class="l">Sertifikat</div></div>
+            </div>
+          </div>
+
+          <div class="card strength">
+            <div class="top">
+              <div class="ring"><span>75<small style="font-size:11px">%</small></span></div>
+              <div><div class="kicker" style="color:var(--muted)">Kekuatan Profil</div><div style="font-weight:700">3 dari 4 bagian selesai</div></div>
+            </div>
+            <div class="prow"><span><span class="dot done">✓</span> Data dasar</span><span class="pct">30%</span></div>
+            <div class="prow"><span><span class="dot done">✓</span> Akun media sosial</span><span class="pct">15%</span></div>
+            <div class="prow"><span><span class="dot done">✓</span> Kartu identitas (KTP)</span><span class="pct">30%</span></div>
+            <div class="prow miss"><span><span class="dot todo"></span> Dokumen pendukung</span><span class="pct">25%</span></div>
+            <a class="btn btn-block" style="margin-top:14px">Unggah Dokumen →</a>
+          </div>
+
+          <div><div class="sec-head"><h3>Tentang Saya</h3></div>
+            <div class="card">Saya pernah menjadi freelance di Sportfest vol.2 dan vol.3 sebagai runner dan dokumentasi lapangan. Sejak 2024 fokus di fotografi event lari & basket. <b style="color:var(--red)">Selengkapnya</b></div></div>
+
+          <div><div class="sec-head"><h3>Sertifikat</h3><a>Lihat semua</a></div>
+            <div class="cert">
+              <div class="cert-card"><div class="cert-ico">🎖</div><div class="cert-main"><b>Sportfest Vol.3 — Fotografer</b><span class="d">nov 2025</span></div><span class="badge b-ok">Verified</span></div>
+              <div class="cert-card"><div class="cert-ico rev">🕒</div><div class="cert-main"><b>Corporate League — Juri</b><span class="d">jun 2026</span></div><span class="badge b-rev">Review</span></div>
+            </div></div>
+
+          <div><div class="sec-head"><h3>Riwayat Event</h3></div>
+            <div class="card" style="padding:4px 14px">
+              <div class="hrow"><div style="flex:1;min-width:0"><div class="nm">Sportfest Vol.4</div><div class="role mono">Fotografer · mar 2026</div></div><span class="badge b-done">Selesai</span></div>
+              <div class="hrow"><div style="flex:1;min-width:0"><div class="nm">Tangerang Fun Run</div><div class="role mono">Water Station · feb 2026</div></div><span class="badge b-prog">Berjalan</span></div>
+            </div></div>
+
+          <div><div class="sec-head"><h3>Data Pribadi</h3></div>
+            <div class="card pd">
+              <div class="pd-row"><div><div class="pd-k">Telepon</div><div class="pd-v">0851 •••• 7695</div></div><span class="show">Tampilkan</span></div>
+              <div class="pd-row"><div><div class="pd-k">Email</div><div class="pd-v">s•••••••@gmail.com</div></div><span class="show">Tampilkan</span></div>
+              <div class="note">🔒 Hanya kamu yang bisa melihat. EO mendapat akses setelah menerima kamu.</div>
+            </div></div>
+
+          <div class="cta"><h3>Lowongan untuk kategorimu</h3><p>6 event membuka lowongan bulan ini.</p><a class="btn" style="margin-top:8px;align-self:flex-start">Lihat Event →</a></div>
+        </div>
+        <div class="tabbar"><div class="tab"><span class="ic"></span>Event</div><div class="tab"><span class="ic"></span>Lamaran</div><div class="tab on"><span class="ic"></span>Profil</div></div>
+      </div>
+    </div>
+
+    <!-- EMPTY -->
+    <div>
+      <p class="device-cap">iPhone · profil BARU (kosong) · ID</p>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="notch"><span class="t mono">9:41</span><span class="mono" style="font-size:12px">＊ ▤ ▮</span></div>
+        <div class="topbar"><span class="logo">20<b>●</b>FIT</span><span class="lang"><span class="on">ID</span><span>EN</span></span></div>
+        <div class="scroll">
+          <div class="hero">
+            <div class="hero-top"><span class="kicker">Profil Talent</span><button class="edit-btn">✎ Edit</button></div>
+            <div class="idrow">
+              <div class="avatar" style="background:linear-gradient(135deg,#6b7280,#374151)">B</div>
+              <div style="min-width:0"><div class="name cond">BUDI</div><div class="handle mono">@budi</div></div>
+            </div>
+            <div class="chips"><span class="chip" style="background:rgba(255,255,255,.06);color:var(--on-black-3)">Belum pilih kategori</span></div>
+            <div class="metaline mono">Kota belum diisi · gabung hari ini</div>
+            <div class="hstats">
+              <div class="hstat"><div class="n">0</div><div class="l">Event diikuti</div></div>
+              <div class="hstat"><div class="n">0</div><div class="l">Disetujui EO</div></div>
+              <div class="hstat"><div class="n">0</div><div class="l">Sertifikat</div></div>
+            </div>
+          </div>
+
+          <div class="card strength">
+            <div class="top">
+              <div class="ring" style="background:conic-gradient(var(--red) 0 30%,#e4e6ea 30% 100%)"><span>30<small style="font-size:11px">%</small></span></div>
+              <div><div class="kicker" style="color:var(--muted)">Kekuatan Profil</div><div style="font-weight:700">1 dari 4 bagian selesai</div></div>
+            </div>
+            <div class="prow"><span><span class="dot done">✓</span> Data dasar</span><span class="pct">30%</span></div>
+            <div class="prow miss"><span><span class="dot todo"></span> Akun media sosial</span><span class="pct">15%</span></div>
+            <div class="prow miss"><span><span class="dot todo"></span> Kartu identitas (KTP)</span><span class="pct">30%</span></div>
+            <div class="prow miss"><span><span class="dot todo"></span> Dokumen pendukung</span><span class="pct">25%</span></div>
+            <a class="btn btn-block" style="margin-top:14px">Lengkapi Profil →</a>
+          </div>
+
+          <div><div class="sec-head"><h3>Tentang Saya</h3></div>
+            <div class="card empty"><div class="ph"></div><div>Belum ada bio. Ceritakan pengalamanmu supaya EO lebih mudah menilai.</div></div></div>
+
+          <div><div class="sec-head"><h3>Sertifikat</h3></div>
+            <div class="card empty"><div class="ph"></div><div>Belum ada sertifikat. Sertifikat muncul otomatis setelah kamu menyelesaikan event.</div></div></div>
+
+          <div><div class="sec-head"><h3>Riwayat Event</h3></div>
+            <div class="card empty"><div class="ph"></div><div>Belum pernah ikut event. <b style="color:var(--red)">Cari event →</b></div></div></div>
+
+          <div class="cta"><h3>Mulai melamar</h3><p>Lengkapi profil lalu lamar event pertamamu.</p><a class="btn" style="margin-top:8px;align-self:flex-start">Lihat Event →</a></div>
+        </div>
+        <div class="tabbar"><div class="tab"><span class="ic"></span>Event</div><div class="tab"><span class="ic"></span>Lamaran</div><div class="tab on"><span class="ic"></span>Profil</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DESKTOP / LAPTOP 1280 ============ -->
+  <h2 style="font-size:20px;margin:44px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px">Laptop 1280px — Profil Penuh (EN)</h2>
+  <div class="browser">
+    <div class="bar"><i></i><i></i><i></i><span class="mono" style="font-size:12px;color:#8a8681;margin-left:8px">talent.20fit.id/profile</span></div>
+    <div class="body">
+      <div class="dtopbar"><div style="display:flex;gap:26px;align-items:center"><span class="logo">20<b>●</b>FIT</span><div class="dnav"><span>Events</span><span>Applications</span><span class="on">Profile</span></div></div><div style="display:flex;gap:12px;align-items:center"><span class="lang"><span>ID</span><span class="on">EN</span></span><span style="display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:13px"><span style="width:26px;height:26px;border-radius:50%;background:#111;color:#fff;display:inline-flex;align-items:center;justify-content:center">C</span>clio</span></div></div>
+
+      <div class="hero" style="padding:22px 26px">
+        <div class="hero-top">
+          <div style="display:flex;gap:18px">
+            <div class="avatar" style="width:96px;height:96px;font-size:50px">C<span class="vf">✓</span></div>
+            <div>
+              <span class="kicker">Talent Profile</span>
+              <div style="display:flex;align-items:baseline;gap:12px"><div class="name cond" style="font-size:52px">CLIO</div><div class="handle mono">@selypascalin</div></div>
+              <div class="chips"><span class="chip on">KOL</span><span class="chip">Judge</span><span class="chip">Photographer</span><span class="chip">Videographer</span><span class="chip">Runner</span><span class="chip">Water Station</span><span class="chip more" title="Registration Staff">+1</span></div>
+              <div class="metaline mono" style="margin-top:12px">Gading Serpong, ID &nbsp;|&nbsp; joined 11 Aug 2026</div>
+            </div>
+          </div>
+          <button class="edit-btn">✎ Edit profile</button>
+        </div>
+        <div class="hstats" style="margin-top:18px">
+          <div class="hstat" style="background:transparent;border:none;border-right:1px solid rgba(255,255,255,.1)"><div class="n">12</div><div class="l">Events joined</div></div>
+          <div class="hstat" style="background:transparent;border:none;border-right:1px solid rgba(255,255,255,.1)"><div class="n">9</div><div class="l">Approved</div></div>
+          <div class="hstat" style="background:transparent;border:none"><div class="n">4</div><div class="l">Certificates</div></div>
+        </div>
+      </div>
+
+      <div class="card strength" style="margin-top:16px">
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <div class="top" style="flex:0 0 auto"><div class="ring"><span>75<small style="font-size:11px">%</small></span></div><div><div class="kicker" style="color:var(--muted)">Profile strength</div><div style="font-weight:700">3 of 4 sections done</div></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
+            <div class="prow"><span><span class="dot done">✓</span> Basic details</span><span class="pct">30%</span></div>
+            <div class="prow"><span><span class="dot done">✓</span> Social account</span><span class="pct">15%</span></div>
+            <div class="prow"><span><span class="dot done">✓</span> ID card (KTP)</span><span class="pct">30%</span></div>
+            <div class="prow miss"><span><span class="dot todo"></span> Documents</span><span class="pct">25%</span></div>
+          </div>
+          <a class="btn" style="flex:0 0 auto">Upload documents</a>
+        </div>
+      </div>
+
+      <div class="drow" style="margin-top:18px">
+        <div>
+          <div class="sec-head"><h3>About</h3></div>
+          <div class="card">I worked as a freelancer at Sportfest vol.2 and vol.3 as a runner and field documentation crew. Since 2024 I have focused on running and basketball event photography across Jakarta, Tangerang and Bandung.</div>
+          <div class="sec-head"><h3>Certificates</h3><a>View all</a></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+            <div class="cert-card" style="flex-direction:column;align-items:flex-start;gap:10px"><div style="display:flex;justify-content:space-between;width:100%"><div class="cert-ico">🎖</div><span class="badge b-ok">Verified</span></div><div><b>Sportfest Vol.3 — Photographer</b><div class="d mono" style="color:var(--muted);font-size:12px">nov 2025</div></div></div>
+            <div class="cert-card" style="flex-direction:column;align-items:flex-start;gap:10px"><div style="display:flex;justify-content:space-between;width:100%"><div class="cert-ico">🎖</div><span class="badge b-ok">Verified</span></div><div><b>Jakarta Night Run — Runner</b><div class="d mono" style="color:var(--muted);font-size:12px">aug 2025</div></div></div>
+            <div class="cert-card" style="flex-direction:column;align-items:flex-start;gap:10px"><div style="display:flex;justify-content:space-between;width:100%"><div class="cert-ico rev">🕒</div><span class="badge b-rev">In review</span></div><div><b>Corporate League — Judge</b><div class="d mono" style="color:var(--muted);font-size:12px">jun 2026</div></div></div>
+          </div>
+          <div class="sec-head"><h3>Event history</h3></div>
+          <div class="card" style="padding:2px 16px">
+            <div class="hrow"><div class="dt mono">mar 2026</div><div class="nm">Sportfest Vol.4</div><div class="role" style="flex:1">Photographer</div><span class="badge b-done">Completed</span></div>
+            <div class="hrow"><div class="dt mono">feb 2026</div><div class="nm">Tangerang Fun Run</div><div class="role" style="flex:1">Water Station</div><span class="badge b-prog">In progress</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="sec-head"><h3>Personal details</h3></div>
+          <div class="card pd">
+            <div class="pd-row"><div><div class="pd-k">Phone</div><div class="pd-v">0851 •••• 7695</div></div><span class="show">Show</span></div>
+            <div class="pd-row"><div><div class="pd-k">Email</div><div class="pd-v">s•••••••@gmail.com</div></div><span class="show">Show</span></div>
+            <div class="note">🔒 Only you can see this. Event Organizers get access after they accept you.</div>
+          </div>
+          <div class="cta" style="margin-top:16px"><h3>Open roles for your categories</h3><p>6 events are hiring this month.</p><a class="btn" style="margin-top:10px;align-self:flex-start">Browse events →</a></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ID vs EN COMPARE ============ -->
+  <h2 style="font-size:20px;margin:44px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px">ID vs EN — elemen berisiko terpotong <span class="changed">dicek</span></h2>
+  <p class="sec-sub">Indonesia biasanya lebih panjang. Tombol & label dibuat cukup lega + boleh melipat rapi, tidak dipotong.</p>
+  <div class="cmp">
+    <div>
+      <div class="lab">🇮🇩 Bahasa Indonesia</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <a class="btn">Unggah Dokumen →</a>
+        <span class="hstat" style="background:var(--card2);border-color:var(--line);color:var(--ink)"><span style="font-weight:800">9</span> <span style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-left:6px">Disetujui EO</span></span>
+        <span class="chip on" style="color:#fff">Registrasi</span><span class="chip" style="background:#eee;color:#333">Water Station</span>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase"><span>Event</span><span>Lamaran</span><span>Profil</span></div>
+    </div>
+    <div>
+      <div class="lab">🇬🇧 English</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <a class="btn">Upload Documents →</a>
+        <span class="hstat" style="background:var(--card2);border-color:var(--line);color:var(--ink)"><span style="font-weight:800">9</span> <span style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-left:6px">Approved</span></span>
+        <span class="chip on" style="color:#fff">Registration</span><span class="chip" style="background:#eee;color:#333">Water Station</span>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:12px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase"><span>Events</span><span>Applications</span><span>Profile</span></div>
+    </div>
+  </div>
+
+  <!-- ============ WHAT CHANGED ============ -->
+  <h2 style="font-size:20px;margin:44px 0 14px;border-bottom:2px solid var(--line);padding-bottom:8px">Apa yang diubah</h2>
+  <div class="card note-list">
+    <b>2. Profile strength:</b> persen per bagian kini tampil <b>konsisten di semua ukuran</b> (dulu iPad tegak/Android menghilangkannya).<br>
+    <b>3. State baru:</b> ditambah tampilan <b>profil kosong</b> (bio/sertifikat/riwayat kosong, strength 30%) dan <b>overflow 7 kategori → "+4"</b>.<br>
+    <b>4. CTA "Lihat Event / Browse events":</b> kini <b>tombol merah</b> di desktop & mobile (dulu di laptop cuma tautan teks).<br>
+    <b>5. Keterbacaan:</b> teks sekunder di header hitam <b>dinaikkan kontrasnya</b> (rgba .78/.55) & ukuran minimum ~11px.<br>
+    <b>6. Safe-area:</b> frame HP diberi <b>dynamic island</b> + padding nav bawah <code>env(safe-area-inset-bottom)</code>.<br>
+    <b>7. Chip "+N":</b> jadi <b>lebih jelas & bisa diketuk</b> (min 44px), diuji sampai 7 kategori.<br>
+    <b>8. ID/EN:</b> disandingkan untuk tombol, label statistik, nama kategori, dan nav — semua muat/ melipat rapi.<br>
+    <b>9. Data pribadi:</b> tetap kartu sendiri berlabel + masking + catatan privasi (dipertahankan, dirapikan jaraknya).<br>
+    <span style="color:var(--muted)">Tidak diubah (sudah bagus): bahasa visual hitam/putih/merah, layout desktop, kartu sertifikat + badge, ring profile strength, masking privasi, varian Android.</span>
+  </div>
+
+  <p style="font-size:12.5px;color:var(--muted);margin-top:26px">Catatan: file mockup asli adalah bundle React terkompilasi sehingga tidak disunting langsung; revisi ini dibangun ulang sebagai HTML bersih. <b>Varian Event Organizer belum dibuat</b> — menunggu keputusanmu (itu rancangan baru).</p>
+</div>
+</body>
+</html>
