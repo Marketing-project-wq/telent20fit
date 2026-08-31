@@ -145,22 +145,28 @@ a{color:var(--red)}
 .talent-app .app-main{min-height:100vh;padding-bottom:88px}
 .wrap{max-width:1000px;margin:0 auto;padding:30px 20px 40px}
 .wrap.narrow{max-width:640px}
-/* Bottom nav bar (talent only); horizontal, scrolls if the items overflow */
+/* Bottom nav bar (talent only). Every item is an equal-width column (mobile:
+   flex:1 to fill the bar; desktop pill: fixed equal width) so spacing stays
+   even and the active marker is the same size on every item regardless of
+   label length. Active = solid red fill + white icon/label (the same active
+   pattern used by the theme/lang toggles), so the current page reads at a
+   glance. Padding is balanced on all four sides; the whole column is tappable. */
 .talent-app .tab-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:none;padding-bottom:env(safe-area-inset-bottom,0px)}
 .tab-bar::-webkit-scrollbar{display:none}
-.tab-inner{display:flex;justify-content:center;gap:56px;margin:0 auto;min-width:min-content;padding:7px 16px}
-.tab-bar a{flex:0 0 auto;min-width:66px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 12px;border-radius:12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:11px;white-space:nowrap}
+.tab-inner{display:flex;align-items:stretch;gap:6px;margin:0 auto;padding:8px}
+.tab-bar a{flex:1 1 0;min-width:0;min-height:50px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:8px;border-radius:14px;color:var(--muted);text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap}
 .tab-bar a svg{width:22px;height:22px;flex-shrink:0}
 .tab-bar a:hover{background:var(--card2);color:var(--ink)}
-.tab-bar a.active{background:var(--red-soft);color:var(--red)}
-.tab-bar a.active svg{color:var(--red)}
+.tab-bar a.active{background:var(--red);color:#fff}
+.tab-bar a.active svg{color:#fff}
+.tab-bar a.active:hover{background:var(--red);color:#fff}
 /* On wide screens (>=768px) the bottom bar stops spanning the full width and
    becomes a centered floating pill, lifted off the bottom edge; on phones it
    stays a full-width bar pinned to the edge. env(safe-area-inset-bottom) keeps
    it clear of the iOS home indicator / Android gesture bar in both modes. */
 @media(min-width:768px){
-  .talent-app .tab-bar{left:50%;right:auto;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));width:max-content;max-width:calc(100% - 40px);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(0,0,0,.20)}
-  .talent-app .tab-inner{gap:20px;padding:8px 14px}
+  .talent-app .tab-bar{left:50%;right:auto;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));width:auto;max-width:calc(100% - 40px);border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 34px rgba(0,0,0,.20)}
+  .talent-app .tab-bar a{flex:0 0 auto;width:96px}
 }
 h1{font-size:27px;font-weight:800;letter-spacing:-.01em}
 h2{font-size:18px;font-weight:700;margin:0 0 14px}
