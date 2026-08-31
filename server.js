@@ -1530,7 +1530,7 @@ async function renderMpHome(req, res, st) {
   const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
   const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
   const eoEvents = await openPositionEvents(st, req.talent.id);
-  res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+  res.send(V.mainPowerDashboard({ talent: req.account || req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
 }
 
 app.get('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, next) => {

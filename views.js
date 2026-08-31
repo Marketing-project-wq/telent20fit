@@ -4194,6 +4194,16 @@ function mpAnswerLabel(val, lang) {
 function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applied }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
+  // Profile hero (consistent with the KOL profile) — real fields only.
+  const acc = talent || {};
+  const initial = ((acc.name || '?').trim()[0] || '?').toUpperCase();
+  let hsum = 0; const nm = acc.name || '?'; for (let i = 0; i < nm.length; i++) hsum += nm.charCodeAt(i);
+  const avatarBg = `linear-gradient(135deg,hsl(${hsum % 360},70%,54%),hsl(${(hsum % 360 + 32) % 360},66%,42%))`;
+  const verified = acc.hyrox_cert_status === 'verified';
+  const cityLine = acc.city ? esc(acc.city) + ', ID' : '';
+  const joined = acc.created_at ? t('tp.joined', { date: esc(fmtDay(acc.created_at, L)) }) : '';
+  const heroMeta = [cityLine, joined].filter(Boolean).join(' · ');
+  const bio = acc.experience || '';
   const eoEvs = eoEvents || [];
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, false)).join('');
   const mpRows = (openEvents && openEvents.length) ? openEvents.map((e) => {
@@ -4221,13 +4231,26 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
     </div>`;
   }).join('') : `<p class="muted" style="margin-top:12px">${t('mp.noApps')}</p>`;
 
-  const body = `<div class="wrap narrow">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+  const body = `<div class="wrap narrow tp-wrap">
+  <style>${PROFILE_CSS}</style>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     <form method="post" action="/logout" style="margin:0"><button class="btn btn-ghost btn-sm">${t('nav.logout')}</button></form>
   </div>
-  <h1>${t('mp.dash.title')}</h1>
-  <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
+
+  <div class="tp-hero" style="padding-bottom:24px">
+    <div class="tp-hero-main">
+      <div class="tp-avatar" style="background:${avatarBg}">${esc(initial)}</div>
+      <div class="tp-id">
+        <div class="tp-kicker">${t('tp.kicker')}</div>
+        <div class="tp-nameline"><h1 class="tp-name">${esc(acc.name || '—')}</h1><span class="tp-pill-cat">${esc(talentLabel(L, 'main_power'))}</span>${verified ? `<span class="tp-pill-verified">✓ ${t('tp.verified')}</span>` : ''}</div>
+        ${heroMeta ? `<div class="tp-meta">${heroMeta}</div>` : ''}
+        ${bio ? `<p class="tp-bio">${esc(bio)}</p>` : ''}
+      </div>
+      <div class="tp-hero-actions"><a href="/data-diri?edit=1&lang=${L}" class="btn btn-sm">✎ ${t('tp.editProfile')}</a></div>
+    </div>
+  </div>
+  <p class="sub" style="margin-top:16px">${t('mp.dash.greeting', { name: esc(acc.name || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
 
   <a href="/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
