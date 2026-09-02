@@ -9,6 +9,7 @@
 const PDFDocument = require('pdfkit');
 const crypto = require('crypto');
 const path = require('path');
+const QRCode = require('qrcode');
 
 const RED = '#E4121F';
 const INK = '#17171d';
@@ -46,7 +47,13 @@ const CERT_FONT_B = path.join(CERT_DIR, 'Carlito-Bold.ttf');
  * cert = { talent_name, role, event_name, event_date, location,
  *          signatory_name, signatory_title, cert_no, verify }
  */
-function renderTalentCertificatePDF(cert) {
+async function renderTalentCertificatePDF(cert) {
+  // QR encodes the full verify URL so the box on the template becomes scannable.
+  let qrBuf = null;
+  if (cert.verify) {
+    const url = /^https?:\/\//i.test(cert.verify) ? cert.verify : 'https://' + cert.verify;
+    try { qrBuf = await QRCode.toBuffer(url, { type: 'png', margin: 0, width: 240, color: { dark: '#141417', light: '#ffffff' } }); } catch (e) { qrBuf = null; }
+  }
   return new Promise((resolve, reject) => {
     const W = 1920, H = 1080;
     const doc = new PDFDocument({ size: [W, H], margin: 0 });
@@ -91,6 +98,8 @@ function renderTalentCertificatePDF(cert) {
     centerAt(cert.signatory_name || '', 'r', 23, 1045, 898, BLACK);
     centerAt(cert.cert_no || '', 'b', 24, 1606, 884, BLACK);
     if (cert.verify) centerAt(cert.verify, 'r', 15, 1606, 924, GREY);
+    // QR inside the template's box (top-left ~1361,833; ~125×123), inset a little.
+    if (qrBuf) { doc.rect(1364, 836, 119, 117).fill('#ffffff'); doc.image(qrBuf, 1372, 843, { width: 103, height: 103 }); }
 
     doc.end();
   });
