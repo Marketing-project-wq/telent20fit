@@ -198,6 +198,7 @@ function dataDiriPost() {
       const acc = req.account;
       const type = req.talent.type;
       const values = {
+        full_name: String(req.body.full_name || '').trim().replace(/\s+/g, ' ').slice(0, 120),
         province: String(req.body.province || '').trim(),
         city: String(req.body.city || '').trim().slice(0, 80),
         ktp: String(req.body.ktp || '').replace(/\D/g, '').slice(0, 20),
@@ -233,6 +234,7 @@ function dataDiriPost() {
         return res.status(400).send(V.talentDataDiri(type, { account: acc, events, values, errors, lang: req.lang, next: safeNext(req.body.next) }));
       }
       await st.updateAccountProfile(acc.id, {
+        full_name: values.full_name || null,
         province: values.province,
         city: values.city,
         ktp: values.ktp,
@@ -848,10 +850,11 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (req.talent.type === 'main_power') return await renderMpHome(req, res, st);
-    // Lazily issue any certificates the talent has earned (attended + finished).
+    // Lazily backfill any certificates this talent has earned (no-op for KOL —
+    // certificates are issued for Man Power only).
     const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
     const eventById = new Map(events.map((e) => [e.id, e]));
-    await issueCertsForApps(st, myApps, eventById, new Map([[req.talent.id, req.account.name]]));
+    await maybeIssueCerts(st, myApps);
     const [certs, proofs] = await Promise.all([st.listCertificatesForTalent(req.talent.id), st.listProofsForTalent(req.talent.id)]);
     // Per-position application history (one application = one position now):
     // resolve each application's chosen position + ranked picks against the event.
@@ -939,10 +942,16 @@ app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
     if (!c || c.talent_id !== req.talent.id || c.revoked_at) return res.redirect('/talent?lang=' + req.lang);
+    // Locked until the talent completes their full legal name — never print a
+    // nickname. Send them back to the profile where the card explains why.
+    const account = await st.getAccountById(req.talent.id);
+    const printName = certPrintName(c, account);
+    if (!printName) return res.redirect('/talent?lang=' + req.lang + '#certs');
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderTalentCertificatePDF(certRenderPayload(c, base, printName));
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    const disp = req.query.view === '1' ? 'inline' : 'attachment';
+    res.setHeader('Content-Disposition', `${disp}; filename="Certificate-${c.cert_no}.pdf"`);
     res.send(buf);
   } catch (e) { next(e); }
 });
@@ -1003,27 +1012,115 @@ function eventDateStrEn(ev) {
   return `${mn} ${d1}, ${y}`;
 }
 
-// Issue certificates for eligible applications: attended + event finished +
-// cert_auto (not explicitly off). Idempotent via the unique (talent,event)
-// constraint, so it is safe to call repeatedly (auto-issue + lazy backfill).
-async function issueCertsForApps(st, apps, eventById, nameById) {
+// Title-case a person's name for print ("clio pascalina" -> "Clio Pascalina").
+function titleCaseName(s) {
+  return String(s || '').trim().replace(/\s+/g, ' ')
+    .replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+// Day-first English event date for the certificate ("11–13 September 2026",
+// "11 September 2026", "29 September – 2 October 2026").
+function certEventDateEn(ev) {
+  const s = String(ev.starts_at || '').slice(0, 10).split('-');
+  if (s.length !== 3) return eventDateStrEn(ev);
+  const y = +s[0], m = +s[1], d1 = +s[2], MN = EN_MONTHS;
+  const eRaw = ev.ends_at && String(ev.ends_at).slice(0, 10) !== String(ev.starts_at).slice(0, 10)
+    ? String(ev.ends_at).slice(0, 10).split('-') : null;
+  if (!eRaw) return `${d1} ${MN[m - 1]} ${y}`;
+  const y2 = +eRaw[0], m2 = +eRaw[1], d2 = +eRaw[2];
+  if (y2 === y && m2 === m) return `${d1}–${d2} ${MN[m - 1]} ${y}`;
+  if (y2 === y) return `${d1} ${MN[m - 1]} – ${d2} ${MN[m2 - 1]} ${y}`;
+  return `${d1} ${MN[m - 1]} ${y} – ${d2} ${MN[m2 - 1]} ${y2}`;
+}
+// Event over (certs may issue)? Explicit completed flag, or the end date passed (WIB).
+function eventFinished(ev) {
+  if (!ev) return false;
+  if (ev.completed_at) return true;
+  const end = String(ev.ends_at || ev.starts_at || '').slice(0, 10);
+  return !!end && end < jakartaDateStr();
+}
+// Shared lookup context for certificate issuance (positions, accepted-position
+// label per application, accounts, signatory config, events).
+async function loadCertCtx(st) {
+  const [events, choices, positions, talents, cfg] = await Promise.all([
+    st.listEvents(), st.listApplicationChoices(), st.listPositions(), st.listTalents(), st.getCertConfig(),
+  ]);
+  const posById = new Map(positions.map((p) => [p.id, p]));
+  const acceptedByApp = new Map();
+  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedByApp.set(c.application_id, p.label_en || p.label_id || null); } });
+  return { eventById: new Map(events.map((e) => [e.id, e])), acceptedByApp, accountById: new Map(talents.map((t) => [t.id, t])), cfg };
+}
+// Issue the 20FIT Talent certificate for the given applications. Rules:
+//   - talent category is Man Power (talent_type === 'main_power'),
+//   - the talent is marked ATTENDED (not just applied / not yet marked),
+//   - the event is over and cert_auto isn't turned off.
+// role is the ASSIGNED position (the accepted application choice), not an
+// applied one. talent_name is the full legal name; when it's still missing the
+// cert row is created with a null name so it appears "locked" in My Certificates
+// until the talent completes it. Idempotent via the unique (talent,event) index;
+// a cert_no clash simply defers that one to the next run (random 32^6 space).
+async function issueCertsForApps(st, apps, ctx) {
   for (const a of apps || []) {
-    if (!a.attended) continue;
-    const ev = eventById.get(a.event_id);
-    if (!ev || !ev.completed_at || ev.cert_auto === false) continue;
+    if (!a.attended || a.talent_type !== 'main_power') continue;
+    const ev = ctx.eventById.get(a.event_id);
+    if (!ev || ev.cert_auto === false || !eventFinished(ev)) continue;
+    const acc = ctx.accountById.get(a.talent_id) || {};
+    const role = ctx.acceptedByApp.get(a.id) || V.CAT_LABEL[a.talent_type] || a.talent_type;
+    const talentName = acc.full_name ? titleCaseName(acc.full_name) : null;
     try {
       await st.createCertificate({
-        cert_no: cert.makeCertNo(),
-        talent_id: a.talent_id,
-        event_id: a.event_id,
-        role: a.role || V.CAT_LABEL[a.talent_type] || a.talent_type,
-        talent_name: (a.answers && a.answers.name) || (nameById && nameById.get(a.talent_id)) || '',
-        event_name: ev.name,
-        event_date: eventDateStr(ev),
-        issued_by: null,
+        cert_no: cert.makeTalentCertNo(), talent_id: a.talent_id, event_id: a.event_id,
+        role, talent_name: talentName, event_name: ev.name, event_date: certEventDateEn(ev),
+        location: ev.location || null,
+        signatory_name: ctx.cfg.signatory_name, signatory_title: ctx.cfg.signatory_title, issued_by: null,
       });
     } catch (e) { if (e.code !== 'DUP') throw e; }
   }
+}
+// Convenience wrapper: only touches the DB when at least one application is
+// actually eligible, so it's cheap to call on every profile view.
+async function maybeIssueCerts(st, apps) {
+  const elig = (apps || []).filter((a) => a.attended && a.talent_type === 'main_power');
+  if (!elig.length) return;
+  const ctx = await loadCertCtx(st);
+  await issueCertsForApps(st, elig, ctx);
+}
+// Daily auto-issue: for events that ended 1–10 days ago (WIB), issue any
+// certificates now earned. Runs from the hourly scheduler, so a leader who fills
+// attendance on day 3 still triggers issuance; the unique index prevents dupes.
+async function runDueCertificates(st) {
+  if (!st) return { issued: 0 };
+  try {
+    const today = jakartaDateStr();
+    const lo = addDaysYMD(today, -10), hi = addDaysYMD(today, -1);
+    const ctx = await loadCertCtx(st);
+    const dueIds = new Set();
+    ctx.eventById.forEach((e, id) => {
+      const end = String(e.ends_at || e.starts_at || '').slice(0, 10);
+      if (end && end >= lo && end <= hi && e.cert_auto !== false) dueIds.add(id);
+    });
+    if (!dueIds.size) return { due: 0 };
+    const apps = (await st.listApplications().catch(() => []))
+      .filter((a) => dueIds.has(a.event_id) && a.attended && a.talent_type === 'main_power');
+    await issueCertsForApps(st, apps, ctx);
+    return { due: dueIds.size, apps: apps.length };
+  } catch (err) { console.warn('[certs] auto-issue skipped:', err && err.message); return { issued: 0 }; }
+}
+// Effective printable name: the snapshot taken at issue, else the account's
+// current full name (so completing the name later unlocks an already-issued
+// cert). null = locked — no full legal name on file yet.
+function certPrintName(c, account) {
+  if (c.talent_name && String(c.talent_name).trim()) return c.talent_name;
+  return account && account.full_name ? titleCaseName(account.full_name) : null;
+}
+// Build the render payload for the 20FIT Talent certificate from a stored row.
+function certRenderPayload(c, base, printName) {
+  const host = String(base || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return {
+    talent_name: printName || '', role: c.role, event_name: c.event_name,
+    event_date: c.event_date, location: c.location,
+    signatory_name: c.signatory_name || 'Novi Eastiyanto', signatory_title: c.signatory_title || 'COO',
+    cert_no: c.cert_no, verify: host + '/cert/' + c.cert_no,
+  };
 }
 
 // Enrich event objects in place with a signed `mockup_url` for any that have a
@@ -1525,12 +1622,16 @@ async function renderMpHome(req, res, st) {
   const [events, allApps, myApps] = await Promise.all([
     st.listEvents(), st.listApplications(), st.listApplicationsForTalent(req.talent.id),
   ]);
+  // Auto-issue on view too, so a Man Power talent sees new certificates the
+  // moment they land here (the daily scheduler is the primary trigger).
+  await maybeIssueCerts(st, myApps);
   const eventName = new Map(events.map((e) => [e.id, e.name]));
   const appliedEventIds = new Set(myApps.map((a) => a.event_id));
   const openEvents = mpOpenEvents(events, allApps).filter((e) => !appliedEventIds.has(e.id));
   const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
   const eoEvents = await openPositionEvents(st, req.talent.id);
-  res.send(V.mainPowerDashboard({ talent: req.talent, openEvents, eoEvents, myApps: myAppsEnriched, lang: req.lang, applied: req.query.applied === '1' }));
+  const certs = await st.listCertificatesForTalent(req.talent.id);
+  res.send(V.mainPowerDashboard({ talent: req.talent, account: req.account || req.talent, openEvents, eoEvents, myApps: myAppsEnriched, certs, lang: req.lang, applied: req.query.applied === '1' }));
 }
 
 app.get('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
@@ -3009,6 +3110,8 @@ function startReminderScheduler() {
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
     runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
+    // Auto-issue certificates for events that ended 1–10 days ago (idempotent).
+    runDueCertificates(db()).catch((e) => console.warn('[certs] tick skipped:', e && e.message));
   };
   _remTimer = setInterval(tick, 60 * 60 * 1000); // hourly
   if (_remTimer.unref) _remTimer.unref();
@@ -3236,10 +3339,8 @@ app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async
     const completed = req.body.completed === '1';
     await st.completeEvent(req.params.id, completed);
     if (completed) {
-      const [events, apps, talents] = await Promise.all([st.listEvents(), st.listApplications(), st.listTalents()]);
-      const eventById = new Map(events.map((e) => [e.id, e]));
-      const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
-      await issueCertsForApps(st, apps.filter((a) => a.event_id === req.params.id), eventById, nameById);
+      const apps = await st.listApplications();
+      await maybeIssueCerts(st, apps.filter((a) => a.event_id === req.params.id));
     }
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
@@ -3251,21 +3352,8 @@ app.post('/admin/applications/:id/issue-cert', auth.requireStaff(['super_admin']
     const st = db();
     if (!st) return needConfig(req, res);
     const a = await st.getApplication(req.params.id);
-    if (a && a.attended) {
-      const [events, talents] = await Promise.all([st.listEvents(), st.listTalents()]);
-      const ev = events.find((e) => e.id === a.event_id);
-      const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
-      if (ev) {
-        try {
-          await st.createCertificate({
-            cert_no: cert.makeCertNo(), talent_id: a.talent_id, event_id: a.event_id,
-            role: a.role || V.CAT_LABEL[a.talent_type] || a.talent_type,
-            talent_name: (a.answers && a.answers.name) || nameById.get(a.talent_id) || '',
-            event_name: ev.name, event_date: eventDateStr(ev), issued_by: req.staff.id,
-          });
-        } catch (e) { if (e.code !== 'DUP') throw e; }
-      }
-    }
+    // Same rules as the automatic path (Man Power + attended + finished event).
+    if (a) await maybeIssueCerts(st, [a]);
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -3287,10 +3375,11 @@ app.get('/admin/certificates/:id', auth.requireStaff(['super_admin']), async (re
     if (!st) return needConfig(req, res);
     const c = await st.getCertificate(req.params.id);
     if (!c) return res.redirect('/admin/applications');
+    const account = await st.getAccountById(c.talent_id);
     const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
-    const buf = await cert.renderCertificatePDF({ ...c, issued_at: fmtDayID(c.issued_at), verifyUrl: base + '/cert/' + c.cert_no });
+    const buf = await cert.renderTalentCertificatePDF(certRenderPayload(c, base, certPrintName(c, account)));
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Sertifikat-${c.cert_no}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Certificate-${c.cert_no}.pdf"`);
     res.send(buf);
   } catch (e) { next(e); }
 });
@@ -3555,7 +3644,16 @@ app.use((err, req, res, next) => {
   res.status(500).send(V.page500(msg, req && req.lang));
 });
 
-app.listen(PORT, HOST, () => {
-  console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
-  startReminderScheduler();
-});
+if (require.main === module) {
+  app.listen(PORT, HOST, () => {
+    console.log('20FIT KOL server on http://' + HOST + ':' + PORT + ' (store: ' + MODE + ')');
+    startReminderScheduler();
+  });
+}
+
+// Exported for tests (require()'d as a module — the guard above keeps the
+// listener from starting in that case).
+module.exports = {
+  app, issueCertsForApps, maybeIssueCerts, runDueCertificates, loadCertCtx,
+  certEventDateEn, titleCaseName, certPrintName, eventFinished,
+};

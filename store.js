@@ -135,9 +135,13 @@ function supabaseStore() {
     },
     async getAccountById(id) {
       const { data } = await sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,cv_path,portfolio_url,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_by,hyrox_cert_verified_at,hyrox_cert_note,created_at')
+        .select('id,talent_type,name,full_name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,cv_path,portfolio_url,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_by,hyrox_cert_verified_at,hyrox_cert_note,created_at')
         .eq('id', id).maybeSingle();
       return data || null;
+    },
+    async getCertConfig() {
+      const { data } = await sb.from('cert_config').select('signatory_name,signatory_title,verify_base').eq('id', 1).maybeSingle();
+      return data || { signatory_name: 'Novi Eastiyanto', signatory_title: 'COO', verify_base: 'talent.20fit.id/cert' };
     },
     async updateAccountProfile(id, patch) {
       const { error } = await sb.from('talent_accounts').update(patch).eq('id', id);
@@ -502,7 +506,7 @@ function memoryStore() {
   const now = () => new Date().toISOString();
   // Project a stored account to the public shape (mirrors the Supabase select).
   const accountProfile = (a) => ({
-    id: a.id, talent_type: a.talent_type, name: a.name, login: a.login, created_at: a.created_at || null,
+    id: a.id, talent_type: a.talent_type, name: a.name, full_name: a.full_name || null, login: a.login, created_at: a.created_at || null,
     phone: a.phone || null, city: a.city || null, province: a.province || null, birthdate: a.birthdate || null,
     gender: a.gender || null, instagram: a.instagram || null,
     instagram_followers: a.instagram_followers != null ? a.instagram_followers : null,
@@ -717,6 +721,7 @@ function memoryStore() {
     async listCertificatesForTalent(talentId) { return certificates.filter((c) => c.talent_id === talentId && !c.revoked_at).slice().reverse(); },
     async listCertificates() { return certificates.slice().reverse(); },
     async revokeCertificate(id, revoked) { const c = certificates.find((c) => c.id === id); if (c) c.revoked_at = revoked ? now() : null; },
+    async getCertConfig() { return { signatory_name: 'Novi Eastiyanto', signatory_title: 'COO', verify_base: 'talent.20fit.id/cert' }; },
     async createProof(row) { const p = { id: 'pf-' + (++seq), ...row, status: row.status || 'pending', created_at: now() }; proofs.push(p); return { id: p.id }; },
     async updateProof(id, patch) { const p = proofs.find((p) => p.id === id); if (p) Object.assign(p, patch); },
     async listProofs() { return proofs.slice().reverse(); },
