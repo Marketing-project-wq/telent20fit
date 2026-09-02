@@ -2228,6 +2228,11 @@ function talentDataDiri(type, opts = {}) {
   ${errorBanner}
   <form class="card" method="post" action="/data-diri?lang=${L}">${opts.next ? `<input type="hidden" name="next" value="${esc(opts.next)}">` : ''}
     <div class="field">
+      <label for="full_name">${t('dd.fullName')}${opt}</label>
+      <input type="text" id="full_name" name="full_name" maxlength="120" placeholder="${esc(t('dd.fullNamePh'))}" value="${esc(v.full_name || '')}">
+      <div class="hint" style="margin-top:6px">${t('dd.fullNameHint')}</div>
+    </div>
+    <div class="field">
       <label for="province">${t('dd.province')}${req}</label>
       ${provinceSelect(v.province, L)}
     </div>
@@ -4218,9 +4223,26 @@ function mpAnswerLabel(val, lang) {
  * Man Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
  * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
  */
-function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applied }) {
+function mainPowerDashboard({ talent, account, openEvents, eoEvents, myApps, certs, lang, applied }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
+  const acc = account || {};
+  // My Certificates — plain-text card (event/role/date/number) so the talent
+  // knows what it is without opening a PDF, plus Open/Download. A cert whose
+  // full legal name is still missing shows a "locked" note instead.
+  const certCards = (certs && certs.length) ? certs.map((c) => {
+    const locked = !(c.talent_name || acc.full_name);
+    const meta = `<div class="muted" style="font-size:12.5px;margin-top:4px">${t('mp.role')}: <b style="color:var(--ink)">${esc(c.role || '—')}</b></div>
+      <div class="muted" style="font-size:12.5px;margin-top:2px">${esc(c.event_date || '')}${c.location ? ' · ' + esc(c.location) : ''}</div>
+      <div class="muted" style="font-size:11.5px;margin-top:5px;letter-spacing:.02em">${esc(c.cert_no || '')}</div>`;
+    const actions = locked
+      ? `<div class="banner banner-warn" style="margin-top:12px">${t('cert.locked')} <a href="/data-diri?edit=1&lang=${L}">${t('cert.lockedCta')}</a></div>`
+      : `<div class="cf-actions" style="margin-top:14px">
+          <a href="/sertifikat/${esc(c.id)}?view=1&lang=${L}" target="_blank" rel="noopener" class="btn btn-sm">${t('cert.open')}</a>
+          <a href="/sertifikat/${esc(c.id)}?lang=${L}" class="btn btn-ghost btn-sm">${t('cert.download')}</a>
+        </div>`;
+    return `<div class="card" style="margin-top:12px;border-left:4px solid var(--red)"><b>${esc(c.event_name || '—')}</b>${meta}${actions}</div>`;
+  }).join('') : `<p class="muted" style="margin-top:12px">${t('cert.mpEmpty')}</p>`;
   const eoEvs = eoEvents || [];
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, false)).join('');
   const mpRows = (openEvents && openEvents.length) ? openEvents.map((e) => {
@@ -4268,6 +4290,9 @@ function mainPowerDashboard({ talent, openEvents, eoEvents, myApps, lang, applie
 
   <div class="section-head"><h2 style="margin:0">${t('mp.myApps')}</h2></div>
   <div class="dl-list">${appCards}</div>
+
+  <div class="section-head" id="certs"><h2 style="margin:0">${t('cert.myTitle')}</h2></div>
+  ${certCards}
 
   <div class="tp-morecta" style="margin-top:26px;border-radius:18px;padding:24px 26px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 14px 34px var(--red-soft)">
     <div style="min-width:0;flex:1 1 240px">
