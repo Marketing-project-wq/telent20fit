@@ -93,9 +93,14 @@ async function renderTalentCertificatePDF(cert) {
     const metaTop = Math.min(786, Math.max(700, recBottom + 14));
     centerAt(`${cert.event_date || ''}      •      ${cert.location || ''}`, 'b', 29, 960, metaTop, BLACK);
 
-    // Signature block + certificate id sit over fixed template artwork.
-    centerAt(cert.signatory_title || '', 'b', 24, 1045, 858, BLACK);
-    centerAt(cert.signatory_name || '', 'r', 23, 1045, 898, BLACK);
+    // Signature block — the template's baked rule sits right-of-centre and a bit
+    // high, so hide it and redraw the rule + title + name centred on the page
+    // and lower.
+    doc.rect(852, 842, 384, 12).fill('#ffffff');
+    const sigCx = 960, sigLineY = 894;
+    doc.moveTo(sigCx - 175, sigLineY).lineTo(sigCx + 175, sigLineY).lineWidth(1.4).strokeColor('#3a3a3f').stroke();
+    centerAt(cert.signatory_title || '', 'b', 24, sigCx, sigLineY + 12, BLACK);
+    centerAt(cert.signatory_name || '', 'r', 23, sigCx, sigLineY + 52, BLACK);
     centerAt(cert.cert_no || '', 'b', 24, 1606, 884, BLACK);
     if (cert.verify) centerAt(cert.verify, 'r', 15, 1606, 924, GREY);
     // QR inside the template's box (top-left ~1361,833; ~125×123), inset a little.
