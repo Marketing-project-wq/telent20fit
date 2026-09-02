@@ -2142,11 +2142,11 @@ function parseEventForm(req, positionsMaster) {
   chosen.forEach((id) => {
     id = String(id);
     if (!validIds.has(id) || seen.has(id)) return;
-    // Quota (how many talents this position needs) is required in the form and
-    // validated in validateEventForm. We still fall back to the UNLIMITED_QUOTA
-    // sentinel here for a blank value so parsing never crashes; validation rejects
-    // it before save. Legacy positions saved before quota was required keep the
-    // sentinel and render as "no quota limit" on the card.
+    // Quota (how many talents this position needs) is OPTIONAL. A blank or 0
+    // value falls back to the UNLIMITED_QUOTA sentinel: the position stays Open
+    // with no limit (rendered as "no quota limit") until the EO sets a specific
+    // number, which they can do any time via Edit Event. A real number (>0) caps
+    // the position and drives the existing filled/needed + auto-close logic.
     const existingQ = parseInt(req.body['quota_' + id], 10);
     const q = Number.isFinite(existingQ) && existingQ > 0 ? existingQ : UNLIMITED_QUOTA;
     // Per-field getter (trim + cap length; empty -> null).
@@ -2191,10 +2191,9 @@ function validateEventForm(f, req) {
   if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
   // The "Lainnya" (custom) role needs a name to identify it.
   if (f.positions.some((p) => p.key === 'other' && !p.custom_label)) e.push(req.t('eo.ev.err.customNameRequired'));
-  // Every selected position needs a real headcount so its card can show how many
-  // talents are wanted. An empty quota parses to the UNLIMITED_QUOTA sentinel, so
-  // any position at/above it means the EO left the field blank.
-  if (f.positions.some((p) => !(p.quota > 0 && p.quota < UNLIMITED_QUOTA))) e.push(req.t('eo.ev.err.quota'));
+  // Quota (Talents Needed) is optional: a blank field parses to the
+  // UNLIMITED_QUOTA sentinel and the position stays Open with no limit until the
+  // EO sets a specific number later via Edit Event — so no headcount check here.
   return e;
 }
 

@@ -2823,8 +2823,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         ${tplField('eo.ev.requirementLabel', 'req', '8px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
         ${enTa('requirement', 1000)}
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}${rq}</label>
-        <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}"${on ? ' required' : ''} style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}</label>
+        <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
+        <div class="hint" style="font-size:10.5px;margin-top:4px">${t('eo.pos.quotaHint')}</div>
         ${kolFields}${photoFields}
         <!-- The optional "Position Details" inputs were removed from the form, but the columns
              are still shown to talents in "Lihat Detail". Carry any existing values as hidden
@@ -2899,7 +2900,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 <script>
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
-  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'), q=r.querySelector('.posm-quota'); var on=!!(cb&&cb.checked); if(ex) ex.style.display=on?'':'none'; if(q) q.required=on; /* only a visible (checked) position requires a quota — a hidden required field can't be validated */ }
+  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'); var on=!!(cb&&cb.checked); if(ex) ex.style.display=on?'':'none'; /* quota is optional now — a checked position no longer forces its quota field */ }
   // On tick, fill empty Deskripsi/Jobdesk/Requirement from the role's default template.
   function fillTpl(r){
     var cb=r.querySelector('.posm-cb'); if(!cb||!cb.checked) return;
