@@ -4658,7 +4658,7 @@ function proofTable(proofs, isSuper, lang, settings) {
 }
 
 // Tab 1 — Dashboard: role-aware activity summary + engagement overview.
-function adminDashboard({ staff, proofs, events, talents, assignments, settings, statsData, lang }) {
+function adminDashboard({ staff, proofs, events, talents, talentStats, assignments, settings, statsData, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || []; events = events || []; talents = talents || []; assignments = assignments || [];
@@ -4670,10 +4670,11 @@ function adminDashboard({ staff, proofs, events, talents, assignments, settings,
   const dayMs = 86400000;
   const dateMs = (d) => { if (!d) return null; const p = String(d).slice(0, 10).split('-'); if (p.length !== 3) return null; const v = Date.UTC(+p[0], +p[1] - 1, +p[2]); return isNaN(v) ? null : v; };
 
-  // Widget 1 — active talents by type (all registered talents; no deactivation exists yet).
-  const byType = {};
-  talents.forEach((tt) => { byType[tt.talent_type] = (byType[tt.talent_type] || 0) + 1; });
-  const talentSub = ['kol', 'main_power', 'fotografer'].map((k) => `${talentLabel(L, k)} ${byType[k] || 0}`).join(' · ');
+  // Widget 1 — talent funnel. NOTE: talent_type is a registration default
+  // ('kol' for everyone on the main form), so a "KOL vs Man Power" split by it is
+  // meaningless. Show registered -> applied -> assigned, which is truthful.
+  const ts = talentStats || { registered: talents.length, applied: 0, assigned: 0, mainPower: 0 };
+  const talentSub = `${ts.applied} ${t('dash.talApplied')} · ${ts.assigned} ${t('dash.talAssigned')}`;
 
   // Widgets 2 & 3 — running vs upcoming campaigns.
   const running = []; const upcoming = [];
