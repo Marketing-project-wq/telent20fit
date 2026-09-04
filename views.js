@@ -4674,7 +4674,8 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
   // ('kol' for everyone on the main form), so a "KOL vs Man Power" split by it is
   // meaningless. Show registered -> applied -> assigned, which is truthful.
   const ts = talentStats || { registered: talents.length, applied: 0, assigned: 0, mainPower: 0 };
-  const talentSub = `${ts.applied} ${t('dash.talApplied')} · ${ts.assigned} ${t('dash.talAssigned')}`;
+  const notApplied = Math.max(0, (ts.registered || 0) - (ts.applied || 0));
+  const talentSub = `${ts.applied} ${t('dash.talApplied')} · ${ts.assigned} ${t('dash.talAssigned')} · ${notApplied} ${t('dash.talNotApplied')}`;
 
   // Widgets 2 & 3 — running vs upcoming campaigns.
   const running = []; const upcoming = [];

@@ -657,6 +657,7 @@
   "dash.wActiveTalent": "Registered Talents",
   "dash.talApplied": "applied",
   "dash.talAssigned": "assigned",
+  "dash.talNotApplied": "not applied",
   "dash.wRunning": "Running Campaigns",
   "dash.wUpcoming": "Upcoming Campaigns",
   "dash.wUnpaid": "Talents Unpaid",
