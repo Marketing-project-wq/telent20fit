@@ -412,6 +412,72 @@ function supabaseStore() {
       const { error } = await sb.from('talent_application_choices').update({ accepted: false }).eq('application_id', applicationId);
       if (error) throw new Error(error.message);
     },
+    // --- Two-layer selection: reviewer proposals (LAPIS 1) --------------------
+    // A proposal is a recommendation only — it never changes the application's
+    // status and never emails the talent. Recorded per (application, position,
+    // reviewer_name) so multiple reviewers can propose the same applicant, one
+    // reviewer can propose several positions, and re-proposing just updates the note.
+    async listProposals() {
+      const { data, error } = await sb.from('talent_application_proposals')
+        .select('id,application_id,position_id,reviewer_name,note,created_at').order('created_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listProposalsForApplication(applicationId) {
+      const { data, error } = await sb.from('talent_application_proposals')
+        .select('id,application_id,position_id,reviewer_name,note,created_at').eq('application_id', applicationId).order('created_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async addProposal(applicationId, positionId, reviewerName, note) {
+      const { error } = await sb.from('talent_application_proposals')
+        .upsert({ application_id: applicationId, position_id: positionId, reviewer_name: reviewerName, note: note || null },
+          { onConflict: 'application_id,position_id,reviewer_name' });
+      if (error) throw new Error(error.message);
+    },
+    async removeProposal(applicationId, positionId, reviewerName) {
+      const { error } = await sb.from('talent_application_proposals').delete()
+        .eq('application_id', applicationId).eq('position_id', positionId).eq('reviewer_name', reviewerName);
+      if (error) throw new Error(error.message);
+    },
+    // "Reviewed but not proposed" optional marks, per (application, reviewer_name).
+    async listReviewMarks() {
+      const { data, error } = await sb.from('talent_application_reviews')
+        .select('id,application_id,reviewer_name,created_at').order('created_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async addReviewMark(applicationId, reviewerName) {
+      const { error } = await sb.from('talent_application_reviews')
+        .upsert({ application_id: applicationId, reviewer_name: reviewerName }, { onConflict: 'application_id,reviewer_name' });
+      if (error) throw new Error(error.message);
+    },
+    async removeReviewMark(applicationId, reviewerName) {
+      const { error } = await sb.from('talent_application_reviews').delete()
+        .eq('application_id', applicationId).eq('reviewer_name', reviewerName);
+      if (error) throw new Error(error.message);
+    },
+    // Append-only status history (LAPIS 2 final decisions). actor_name captures
+    // the meeting operator's typed name (all reviewers share one login).
+    async addStatusLog(applicationId, fromStatus, toStatus, changedBy, actorName) {
+      const { error } = await sb.from('talent_application_status_log').insert({
+        application_id: applicationId, from_status: fromStatus || null, to_status: toStatus,
+        changed_by: changedBy || null, actor_name: actorName || null, changed_at: new Date().toISOString(),
+      });
+      if (error) throw new Error(error.message);
+    },
+    async listStatusLogForApplication(applicationId) {
+      const { data, error } = await sb.from('talent_application_status_log')
+        .select('id,application_id,from_status,to_status,changed_by,actor_name,changed_at').eq('application_id', applicationId).order('changed_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async listStatusLogs() {
+      const { data, error } = await sb.from('talent_application_status_log')
+        .select('id,application_id,from_status,to_status,changed_by,actor_name,changed_at').order('changed_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
     async deleteApplication(id) {
       // No FK cascade on talent_application_choices, so remove choices first to
       // avoid leaving orphaned rows behind.

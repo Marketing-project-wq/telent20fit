@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview — Seleksi Pelamar Dua Lapis (MOCKUP)</title>
+<style>
+  :root{--red:#E4121F;--ink:#17171d;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--card2:#f4f6f9;--ok:#0f7a45;--ok-soft:#e7f6ee;--err:#c0261f;--err-soft:#fdecea;--warn:#b7791f;--warn-soft:#fdf3e3;--bg:#eef1f6}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .note{background:#17171d;color:#fff;padding:14px 18px;font-size:13.5px;line-height:1.6}
+  .note b{color:#ffd23f}
+  .wrap{max-width:960px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:22px;margin:26px 0 4px}
+  h2{font-size:18px;margin:34px 0 4px;padding-top:20px;border-top:2px solid var(--line)}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .btn{display:inline-block;background:var(--red);color:#fff;border:0;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none}
+  .btn.sm{padding:6px 11px;font-size:12.5px}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.red{background:#fff;color:var(--red);border:1px solid var(--line)}
+  .pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .pill.ok{background:var(--ok-soft);color:var(--ok)}
+  .pill.off{background:#eef0f3;color:var(--muted)}
+  .pill.err{background:var(--err-soft);color:var(--err)}
+  .tag{display:inline-block;background:var(--card2);border-radius:8px;padding:3px 9px;font-size:12px;margin:0 5px 5px 0}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .between{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .rvbar{border-left:4px solid var(--red)}
+  .propbox{margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px}
+  .greenrow{font-size:13px;margin-top:5px;color:var(--ok)}
+  input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px}
+  .modal{background:rgba(0,0,0,.5);border-radius:14px;padding:22px;display:flex;align-items:center;justify-content:center}
+  .modal .card{max-width:420px;width:100%;margin:0}
+  .banner{border-radius:12px;padding:12px 14px;margin-top:12px;font-size:13px}
+  .banner.warn{background:var(--warn-soft);border:1px solid var(--warn);color:#8a5a12}
+  .banner.ok{background:var(--ok-soft);border:1px solid var(--ok);color:#0c5c34}
+  .sec-lead{color:var(--red);font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .divider{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+</style>
+</head>
+<body>
+<div class="note">
+  <b>CATATAN:</b> Ini hanya <b>gambaran tampilan (mockup)</b> untuk seleksi pelamar dua lapis — <b>bukan aplikasi yang berjalan</b>.
+  Tombol di sini tidak menyimpan data dan tidak mengirim email. Tujuannya supaya Anda melihat alur & tata letaknya sebelum dipakai di talent.20fit.id.
+</div>
+<div class="wrap">
+
+  <h1>Seleksi Pelamar — Dua Lapis</h1>
+  <p class="sub">Lapis 1: usulan reviewer (tanpa email, talent tidak tahu). Lapis 2: keputusan final bersama (baru di sini email terkirim).</p>
+
+  <!-- 1. PROMPT NAMA REVIEWER -->
+  <h2>1 · Permintaan nama reviewer (muncul sekali saat membuka daftar)</h2>
+  <p class="sub">Karena semua reviewer memakai satu akun yang sama, nama diminta sekali lalu tersimpan di browser.</p>
+  <div class="modal">
+    <div class="card">
+      <h3 style="margin:0 0 6px;font-size:18px">Siapa yang sedang meninjau?</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">Masukkan namamu sekali. Semua usulanmu akan tercatat atas nama ini. Tidak ada email yang terkirim ke talent saat kamu mengusulkan.</p>
+      <input type="text" placeholder="Nama kamu…" value="Rara">
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button class="btn ghost sm">Batal</button>
+        <button class="btn sm">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. BAR REVIEWER AKTIF (CHIP 1-KETUK) + FILTER -->
+  <h2>2 · Bar reviewer aktif (chip 1-ketuk) + penyaring status usulan</h2>
+  <p class="sub">Nama yang pernah dipakai muncul sebagai chip. <b>Ganti reviewer = 1 ketuk</b>, tanpa ketik ulang. Modal (bagian 1) hanya muncul kalau belum ada nama atau saat menekan "+ Tambah nama".</p>
+  <div class="card rvbar">
+    <div class="row">
+      <span style="font-size:13.5px">👤 Reviewer aktif: <b style="color:var(--red)">Rara</b></span>
+      <button class="btn ghost sm">Dimas</button>
+      <button class="btn sm">✓ Rara</button>
+      <button class="btn ghost sm">Sinta</button>
+      <button class="btn ghost sm">+ Tambah nama</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Nama ini otomatis tercatat pada setiap usulan yang kamu buat. Satu komputer dipakai bergantian? Cukup ketuk chip nama lain.</div>
+  </div>
+  <div class="card row" style="align-items:flex-end">
+    <label style="font-size:11px;color:var(--muted)">Posisi<br><select style="padding:7px"><option>Semua posisi</option></select></label>
+    <label style="font-size:11px;color:var(--muted)">Status<br><select style="padding:7px"><option>Semua status</option></select></label>
+    <label style="font-size:11px;color:var(--muted)">Status usulan<br><select style="padding:7px"><option>Semua</option><option>Belum ditinjau siapa pun</option><option>Sudah diusulkan</option><option>Ditinjau, tidak diusulkan</option></select></label>
+    <input style="flex:1;min-width:140px;width:auto" type="text" placeholder="Cari nama / email…">
+    <button class="btn ghost sm">↺ Reset</button>
+  </div>
+
+  <!-- 3. KARTU PELAMAR — dengan tombol usulan + daftar pengusul -->
+  <h2>3 · Kartu pelamar (Lapis 1) — tombol usulan &amp; daftar pengusul</h2>
+  <div class="card">
+    <div class="between">
+      <div>
+        <b style="font-size:15px">Budi Santoso</b>
+        <div class="muted" style="font-size:12.5px;margin-top:2px">budi@mail.com · Apply 01 Sep 2026</div>
+        <div class="row" style="margin-top:6px"><span class="muted" style="font-size:12px">Kelengkapan profil</span> <span class="pill ok">Lengkap</span></div>
+      </div>
+      <span class="pill off">Under Review</span>
+    </div>
+    <div style="margin-top:8px">
+      <span class="tag">P1 · Judges Hybrid Race</span><span class="tag">P2 · Runner</span>
+    </div>
+    <div class="propbox">
+      <div class="greenrow">✅ <b>Judges Hybrid Race</b> · Diusulkan oleh <b>Rara, Dimas</b><div class="muted" style="font-size:12px">📝 Rara: kuat di lari | Dimas: cocok jadi juri</div></div>
+      <div class="muted" style="font-size:12.5px;margin-top:5px">👀 Ditinjau, tidak diusulkan: Sinta</div>
+    </div>
+    <div class="divider">
+      <div class="muted" style="font-size:12.5px;margin-bottom:8px">Usulkan pelamar ini untuk salah satu posisi pilihannya. Ini baru rekomendasi — belum keputusan, dan tidak ada email yang terkirim ke talent.</div>
+      <input type="text" placeholder="Catatan singkat (opsional) — alasan mengusulkan…" style="margin-bottom:8px">
+      <div class="row">
+        <button class="btn sm">➕ Usulkan: P1 Judges Hybrid Race</button>
+        <button class="btn sm">➕ Usulkan: P2 Runner</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost sm">👀 Tandai: sudah ditinjau, tidak diusulkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. KARTU "SUDAH DITINJAU TAPI TIDAK DIUSULKAN" -->
+  <h2>4 · Kartu yang sudah ditinjau tapi tidak diusulkan</h2>
+  <div class="card">
+    <div class="between">
+      <div>
+        <b style="font-size:15px">Citra Melati</b>
+        <div class="muted" style="font-size:12.5px;margin-top:2px">citra@mail.com · Apply 30 Agu 2026</div>
+      </div>
+      <span class="pill off">Under Review</span>
+    </div>
+    <div style="margin-top:8px"><span class="tag">P1 · Water Station</span></div>
+    <div class="propbox">
+      <div class="muted" style="font-size:12.5px">👀 Ditinjau, tidak diusulkan: Rara, Dimas</div>
+    </div>
+    <div class="divider">
+      <div class="row">
+        <button class="btn sm">➕ Usulkan: P1 Water Station</button>
+        <button class="btn ghost red sm">✖ Batal tanda ditinjau</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. TOMBOL RAPAT KEPUTUSAN di baris event -->
+  <h2>5 · Tombol "Rapat Keputusan" di baris event (sebelah Copy link &amp; Open)</h2>
+  <div class="card row">
+    <a class="btn sm" href="#dm">🗳️ Rapat Keputusan</a>
+    <span class="muted" style="font-size:12.5px;flex:1;text-align:right">📋 Link absensi on-site</span>
+    <button class="btn ghost sm">🔗 Salin link</button>
+    <a class="btn ghost sm">Buka ↗</a>
+  </div>
+
+  <!-- 6. TAMPILAN RAPAT KEPUTUSAN -->
+  <h2 id="dm">6 · Tampilan Rapat Keputusan (Lapis 2) — hanya yang diusulkan, per posisi</h2>
+  <div class="banner warn">⚠️ Ini tahap keputusan final. Tombol Terima Final akan mengirim email ke talent. Pastikan keputusan sudah bulat.</div>
+  <div class="card rvbar">
+    <div class="row">
+      <span style="font-size:13.5px">👤 Operator rapat: <b style="color:var(--red)">Rara</b></span>
+      <button class="btn ghost sm">Dimas</button>
+      <button class="btn sm">✓ Rara</button>
+      <button class="btn ghost sm">+ Tambah nama</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Nama operator tercatat sebagai yang menekan keputusan final.</div>
+  </div>
+
+  <div style="margin-top:18px">
+    <div style="font-weight:800;font-size:16px">Judges Hybrid Race <span class="muted" style="font-weight:600;font-size:13px">· 2 diusulkan · diterima 0/2</span></div>
+    <div class="card">
+      <div class="between">
+        <div>
+          <b style="font-size:15px">Budi Santoso</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">budi@mail.com</div>
+          <div style="font-size:13px;margin-top:6px">👍 Diusulkan oleh <b>Rara, Dimas</b> <span class="muted">(2)</span></div>
+          <div class="muted" style="font-size:12.5px;margin-top:4px">📝 Rara: kuat di lari | Dimas: cocok jadi juri</div>
+        </div>
+        <span class="pill off">Under Review</span>
+      </div>
+      <div class="divider row">
+        <button class="btn sm" onclick="document.getElementById('cf').scrollIntoView({behavior:'smooth'})">✅ Terima Final</button>
+        <button class="btn ghost red sm">🚫 Tolak Final</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="between">
+        <div>
+          <b style="font-size:15px">Sarah Wijaya</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">sarah@mail.com</div>
+          <div style="font-size:13px;margin-top:6px">👍 Diusulkan oleh <b>Dimas</b> <span class="muted">(1)</span></div>
+        </div>
+        <span class="pill off">Under Review</span>
+      </div>
+      <div class="divider row">
+        <button class="btn sm">✅ Terima Final</button>
+        <button class="btn ghost red sm">🚫 Tolak Final</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:18px">
+    <div style="font-weight:800;font-size:16px">Runner <span class="muted" style="font-weight:600;font-size:13px">· 1 diusulkan</span></div>
+    <div class="card">
+      <div class="between">
+        <div>
+          <b style="font-size:15px">Budi Santoso</b>
+          <div class="muted" style="font-size:12px;margin-top:2px">budi@mail.com</div>
+          <div style="font-size:13px;margin-top:6px">👍 Diusulkan oleh <b>Rara</b> <span class="muted">(1)</span></div>
+        </div>
+        <span class="pill off">Under Review</span>
+      </div>
+      <div class="divider row">
+        <span class="muted" style="font-size:12.5px">Catatan: Budi juga diusulkan di Judges Hybrid Race. Menerima di satu posisi otomatis mengunci posisi lain (aturan DB: 1 talent = 1 posisi diterima per event).</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. LANGKAH KONFIRMASI -->
+  <h2 id="cf">7 · Langkah konfirmasi sebelum keputusan final (mencegah salah pencet)</h2>
+  <div class="card" style="border:2px solid var(--red);max-width:520px">
+    <h3 style="margin:0 0 10px;font-size:20px">⚠️ Terima talent ini secara final?</h3>
+    <p style="font-size:14px;margin:0 0 14px">Setelah dikonfirmasi, status berubah menjadi diterima dan email otomatis dikirim ke talent. Semua reviewer memakai akun yang sama, jadi periksa dulu ringkasan di bawah.</p>
+    <div style="background:var(--card2);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.9">
+      <div>👤 <b>Budi Santoso</b> <span class="muted">· budi@mail.com</span></div>
+      <div>🎯 Posisi: <b>Judges Hybrid Race</b></div>
+      <div>📁 Event: <b>Indonesia Sports Summit</b></div>
+      <div>✉️ Email dikirim ke: <b>budi@mail.com</b></div>
+      <div>🖊️ Diputuskan oleh: <b>Rara</b></div>
+    </div>
+    <p class="muted" style="font-size:13px;margin:14px 0 16px">Email tidak menyebutkan posisi. Talent diminta masuk ke web untuk melihat penempatannya dan menjawab dalam 48 jam.</p>
+    <div class="row">
+      <button class="btn">✅ Ya, terima &amp; kirim email</button>
+      <a class="btn ghost">Batal</a>
+    </div>
+  </div>
+
+  <div class="banner ok" style="margin-top:30px">Setelah "Ya, terima & kirim email": status → <b>Diterima</b>, email generik (tanpa posisi) terkirim, dan riwayat mencatat siapa mengusulkan &amp; siapa yang memutuskan.</div>
+
+</div>
+</body>
+</html>

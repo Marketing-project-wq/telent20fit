@@ -2116,14 +2116,11 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
         await st.updateApplication(a.id, { status: 'under_review' }); a.status = 'under_review'; nowUR.push(a);
       }
     }
-    for (const a of nowUR) {
-      const tt = talentById.get(a.talent_id) || {}; const to = tt.login; if (!to || !/@/.test(to)) continue;
-      const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
-      const pos = top && posMaster.get(top.position_id);
-      const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
-      mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: eventName.get(a.event_id) || 'Event 20FIT', positionName, eventDate: eventDateStrEn(mine.find((e) => e.id === a.event_id) || {}) })
-        .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
-    }
+    // Two-layer selection (LAPIS 1): talents are NOT emailed while under review.
+    // The under-review notification is intentionally suppressed — a talent is only
+    // emailed once a FINAL decision (accept) is made in the decision meeting. The
+    // status still advances to under_review so internal trackers keep working.
+    void nowUR;
 
     // accepted count per (event|position) so full positions disable their accept button.
     const acceptedCount = new Map();
@@ -2449,21 +2446,10 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
         nowUnderReview.push(a);
       }
     }
-    // Notify each talent (English, always) that their application is under review.
-    // Fire-and-forget so a slow/failed mail send never blocks the applicants page.
-    if (nowUnderReview.length) {
-      const posById = new Map(positions.map((p) => [p.position_id, p]));
-      for (const a of nowUnderReview) {
-        const tt = talentById.get(a.talent_id) || {};
-        const to = tt.login;
-        if (!to || !/@/.test(to)) continue;
-        const top = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)[0];
-        const pos = top && posById.get(top.position_id);
-        const positionName = pos ? (pos.custom_label || pos.label_en || pos.label_id || 'Position') : 'Position';
-        mailer.sendUnderReviewEmail({ to, name: tt.name || '', eventName: ev.name || 'Event 20FIT', positionName, eventDate: eventDateStrEn(ev) })
-          .catch((err) => console.warn('[mail] under-review send failed for ' + to + ': ' + (err && err.message)));
-      }
-    }
+    // Two-layer selection (LAPIS 1): the under-review email is intentionally
+    // suppressed — talents are only emailed once a FINAL decision (accept) is made
+    // in the decision meeting. Status still advances so trackers keep working.
+    void nowUnderReview;
     const applicants = apps
       .filter((a) => a.event_id === ev.id && (choicesByApp.get(a.id) || []).length)
       .map((a) => {
@@ -2794,8 +2780,13 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [apps, events, talents, certs, choicesAll, positions] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates(), st.listApplicationChoices(), st.listPositions()]);
+    const [apps, events, talents, certs, choicesAll, positions, proposalsAll, reviewMarksAll] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listReviewMarks()]);
     const eventName = new Map(events.map((e) => [e.id, e.name]));
+    // Two-layer selection: reviewer proposals + "reviewed, not proposed" marks per application.
+    const proposalsByApp = new Map();
+    (proposalsAll || []).forEach((p) => { const arr = proposalsByApp.get(p.application_id) || []; arr.push(p); proposalsByApp.set(p.application_id, arr); });
+    const reviewsByApp = new Map();
+    (reviewMarksAll || []).forEach((r) => { const arr = reviewsByApp.get(r.application_id) || []; arr.push(r); reviewsByApp.set(r.application_id, arr); });
     const eventById = new Map(events.map((e) => [e.id, e]));
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
     const certByKey = new Map(certs.map((c) => [c.talent_id + '|' + c.event_id, c]));
@@ -2821,9 +2812,15 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
           const full = quota > 0 && !c.accepted && (acceptedCount.get(a.event_id + '|' + c.position_id) || 0) >= quota;
           return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, accepted: !!c.accepted, full };
         });
+      const proposals = (proposalsByApp.get(a.id) || []).map((p) => {
+        const pp = posById.get(p.position_id) || {};
+        return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: pp.label_id, label_en: pp.label_en, key: pp.key };
+      });
+      const reviewMarks = (reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name);
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
+        proposals, reviewMarks,
       };
     });
     // Attendance links: one per event that has any approved talent, for on-site PICs.
@@ -2940,9 +2937,212 @@ app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_adm
     if (!st) return needConfig(req, res);
     const app = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app) return res.redirect('/admin/applications');
+    const prior = app.status;
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
-    res.redirect('/admin/applications');
+    if (prior !== 'applied') await st.addStatusLog(app.id, prior, 'applied', req.staff.id, String(req.body.actor_name || '').trim().slice(0, 80) || null).catch((e) => console.error('[log] reset failed:', e && e.message));
+    const back = String(req.body.next || '');
+    res.redirect(back.startsWith('/admin/applications') ? back : '/admin/applications');
+  } catch (e) { next(e); }
+});
+
+// ===========================================================================
+// Two-layer selection — LAPIS 1 (reviewer proposals) and LAPIS 2 (final decision)
+// ---------------------------------------------------------------------------
+// A "proposal" is a recommendation by a named reviewer for one of an applicant's
+// ranked positions. It NEVER changes the application status and NEVER emails the
+// talent. Multiple reviewers can propose the same applicant. The reviewer name is
+// supplied by the client (typed once, kept in the browser) — all reviewers share
+// one login, so the name is how we attribute proposals.
+function cleanReviewer(v) { return String(v || '').trim().replace(/\s+/g, ' ').slice(0, 80); }
+function backTo(v) { const s = String(v || ''); return s.startsWith('/admin/applications') ? s : '/admin/applications'; }
+
+app.post('/admin/applications/:id/propose', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const positionId = String(req.body.position_id || '');
+    const note = String(req.body.note || '').trim().slice(0, 500) || null;
+    const back = backTo(req.body.next);
+    if (!reviewer || !positionId) return res.redirect(back);
+    const app = await st.getApplication(req.params.id);
+    if (!app) return res.redirect(back);
+    // Only accept a proposal for one of the applicant's own ranked choices.
+    const choices = await st.listChoicesForApplication(app.id);
+    if (!choices.some((c) => c.position_id === positionId)) return res.redirect(back);
+    await st.addProposal(app.id, positionId, reviewer, note);
+    // Proposing implies "reviewed"; drop any earlier "reviewed, not proposed" mark
+    // from the same reviewer so the two never contradict.
+    await st.removeReviewMark(app.id, reviewer).catch(() => {});
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/applications/:id/unpropose', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const positionId = String(req.body.position_id || '');
+    const back = backTo(req.body.next);
+    if (reviewer && positionId) await st.removeProposal(req.params.id, positionId, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/applications/:id/mark-reviewed', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const back = backTo(req.body.next);
+    if (reviewer) await st.addReviewMark(req.params.id, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const back = backTo(req.body.next);
+    if (reviewer) await st.removeReviewMark(req.params.id, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+
+// LAPIS 2 — the decision meeting. Shows ONLY proposed applicants for one event,
+// grouped by the position they were proposed for, with proposers + notes. The
+// final accept / reject buttons live only here.
+app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const eventId = String(req.query.event || '');
+    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll] = await Promise.all([
+      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(),
+    ]);
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const eventById = new Map(events.map((e) => [e.id, e]));
+    // Events that have at least one proposal — the meeting picker + default.
+    const propByApp = new Map();
+    (proposalsAll || []).forEach((p) => { const arr = propByApp.get(p.application_id) || []; arr.push(p); propByApp.set(p.application_id, arr); });
+    const appById = new Map(apps.map((a) => [a.id, a]));
+    const eventsWithProps = new Map();
+    (proposalsAll || []).forEach((p) => { const a = appById.get(p.application_id); if (a) eventsWithProps.set(a.event_id, (eventsWithProps.get(a.event_id) || 0) + 1); });
+    const eventChoices = new Map();
+    (choicesAll || []).forEach((c) => { const arr = eventChoices.get(c.application_id) || []; arr.push(c); eventChoices.set(c.application_id, arr); });
+    const acceptedByApp = new Map();
+    (choicesAll || []).forEach((c) => { if (c.accepted) acceptedByApp.set(c.application_id, c.position_id); });
+    const logByApp = new Map();
+    (logsAll || []).forEach((l) => { const arr = logByApp.get(l.application_id) || []; arr.push(l); logByApp.set(l.application_id, arr); });
+
+    // No event chosen → render a small picker of events that have proposals.
+    if (!eventId) {
+      const picker = [...eventsWithProps.entries()].map(([eid, n]) => ({ id: eid, name: (eventById.get(eid) || {}).name || '—', count: n }));
+      return res.send(V.decisionMeeting({ staff: staffCtx(req), event: null, picker, groups: [], lang: req.lang }));
+    }
+    const ev = eventById.get(eventId) || null;
+    const evPositions = await st.listEventPositions(eventId).catch(() => []);
+    const quotaByPos = new Map((evPositions || []).map((p) => [p.position_id, p.quota]));
+    const acceptedCountByPos = new Map();
+    (choicesAll || []).forEach((c) => { if (!c.accepted) return; const a = appById.get(c.application_id); if (!a || a.event_id !== eventId) return; acceptedCountByPos.set(c.position_id, (acceptedCountByPos.get(c.position_id) || 0) + 1); });
+
+    // Build one group per position that has ≥1 proposed applicant, in this event.
+    const byPosition = new Map(); // position_id -> [{ app, proposers:[{name,note}] }]
+    (proposalsAll || []).forEach((p) => {
+      const a = appById.get(p.application_id);
+      if (!a || a.event_id !== eventId) return;
+      const arr = byPosition.get(p.position_id) || [];
+      let entry = arr.find((x) => x.app.id === a.id);
+      if (!entry) {
+        const tt = talentById.get(a.talent_id) || {};
+        const acceptedPos = acceptedByApp.get(a.id);
+        const decidedLog = (logByApp.get(a.id) || []).filter((l) => l.to_status === 'approved' || l.to_status === 'rejected').slice(-1)[0];
+        entry = {
+          app: { id: a.id, status: a.status, name: tt.name || '—', login: tt.login || '', created_at: a.created_at,
+            acceptedPositionId: acceptedPos || null, decidedBy: decidedLog ? (decidedLog.actor_name || '') : '', decidedAt: decidedLog ? decidedLog.changed_at : '' },
+          proposers: [],
+        };
+        arr.push(entry);
+      }
+      entry.proposers.push({ name: p.reviewer_name, note: p.note });
+      byPosition.set(p.position_id, arr);
+    });
+    const groups = [...byPosition.entries()].map(([pid, entries]) => {
+      const pp = posById.get(pid) || {};
+      const quota = quotaByPos.get(pid) || 0;
+      const acceptedHere = acceptedCountByPos.get(pid) || 0;
+      return {
+        position_id: pid, label_id: pp.label_id, label_en: pp.label_en, key: pp.key,
+        quota, acceptedHere, full: quota > 0 && acceptedHere >= quota,
+        entries: entries.sort((a, b) => (b.proposers.length - a.proposers.length) || String(a.app.name).localeCompare(String(b.app.name))),
+      };
+    }).sort((a, b) => b.entries.length - a.entries.length);
+    res.send(V.decisionMeeting({ staff: staffCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || '') }));
+  } catch (e) { next(e); }
+});
+
+// LAPIS 2 — final ACCEPT. Two-step: the first POST (no confirmed flag) renders a
+// confirmation page summarising who will be accepted + emailed; the confirmed POST
+// performs the accept, logs it, and sends the generic (position-less) decision email.
+app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const positionId = String(req.body.position_id || '');
+    const actor = cleanReviewer(req.body.actor_name);
+    const confirmed = String(req.body.confirmed || '') === '1';
+    const app0 = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app0) return res.redirect('/admin/applications/decision');
+    const ev = (await st.listEvents()).find((e) => e.id === app0.event_id) || {};
+    const account = await st.getAccountById(app0.talent_id);
+    let posName = '';
+    try { const evp = await st.listEventPositions(app0.event_id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
+    if (!confirmed) {
+      return res.send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, lang: req.lang }));
+    }
+    await withEventLock(app0.event_id, async () => {
+      const apps = await st.listApplications();
+      const app = apps.find((a) => a.id === req.params.id);
+      if (!app) return;
+      const [evPositions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
+      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return;
+      const p = evPositions.find((pp) => pp.position_id === positionId);
+      const quota = p ? p.quota : 0;
+      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
+      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
+      const prior = app.status;
+      const wasApproved = app.status === 'approved';
+      await st.acceptApplicationChoice(app.id, positionId);
+      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
+      await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] accept failed:', e && e.message));
+      const evx = (await st.listEvents()).find((e) => e.id === app.event_id);
+      if (!wasApproved && evx) notifyDecision(st, app, evx).catch((e) => console.error('[mail] decision email failed:', e && e.message));
+    });
+    res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + '&done=accept');
+  } catch (e) { next(e); }
+});
+
+// LAPIS 2 — final REJECT. Status → rejected, logged. Sends NO acceptance email
+// (and, per the decision, no email at all — the talent is simply not taken on).
+app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const actor = cleanReviewer(req.body.actor_name);
+    const app = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app) return res.redirect('/admin/applications/decision');
+    const prior = app.status;
+    await st.clearApplicationAccepted(app.id);
+    await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.addStatusLog(app.id, prior, 'rejected', req.staff.id, actor || null).catch((e) => console.error('[log] reject failed:', e && e.message));
+    res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app.event_id) + '&done=reject');
   } catch (e) { next(e); }
 });
 
@@ -3032,6 +3232,20 @@ async function notifyGroupForAssigned(st, ev, opts = {}) {
     }
   }
   return sent;
+}
+
+// LAPIS 2: a talent whose application was finally ACCEPTED in the decision
+// meeting. Deliberately generic — the email never names the position; the talent
+// must log in (within 48h) to see their placement and respond. Best-effort.
+async function notifyDecision(st, app, ev) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) { console.warn('[mail] decision email skipped: talent has no email on file'); return; }
+  await mailer.sendDecisionEmail({
+    to, name: account.name,
+    eventName: (ev && ev.name) || 'Event 20FIT',
+    eventDate: ev ? eventDateStrEn(ev) : null,
+  });
 }
 
 // Notify a talent their application was rejected (red email). Best-effort.
