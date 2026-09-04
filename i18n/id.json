@@ -654,7 +654,9 @@
   "th.proofs": "Bukti",
   "dash.emptyKol": "Belum ada data KOL.",
 
-  "dash.wActiveTalent": "Total Talent Aktif",
+  "dash.wActiveTalent": "Total Talent Terdaftar",
+  "dash.talApplied": "sudah melamar",
+  "dash.talAssigned": "ditugaskan",
   "dash.wRunning": "Campaign Berjalan",
   "dash.wUpcoming": "Campaign Akan Datang",
   "dash.wUnpaid": "Talent Belum Dibayar",

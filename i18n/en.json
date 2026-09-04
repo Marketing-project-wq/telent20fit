@@ -654,7 +654,9 @@
   "th.proofs": "Proofs",
   "dash.emptyKol": "No KOL data yet.",
 
-  "dash.wActiveTalent": "Active Talents",
+  "dash.wActiveTalent": "Registered Talents",
+  "dash.talApplied": "applied",
+  "dash.talAssigned": "assigned",
   "dash.wRunning": "Running Campaigns",
   "dash.wUpcoming": "Upcoming Campaigns",
   "dash.wUnpaid": "Talents Unpaid",

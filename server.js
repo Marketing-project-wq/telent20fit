@@ -2612,15 +2612,24 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll, assignments, settings] = await Promise.all([
-      st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(), st.getSettings(),
+    const [rawProofs, events, talentsAll, assignments, settings, allApps] = await Promise.all([
+      st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(), st.getSettings(), st.listApplications(),
     ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null }));
+    // Honest talent funnel for the dashboard: talent_type is a registration
+    // default ('kol' for everyone on the main form), so counting by it is
+    // misleading. Report registered -> applied -> assigned instead.
+    const talentStats = {
+      registered: talentsAll.length,
+      applied: new Set(allApps.map((a) => a.talent_id)).size,
+      assigned: new Set(allApps.filter((a) => a.status === 'assigned').map((a) => a.talent_id)).size,
+      mainPower: talentsAll.filter((tt) => tt.talent_type === 'main_power').length,
+    };
     // Event Statistics is embedded in the dashboard; a super admin sees every event.
     const evSorted = events.slice().sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
     const statsData = await statsPageData(st, evSorted, String(req.query.event || ''), String(req.query.type || ''));
-    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, assignments, settings, statsData, lang: req.lang }));
+    res.send(V.adminDashboard({ staff: staffCtx(req), proofs, events, talents: talentsAll, talentStats, assignments, settings, statsData, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
