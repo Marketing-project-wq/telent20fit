@@ -130,16 +130,13 @@
   "talent.kol": "KOL",
   "talent.main_power": "Man Power",
   "talent.fotografer": "Photographer",
-
   "err.header": "Failed:",
   "check.header": "Please check:",
-
   "common.email": "Email",
   "common.password": "Password",
   "common.passwordConfirm": "Confirm Password",
   "common.fullname": "Full Name",
   "common.emailphone": "Email / Phone",
-
   "staffLogin.title": "Admin Login",
   "staffLogin.sub": "Sign in as Super Admin or Event Organizer.",
   "staffLogin.titleAdmin": "Super Admin Login",
@@ -149,7 +146,6 @@
   "staffLogin.toEo": "Event Organizer login →",
   "staffLogin.toAdmin": "Super Admin login →",
   "btn.signin": "Sign in",
-
   "auth.login.title": "Sign in {role}",
   "auth.login.sub": "Sign in to your account to submit results.",
   "auth.register.title": "Sign up {role}",
@@ -590,7 +586,6 @@
   "auth.reset.doneTitle": "Password Updated!",
   "auth.reset.doneBody": "Your password has been changed. You can now log in with your new password.",
   "auth.reset.toLogin": "Log in now",
-
   "kol.title": "KOL Post Proofs",
   "kol.greeting": "Hi <b>{name}</b> — upload a screenshot of your post's performance (likes / comments / views). The system reads the numbers automatically.",
   "kol.noEvents": "No active events yet. Contact your admin.",
@@ -610,14 +605,12 @@
   "kol.uploaded": "Uploaded",
   "kol.notUploaded": "Not uploaded",
   "kol.deadlineLabel": "Deadline: {date}",
-
   "status.pending": "Pending",
   "status.processing": "Processing",
   "status.extracted": "Extracted",
   "status.failed": "Failed",
   "status.verified": "Verified",
   "status.rejected": "Rejected",
-
   "stats.views": "Views",
   "stats.likes": "Likes",
   "stats.comments": "Comments",
@@ -626,9 +619,7 @@
   "stats.reach": "Reach",
   "stats.impressions": "Impressions",
   "stats.linkClicks": "Link Clicks",
-
   "staff.signedInAs": "Signed in as <b>{name}</b> · {role}",
-
   "th.talent": "Talent",
   "th.event": "Event",
   "th.ss": "Screenshot",
@@ -641,7 +632,6 @@
   "proofs.pageTitle": "Post Proofs",
   "proofs.all": "All KOL post proofs",
   "proofs.readonly": "(read-only)",
-
   "dash.title": "Dashboard",
   "dash.totalKol": "Total KOL",
   "dash.totalProofs": "Total post proofs",
@@ -653,7 +643,6 @@
   "th.kol": "KOL",
   "th.proofs": "Proofs",
   "dash.emptyKol": "No KOL data yet.",
-
   "dash.wActiveTalent": "Registered Talents",
   "dash.talApplied": "applied",
   "dash.talAssigned": "assigned",
@@ -675,7 +664,6 @@
   "manage.endDate": "End (upload deadline)",
   "manage.location": "Event location",
   "manage.locationPh": "e.g. Hutan Kota by Plataran",
-
   "nav.analytics": "Analysis",
   "nav.statistics": "Statistics",
   "nav.overview": "Performance",
@@ -715,28 +703,23 @@
   "an.trend": "Trend over time",
   "an.trendEng": "Engagement per day",
   "an.trendPosts": "Posts per day",
-
   "title.delete": "Delete",
   "confirm.deleteProof": "Delete this post proof? This cannot be undone.",
   "confirm.deleteEvent": "Delete this event and its assignments?",
   "confirm.deleteEo": "Delete this EO account?",
-
   "time.title": "Reasonableness",
   "time.onTime": "Reasonable",
   "time.near": "Check needed",
   "time.late": "Unreasonable",
   "time.unknown": "Incomplete data (posting time / views)",
   "unit.perDay": "views/day",
-
   "kol.postedLabel": "Date & time posted on social media",
   "kol.postedHint": "(to assess views/day reasonableness)",
-
   "manage.settings": "Reasonableness settings (per metric)",
   "set.greenLabel": "Reasonable (max/day)",
   "set.yellowLabel": "Check needed (max/day)",
   "set.hint": "For each metric: value ÷ number of days (posted → submitted). ≤ green = Reasonable · ≤ yellow = Check needed · beyond = Unreasonable. Suspicious numbers are also colored in the proof list.",
   "btn.saveSettings": "Save",
-
   "manage.title": "Manage",
   "manage.events": "Event / Campaign",
   "manage.assignments": "Talent Assignment",
@@ -776,7 +759,6 @@
   "eo.detail.activate": "Activate EO",
   "eo.detail.suspendConfirm": "Suspend this EO? They won't be able to log in until reactivated.",
   "eo.detail.suspendedNote": "This EO is suspended — they can't log in. Existing events stay intact.",
-
   "err.nameRequired": "Name is required.",
   "err.loginRequired": "Email / phone is required.",
   "err.passwordMin6": "Password must be at least 6 characters.",
@@ -790,7 +772,6 @@
   "err.ssRequired": "A screenshot is required.",
   "err.fileMustBeImage": "The file must be an image.",
   "err.badLink": "The post link is not valid.",
-
   "score.col": "Eligibility",
   "score.none": "No data yet",
   "score.good": "Recommended",
@@ -810,7 +791,6 @@
   "score.minCampaigns": "Campaigns for full consistency",
   "score.eligibleAt": "'Recommended' from score",
   "score.considerAt": "'Consider' from score",
-
   "pub.title": "Submit Post Proof",
   "pub.sub": "Fill in your details and upload your post insight screenshots — no login needed.",
   "pub.name": "Name",
@@ -831,11 +811,9 @@
   "pub.again": "Submit again",
   "dash.perEvent": "Analysis per Event",
   "dash.kolCount": "KOL",
-
   "hero.headlineLead": "ONE PLATFORM.",
   "hero.headlineAccent": "ENDLESS EVENT OPPORTUNITIES.",
   "hero.subheadline": "Find projects that match your skills and be part of exciting sports events",
-
   "joinEvent.headline": "Ready to Be Part of Exciting Events?",
   "joinEvent.description": "Join 20FIT Talent and discover more opportunities to create in various sporting events. From KOL, Photographer, to Main Power, choose projects that match your skills and passion.",
   "joinEvent.b1.title": "Projects Matching Your Skills",
@@ -846,7 +824,6 @@
   "joinEvent.b3.desc": "Build a stronger track record and professional portfolio",
   "joinEvent.cta": "Register as Talent",
   "joinEvent.ctaSub": "Join Now",
-
   "land.join": "Sign Up",
   "land.login": "Login",
   "land.submit": "Submit Post Proof",
@@ -885,7 +862,6 @@
   "whyChoose.item5.description": "Get a digital certificate every time you complete an event — solid proof of your experience.",
   "whyChoose.item6.title": "Find the Right Project",
   "whyChoose.item6.description": "Pick projects that actually match your skills and interests.",
-
   "mp.dash.title": "Man Power Dashboard",
   "mp.dash.greeting": "Hi <b>{name}</b> — browse events, review the SOW, then apply for your jobdesk.",
   "mp.dash.verifyNote": "Identity (ID card) & 3-angle AI face verification for Man Power is coming soon.",
@@ -945,7 +921,6 @@
   "mp.apply.alreadyApplied": "You have already applied to this event.",
   "mp.err.roleRequired": "Please choose a jobdesk first.",
   "mp.err.sowRequired": "You must agree to the SOW to continue.",
-
   "nav.applications": "Man Power",
   "nav.appKol": "KOL",
   "nav.appCreative": "Photographer / Videographer",
@@ -1037,7 +1012,6 @@
   "manage.needsLabel": "Talent Needs",
   "manage.kolQuota": "KOL Quota",
   "manage.fgQuota": "Fotografer Quota",
-
   "cfg.title": "Configuration incomplete",
   "cfg.body": "Environment variable not set: <b>{missing}</b>.<br>Set it in the Railway dashboard (Variables) and redeploy.",
   "perf.title": "KOL Leaderboard",
@@ -1056,7 +1030,6 @@
   "err500.generic": "Something went wrong.",
   "err500.fileSize": "Image too large (max 6 MB per file).",
   "err500.fileCount": "Maximum {n} images.",
-
   "ev.findTitle": "Find Events",
   "ev.searchPh": "Search event name or location…",
   "ev.filterAll": "All",
@@ -1064,7 +1037,6 @@
   "ev.noMatch": "No matching events.",
   "ev.status.ongoing": "Ongoing",
   "ev.status.upcoming": "Coming soon",
-
   "dd.title": "Complete Your Profile",
   "dd.sub": "{name}, please complete your profile before you get started.",
   "dd.editTitle": "Edit Your Profile",
@@ -1142,7 +1114,6 @@
   "dd.err.followers": "Approx. followers must be a number.",
   "dd.err.followersReq": "Approx. followers is required (enter 0 if none).",
   "dd.err.experience": "Experience is required.",
-
   "adm.profile.title": "Profile",
   "adm.profile.phone": "WhatsApp",
   "adm.profile.city": "City",
@@ -1152,5 +1123,59 @@
   "adm.profile.instagram": "Instagram",
   "adm.profile.followers": "IG followers",
   "adm.profile.experience": "Experience",
-  "adm.profile.incomplete": "Talent hasn't completed their profile yet."
+  "adm.profile.incomplete": "Talent hasn't completed their profile yet.",
+  "mpr2.proposedBy": "Proposed by",
+  "mpr2.reviewedNP": "Reviewed, not proposed",
+  "mpr2.proposeFor": "Propose",
+  "mpr2.unpropose": "Withdraw proposal",
+  "mpr2.proposeHint": "Propose this applicant for one of their chosen positions. This is a recommendation only — not a decision, and no email is sent to the talent.",
+  "mpr2.notePh": "Short note (optional) — reason for proposing…",
+  "mpr2.markReviewed": "Mark: reviewed, not proposed",
+  "mpr2.unmarkReviewed": "Undo reviewed mark",
+  "mpr2.toDecision": "Decision Meeting",
+  "mpr2.filterProposal": "Proposal status",
+  "mpr2.prAll": "All",
+  "mpr2.prUnreviewed": "Not reviewed by anyone",
+  "mpr2.prProposed": "Proposed",
+  "mpr2.prReviewedNp": "Reviewed, not proposed",
+  "mpr2.activeReviewer": "Active reviewer",
+  "mpr2.changeReviewer": "Change name",
+  "mpr2.reviewerHint": "This name is auto-attached to every proposal you make. Sharing one computer? Click Change name.",
+  "mpr2.promptTitle": "Who is reviewing?",
+  "mpr2.promptBody": "Enter your name once. All your proposals will be recorded under it. No email is sent to talents when you propose.",
+  "mpr2.promptPh": "Your name…",
+  "mpr2.promptSave": "Save",
+  "mpr2.cancel": "Cancel",
+  "mpr2.dm.title": "Decision Meeting",
+  "mpr2.dm.proposedCount": "{n} proposed",
+  "mpr2.dm.noProposals": "No applicants have been proposed for this event yet.",
+  "mpr2.dm.noProposalsAny": "No proposals in any event yet.",
+  "mpr2.dm.pickEvent": "Pick an event to open its decision meeting.",
+  "mpr2.dm.back": "Back to applicants",
+  "mpr2.dm.flashAccept": "Final decision saved. A notification email was sent to the talent.",
+  "mpr2.dm.flashReject": "Final decision saved (rejected). No acceptance email was sent.",
+  "mpr2.dm.assignedHere": "Accepted & confirmed",
+  "mpr2.dm.acceptedHere": "Accepted (final)",
+  "mpr2.dm.acceptedElsewhere": "Already accepted for another position",
+  "mpr2.dm.by": "by {name}",
+  "mpr2.dm.finalAccept": "Final Accept",
+  "mpr2.dm.finalReject": "Final Reject",
+  "mpr2.dm.rejectConfirm": "Final-reject this applicant? Their status becomes rejected. No acceptance email is sent.",
+  "mpr2.dm.accepted": "accepted {n}/{q}",
+  "mpr2.dm.warn": "This is the final decision stage. Final Accept sends an email to the talent. Make sure the decision is final.",
+  "mpr2.dm.actor": "Meeting operator",
+  "mpr2.dm.actorHint": "This name is recorded as the person who made the final decision.",
+  "mpr2.dm.actorPromptTitle": "Who is running the meeting?",
+  "mpr2.dm.actorPromptBody": "Enter your name. It is recorded on every final decision you make.",
+  "mpr2.cf.title": "Confirm Final Decision",
+  "mpr2.cf.heading": "Finally accept this talent?",
+  "mpr2.cf.body": "Once confirmed, the status changes to accepted and an email is automatically sent to the talent. All reviewers share one login, so check the summary below first.",
+  "mpr2.cf.position": "Position",
+  "mpr2.cf.event": "Event",
+  "mpr2.cf.email": "Email will be sent to",
+  "mpr2.cf.actor": "Decided by",
+  "mpr2.cf.note": "The email does not mention the position. The talent is asked to log in to see their placement and respond within 48 hours.",
+  "mpr2.cf.confirm": "Yes, accept & send email",
+  "mpr2.cf.cancel": "Cancel",
+  "mpr2.addName": "Add name"
 }

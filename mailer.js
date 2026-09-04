@@ -645,4 +645,65 @@ async function sendApplicationReceivedEmail({ to, name }) {
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml };
+// Final decision reached (two-layer selection, LAPIS 2 → accepted). Deliberately
+// GENERIC: it never names the position — the talent must log in to see their
+// placement and respond within 48 hours. The event name is included only as
+// context so they know which application this concerns. Always English.
+function decisionEmailHtml({ name, eventName, eventDate }) {
+  const dashUrl = APP_BASE + '/talent';
+  const evLine = eventName
+    ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#4a4e57">This concerns your application for <b>${esc(eventName)}</b>${eventDate ? ` <span style="color:#8b8f97">(${esc(eventDate)})</span>` : ''}.</p>`
+    : '';
+  return `<!doctype html><html lang="en"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">There's a decision on your application — log in within 48 hours to view it and respond.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      ${logoBar()}
+      <tr><td bgcolor="#178A54" style="background:#178A54;background:linear-gradient(135deg,#1fb268,#127a45);padding:30px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:#fffffe">There's an Update on Your Application 🎉</div>
+      </td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">Hi ${esc(name || '')},</p>
+        <p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#4a4e57">Our selection team has reached a decision on your application. Please log in to your dashboard to see it and give your response.</p>
+        ${evLine}
+        <p style="margin:0;font-size:14px;line-height:1.65;color:#4a4e57"><b style="color:#17171d">Please respond within 48 hours</b> so we can confirm your spot.</p>
+      </td></tr>
+      <tr><td style="padding:22px 30px 6px;text-align:center">
+        <a href="${esc(dashUrl)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">Open My Dashboard</a>
+      </td></tr>
+      <tr><td style="padding:18px 30px 4px">
+        <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">Best,<br><b style="color:#17171d">20FIT Talent Team</b></p>
+      </td></tr>
+      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">This is an automated email from 20FIT Talent. Please do not reply to this email.</p></td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+}
+
+/** Final-decision (accepted) email — generic, never names the position. English. Never throws for a missing key. */
+async function sendDecisionEmail({ to, name, eventName, eventDate }) {
+  const subject = "There's an update on your 20FIT application";
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — decision email for ' + to);
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: decisionEmailHtml({ name, eventName, eventDate }) }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) {
+      console.warn('[mail] Resend API key is invalid; decision email not sent to ' + to);
+      return { delivered: false, error: 'Invalid API key' };
+    }
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendDecisionEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, decisionEmailHtml };

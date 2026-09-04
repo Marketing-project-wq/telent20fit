@@ -130,16 +130,13 @@
   "talent.kol": "KOL",
   "talent.main_power": "Man Power",
   "talent.fotografer": "Fotografer",
-
   "err.header": "Gagal:",
   "check.header": "Periksa lagi:",
-
   "common.email": "Email",
   "common.password": "Password",
   "common.passwordConfirm": "Konfirmasi Password",
   "common.fullname": "Nama Lengkap",
   "common.emailphone": "Email / No. HP",
-
   "staffLogin.title": "Login Admin",
   "staffLogin.sub": "Masuk sebagai Super Admin atau Event Organizer.",
   "staffLogin.titleAdmin": "Login Super Admin",
@@ -149,7 +146,6 @@
   "staffLogin.toEo": "Login Event Organizer →",
   "staffLogin.toAdmin": "Login Super Admin →",
   "btn.signin": "Masuk",
-
   "auth.login.title": "Masuk {role}",
   "auth.login.sub": "Masuk ke akun kamu untuk submit hasil.",
   "auth.register.title": "Daftar {role}",
@@ -590,7 +586,6 @@
   "auth.reset.doneTitle": "Password Diperbarui!",
   "auth.reset.doneBody": "Password kamu sudah diganti. Sekarang kamu bisa masuk pakai password baru.",
   "auth.reset.toLogin": "Masuk sekarang",
-
   "kol.title": "Bukti Post KOL",
   "kol.greeting": "Halo <b>{name}</b> — upload screenshot performa post kamu (like / komentar / view). Sistem membaca angkanya otomatis.",
   "kol.noEvents": "Belum ada event aktif. Hubungi admin.",
@@ -610,14 +605,12 @@
   "kol.uploaded": "Sudah upload",
   "kol.notUploaded": "Belum upload",
   "kol.deadlineLabel": "Deadline: {date}",
-
   "status.pending": "Menunggu",
   "status.processing": "Diproses",
   "status.extracted": "Terekstrak",
   "status.failed": "Gagal",
   "status.verified": "Terverifikasi",
   "status.rejected": "Ditolak",
-
   "stats.views": "Views",
   "stats.likes": "Likes",
   "stats.comments": "Komentar",
@@ -626,9 +619,7 @@
   "stats.reach": "Reach",
   "stats.impressions": "Impressions",
   "stats.linkClicks": "Link Click",
-
   "staff.signedInAs": "Login sebagai <b>{name}</b> · {role}",
-
   "th.talent": "Talent",
   "th.event": "Event",
   "th.ss": "SS",
@@ -641,7 +632,6 @@
   "proofs.pageTitle": "Bukti Post",
   "proofs.all": "Semua bukti post KOL",
   "proofs.readonly": "(lihat-saja)",
-
   "dash.title": "Dashboard",
   "dash.totalKol": "Total KOL",
   "dash.totalProofs": "Total bukti post",
@@ -653,7 +643,6 @@
   "th.kol": "KOL",
   "th.proofs": "Bukti",
   "dash.emptyKol": "Belum ada data KOL.",
-
   "dash.wActiveTalent": "Total Talent Terdaftar",
   "dash.talApplied": "sudah melamar",
   "dash.talAssigned": "ditugaskan",
@@ -675,7 +664,6 @@
   "manage.endDate": "Selesai (deadline upload)",
   "manage.location": "Lokasi event",
   "manage.locationPh": "cth. Hutan Kota by Plataran",
-
   "nav.analytics": "Analisis",
   "nav.statistics": "Statistik",
   "nav.overview": "Performa",
@@ -715,28 +703,23 @@
   "an.trend": "Tren dari waktu ke waktu",
   "an.trendEng": "Engagement per hari",
   "an.trendPosts": "Jumlah post per hari",
-
   "title.delete": "Hapus",
   "confirm.deleteProof": "Hapus bukti post ini? Tindakan ini tidak bisa dibatalkan.",
   "confirm.deleteEvent": "Hapus event ini beserta assignment-nya?",
   "confirm.deleteEo": "Hapus akun EO ini?",
-
   "time.title": "Kewajaran",
   "time.onTime": "Wajar",
   "time.near": "Perlu dicek",
   "time.late": "Tidak wajar",
   "time.unknown": "Data belum lengkap (waktu posting / views)",
   "unit.perDay": "views/hari",
-
   "kol.postedLabel": "Tanggal & jam posting di sosial media",
   "kol.postedHint": "(untuk menilai kewajaran views/hari)",
-
   "manage.settings": "Pengaturan Kewajaran (per metrik)",
   "set.greenLabel": "Wajar (maks/hari)",
   "set.yellowLabel": "Perlu dicek (maks/hari)",
   "set.hint": "Untuk tiap metrik: nilai ÷ jumlah hari (posting → submit). ≤ batas hijau = Wajar · ≤ batas kuning = Perlu dicek · lebih = Tidak wajar. Angka yang mencurigakan ikut diwarnai di daftar bukti.",
   "btn.saveSettings": "Simpan",
-
   "manage.title": "Kelola",
   "manage.events": "Event / Campaign",
   "manage.assignments": "Assignment Talent",
@@ -776,7 +759,6 @@
   "eo.detail.activate": "Aktifkan EO",
   "eo.detail.suspendConfirm": "Tangguhkan EO ini? Mereka tidak akan bisa login sampai diaktifkan lagi.",
   "eo.detail.suspendedNote": "EO ini sedang ditangguhkan — tidak bisa login. Event yang sudah ada tetap aman.",
-
   "err.nameRequired": "Nama wajib diisi.",
   "err.loginRequired": "Email / No. HP wajib diisi.",
   "err.passwordMin6": "Password minimal 6 karakter.",
@@ -790,7 +772,6 @@
   "err.ssRequired": "Screenshot wajib diupload.",
   "err.fileMustBeImage": "File harus berupa gambar.",
   "err.badLink": "Link postingan tidak valid.",
-
   "score.col": "Kelayakan",
   "score.none": "Belum ada data",
   "score.good": "Layak Direkomendasikan",
@@ -810,7 +791,6 @@
   "score.minCampaigns": "Jumlah campaign untuk konsistensi penuh",
   "score.eligibleAt": "'Layak' mulai skor",
   "score.considerAt": "'Perlu Dipertimbangkan' mulai skor",
-
   "pub.title": "Kirim Bukti Post",
   "pub.sub": "Isi data kamu dan upload screenshot insight postingan — tanpa perlu login.",
   "pub.name": "Nama",
@@ -831,11 +811,9 @@
   "pub.again": "Kirim lagi",
   "dash.perEvent": "Analisa per Event",
   "dash.kolCount": "KOL",
-
   "hero.headlineLead": "SATU PLATFORM.",
   "hero.headlineAccent": "PELUANG EVENT TAK TERBATAS.",
   "hero.subheadline": "Temukan proyek yang sesuai dengan keahlianmu dan jadilah bagian dari event olahraga yang seru.",
-
   "joinEvent.headline": "Siap Jadi Bagian dari Event Seru?",
   "joinEvent.description": "Gabung di 20FIT Talent dan temukan lebih banyak kesempatan untuk berkarya di berbagai event olahraga. Dari KOL, Photographer, hingga Main Power, pilih project yang sesuai dengan skill dan passion kamu.",
   "joinEvent.b1.title": "Project Sesuai Skill",
@@ -846,7 +824,6 @@
   "joinEvent.b3.desc": "Bangun pengalaman dan portofolio yang lebih kuat",
   "joinEvent.cta": "Daftar sebagai Talent",
   "joinEvent.ctaSub": "Gabung Sekarang",
-
   "land.join": "Daftar Sekarang",
   "land.login": "Login",
   "land.submit": "Kirim Bukti Post",
@@ -885,7 +862,6 @@
   "whyChoose.item5.description": "Dapatkan sertifikat digital setiap selesai event — bukti pengalaman yang solid.",
   "whyChoose.item6.title": "Temukan Project yang Cocok",
   "whyChoose.item6.description": "Pilih project yang sesuai dengan skill dan minat kamu.",
-
   "mp.dash.title": "Dashboard Man Power",
   "mp.dash.greeting": "Halo <b>{name}</b> — cari event, tinjau SOW, lalu apply sesuai jobdesk kamu.",
   "mp.dash.verifyNote": "Verifikasi identitas (KTP) & foto wajah 3 sudut via AI untuk Man Power akan segera hadir.",
@@ -945,7 +921,6 @@
   "mp.apply.alreadyApplied": "Kamu sudah apply ke event ini.",
   "mp.err.roleRequired": "Pilih jobdesk dulu.",
   "mp.err.sowRequired": "Kamu harus menyetujui SOW untuk lanjut.",
-
   "nav.applications": "Man Power",
   "nav.appKol": "KOL",
   "nav.appCreative": "Fotografer / Videografer",
@@ -1037,7 +1012,6 @@
   "manage.needsLabel": "Kebutuhan Talent",
   "manage.kolQuota": "Kuota KOL",
   "manage.fgQuota": "Kuota Fotografer",
-
   "cfg.title": "Konfigurasi belum lengkap",
   "cfg.body": "Environment variable belum di-set: <b>{missing}</b>.<br>Set variabel ini di Railway dashboard (Variables) lalu redeploy.",
   "perf.title": "Leaderboard KOL",
@@ -1056,7 +1030,6 @@
   "err500.generic": "Terjadi kesalahan.",
   "err500.fileSize": "Ukuran gambar terlalu besar (maks 6 MB per file).",
   "err500.fileCount": "Maksimal {n} gambar.",
-
   "ev.findTitle": "Cari Event",
   "ev.searchPh": "Cari nama atau lokasi event…",
   "ev.filterAll": "Semua",
@@ -1064,7 +1037,6 @@
   "ev.noMatch": "Tidak ada event yang cocok.",
   "ev.status.ongoing": "Sedang berjalan",
   "ev.status.upcoming": "Segera hadir",
-
   "dd.title": "Lengkapi Data Diri",
   "dd.sub": "{name}, lengkapi data diri kamu dulu ya sebelum mulai.",
   "dd.editTitle": "Ubah Data Diri",
@@ -1142,7 +1114,6 @@
   "dd.err.followers": "Perkiraan followers harus berupa angka.",
   "dd.err.followersReq": "Perkiraan followers wajib diisi (isi 0 kalau belum ada).",
   "dd.err.experience": "Pengalaman wajib diisi.",
-
   "adm.profile.title": "Data diri",
   "adm.profile.phone": "WhatsApp",
   "adm.profile.city": "Domisili",
@@ -1152,5 +1123,59 @@
   "adm.profile.instagram": "Instagram",
   "adm.profile.followers": "Followers IG",
   "adm.profile.experience": "Pengalaman",
-  "adm.profile.incomplete": "Data diri belum dilengkapi talent."
+  "adm.profile.incomplete": "Data diri belum dilengkapi talent.",
+  "mpr2.proposedBy": "Diusulkan oleh",
+  "mpr2.reviewedNP": "Ditinjau, tidak diusulkan",
+  "mpr2.proposeFor": "Usulkan",
+  "mpr2.unpropose": "Batalkan usulan",
+  "mpr2.proposeHint": "Usulkan pelamar ini untuk salah satu posisi pilihannya. Ini baru rekomendasi — belum keputusan, dan tidak ada email yang terkirim ke talent.",
+  "mpr2.notePh": "Catatan singkat (opsional) — alasan mengusulkan…",
+  "mpr2.markReviewed": "Tandai: sudah ditinjau, tidak diusulkan",
+  "mpr2.unmarkReviewed": "Batal tanda ditinjau",
+  "mpr2.toDecision": "Rapat Keputusan",
+  "mpr2.filterProposal": "Status usulan",
+  "mpr2.prAll": "Semua",
+  "mpr2.prUnreviewed": "Belum ditinjau siapa pun",
+  "mpr2.prProposed": "Sudah diusulkan",
+  "mpr2.prReviewedNp": "Ditinjau, tidak diusulkan",
+  "mpr2.activeReviewer": "Reviewer aktif",
+  "mpr2.changeReviewer": "Ganti nama",
+  "mpr2.reviewerHint": "Nama ini otomatis tercatat pada setiap usulan yang kamu buat. Satu komputer dipakai bergantian? Klik Ganti nama.",
+  "mpr2.promptTitle": "Siapa yang sedang meninjau?",
+  "mpr2.promptBody": "Masukkan namamu sekali. Semua usulanmu akan tercatat atas nama ini. Tidak ada email yang terkirim ke talent saat kamu mengusulkan.",
+  "mpr2.promptPh": "Nama kamu…",
+  "mpr2.promptSave": "Simpan",
+  "mpr2.cancel": "Batal",
+  "mpr2.dm.title": "Rapat Keputusan",
+  "mpr2.dm.proposedCount": "{n} diusulkan",
+  "mpr2.dm.noProposals": "Belum ada pelamar yang diusulkan untuk event ini.",
+  "mpr2.dm.noProposalsAny": "Belum ada usulan di event mana pun.",
+  "mpr2.dm.pickEvent": "Pilih event untuk membuka rapat keputusannya.",
+  "mpr2.dm.back": "Kembali ke daftar pelamar",
+  "mpr2.dm.flashAccept": "Keputusan final tersimpan. Email pemberitahuan dikirim ke talent.",
+  "mpr2.dm.flashReject": "Keputusan final tersimpan (ditolak). Tidak ada email penerimaan yang dikirim.",
+  "mpr2.dm.assignedHere": "Diterima final & dikonfirmasi",
+  "mpr2.dm.acceptedHere": "Diterima final",
+  "mpr2.dm.acceptedElsewhere": "Sudah diterima di posisi lain",
+  "mpr2.dm.by": "oleh {name}",
+  "mpr2.dm.finalAccept": "Terima Final",
+  "mpr2.dm.finalReject": "Tolak Final",
+  "mpr2.dm.rejectConfirm": "Tolak final pelamar ini? Statusnya berubah menjadi ditolak. Tidak ada email penerimaan yang dikirim.",
+  "mpr2.dm.accepted": "diterima {n}/{q}",
+  "mpr2.dm.warn": "Ini tahap keputusan final. Tombol Terima Final akan mengirim email ke talent. Pastikan keputusan sudah bulat.",
+  "mpr2.dm.actor": "Operator rapat",
+  "mpr2.dm.actorHint": "Nama ini tercatat sebagai yang menekan keputusan final.",
+  "mpr2.dm.actorPromptTitle": "Siapa yang menjalankan rapat?",
+  "mpr2.dm.actorPromptBody": "Masukkan namamu. Nama ini tercatat pada setiap keputusan final yang kamu jalankan.",
+  "mpr2.cf.title": "Konfirmasi Keputusan Final",
+  "mpr2.cf.heading": "Terima talent ini secara final?",
+  "mpr2.cf.body": "Setelah dikonfirmasi, status berubah menjadi diterima dan email otomatis dikirim ke talent. Semua reviewer memakai akun yang sama, jadi periksa dulu ringkasan di bawah.",
+  "mpr2.cf.position": "Posisi",
+  "mpr2.cf.event": "Event",
+  "mpr2.cf.email": "Email dikirim ke",
+  "mpr2.cf.actor": "Diputuskan oleh",
+  "mpr2.cf.note": "Email tidak menyebutkan posisi. Talent diminta masuk ke web untuk melihat penempatannya dan menjawab dalam 48 jam.",
+  "mpr2.cf.confirm": "Ya, terima & kirim email",
+  "mpr2.cf.cancel": "Batal",
+  "mpr2.addName": "Tambah nama"
 }

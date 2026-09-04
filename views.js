@@ -2159,6 +2159,18 @@ function eventStatusBadge(status, lang) {
  * review + KOL detail). WhatsApp and Instagram become click-through links.
  * Returns a short "not completed yet" note if the profile is still empty.
  */
+// Mask a national ID (KTP) number so only the last 4 digits show, e.g.
+// "3201••••••••3456". Reduces exposure of hundreds of applicants' full KTP
+// numbers to the several reviewers who open the applicant list.
+function maskId(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '—';
+  const digits = s.replace(/\D/g, '');
+  if (digits.length <= 4) return '••••';
+  const last = digits.slice(-4);
+  const head = digits.slice(0, 4);
+  return head + '•'.repeat(Math.max(4, digits.length - 8)) + last;
+}
 function talentProfileBlock(profile, lang) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -2172,7 +2184,7 @@ function talentProfileBlock(profile, lang) {
   const rows = [
     [t('adm.profile.phone'), wa],
     [t('adm.profile.city'), esc(profile.city || '—')],
-    [t('adm.profile.ktp'), esc(profile.ktp || '—')],
+    [t('adm.profile.ktp'), profile.ktp ? esc(maskId(profile.ktp)) : '—'],
     [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
     [t('adm.profile.gender'), esc(genderLabel)],
     [t('adm.profile.instagram'), ig],
@@ -5465,34 +5477,56 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
         </div>`
       : '';
 
-    // Per-position accept / reject / undo for Super Admin (mirrors the EO decision controls).
-    const posControls = () => {
+    // LAPIS 1 — reviewer proposals. Show who has proposed this applicant (per
+    // position) and who reviewed-but-didn't-propose. NO accept/reject here — those
+    // live only in the decision meeting. Decided apps show their status + undo.
+    const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
+    const proposalDisplay = () => {
+      const byPos = new Map();
+      (a.proposals || []).forEach((p) => { const g = byPos.get(p.position_id) || { label: posLabel(p, L), names: [], notes: [] }; g.names.push(p.reviewer_name); if (p.note) g.notes.push(p.reviewer_name + ': ' + p.note); byPos.set(p.position_id, g); });
+      const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
+      const rev = (a.reviewMarks || []).length ? `<div class="muted" style="font-size:12.5px;margin-top:5px">👀 ${t('mpr2.reviewedNP')}: ${esc(a.reviewMarks.join(', '))}</div>` : '';
+      return (lines || rev) ? `<div style="margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px">${lines}${rev}</div>` : '';
+    };
+    const lapis1Controls = () => {
       const base = `/admin/applications/${esc(a.id)}`;
       const acc = choices.find((c) => c.accepted);
       if ((a.status === 'approved' || a.status === 'assigned') && acc) {
         const confirmed = a.status === 'assigned';
-        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
           <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posLabel(acc, L) }))}</span>
           ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
-          <form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+          <form class="inline-form" method="post" action="${base}/reset-position"><input type="hidden" class="rvname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
         </div>`;
       }
       if (a.status === 'rejected') {
-        return `<div style="margin-top:12px"><form class="inline-form" method="post" action="${base}/reset-position"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form></div>`;
+        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+          <span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span>
+          <form class="inline-form" method="post" action="${base}/reset-position"><input type="hidden" class="rvname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+        </div>`;
       }
-      const btns = choices.map((c) => c.full
-        ? `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLabel(c, L))} · ${t('eo.ap.posFull')}</button>`
-        : `<form class="inline-form" method="post" action="${base}/accept-position"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><button class="btn btn-sm">${t('eo.ap.accept')}: P${c.priority} ${esc(posLabel(c, L))}</button></form>`
-      ).join('');
-      return `<div style="margin-top:12px">
-        <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('eo.ap.decide')}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${btns}
-          <form class="inline-form" method="post" action="${base}/reject-position" ${jsConfirm(t('eo.ap.rejectConfirm'))}><button class="btn btn-ghost btn-sm" style="color:var(--red)">${t('eo.ap.reject')}</button></form>
+      const proposedSet = JSON.stringify((a.proposals || []).map((p) => p.position_id + '|' + p.reviewer_name));
+      const reviewedSet = JSON.stringify(a.reviewMarks || []);
+      const posBtns = choices.map((c) => {
+        if (c.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLabel(c, L))} · ${t('eo.ap.posFull')}</button>`;
+        return `<span class="prop-pos" data-pid="${esc(c.position_id)}" style="display:inline-flex;gap:6px;align-items:center">
+          <form class="inline-form prop-form needs-reviewer" method="post" action="${base}/propose"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" class="prop-note" name="note" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-sm">➕ ${t('mpr2.proposeFor')}: P${c.priority} ${esc(posLabel(c, L))}</button></form>
+          <form class="inline-form unprop-form needs-reviewer" method="post" action="${base}/unpropose" style="display:none"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm" style="color:var(--red)">↩︎ ${t('mpr2.unpropose')}: P${c.priority}</button></form>
+        </span>`;
+      }).join('');
+      return `<div class="lapis1" data-proposed="${esc(proposedSet)}" data-reviewed="${esc(reviewedSet)}" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+        <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('mpr2.proposeHint')}</div>
+        <input type="text" class="prop-note-input" maxlength="500" placeholder="${esc(t('mpr2.notePh'))}" style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:13px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${posBtns}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <form class="inline-form mark-form needs-reviewer" method="post" action="${base}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">👀 ${t('mpr2.markReviewed')}</button></form>
+          <form class="inline-form unmark-form needs-reviewer" method="post" action="${base}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
         </div>
       </div>`;
     };
 
-    return `<div class="card adm-ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
+    const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
+    return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
@@ -5515,7 +5549,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
              <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
           : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
       </div>` : ''}
-      ${choices.length ? posControls() : stationForm}
+      ${choices.length ? proposalDisplay() + lapis1Controls() : stationForm}
       <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
         <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
         <div style="margin-top:10px">
@@ -5542,13 +5576,15 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   });
   const folders = [...groups.entries()].map(([eid, g]) => {
     const attn = attnByEvent.get(eid);
-    const attnBar = attn
-      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 2px 2px">
-          <span class="muted" style="font-size:12.5px;flex:1;min-width:0">📋 ${t('mpr.attnHead')}</span>
+    // Event-level action bar: the "decision meeting" button is always available
+    // (it opens LAPIS 2 for this event); the attendance Copy link / Open cluster
+    // is shown alongside it once the event has approved talent.
+    const attnBar = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 2px 2px">
+          <a href="/admin/applications/decision?event=${esc(eid)}&lang=${L}" class="btn btn-sm">🗳️ ${t('mpr2.toDecision')}</a>
+          ${attn ? `<span class="muted" style="font-size:12.5px;flex:1;min-width:0;text-align:right">📋 ${t('mpr.attnHead')}</span>
           <button type="button" class="btn btn-ghost btn-sm attn-copy" data-path="${esc(attn.path)}" data-copied="🔗 ${esc(t('mpr.attnCopied'))}" data-label="🔗 ${esc(t('mpr.attnCopy'))}">🔗 ${t('mpr.attnCopy')}</button>
-          <a href="${esc(attn.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>
-        </div>`
-      : '';
+          <a href="${esc(attn.path)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">${t('mpr.attnOpen')} ↗</a>` : ''}
+        </div>`;
     return `<details class="ev-folder" style="margin-top:14px"${groups.size === 1 ? ' open' : ''}>
       <summary style="cursor:pointer;font-weight:800;font-size:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px">📁 ${esc(g.name)} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr.count', { n: g.apps.length })}</span></summary>
       ${attnBar}${g.apps.map(renderCard).join('')}
@@ -5568,11 +5604,36 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     </select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="admPosFilter" style="min-width:150px"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.status')}<select id="admStatusFilter" style="min-width:150px"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="admPrFilter" style="min-width:190px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
     <input type="text" id="admSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" style="flex:1;min-width:150px;box-sizing:border-box">
     <button type="button" id="admReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
   </div>
   <p class="muted" id="admNoMatch" style="margin-top:14px;display:none">${t('eo.ap.noMatch')}</p>`;
 
+  // Active-reviewer bar (LAPIS 1). All reviewers share one login, so names used
+  // before appear as one-tap chips (seeded from existing proposals so a fresh
+  // browser still sees them); tapping a chip switches the active reviewer with no
+  // typing. The active name auto-attaches to every proposal. "+ Add name" prompts.
+  const knownReviewers = Array.from(new Set(applications.flatMap((a) => [...(a.proposals || []).map((p) => p.reviewer_name), ...(a.reviewMarks || [])]))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
+  const reviewerBar = `<div class="card" style="margin-top:14px;padding:12px 14px;border-left:4px solid var(--red)">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13.5px">👤 ${t('mpr2.activeReviewer')}: <b id="rvNameShow" style="color:var(--red)">—</b></span>
+      <div id="rvChips" data-seed="${esc(JSON.stringify(knownReviewers))}" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button type="button" id="rvAdd" class="btn btn-ghost btn-sm">+ ${t('mpr2.addName')}</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">${t('mpr2.reviewerHint')}</div>
+  </div>`;
+  const rvModal = `<div id="rvModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:430px;width:100%;margin:0">
+      <h3 style="margin:0 0 6px;font-size:18px">${t('mpr2.promptTitle')}</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">${t('mpr2.promptBody')}</p>
+      <input type="text" id="rvInput" maxlength="80" autocomplete="off" placeholder="${esc(t('mpr2.promptPh'))}" style="width:100%;box-sizing:border-box;margin-bottom:12px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" id="rvCancel" class="btn btn-ghost btn-sm">${t('mpr2.cancel')}</button>
+        <button type="button" id="rvSave" class="btn btn-sm">${t('mpr2.promptSave')}</button>
+      </div>
+    </div>
+  </div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
   ${flashBanner}
@@ -5582,33 +5643,107 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
-  ${applications.length ? filterBar + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
+  ${applications.length ? reviewerBar + filterBar + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
 </div>
+${rvModal}
 <script>
 (function(){
-  var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
-  if(pos||st||sr){
-    var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
-    var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
-    var apply=function(){
-      var p=pos?pos.value:'',s=st?st.value:'',q=sr?sr.value.trim().toLowerCase():'',shown=0,filtering=!!(p||s||q);
-      items.forEach(function(it){
-        var okP=!p||it.getAttribute('data-p1pos')===p;
-        var okS=!s||it.getAttribute('data-status')===s;
-        var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
-        var vis=okP&&okS&&okQ;it.style.display=vis?'':'none';if(vis)shown++;
-      });
-      folders.forEach(function(f){
-        var vis=[].slice.call(f.querySelectorAll('.adm-ap-item')).filter(function(x){return x.style.display!=='none';}).length;
-        f.style.display=(filtering&&vis===0)?'none':'';if(filtering&&vis>0)f.open=true;
-      });
-      if(nm)nm.style.display=shown===0?'':'none';
-    };
-    if(pos)pos.addEventListener('change',apply);
-    if(st)st.addEventListener('change',apply);
-    if(sr)sr.addEventListener('input',apply);
-    if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(sr)sr.value='';apply();});
+  // --- Active reviewer name (LAPIS 1). Shared login → names used before appear as
+  // one-tap chips; tapping switches the active reviewer with no typing. ---
+  var LS='mpr_reviewer_name', LSN='mpr_reviewer_names';
+  function getName(){ try{return localStorage.getItem(LS)||'';}catch(e){return '';} }
+  function setName(n){ try{localStorage.setItem(LS,n);}catch(e){} }
+  function storedNames(){ try{return JSON.parse(localStorage.getItem(LSN)||'[]');}catch(e){return [];} }
+  function rememberName(n){ var a=storedNames(); if(a.indexOf(n)<0){a.push(n); try{localStorage.setItem(LSN,JSON.stringify(a));}catch(e){}} }
+  var show=document.getElementById('rvNameShow'), chipsBox=document.getElementById('rvChips');
+  var modal=document.getElementById('rvModal'), input=document.getElementById('rvInput');
+  function allNames(){
+    var seed=[]; if(chipsBox){try{seed=JSON.parse(chipsBox.getAttribute('data-seed')||'[]');}catch(e){}}
+    var out=[], seen={}; seed.concat(storedNames()).forEach(function(n){ var k=String(n).toLowerCase(); if(n&&!seen[k]){seen[k]=1;out.push(n);} });
+    return out;
   }
+  function refreshToggles(){
+    var n=getName();
+    [].slice.call(document.querySelectorAll('.lapis1')).forEach(function(box){
+      var proposed=[], reviewed=[];
+      try{proposed=JSON.parse(box.getAttribute('data-proposed')||'[]');}catch(e){}
+      try{reviewed=JSON.parse(box.getAttribute('data-reviewed')||'[]');}catch(e){}
+      [].slice.call(box.querySelectorAll('.prop-pos')).forEach(function(sp){
+        var pid=sp.getAttribute('data-pid');
+        var mine=!!n && proposed.indexOf(pid+'|'+n)>=0;
+        var pf=sp.querySelector('.prop-form'), uf=sp.querySelector('.unprop-form');
+        if(pf)pf.style.display=mine?'none':'';
+        if(uf)uf.style.display=mine?'':'none';
+      });
+      var markedMine=!!n && reviewed.indexOf(n)>=0;
+      var mf=box.querySelector('.mark-form'), umf=box.querySelector('.unmark-form');
+      if(mf)mf.style.display=markedMine?'none':'';
+      if(umf)umf.style.display=markedMine?'':'none';
+    });
+  }
+  function escHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function renderChips(){
+    if(!chipsBox)return; var n=getName();
+    chipsBox.innerHTML=allNames().map(function(nm){
+      var on=nm===n;
+      return '<button type="button" class="btn btn-sm rv-chip" data-name="'+escHtml(nm)+'"'+(on?'':' style="background:#fff;color:var(--ink);border:1px solid var(--line)"')+'>'+(on?'✓ ':'')+escHtml(nm)+'</button>';
+    }).join('');
+    [].slice.call(chipsBox.querySelectorAll('.rv-chip')).forEach(function(b){ b.addEventListener('click',function(){ setActive(b.getAttribute('data-name')); }); });
+  }
+  function fillNames(){
+    var n=getName();
+    [].slice.call(document.querySelectorAll('.rvname')).forEach(function(el){el.value=n;});
+    if(show)show.textContent=n||'—';
+    refreshToggles();
+  }
+  function setActive(n){ setName(n); rememberName(n); fillNames(); renderChips(); }
+  function openModal(){ if(!modal)return; input.value=''; modal.style.display='flex'; setTimeout(function(){input.focus();},30); }
+  function closeModal(){ if(modal)modal.style.display='none'; }
+  function saveModal(){ var v=(input.value||'').trim().replace(/\\s+/g,' ').slice(0,80); if(!v){input.focus();return;} setActive(v); closeModal(); }
+  var rvSave=document.getElementById('rvSave'), rvCancel=document.getElementById('rvCancel'), rvAdd=document.getElementById('rvAdd');
+  if(rvSave)rvSave.addEventListener('click',saveModal);
+  if(rvCancel)rvCancel.addEventListener('click',closeModal);
+  if(rvAdd)rvAdd.addEventListener('click',openModal);
+  if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveModal();}});
+  // Every LAPIS-1 action needs a reviewer name; copy the card note into the proposal.
+  document.addEventListener('submit',function(e){
+    var f=e.target;
+    if(f && f.classList && f.classList.contains('needs-reviewer')){
+      var n=getName();
+      if(!n){ e.preventDefault(); openModal(); return; }
+      var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
+      if(f.classList.contains('prop-form')){
+        var box=f.closest('.lapis1'); var noteInput=box&&box.querySelector('.prop-note-input');
+        var hidden=f.querySelector('.prop-note'); if(hidden&&noteInput)hidden.value=noteInput.value||'';
+      }
+    }
+  },true);
+
+  // --- Filters: position + status + proposal-status + search ---
+  var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),pr=document.getElementById('admPrFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
+  var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
+  var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
+  function apply(){
+    var p=pos?pos.value:'',s=st?st.value:'',pf=pr?pr.value:'',q=sr?sr.value.trim().toLowerCase():'',shown=0,filtering=!!(p||s||pf||q);
+    items.forEach(function(it){
+      var okP=!p||it.getAttribute('data-p1pos')===p;
+      var okS=!s||it.getAttribute('data-status')===s;
+      var okPr=!pf||it.getAttribute('data-prstatus')===pf;
+      var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+      var vis=okP&&okS&&okPr&&okQ;it.style.display=vis?'':'none';if(vis)shown++;
+    });
+    folders.forEach(function(f){
+      var vis=[].slice.call(f.querySelectorAll('.adm-ap-item')).filter(function(x){return x.style.display!=='none';}).length;
+      f.style.display=(filtering&&vis===0)?'none':'';if(filtering&&vis>0)f.open=true;
+    });
+    if(nm)nm.style.display=shown===0?'':'none';
+  }
+  if(pos)pos.addEventListener('change',apply);
+  if(st)st.addEventListener('change',apply);
+  if(pr)pr.addEventListener('change',apply);
+  if(sr)sr.addEventListener('input',apply);
+  if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';apply();});
+
   document.querySelectorAll('.station-save').forEach(function(btn){
     var form = btn.closest('form'); if(!form) return;
     var inputs = form.querySelectorAll('[name="station"], [name="station_loc"]');
@@ -5629,9 +5764,173 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       else { var ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); done(); }
     });
   });
+
+  renderChips();
+  fillNames();
+  apply();
+  // First visit on this browser with no saved name and applicants present → prompt.
+  if(!getName() && document.querySelector('.adm-ap-item')) openModal();
 })();
 </script>`;
   return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
+}
+
+// LAPIS 2 — the decision meeting. Shows ONLY proposed applicants for one event,
+// grouped by the position they were proposed for, with proposers + notes. Final
+// accept / reject live only here. `event` null → a small event picker.
+function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const posLabelOf = (g) => posLabel({ label_id: g.label_id, label_en: g.label_en, key: g.key }, L);
+  if (!event) {
+    const list = (picker && picker.length)
+      ? picker.map((p) => `<a href="/admin/applications/decision?event=${esc(p.id)}&lang=${L}" class="card" style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;text-decoration:none;color:inherit;padding:14px 16px;align-items:center"><b>${esc(p.name)}</b><span class="pill pill-off">${t('mpr2.dm.proposedCount', { n: p.count })}</span></a>`).join('')
+      : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr2.dm.noProposalsAny')}</p></div>`;
+    const body = `<div class="wrap">${staffHead(staff, t('mpr2.dm.title'), L)}<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><p class="sub" style="margin:0">${t('mpr2.dm.pickEvent')}</p><a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>${list}</div>`;
+    return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+  }
+  const flashBanner = flash === 'accept' ? `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr2.dm.flashAccept')}</div>`
+    : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>` : '';
+  const nextUrl = `/admin/applications/decision?event=${esc(event.id)}`;
+  const groupCards = groups.length ? groups.map((g) => {
+    const rows = g.entries.map((e) => {
+      const a = e.app;
+      const proposers = e.proposers.map((p) => p.name);
+      const notes = e.proposers.filter((p) => p.note).map((p) => p.name + ': ' + p.note);
+      const decided = (a.status === 'approved' || a.status === 'assigned') && a.acceptedPositionId;
+      let action;
+      if (decided) {
+        const here = a.acceptedPositionId === g.position_id;
+        action = here
+          ? `<span class="pill pill-ok">✓ ${t(a.status === 'assigned' ? 'mpr2.dm.assignedHere' : 'mpr2.dm.acceptedHere')}</span>${a.decidedBy ? `<span class="muted" style="font-size:12px">· ${t('mpr2.dm.by', { name: esc(a.decidedBy) })}</span>` : ''}<form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/reset-position"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`
+          : `<span class="pill pill-off">${t('mpr2.dm.acceptedElsewhere')}</span>`;
+      } else if (a.status === 'rejected') {
+        action = `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span><form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/reset-position"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`;
+      } else if (g.full) {
+        action = `<span class="pill pill-off">${t('eo.ap.posFull')}</span>
+          <form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
+      } else {
+        action = `<form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-accept"><input type="hidden" name="position_id" value="${esc(g.position_id)}"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-sm">✅ ${t('mpr2.dm.finalAccept')}</button></form>
+          <form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
+      }
+      return `<div class="card" style="margin-top:10px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+          <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.login ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(a.login)}</div>` : ''}
+            <div style="font-size:13px;margin-top:6px">👍 ${t('mpr2.proposedBy')} <b>${esc(proposers.join(', '))}</b> <span class="muted">(${proposers.length})</span></div>
+            ${notes.length ? `<div class="muted" style="font-size:12.5px;margin-top:4px;white-space:pre-wrap">📝 ${esc(notes.join(' | '))}</div>` : ''}
+          </div>
+          ${talentStatusBadge(a.status, L)}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">${action}</div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-top:18px">
+      <div style="font-weight:800;font-size:16px">${esc(posLabelOf(g))} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr2.dm.proposedCount', { n: g.entries.length })}${g.quota ? ` · ${t('mpr2.dm.accepted', { n: g.acceptedHere, q: g.quota })}` : ''}</span></div>
+      ${rows}
+    </div>`;
+  }).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr2.dm.noProposals')}</p></div>`;
+
+  const knownActors = Array.from(new Set(groups.flatMap((g) => g.entries.flatMap((e) => e.proposers.map((p) => p.name))))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
+  const actorBar = `<div class="card" style="margin-top:14px;padding:12px 14px;border-left:4px solid var(--red)">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13.5px">👤 ${t('mpr2.dm.actor')}: <b id="acNameShow" style="color:var(--red)">—</b></span>
+      <div id="acChips" data-seed="${esc(JSON.stringify(knownActors))}" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button type="button" id="acAdd" class="btn btn-ghost btn-sm">+ ${t('mpr2.addName')}</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">${t('mpr2.dm.actorHint')}</div>
+  </div>`;
+  const acModal = `<div id="acModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:430px;width:100%;margin:0">
+      <h3 style="margin:0 0 6px;font-size:18px">${t('mpr2.dm.actorPromptTitle')}</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">${t('mpr2.dm.actorPromptBody')}</p>
+      <input type="text" id="acInput" maxlength="80" autocomplete="off" placeholder="${esc(t('mpr2.promptPh'))}" style="width:100%;box-sizing:border-box;margin-bottom:12px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" id="acCancel" class="btn btn-ghost btn-sm">${t('mpr2.cancel')}</button>
+        <button type="button" id="acSave" class="btn btn-sm">${t('mpr2.promptSave')}</button>
+      </div>
+    </div>
+  </div>`;
+  const body = `<div class="wrap">
+    ${staffHead(staff, t('mpr2.dm.title'), L)}
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <p class="sub" style="margin:0">📁 ${esc(event.name)}</p>
+      <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a>
+    </div>
+    <div class="banner banner-warn" style="margin-top:12px;font-size:13px">⚠️ ${t('mpr2.dm.warn')}</div>
+    ${flashBanner}
+    ${actorBar}
+    ${groupCards}
+  </div>
+  ${acModal}
+  <script>
+  (function(){
+    var LS='mpr_reviewer_name', LSN='mpr_reviewer_names';
+    function getName(){ try{return localStorage.getItem(LS)||'';}catch(e){return '';} }
+    function setName(n){ try{localStorage.setItem(LS,n);}catch(e){} }
+    function storedNames(){ try{return JSON.parse(localStorage.getItem(LSN)||'[]');}catch(e){return [];} }
+    function rememberName(n){ var a=storedNames(); if(a.indexOf(n)<0){a.push(n); try{localStorage.setItem(LSN,JSON.stringify(a));}catch(e){}} }
+    var show=document.getElementById('acNameShow'), chipsBox=document.getElementById('acChips');
+    var modal=document.getElementById('acModal'), input=document.getElementById('acInput');
+    function allNames(){ var seed=[]; if(chipsBox){try{seed=JSON.parse(chipsBox.getAttribute('data-seed')||'[]');}catch(e){}} var out=[],seen={}; seed.concat(storedNames()).forEach(function(n){var k=String(n).toLowerCase(); if(n&&!seen[k]){seen[k]=1;out.push(n);}}); return out; }
+    function escHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function renderChips(){ if(!chipsBox)return; var n=getName();
+      chipsBox.innerHTML=allNames().map(function(nm){var on=nm===n; return '<button type="button" class="btn btn-sm ac-chip" data-name="'+escHtml(nm)+'"'+(on?'':' style="background:#fff;color:var(--ink);border:1px solid var(--line)"')+'>'+(on?'✓ ':'')+escHtml(nm)+'</button>';}).join('');
+      [].slice.call(chipsBox.querySelectorAll('.ac-chip')).forEach(function(b){ b.addEventListener('click',function(){ setActive(b.getAttribute('data-name')); }); });
+    }
+    function fill(){ var n=getName(); [].slice.call(document.querySelectorAll('.acname')).forEach(function(el){el.value=n;}); if(show)show.textContent=n||'—'; }
+    function setActive(n){ setName(n); rememberName(n); fill(); renderChips(); }
+    function openM(){ if(!modal)return; input.value=''; modal.style.display='flex'; setTimeout(function(){input.focus();},30); }
+    function closeM(){ if(modal)modal.style.display='none'; }
+    function saveM(){ var v=(input.value||'').trim().replace(/\\s+/g,' ').slice(0,80); if(!v){input.focus();return;} setActive(v); closeM(); }
+    var s=document.getElementById('acSave'),c=document.getElementById('acCancel'),add=document.getElementById('acAdd');
+    if(s)s.addEventListener('click',saveM); if(c)c.addEventListener('click',closeM); if(add)add.addEventListener('click',openM);
+    if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveM();}});
+    document.addEventListener('submit',function(e){
+      var f=e.target;
+      if(f&&f.classList&&f.classList.contains('needs-actor')){
+        var n=getName(); if(!n){ e.preventDefault(); openM(); return; }
+        var rv=f.querySelector('.acname'); if(rv)rv.value=n;
+      }
+    },true);
+    renderChips();
+    fill();
+    if(!getName())openM();
+  })();
+  </script>`;
+  return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+}
+
+// LAPIS 2 — confirmation interstitial before a FINAL accept (irreversible: it
+// emails the talent). All reviewers share one login, so this summary makes the
+// operator confirm exactly who will be accepted + emailed before it happens.
+function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const body = `<div class="wrap narrow">
+    ${staffHead(staff, t('mpr2.cf.title'), L)}
+    <div class="card" style="margin-top:16px;border:2px solid var(--red)">
+      <h2 style="margin:0 0 10px;font-size:20px">⚠️ ${t('mpr2.cf.heading')}</h2>
+      <p style="font-size:14px;line-height:1.6;margin:0 0 14px">${t('mpr2.cf.body')}</p>
+      <div style="background:var(--card2);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.9">
+        <div>👤 <b>${esc(talentName)}</b>${talentLogin ? ` <span class="muted">· ${esc(talentLogin)}</span>` : ''}</div>
+        <div>🎯 ${t('mpr2.cf.position')}: <b>${esc(positionName || '—')}</b></div>
+        <div>📁 ${t('mpr2.cf.event')}: <b>${esc(eventName)}</b></div>
+        <div>✉️ ${t('mpr2.cf.email')}: <b>${esc(talentLogin || '—')}</b></div>
+        ${actorName ? `<div>🖊️ ${t('mpr2.cf.actor')}: <b>${esc(actorName)}</b></div>` : ''}
+      </div>
+      <p class="muted" style="font-size:13px;margin:14px 0 16px">${t('mpr2.cf.note')}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <form method="post" action="/admin/applications/${esc(appId)}/final-accept">
+          <input type="hidden" name="position_id" value="${esc(positionId)}">
+          <input type="hidden" name="actor_name" value="${esc(actorName || '')}">
+          <input type="hidden" name="confirmed" value="1">
+          <button class="btn">✅ ${t('mpr2.cf.confirm')}</button>
+        </form>
+        <a href="/admin/applications/decision?event=${esc(eventId)}&lang=${L}" class="btn btn-ghost">${t('mpr2.cf.cancel')}</a>
+      </div>
+    </div>
+  </div>`;
+  return appLayout({ title: t('mpr2.cf.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
 }
 
 /**
@@ -6130,7 +6429,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
