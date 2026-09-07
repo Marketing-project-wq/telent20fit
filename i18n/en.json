@@ -1177,5 +1177,11 @@
   "mpr2.cf.note": "The email does not mention the position. The talent is asked to log in to see their placement and respond within 48 hours.",
   "mpr2.cf.confirm": "Yes, accept & send email",
   "mpr2.cf.cancel": "Cancel",
-  "mpr2.addName": "Add name"
+  "mpr2.addName": "Add name",
+  "adm.profile.cv": "CV",
+  "adm.profile.cvView": "View CV",
+  "adm.profile.portfolio": "Portfolio",
+  "adm.profile.hyrox": "HYROX Certificate",
+  "adm.profile.hyroxView": "View certificate",
+  "adm.profile.contactLocked": "Contact unlocks after the talent is accepted & confirms"
 }

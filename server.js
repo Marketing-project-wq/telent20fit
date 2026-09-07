@@ -3393,6 +3393,27 @@ app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin']), async
   } catch (e) { next(e); }
 });
 
+// Stream a talent's uploaded CV to staff (for applicant assessment). Super admin only.
+app.get('/admin/talents/:talentId/cv', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const acc = await st.getAccountById(req.params.talentId);
+    const key = acc && acc.cv_path;
+    if (!key) return res.redirect('/admin/applications');
+    const buf = await st.downloadImage(key);
+    if (!buf) return res.redirect('/admin/applications');
+    const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+    const ct = ext === '.pdf' ? 'application/pdf'
+      : ext === '.png' ? 'image/png'
+      : ext === '.webp' ? 'image/webp'
+      : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Content-Disposition', 'inline');
+    res.send(buf);
+  } catch (e) { next(e); }
+});
+
 // Verify or reject a talent's HYROX certificate.
 app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {

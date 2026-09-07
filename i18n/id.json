@@ -1177,5 +1177,11 @@
   "mpr2.cf.note": "Email tidak menyebutkan posisi. Talent diminta masuk ke web untuk melihat penempatannya dan menjawab dalam 48 jam.",
   "mpr2.cf.confirm": "Ya, terima & kirim email",
   "mpr2.cf.cancel": "Batal",
-  "mpr2.addName": "Tambah nama"
+  "mpr2.addName": "Tambah nama",
+  "adm.profile.cv": "CV",
+  "adm.profile.cvView": "Lihat CV",
+  "adm.profile.portfolio": "Portfolio",
+  "adm.profile.hyrox": "Sertifikat HYROX",
+  "adm.profile.hyroxView": "Lihat sertifikat",
+  "adm.profile.contactLocked": "Kontak dibuka setelah talent diterima & konfirmasi"
 }
