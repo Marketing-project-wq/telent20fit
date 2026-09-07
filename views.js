@@ -3493,7 +3493,11 @@ function eoApplicantCard(a, L) {
   const catOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'));
   const k0 = (a.choices && a.choices[0] && a.choices[0].key) || '';
   const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
-  const dataAttrs = `data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(k0)}" data-category="${catOf(k0)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`;
+  // Instagram followers (numeric, from the talent profile) + apply timestamp —
+  // fuel the client-side followers sort/filter and the on-card display.
+  const fol = (a.profile && a.profile.instagram_followers != null && a.profile.instagram_followers !== '') ? parseInt(a.profile.instagram_followers, 10) : null;
+  const createdMs = a.createdAt ? (new Date(a.createdAt).getTime() || 0) : 0;
+  const dataAttrs = `data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(k0)}" data-category="${catOf(k0)}" data-event="${esc(a.eventId)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc((a.name || '').toLowerCase())}"`;
   const contact = (() => { const b = []; if (a.phone) b.push(`📱 ${esc(a.status === 'assigned' ? a.phone : maskPhone(a.phone))}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; })();
   const hyrox = a.hyroxStatus === 'verified' ? `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>` : a.hyroxStatus === 'pending' ? `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>` : '';
   const chips = (a.choices || []).map((c) => { const on = c.accepted; const closed = !on && a.status === 'approved'; const style = on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : (closed ? ';opacity:.5;text-decoration:line-through' : ''); return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}">P${c.priority} · ${esc(posOf(c))}${on ? ' ✓' : ''}</span>`; }).join('');
@@ -3502,6 +3506,7 @@ function eoApplicantCard(a, L) {
       <div style="min-width:0">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:15px">${esc(a.name)}</b>${mprReviewerBadges(a, L)}</div>
         <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div>
+        ${fol != null ? `<div style="font-size:12.5px;margin-top:4px">👥 <span class="muted">${t('filter.followers')}:</span> <b>${fmtNum(fol)}</b></div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
     </div>
@@ -3598,6 +3603,9 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="apPosFilter" style="min-width:140px">${posOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="apCatFilter" style="min-width:140px">${catOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="apPrFilter" style="min-width:175px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('sort.by')}<select id="apSort" style="min-width:170px"><option value="new">${esc(t('sort.newest'))}</option><option value="folHi">${esc(t('sort.folDesc'))}</option><option value="folLo">${esc(t('sort.folAsc'))}</option></select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.minFollowers')}<input type="number" id="apFolMin" min="0" inputmode="numeric" placeholder="0" style="width:110px;box-sizing:border-box"></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.maxFollowers')}<input type="number" id="apFolMax" min="0" inputmode="numeric" placeholder="∞" style="width:110px;box-sizing:border-box"></label>
       <button type="button" id="apReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
@@ -3634,7 +3642,10 @@ function eoApplicantsPageScript() {
   var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
   var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
   var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),prSel=document.getElementById('apPrFilter'),reset=document.getElementById('apReset');
+  var sortSel=document.getElementById('apSort'),folMin=document.getElementById('apFolMin'),folMax=document.getElementById('apFolMax');
   var flt='all', tab='talent';
+  // Numeric follower count of a card (null when the talent has none).
+  function folNum(it){ var v=it.getAttribute('data-followers'); return (v===''||v==null)?null:parseInt(v,10); }
   // Keep the active filters in the URL (no reload) so they survive an in-place
   // action, a manual refresh, or leaving and coming back — and can be shared.
   function writeUrl(){
@@ -3645,6 +3656,9 @@ function eoApplicantsPageScript() {
       if(catSel&&catSel.value)p.set('cat',catSel.value);
       if(evSel&&evSel.value)p.set('ev',evSel.value);
       if(prSel&&prSel.value)p.set('pr',prSel.value);
+      if(sortSel&&sortSel.value!=='new')p.set('sort',sortSel.value);
+      if(folMin&&folMin.value.trim())p.set('fmin',folMin.value.trim());
+      if(folMax&&folMax.value.trim())p.set('fmax',folMax.value.trim());
       if(flt&&flt!=='all')p.set('st',flt);
       if(tab&&tab!=='talent')p.set('tab',tab);
       var qs=p.toString();
@@ -3654,6 +3668,10 @@ function eoApplicantsPageScript() {
   function apply(){
     var q=search.value.trim().toLowerCase();
     var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'', ef=evSel?evSel.value:'', prf=prSel?prSel.value:'';
+    var mn=(folMin&&folMin.value!=='')?parseInt(folMin.value,10):null;
+    var mx=(folMax&&folMax.value!=='')?parseInt(folMax.value,10):null;
+    if(mn!=null&&isNaN(mn))mn=null; if(mx!=null&&isNaN(mx))mx=null;
+    var mode=sortSel?sortSel.value:'new';
     var box=tab==='talent'?talentBox:posBox;
     var items=[].slice.call(box.querySelectorAll('.ap-item'));
     var shown=0;
@@ -3664,8 +3682,27 @@ function eoApplicantsPageScript() {
       var okC=!cf||(it.getAttribute('data-category')===cf);
       var okE=!ef||(it.getAttribute('data-event')===ef);
       var okPr=!prf||(it.getAttribute('data-prstatus')===prf);
-      var vis=okS&&okQ&&okP&&okC&&okE&&okPr; it.style.display=vis?'':'none'; if(vis)shown++;
+      var f=folNum(it),okF=true;
+      if(mn!=null)okF=(f!=null&&f>=mn);
+      if(okF&&mx!=null)okF=(f!=null&&f<=mx);
+      var vis=okS&&okQ&&okP&&okC&&okE&&okPr&&okF; it.style.display=vis?'':'none'; if(vis)shown++;
     });
+    // By-talent: reorder the visible cards by the chosen sort. Followers sorts push
+    // talents with no follower value to the bottom; ties (and the default) fall back
+    // to newest-applied-first (the server's order).
+    if(tab==='talent'&&talentBox){
+      var vis=[].slice.call(talentBox.querySelectorAll('.ap-item')).filter(function(x){return x.style.display!=='none';});
+      vis.sort(function(a,b){
+        if(mode==='folHi'||mode==='folLo'){
+          var fa=folNum(a),fb=folNum(b);
+          if(fa==null&&fb!=null)return 1;
+          if(fb==null&&fa!=null)return -1;
+          if(fa!=null&&fb!=null&&fa!==fb)return mode==='folHi'?(fb-fa):(fa-fb);
+        }
+        return (parseInt(b.getAttribute('data-created'),10)||0)-(parseInt(a.getAttribute('data-created'),10)||0);
+      });
+      vis.forEach(function(x){ talentBox.appendChild(x); });
+    }
     if(tab==='position'){[].slice.call(posBox.querySelectorAll('.pos-group')).forEach(function(g){var any=[].slice.call(g.querySelectorAll('.ap-item')).some(function(it){return it.style.display!=='none';});g.style.display=any?'':'none';});}
     if(noMatch)noMatch.style.display=(shown===0)?'':'none';
     writeUrl();
@@ -3676,7 +3713,10 @@ function eoApplicantsPageScript() {
   if(catSel)catSel.addEventListener('change',apply);
   if(evSel)evSel.addEventListener('change',apply);
   if(prSel)prSel.addEventListener('change',apply);
-  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';apply();});
+  if(sortSel)sortSel.addEventListener('change',apply);
+  if(folMin)folMin.addEventListener('input',apply);
+  if(folMax)folMax.addEventListener('input',apply);
+  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apply();});
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
   // Restore filters previously written to the URL.
   try{
@@ -3686,6 +3726,9 @@ function eoApplicantsPageScript() {
     if(catSel&&ip.has('cat'))catSel.value=ip.get('cat');
     if(evSel&&ip.has('ev'))evSel.value=ip.get('ev');
     if(prSel&&ip.has('pr'))prSel.value=ip.get('pr');
+    if(sortSel&&ip.has('sort'))sortSel.value=ip.get('sort');
+    if(folMin&&ip.has('fmin'))folMin.value=ip.get('fmin');
+    if(folMax&&ip.has('fmax'))folMax.value=ip.get('fmax');
     if(ip.has('st')){flt=ip.get('st');statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')===flt);});}
     if(ip.has('tab')){tab=ip.get('tab');tabChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-aptab')===tab);});talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';}
   }catch(e){}
