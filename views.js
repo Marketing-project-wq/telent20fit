@@ -3142,6 +3142,138 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
 // Tahap 6: applicants for one EO event — per-talent and per-position, with a
 // name search + status filter (all client-side). Contact is shown so the EO
 // can coordinate with talents who applied.
+// ===== Shared LAPIS-1 (reviewer proposal) UI — used by both EO applicant views =====
+// Who proposed this applicant (per position) + notes, and who reviewed-not-proposed.
+// Each proposal carries label fields so posLabel() can render its position.
+function proposalDisplayHtml(a, L) {
+  const t = (k, v) => tr(L, k, v);
+  const byPos = new Map();
+  (a.proposals || []).forEach((p) => { const g = byPos.get(p.position_id) || { label: posLabel(p, L), names: [], notes: [] }; g.names.push(p.reviewer_name); if (p.note) g.notes.push(p.reviewer_name + ': ' + p.note); byPos.set(p.position_id, g); });
+  const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
+  const rev = (a.reviewMarks || []).length ? `<div class="muted" style="font-size:12.5px;margin-top:5px">👀 ${t('mpr2.reviewedNP')}: ${esc(a.reviewMarks.join(', '))}</div>` : '';
+  return (lines || rev) ? `<div style="margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px">${lines}${rev}</div>` : '';
+}
+// LAPIS-1 controls: propose per open position / mark reviewed / (decided → status+undo).
+// `appBase` is the per-applicant route prefix (e.g. `/eo/applicants/<id>`); a.choices
+// must carry label fields (label_id/label_en/key/custom_label).
+function lapis1CardControls(a, L, appBase, nextUrl) {
+  const t = (k, v) => tr(L, k, v);
+  const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
+  const nx = `<input type="hidden" name="next" value="${esc(nextUrl)}">`;
+  const acc = (a.choices || []).find((c) => c.accepted);
+  if ((a.status === 'approved' || a.status === 'assigned') && acc) {
+    const confirmed = a.status === 'assigned';
+    return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posOf(acc) }))}</span>
+      ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
+      <form class="inline-form needs-reviewer" method="post" action="${appBase}/reset"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+    </div>`;
+  }
+  if (a.status === 'rejected') {
+    return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+      <span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span>
+      <form class="inline-form needs-reviewer" method="post" action="${appBase}/reset"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+    </div>`;
+  }
+  const proposedSet = JSON.stringify((a.proposals || []).map((p) => p.position_id + '|' + p.reviewer_name));
+  const reviewedSet = JSON.stringify(a.reviewMarks || []);
+  const posBtns = (a.choices || []).map((c) => {
+    if (c.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posOf(c))} · ${t('eo.ap.posFull')}</button>`;
+    return `<span class="prop-pos" data-pid="${esc(c.position_id)}" style="display:inline-flex;gap:6px;align-items:center">
+      <form class="inline-form prop-form needs-reviewer" method="post" action="${appBase}/propose"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" class="prop-note" name="note" value="">${nx}<button class="btn btn-sm">➕ ${t('mpr2.proposeFor')}: P${c.priority} ${esc(posOf(c))}</button></form>
+      <form class="inline-form unprop-form needs-reviewer" method="post" action="${appBase}/unpropose" style="display:none"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm" style="color:var(--red)">↩︎ ${t('mpr2.unpropose')}: P${c.priority}</button></form>
+    </span>`;
+  }).join('');
+  return `<div class="lapis1" data-proposed="${esc(proposedSet)}" data-reviewed="${esc(reviewedSet)}" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('mpr2.proposeHint')}</div>
+    <input type="text" class="prop-note-input" maxlength="500" placeholder="${esc(t('mpr2.notePh'))}" style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:13px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${posBtns}</div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">👀 ${t('mpr2.markReviewed')}</button></form>
+      <form class="inline-form unmark-form needs-reviewer" method="post" action="${appBase}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
+    </div>
+  </div>`;
+}
+// Active-reviewer chip bar + prompt modal (shared). `knownReviewers` seeds the chips.
+function mprReviewerBar(L, knownReviewers) {
+  const t = (k, v) => tr(L, k, v);
+  const seed = esc(JSON.stringify(knownReviewers || []));
+  return `<div class="card" style="margin-top:14px;padding:12px 14px;border-left:4px solid var(--red)">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13.5px">👤 ${t('mpr2.activeReviewer')}: <b id="rvNameShow" style="color:var(--red)">—</b></span>
+      <div id="rvChips" data-seed="${seed}" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <button type="button" id="rvAdd" class="btn btn-ghost btn-sm">+ ${t('mpr2.addName')}</button>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">${t('mpr2.reviewerHint')}</div>
+  </div>
+  <div id="rvModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
+    <div class="card" style="max-width:430px;width:100%;margin:0">
+      <h3 style="margin:0 0 6px;font-size:18px">${t('mpr2.promptTitle')}</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 12px">${t('mpr2.promptBody')}</p>
+      <input type="text" id="rvInput" maxlength="80" autocomplete="off" placeholder="${esc(t('mpr2.promptPh'))}" style="width:100%;box-sizing:border-box;margin-bottom:12px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" id="rvCancel" class="btn btn-ghost btn-sm">${t('mpr2.cancel')}</button>
+        <button type="button" id="rvSave" class="btn btn-sm">${t('mpr2.promptSave')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+// Reviewer chip logic + submit guard (fills the active name) + note copy + propose
+// toggles. Shared by both EO views; uses the same localStorage keys as the admin page.
+function mprReviewerScript() {
+  return `<script>
+(function(){
+  var LS='mpr_reviewer_name', LSN='mpr_reviewer_names';
+  function getName(){ try{return localStorage.getItem(LS)||'';}catch(e){return '';} }
+  function setName(n){ try{localStorage.setItem(LS,n);}catch(e){} }
+  function storedNames(){ try{return JSON.parse(localStorage.getItem(LSN)||'[]');}catch(e){return [];} }
+  function rememberName(n){ var a=storedNames(); if(a.indexOf(n)<0){a.push(n); try{localStorage.setItem(LSN,JSON.stringify(a));}catch(e){}} }
+  var show=document.getElementById('rvNameShow'), chipsBox=document.getElementById('rvChips');
+  var modal=document.getElementById('rvModal'), input=document.getElementById('rvInput');
+  function allNames(){ var seed=[]; if(chipsBox){try{seed=JSON.parse(chipsBox.getAttribute('data-seed')||'[]');}catch(e){}} var out=[],seen={}; seed.concat(storedNames()).forEach(function(n){var k=String(n).toLowerCase(); if(n&&!seen[k]){seen[k]=1;out.push(n);}}); return out; }
+  function escH(s){ return String(s).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];}); }
+  function refreshToggles(){
+    var n=getName();
+    [].slice.call(document.querySelectorAll('.lapis1')).forEach(function(box){
+      var proposed=[],reviewed=[];
+      try{proposed=JSON.parse(box.getAttribute('data-proposed')||'[]');}catch(e){}
+      try{reviewed=JSON.parse(box.getAttribute('data-reviewed')||'[]');}catch(e){}
+      [].slice.call(box.querySelectorAll('.prop-pos')).forEach(function(sp){
+        var pid=sp.getAttribute('data-pid'); var mine=!!n&&proposed.indexOf(pid+'|'+n)>=0;
+        var pf=sp.querySelector('.prop-form'),uf=sp.querySelector('.unprop-form');
+        if(pf)pf.style.display=mine?'none':''; if(uf)uf.style.display=mine?'':'none';
+      });
+      var mk=!!n&&reviewed.indexOf(n)>=0;
+      var mf=box.querySelector('.mark-form'),umf=box.querySelector('.unmark-form');
+      if(mf)mf.style.display=mk?'none':''; if(umf)umf.style.display=mk?'':'none';
+    });
+  }
+  function renderChips(){ if(!chipsBox)return; var n=getName();
+    chipsBox.innerHTML=allNames().map(function(nm){var on=nm===n; return '<button type=\"button\" class=\"btn btn-sm rv-chip\" data-name=\"'+escH(nm)+'\"'+(on?'':' style=\"background:#fff;color:var(--ink);border:1px solid var(--line)\"')+'>'+(on?'✓ ':'')+escH(nm)+'</button>';}).join('');
+    [].slice.call(chipsBox.querySelectorAll('.rv-chip')).forEach(function(b){ b.addEventListener('click',function(){ setActive(b.getAttribute('data-name')); }); });
+  }
+  function fillNames(){ var n=getName(); [].slice.call(document.querySelectorAll('.rvname')).forEach(function(el){el.value=n;}); if(show)show.textContent=n||'—'; refreshToggles(); }
+  function setActive(n){ setName(n); rememberName(n); fillNames(); renderChips(); }
+  function openM(){ if(!modal)return; input.value=''; modal.style.display='flex'; setTimeout(function(){input.focus();},30); }
+  function closeM(){ if(modal)modal.style.display='none'; }
+  function saveM(){ var v=(input.value||'').trim().replace(/\\s+/g,' ').slice(0,80); if(!v){input.focus();return;} setActive(v); closeM(); }
+  var s=document.getElementById('rvSave'),c=document.getElementById('rvCancel'),add=document.getElementById('rvAdd');
+  if(s)s.addEventListener('click',saveM); if(c)c.addEventListener('click',closeM); if(add)add.addEventListener('click',openM);
+  if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveM();}});
+  document.addEventListener('submit',function(e){
+    var f=e.target;
+    if(f&&f.classList&&f.classList.contains('needs-reviewer')){
+      var n=getName(); if(!n){ e.preventDefault(); openM(); return; }
+      var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
+      if(f.classList.contains('prop-form')){ var box=f.closest('.lapis1'); var ni=box&&box.querySelector('.prop-note-input'); var h=f.querySelector('.prop-note'); if(h&&ni)h.value=ni.value||''; }
+    }
+  },true);
+  renderChips(); fillNames();
+  if(!getName() && document.querySelector('.needs-reviewer')) openM();
+})();
+</script>`;
+}
+
 function eoApplicantsSection(e, view, aps, L) {
   const t = (k, v) => tr(L, k, v);
   const posById = new Map((view.positions || []).map((p) => [p.position_id, p]));
@@ -3306,7 +3438,7 @@ function eoApplicantsScript() {
 // review controls (approve / reject / undo) plus filters: Event, Position,
 // Talent Category, status, and a By-talent / By-position toggle. This is now the
 // one place applicants are managed; the per-event detail page just links here.
-function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, lang }) {
+function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, knownReviewers, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const aps = applicants || [];
@@ -3354,7 +3486,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
       </div>
     </div>`;
   };
-  const dataAttrs = (a) => { const k = (a.choices[0] && a.choices[0].key) || ''; return `data-status="${esc(a.status)}" data-p1pos="${esc(k)}" data-category="${catOf(k)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`; };
+  const dataAttrs = (a) => { const k = (a.choices[0] && a.choices[0].key) || ''; const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed'); return `data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(k)}" data-category="${catOf(k)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`; };
 
   const talentCards = aps.map((a) => `<div class="card ap-item" ${dataAttrs(a)} style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
@@ -3364,7 +3496,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
     </div>
     ${contactLine(a)}${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
-    ${decision(a)}
+    ${proposalDisplayHtml(a, L)}${lapis1CardControls(a, L, '/eo/applicants/' + esc(a.id), '/eo/talents')}
     <details style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
       <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('adm.profile.title')}</summary>
       <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
@@ -3400,6 +3532,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.event')}<select id="apEventFilter" style="min-width:170px;max-width:240px">${evOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="apPosFilter" style="min-width:140px">${posOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="apCatFilter" style="min-width:140px">${catOpts}</select></label>
+      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="apPrFilter" style="min-width:175px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
       <button type="button" id="apReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">${statusChips}</div>
@@ -3409,16 +3542,18 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
     </div>
   </div>`;
 
+  const reviewerBar = mprReviewerBar(L, knownReviewers || []);
+  const decisionBtnRow = `<div style="margin-top:14px;display:flex;justify-content:flex-end"><a href="/eo/decision${selEv ? '?event=' + esc(selEv) + '&' : '?'}lang=${L}" class="btn btn-sm">🗳️ ${t('mpr2.toDecision')}</a></div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, t('nav.talents'), L)}
   <p class="sub">${t('eo.ap.pageSub')}</p>
   ${!aps.length
     ? `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.ap.noneAll')}</p></div>`
-    : `${controls}
+    : `${reviewerBar}${decisionBtnRow}${controls}
   <div id="apTalent">${talentCards}</div>
   <div id="apPosition" style="display:none">${posGroups}</div>
   <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`}
-</div>${eoApplicantsPageScript()}`;
+</div>${eoApplicantsPageScript()}${mprReviewerScript()}`;
   return appLayout({ title: t('nav.talents') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
 }
 
@@ -3433,11 +3568,11 @@ function eoApplicantsPageScript() {
   var talentBox=document.getElementById('apTalent'), posBox=document.getElementById('apPosition');
   var statusChips=[].slice.call(document.querySelectorAll('[data-apstatus]'));
   var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
-  var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),reset=document.getElementById('apReset');
+  var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),prSel=document.getElementById('apPrFilter'),reset=document.getElementById('apReset');
   var flt='all', tab='talent';
   function apply(){
     var q=search.value.trim().toLowerCase();
-    var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'', ef=evSel?evSel.value:'';
+    var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'', ef=evSel?evSel.value:'', prf=prSel?prSel.value:'';
     var box=tab==='talent'?talentBox:posBox;
     var items=[].slice.call(box.querySelectorAll('.ap-item'));
     var shown=0;
@@ -3447,7 +3582,8 @@ function eoApplicantsPageScript() {
       var okP=!pf||(it.getAttribute('data-p1pos')===pf);
       var okC=!cf||(it.getAttribute('data-category')===cf);
       var okE=!ef||(it.getAttribute('data-event')===ef);
-      var vis=okS&&okQ&&okP&&okC&&okE; it.style.display=vis?'':'none'; if(vis)shown++;
+      var okPr=!prf||(it.getAttribute('data-prstatus')===prf);
+      var vis=okS&&okQ&&okP&&okC&&okE&&okPr; it.style.display=vis?'':'none'; if(vis)shown++;
     });
     if(tab==='position'){[].slice.call(posBox.querySelectorAll('.pos-group')).forEach(function(g){var any=[].slice.call(g.querySelectorAll('.ap-item')).some(function(it){return it.style.display!=='none';});g.style.display=any?'':'none';});}
     if(noMatch)noMatch.style.display=(shown===0)?'':'none';
@@ -3457,7 +3593,8 @@ function eoApplicantsPageScript() {
   if(posSel)posSel.addEventListener('change',apply);
   if(catSel)catSel.addEventListener('change',apply);
   if(evSel)evSel.addEventListener('change',apply);
-  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';apply();});
+  if(prSel)prSel.addEventListener('change',apply);
+  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';apply();});
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
   apply();
 })();
@@ -5879,20 +6016,26 @@ ${rvModal}
 // LAPIS 2 — the decision meeting. Shows ONLY proposed applicants for one event,
 // grouped by the position they were proposed for, with proposers + notes. Final
 // accept / reject live only here. `event` null → a small event picker.
-function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
+function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
+  const m = mount || {};
+  const appBase = m.appBase || '/admin/applications';        // + `/<id>/final-accept` etc.
+  const resetPath = m.resetPath || 'reset-position';
+  const decisionUrl = m.decisionUrl || '/admin/applications/decision';
+  const backUrl = m.backUrl || '/admin/applications';
+  const activeNav = m.active || 'applications';
   const posLabelOf = (g) => posLabel({ label_id: g.label_id, label_en: g.label_en, key: g.key }, L);
   if (!event) {
     const list = (picker && picker.length)
-      ? picker.map((p) => `<a href="/admin/applications/decision?event=${esc(p.id)}&lang=${L}" class="card" style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;text-decoration:none;color:inherit;padding:14px 16px;align-items:center"><b>${esc(p.name)}</b><span class="pill pill-off">${t('mpr2.dm.proposedCount', { n: p.count })}</span></a>`).join('')
+      ? picker.map((p) => `<a href="${decisionUrl}?event=${esc(p.id)}&lang=${L}" class="card" style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;text-decoration:none;color:inherit;padding:14px 16px;align-items:center"><b>${esc(p.name)}</b><span class="pill pill-off">${t('mpr2.dm.proposedCount', { n: p.count })}</span></a>`).join('')
       : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr2.dm.noProposalsAny')}</p></div>`;
-    const body = `<div class="wrap">${staffHead(staff, t('mpr2.dm.title'), L)}<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><p class="sub" style="margin:0">${t('mpr2.dm.pickEvent')}</p><a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>${list}</div>`;
-    return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+    const body = `<div class="wrap">${staffHead(staff, t('mpr2.dm.title'), L)}<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><p class="sub" style="margin:0">${t('mpr2.dm.pickEvent')}</p><a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>${list}</div>`;
+    return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
   }
   const flashBanner = flash === 'accept' ? `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr2.dm.flashAccept')}</div>`
     : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>` : '';
-  const nextUrl = `/admin/applications/decision?event=${esc(event.id)}`;
+  const nextUrl = `${decisionUrl}?event=${esc(event.id)}`;
   const groupCards = groups.length ? groups.map((g) => {
     const rows = g.entries.map((e) => {
       const a = e.app;
@@ -5903,16 +6046,16 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
       if (decided) {
         const here = a.acceptedPositionId === g.position_id;
         action = here
-          ? `<span class="pill pill-ok">✓ ${t(a.status === 'assigned' ? 'mpr2.dm.assignedHere' : 'mpr2.dm.acceptedHere')}</span>${a.decidedBy ? `<span class="muted" style="font-size:12px">· ${t('mpr2.dm.by', { name: esc(a.decidedBy) })}</span>` : ''}<form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/reset-position"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`
+          ? `<span class="pill pill-ok">✓ ${t(a.status === 'assigned' ? 'mpr2.dm.assignedHere' : 'mpr2.dm.acceptedHere')}</span>${a.decidedBy ? `<span class="muted" style="font-size:12px">· ${t('mpr2.dm.by', { name: esc(a.decidedBy) })}</span>` : ''}<form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/${resetPath}"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`
           : `<span class="pill pill-off">${t('mpr2.dm.acceptedElsewhere')}</span>`;
       } else if (a.status === 'rejected') {
-        action = `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span><form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/reset-position"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`;
+        action = `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span><form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/${resetPath}"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`;
       } else if (g.full) {
         action = `<span class="pill pill-off">${t('eo.ap.posFull')}</span>
-          <form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
+          <form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
       } else {
-        action = `<form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-accept"><input type="hidden" name="position_id" value="${esc(g.position_id)}"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-sm">✅ ${t('mpr2.dm.finalAccept')}</button></form>
-          <form class="inline-form needs-actor" method="post" action="/admin/applications/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
+        action = `<form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-accept"><input type="hidden" name="position_id" value="${esc(g.position_id)}"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-sm">✅ ${t('mpr2.dm.finalAccept')}</button></form>
+          <form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
       }
       return `<div class="card" style="margin-top:10px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
@@ -5955,7 +6098,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
     ${staffHead(staff, t('mpr2.dm.title'), L)}
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <p class="sub" style="margin:0">📁 ${esc(event.name)}</p>
-      <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a>
+      <a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a>
     </div>
     <div class="banner banner-warn" style="margin-top:12px;font-size:13px">⚠️ ${t('mpr2.dm.warn')}</div>
     ${flashBanner}
@@ -5963,7 +6106,11 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
     ${groupCards}
   </div>
   ${acModal}
-  <script>
+  ${dmActorScript()}`;
+  return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
+}
+function dmActorScript() {
+  return `<script>
   (function(){
     var LS='mpr_reviewer_name', LSN='mpr_reviewer_names';
     function getName(){ try{return localStorage.getItem(LS)||'';}catch(e){return '';} }
@@ -5998,15 +6145,18 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash }) {
     if(!getName())openM();
   })();
   </script>`;
-  return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
 }
 
 // LAPIS 2 — confirmation interstitial before a FINAL accept (irreversible: it
 // emails the talent). All reviewers share one login, so this summary makes the
 // operator confirm exactly who will be accepted + emailed before it happens.
-function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, lang }) {
+function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, lang, mount }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
+  const m = mount || {};
+  const appBase = m.appBase || '/admin/applications';
+  const decisionUrl = m.decisionUrl || '/admin/applications/decision';
+  const activeNav = m.active || 'applications';
   const body = `<div class="wrap narrow">
     ${staffHead(staff, t('mpr2.cf.title'), L)}
     <div class="card" style="margin-top:16px;border:2px solid var(--red)">
@@ -6021,17 +6171,17 @@ function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, 
       </div>
       <p class="muted" style="font-size:13px;margin:14px 0 16px">${t('mpr2.cf.note')}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <form method="post" action="/admin/applications/${esc(appId)}/final-accept">
+        <form method="post" action="${appBase}/${esc(appId)}/final-accept">
           <input type="hidden" name="position_id" value="${esc(positionId)}">
           <input type="hidden" name="actor_name" value="${esc(actorName || '')}">
           <input type="hidden" name="confirmed" value="1">
           <button class="btn">✅ ${t('mpr2.cf.confirm')}</button>
         </form>
-        <a href="/admin/applications/decision?event=${esc(eventId)}&lang=${L}" class="btn btn-ghost">${t('mpr2.cf.cancel')}</a>
+        <a href="${decisionUrl}?event=${esc(eventId)}&lang=${L}" class="btn btn-ghost">${t('mpr2.cf.cancel')}</a>
       </div>
     </div>
   </div>`;
-  return appLayout({ title: t('mpr2.cf.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'applications', user: staff && staff.name, lang: L });
+  return appLayout({ title: t('mpr2.cf.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
 }
 
 /**
