@@ -1195,5 +1195,10 @@
   "adm.profile.grpSocial": "Social Media",
   "adm.profile.grpContact": "Contact",
   "adm.profile.cvOpen": "Open CV",
-  "adm.profile.portfolioOpen": "Open Portfolio"
+  "adm.profile.portfolioOpen": "Open Portfolio",
+  "mpr2.badgeProposed": "Proposed",
+  "mpr2.badgeReviewed": "Reviewed",
+  "mpr2.badgeUnreviewed": "Not reviewed",
+  "mpr2.saving": "Saving…",
+  "mpr2.saveError": "Couldn't save, try again"
 }

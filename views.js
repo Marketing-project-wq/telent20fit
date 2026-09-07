@@ -3220,7 +3220,11 @@ function mprReviewerBar(L, knownReviewers) {
 }
 // Reviewer chip logic + submit guard (fills the active name) + note copy + propose
 // toggles. Shared by both EO views; uses the same localStorage keys as the admin page.
-function mprReviewerScript() {
+function mprReviewerScript(lang) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const SAVING = JSON.stringify(t('mpr2.saving'));
+  const SAVEERR = JSON.stringify(t('mpr2.saveError'));
   return `<script>
 (function(){
   var LS='mpr_reviewer_name', LSN='mpr_reviewer_names';
@@ -3260,14 +3264,40 @@ function mprReviewerScript() {
   var s=document.getElementById('rvSave'),c=document.getElementById('rvCancel'),add=document.getElementById('rvAdd');
   if(s)s.addEventListener('click',saveM); if(c)c.addEventListener('click',closeM); if(add)add.addEventListener('click',openM);
   if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveM();}});
+  // In-place submit: propose/mark actions post via fetch and swap ONLY that card,
+  // so the scroll position never moves. Button is disabled + shows "saving…" to
+  // block a double click; a failure shows an inline message in the same card.
+  function ajaxSubmit(f, btn){
+    var card=f.closest('.ap-item');
+    var msg=card&&card.querySelector('.rv-msg'); if(msg){msg.hidden=true;msg.textContent='';}
+    var oldTxt; if(btn){ oldTxt=btn.textContent; btn.disabled=true; btn.textContent=${SAVING}; }
+    fetch(f.getAttribute('action'),{method:'POST',headers:{'X-Requested-With':'fetch'},body:new URLSearchParams(new FormData(f))})
+      .then(function(r){ if(!r.ok) throw new Error('http'); return r.text(); })
+      .then(function(html){ if(card&&html){ card.outerHTML=html; fillNames(); } })
+      .catch(function(){ if(btn){ btn.disabled=false; if(oldTxt!=null)btn.textContent=oldTxt; } if(msg){ msg.textContent=${SAVEERR}; msg.hidden=false; } });
+  }
+  var AJAX_RE=/\\/eo\\/applicants\\/[^/]+\\/(propose|unpropose|mark-reviewed|unmark-reviewed|reset)$/;
   document.addEventListener('submit',function(e){
     var f=e.target;
-    if(f&&f.classList&&f.classList.contains('needs-reviewer')){
-      var n=getName(); if(!n){ e.preventDefault(); openM(); return; }
-      var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
-      if(f.classList.contains('prop-form')){ var box=f.closest('.lapis1'); var ni=box&&box.querySelector('.prop-note-input'); var h=f.querySelector('.prop-note'); if(h&&ni)h.value=ni.value||''; }
+    if(!(f&&f.classList&&f.classList.contains('needs-reviewer'))) return;
+    var n=getName(); if(!n){ e.preventDefault(); openM(); return; }
+    var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
+    if(f.classList.contains('prop-form')){ var box=f.closest('.lapis1'); var ni=box&&box.querySelector('.prop-note-input'); var h=f.querySelector('.prop-note'); if(h&&ni)h.value=ni.value||''; }
+    if(f.closest('.ap-item') && AJAX_RE.test(f.getAttribute('action')||'')){
+      e.preventDefault();
+      var btn=f.querySelector('button'); ajaxSubmit(f, btn);
     }
   },true);
+  // Remember scroll position so returning to the applicant list lands where you left.
+  try{
+    var SKEY='eo_talents_scroll';
+    if(/^\\/eo\\/talents/.test(location.pathname)){
+      var saved=sessionStorage.getItem(SKEY);
+      if(saved){ var y=parseInt(saved,10)||0; requestAnimationFrame(function(){ window.scrollTo(0,y); }); }
+      var save=function(){ try{sessionStorage.setItem(SKEY,String(window.scrollY||window.pageYOffset||0));}catch(e){} };
+      window.addEventListener('pagehide',save); window.addEventListener('beforeunload',save);
+    }
+  }catch(e){}
   renderChips(); fillNames();
   if(!getName() && document.querySelector('.needs-reviewer')) openM();
 })();
@@ -3438,6 +3468,53 @@ function eoApplicantsScript() {
 // review controls (approve / reject / undo) plus filters: Event, Position,
 // Talent Category, status, and a By-talent / By-position toggle. This is now the
 // one place applicants are managed; the per-event detail page just links here.
+// Compact "who reviewed" badges shown right next to the applicant's name, so a
+// reviewer sees the state without opening the card. Proposed = green (with names,
+// truncated + full list in title); reviewed-not-proposed = grey; nobody yet = a
+// distinct dashed marker (that's what the next reviewer looks for). Data comes
+// from the list-level a.proposals / a.reviewMarks — no extra fetch.
+function mprReviewerBadges(a, L) {
+  const t = (k, v) => tr(L, k, v);
+  const proposers = Array.from(new Set((a.proposals || []).map((p) => p.reviewer_name)));
+  const revs = a.reviewMarks || [];
+  const trunc = (arr) => arr.slice(0, 2).map(esc).join(', ') + (arr.length > 2 ? ' +' + (arr.length - 2) : '');
+  const out = [];
+  if (proposers.length) out.push(`<span class="pill pill-ok" title="${esc(t('mpr2.proposedBy') + ' ' + proposers.join(', '))}">✔ ${trunc(proposers)}</span>`);
+  if (revs.length) out.push(`<span class="pill pill-off" title="${esc(t('mpr2.reviewedNP') + ': ' + revs.join(', '))}">👁 ${trunc(revs)}</span>`);
+  if (!proposers.length && !revs.length) out.push(`<span class="pill" style="background:transparent;border:1px dashed var(--red);color:var(--red)">• ${t('mpr2.badgeUnreviewed')}</span>`);
+  return `<span class="rv-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap">${out.join('')}</span>`;
+}
+// One EO applicant card. Module-level so the AJAX in-place update can re-render a
+// single card server-side (source of truth) after a propose/mark action.
+function eoApplicantCard(a, L) {
+  const t = (k, v) => tr(L, k, v);
+  const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
+  const catOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'));
+  const k0 = (a.choices && a.choices[0] && a.choices[0].key) || '';
+  const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
+  const dataAttrs = `data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(k0)}" data-category="${catOf(k0)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`;
+  const contact = (() => { const b = []; if (a.phone) b.push(`📱 ${esc(a.status === 'assigned' ? a.phone : maskPhone(a.phone))}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; })();
+  const hyrox = a.hyroxStatus === 'verified' ? `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>` : a.hyroxStatus === 'pending' ? `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>` : '';
+  const chips = (a.choices || []).map((c) => { const on = c.accepted; const closed = !on && a.status === 'approved'; const style = on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : (closed ? ';opacity:.5;text-decoration:line-through' : ''); return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}">P${c.priority} · ${esc(posOf(c))}${on ? ' ✓' : ''}</span>`; }).join('');
+  return `<div class="card ap-item" id="apc-${esc(a.id)}" ${dataAttrs} style="margin-top:12px;padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:15px">${esc(a.name)}</b>${mprReviewerBadges(a, L)}</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
+    </div>
+    ${contact}${hyrox}
+    <div style="margin-top:10px">${chips}</div>
+    <div class="rv-msg" role="alert" hidden style="margin-top:10px;font-size:12.5px;color:var(--err);background:var(--err-soft);border-radius:8px;padding:8px 10px"></div>
+    ${proposalDisplayHtml(a, L)}${lapis1CardControls(a, L, '/eo/applicants/' + esc(a.id), '/eo/talents')}
+    <details style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('adm.profile.title')}</summary>
+      <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
+    </details>
+  </div>`;
+}
+
 function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, knownReviewers, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -3488,20 +3565,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   };
   const dataAttrs = (a) => { const k = (a.choices[0] && a.choices[0].key) || ''; const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed'); return `data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(k)}" data-category="${catOf(k)}" data-event="${esc(a.eventId)}" data-search="${esc((a.name || '').toLowerCase())}"`; };
 
-  const talentCards = aps.map((a) => `<div class="card ap-item" ${dataAttrs(a)} style="margin-top:12px;padding:14px 16px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>
-        <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div></div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
-    </div>
-    ${contactLine(a)}${hyroxBadge(a)}
-    <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
-    ${proposalDisplayHtml(a, L)}${lapis1CardControls(a, L, '/eo/applicants/' + esc(a.id), '/eo/talents')}
-    <details style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
-      <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('adm.profile.title')}</summary>
-      <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
-    </details>
-  </div>`).join('');
+  const talentCards = aps.map((a) => eoApplicantCard(a, L)).join('');
 
   // By-position: group across events by position key.
   const posGroups = (positionsUnion || []).map((p) => {
@@ -3553,7 +3617,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   <div id="apTalent">${talentCards}</div>
   <div id="apPosition" style="display:none">${posGroups}</div>
   <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`}
-</div>${eoApplicantsPageScript()}${mprReviewerScript()}`;
+</div>${eoApplicantsPageScript()}${mprReviewerScript(L)}`;
   return appLayout({ title: t('nav.talents') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
 }
 
@@ -6685,5 +6749,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, eoApplicantCard, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

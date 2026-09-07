@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview — Penanda Reviewer di Baris Nama (MOCKUP)</title>
+<style>
+  :root{--red:#E4121F;--ink:#17171d;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--card2:#f4f6f9;--ok:#0f7a45;--ok-soft:#e7f6ee;--off:#eef0f3;--bg:#eef1f6}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .note{background:#17171d;color:#fff;padding:14px 18px;font-size:13.5px;line-height:1.6}
+  .note b{color:#ffd23f}
+  .wrap{max-width:1060px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:22px;margin:26px 0 4px}
+  h2{font-size:16px;margin:30px 0 6px;padding-top:18px;border-top:2px solid var(--line)}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .frames{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .desktop{flex:1;min-width:360px}.mobile{width:390px;max-width:100%}
+  .device-label{font:700 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:12px}
+  .between{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .nameline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .pill-ok{background:var(--ok-soft);color:var(--ok)}
+  .pill-off{background:var(--off);color:var(--muted)}
+  .pill-un{background:transparent;border:1px dashed var(--red);color:var(--red)}
+  .pill-status{background:#fdf3e3;color:#b7791f}
+  .tag{display:inline-block;background:#fdecec;color:var(--red);border-radius:8px;padding:3px 9px;font-size:12px;margin:0 5px 5px 0;font-weight:600}
+  .muted{color:var(--muted)}.b{font-size:15px;font-weight:700}
+  .btn{display:inline-block;background:var(--red);color:#fff;border:0;border-radius:9px;padding:8px 13px;font-size:13px;font-weight:700}
+  .btn.g{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .propbox{margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px;font-size:13px}
+  .green{color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="note"><b>CATATAN:</b> Ini hanya <b>gambaran tampilan (mockup)</b> — <b>bukan aplikasi berjalan</b>. Menampilkan penanda "sudah ditinjau siapa" tepat di sebelah nama pelamar. Di aplikasi asli, menekan Usulkan/Tandai memperbarui kartu di tempat tanpa memuat ulang halaman (gulir tetap).</div>
+<div class="wrap">
+  <h1>Penanda Reviewer di Sebelah Nama</h1>
+  <p class="sub">🟢 <b>Diusulkan</b> (hijau, dengan nama) · ⚪ <b>Ditinjau</b> (abu) · <span style="color:var(--red)">🔴 <b>Belum ditinjau</b></span> (garis putus, paling menonjol). Nama panjang dipangkas jadi "+N", daftar lengkap tetap di dalam kartu &amp; muncul saat kursor diarahkan ke penanda.</p>
+
+  <h2>Bahasa Indonesia — desktop</h2>
+  <div class="desktop" style="min-width:auto">
+    <div class="card"><div class="between"><div><div class="nameline"><span class="b">Ani</span> <span class="pill pill-un">• Belum ditinjau</span></div><div class="muted" style="font-size:12px;margin-top:2px">📅 Indonesia Sports Summit</div></div><span class="pill pill-status">Sedang Ditinjau</span></div><div style="margin-top:8px"><span class="tag">P1 · Registration Staff</span><span class="tag">P2 · Runner</span></div></div>
+
+    <div class="card"><div class="between"><div><div class="nameline"><span class="b">Budi</span> <span class="pill pill-ok" title="Diusulkan oleh Rara">✔ Rara</span></div><div class="muted" style="font-size:12px;margin-top:2px">📅 Indonesia Sports Summit</div></div><span class="pill pill-status">Sedang Ditinjau</span></div><div style="margin-top:8px"><span class="tag">P1 · Registration Staff</span></div><div class="propbox"><span class="green">✅ <b>Registration Staff</b> · Diusulkan oleh <b>Rara</b></span><div class="muted" style="font-size:12px;margin-top:2px">📝 Rara: kuat di registrasi</div></div></div>
+
+    <div class="card"><div class="between"><div><div class="nameline"><span class="b">Citra</span> <span class="pill pill-ok" title="Diusulkan oleh Rara, Dimas, Sinta">✔ Rara, Dimas +1</span></div><div class="muted" style="font-size:12px;margin-top:2px">📅 Indonesia Sports Summit</div></div><span class="pill pill-status">Sedang Ditinjau</span></div><div style="margin-top:8px"><span class="tag">P1 · Registration Staff</span></div><div class="propbox"><span class="green">✅ <b>Registration Staff</b> · Diusulkan oleh <b>Rara, Dimas, Sinta</b></span></div></div>
+
+    <div class="card"><div class="between"><div><div class="nameline"><span class="b">Dewi</span> <span class="pill pill-off" title="Ditinjau, tidak diusulkan: Rara, Dimas">👁 Rara, Dimas</span></div><div class="muted" style="font-size:12px;margin-top:2px">📅 Indonesia Sports Summit</div></div><span class="pill pill-status">Sedang Ditinjau</span></div><div style="margin-top:8px"><span class="tag">P1 · Registration Staff</span></div><div class="propbox"><span class="muted">👀 Ditinjau, tidak diusulkan: Rara, Dimas</span></div></div>
+  </div>
+
+  <h2>English + mobile (390px)</h2>
+  <div class="frames">
+    <div class="desktop"><p class="device-label">🖥️ English</p>
+      <div class="card"><div class="nameline"><span class="b">Ani</span> <span class="pill pill-un">• Not reviewed</span></div></div>
+      <div class="card"><div class="nameline"><span class="b">Budi</span> <span class="pill pill-ok">✔ Rara</span></div></div>
+      <div class="card"><div class="nameline"><span class="b">Citra</span> <span class="pill pill-ok">✔ Rara, Dimas +1</span></div></div>
+      <div class="card"><div class="nameline"><span class="b">Dewi</span> <span class="pill pill-off">👁 Rara, Dimas</span></div></div>
+    </div>
+    <div class="mobile"><p class="device-label">📱 HP 390px</p>
+      <div class="card"><div class="nameline"><span class="b">Ani</span> <span class="pill pill-un">• Belum ditinjau</span></div><div style="margin-top:6px"><span class="tag">P1 · Registration Staff</span></div></div>
+      <div class="card"><div class="nameline"><span class="b">Citra</span> <span class="pill pill-ok">✔ Rara, Dimas +1</span></div><div style="margin-top:6px"><span class="tag">P1 · Registration Staff</span></div></div>
+    </div>
+  </div>
+
+  <h2>Perilaku setelah menekan tombol (ilustrasi)</h2>
+  <p class="sub">Menekan <b>Usulkan</b>/<b>Tandai</b> → tombol berubah <b>"Menyimpan…"</b> (tak bisa diklik dua kali) → kartu diperbarui <b>di tempat</b>, gulir tidak berpindah. Bila gagal, pesan error muncul di kartu itu.</p>
+  <div class="card" style="max-width:560px">
+    <div class="nameline"><span class="b">Budi</span> <span class="pill pill-ok">✔ Rara</span></div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="btn" style="opacity:.7">⏳ Menyimpan…</span>
+      <span class="muted" style="font-size:12px">(tombol dinonaktifkan sementara)</span>
+    </div>
+    <div style="margin-top:10px;font-size:12.5px;color:var(--red);background:#fdecea;border-radius:8px;padding:8px 10px">Gagal menyimpan, coba lagi <span class="muted">(contoh pesan error di kartu — gulir tetap)</span></div>
+  </div>
+</div>
+</body>
+</html>

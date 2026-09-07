@@ -2590,6 +2590,47 @@ async function eoOwnedApp(st, staffId, appId) {
 }
 function eoBackTo(v) { const s = String(v || ''); return s.startsWith('/eo/') ? s : '/eo/talents'; }
 
+// Rebuild one EO applicant into the shape eoApplicantCard() expects, for the
+// in-place (AJAX) card refresh after a propose/mark action.
+async function buildEoApplicant(st, staffId, appId) {
+  const found = await eoOwnedApp(st, staffId, appId);
+  if (!found) return null;
+  const { ev, app } = found;
+  const [tt, master, evPositions, choicesAll, proposals, allReviewMarks, apps] = await Promise.all([
+    st.getAccountById(app.talent_id), st.listPositions(), st.listEventPositions(ev.id),
+    st.listApplicationChoices(), st.listProposalsForApplication(app.id), st.listReviewMarks(), st.listApplications(),
+  ]);
+  const posMaster = new Map((master || []).map((p) => [p.id, p]));
+  const evPosById = new Map((evPositions || []).map((p) => [p.position_id, p]));
+  const appIdsThisEvent = new Set((apps || []).filter((a) => a.event_id === ev.id).map((a) => a.id));
+  const acceptedByPos = new Map();
+  (choicesAll || []).forEach((c) => { if (c.accepted && appIdsThisEvent.has(c.application_id)) acceptedByPos.set(c.position_id, (acceptedByPos.get(c.position_id) || 0) + 1); });
+  const choices = (choicesAll || []).filter((c) => c.application_id === app.id).slice().sort((x, y) => x.priority - y.priority).map((c) => {
+    const mp = posMaster.get(c.position_id) || {}; const ep = evPosById.get(c.position_id) || {}; const quota = ep.quota || 0;
+    const full = quota > 0 && !c.accepted && (acceptedByPos.get(c.position_id) || 0) >= quota;
+    return { priority: c.priority, position_id: c.position_id, key: mp.key, label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
+  });
+  return {
+    id: app.id, eventId: ev.id, eventName: ev.name || '—',
+    name: (tt && tt.name) || '—', phone: (tt && tt.phone) || null, city: (tt && tt.city) || null,
+    instagram: (tt && tt.instagram) || null, login: (tt && tt.login) || null,
+    hyroxStatus: (tt && tt.hyrox_cert_status) || 'none', profile: tt || {},
+    status: app.status || 'applied', createdAt: app.created_at, choices,
+    proposals: (proposals || []).map((p) => { const mp = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; }),
+    reviewMarks: (allReviewMarks || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name),
+  };
+}
+// After an EO lapis-1 mutation: return just the re-rendered card for an AJAX
+// (fetch) request so the page can swap it in place; otherwise redirect as before.
+async function eoCardOrRedirect(req, res, st, back) {
+  if ((req.get('X-Requested-With') || '') === 'fetch' && /^\/eo\/applicants\//.test(req.path)) {
+    const a = await buildEoApplicant(st, req.staff.id, req.params.appId);
+    if (a) return res.send(V.eoApplicantCard(a, req.lang));
+    return res.status(204).end();
+  }
+  return res.redirect(back);
+}
+
 app.post('/eo/applicants/:appId/propose', requireEo, async (req, res, next) => {
   try {
     const st = db(); if (!st) return needConfig(req, res);
@@ -2604,7 +2645,7 @@ app.post('/eo/applicants/:appId/propose', requireEo, async (req, res, next) => {
     if (!choices.some((c) => c.position_id === positionId)) return res.redirect(back);
     await st.addProposal(found.app.id, positionId, reviewer, note);
     await st.removeReviewMark(found.app.id, reviewer).catch(() => {});
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 app.post('/eo/applicants/:appId/unpropose', requireEo, async (req, res, next) => {
@@ -2616,7 +2657,7 @@ app.post('/eo/applicants/:appId/unpropose', requireEo, async (req, res, next) =>
     const reviewer = cleanReviewer(req.body.reviewer_name);
     const positionId = String(req.body.position_id || '');
     if (reviewer && positionId) await st.removeProposal(found.app.id, positionId, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 app.post('/eo/applicants/:appId/mark-reviewed', requireEo, async (req, res, next) => {
@@ -2627,7 +2668,7 @@ app.post('/eo/applicants/:appId/mark-reviewed', requireEo, async (req, res, next
     if (!found) return res.redirect('/eo/talents');
     const reviewer = cleanReviewer(req.body.reviewer_name);
     if (reviewer) await st.addReviewMark(found.app.id, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 app.post('/eo/applicants/:appId/unmark-reviewed', requireEo, async (req, res, next) => {
@@ -2638,7 +2679,7 @@ app.post('/eo/applicants/:appId/unmark-reviewed', requireEo, async (req, res, ne
     if (!found) return res.redirect('/eo/talents');
     const reviewer = cleanReviewer(req.body.reviewer_name);
     if (reviewer) await st.removeReviewMark(found.app.id, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 app.post('/eo/applicants/:appId/reset', requireEo, async (req, res, next) => {
@@ -2651,7 +2692,7 @@ app.post('/eo/applicants/:appId/reset', requireEo, async (req, res, next) => {
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     if (prior !== 'applied') await st.addStatusLog(found.app.id, prior, 'applied', req.staff.id, cleanReviewer(req.body.actor_name) || null).catch(() => {});
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 
@@ -3169,7 +3210,7 @@ app.post('/admin/applications/:id/propose', auth.requireStaff(['super_admin']), 
     // Proposing implies "reviewed"; drop any earlier "reviewed, not proposed" mark
     // from the same reviewer so the two never contradict.
     await st.removeReviewMark(app.id, reviewer).catch(() => {});
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 
@@ -3181,7 +3222,7 @@ app.post('/admin/applications/:id/unpropose', auth.requireStaff(['super_admin'])
     const positionId = String(req.body.position_id || '');
     const back = backTo(req.body.next);
     if (reviewer && positionId) await st.removeProposal(req.params.id, positionId, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 
@@ -3192,7 +3233,7 @@ app.post('/admin/applications/:id/mark-reviewed', auth.requireStaff(['super_admi
     const reviewer = cleanReviewer(req.body.reviewer_name);
     const back = backTo(req.body.next);
     if (reviewer) await st.addReviewMark(req.params.id, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 
@@ -3203,7 +3244,7 @@ app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_ad
     const reviewer = cleanReviewer(req.body.reviewer_name);
     const back = backTo(req.body.next);
     if (reviewer) await st.removeReviewMark(req.params.id, reviewer);
-    res.redirect(back);
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 
