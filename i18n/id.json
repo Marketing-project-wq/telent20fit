@@ -1183,5 +1183,17 @@
   "adm.profile.portfolio": "Portfolio",
   "adm.profile.hyrox": "Sertifikat HYROX",
   "adm.profile.hyroxView": "Lihat sertifikat",
-  "adm.profile.contactLocked": "Kontak dibuka setelah talent diterima & konfirmasi"
+  "adm.profile.contactLocked": "Kontak dibuka setelah talent diterima & konfirmasi",
+  "adm.profile.empty": "Belum diisi",
+  "adm.profile.notUploaded": "Belum diunggah",
+  "adm.profile.fullname": "Nama lengkap",
+  "adm.profile.domicile": "Domisili",
+  "adm.profile.age": "{n} th",
+  "adm.profile.email": "Email",
+  "adm.profile.grpIdentity": "Identitas",
+  "adm.profile.grpSkills": "Bukti Kemampuan",
+  "adm.profile.grpSocial": "Media Sosial",
+  "adm.profile.grpContact": "Kontak",
+  "adm.profile.cvOpen": "Buka CV",
+  "adm.profile.portfolioOpen": "Buka Portfolio"
 }

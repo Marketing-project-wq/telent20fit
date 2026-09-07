@@ -2181,11 +2181,28 @@ function maskPhone(v) {
   if (d.length < 4) return '••••';
   return '+' + d.slice(0, 2) + ' ••••‑' + d.slice(-4);
 }
-// Renders the "Data Diri" grid. `opts` controls what a viewer may see:
+// Render free text with any URLs turned into tidy named links (the domain + ↗)
+// instead of raw addresses. Non-URL text is HTML-escaped.
+function linkifyText(text) {
+  const s = String(text == null ? '' : text);
+  const re = /(https?:\/\/[^\s<]+)/g;
+  let out = ''; let last = 0; let m;
+  while ((m = re.exec(s))) {
+    out += esc(s.slice(last, m.index));
+    const url = m[1].replace(/[.,);]+$/, '');
+    let host = url; try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (_) { host = url; }
+    out += `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(host)} ↗</a>`;
+    last = m.index + m[1].length;
+  }
+  out += esc(s.slice(last));
+  return out;
+}
+// Renders the "Data Diri" block. `opts`:
 //   maskKtp   (default true)  — mask the KTP number (staff always; talent's own view passes false).
 //   maskPhone (default true)  — mask the phone + drop the click-to-call link
 //                               (staff before the talent is Assigned; false once contact is unlocked).
-//   staff     (default false) — show staff-only extras (CV / portfolio / HYROX file links).
+//   staff     (default false) — grouped layout ordered for screening + CV/portfolio/HYROX access.
+//                               When false the talent's own flat view is rendered, unchanged.
 // Masking happens here on the server, so a masked value's full form is never sent to the browser.
 function talentProfileBlock(profile, lang, opts = {}) {
   const L = normLang(lang);
@@ -2203,35 +2220,80 @@ function talentProfileBlock(profile, lang, opts = {}) {
       ? `<span title="${esc(t('adm.profile.contactLocked'))}">${esc(maskPhone(profile.phone))}</span>`
       : `<a href="https://wa.me/${esc(waDigits)}" target="_blank" rel="noopener">${esc(profile.phone)}</a>`);
   const ig = profile.instagram ? `<a href="https://instagram.com/${encodeURIComponent(profile.instagram)}" target="_blank" rel="noopener">@${esc(profile.instagram)}</a>` : '—';
-  const rows = [
-    [t('adm.profile.phone'), phoneCell],
-    [t('adm.profile.city'), esc(profile.city || '—')],
-    [t('adm.profile.ktp'), profile.ktp ? esc(doMaskKtp ? maskId(profile.ktp) : profile.ktp) : '—'],
-    [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
-    [t('adm.profile.gender'), esc(genderLabel)],
-    [t('adm.profile.instagram'), ig],
-    [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
-  ];
-  // Staff-only extras that help assessment: CV file, portfolio link, HYROX status.
-  if (staff && profile.portfolio_url) {
-    rows.push([t('adm.profile.portfolio'), `<a href="${esc(profile.portfolio_url)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(profile.portfolio_url)}</a>`]);
+  const ktpCell = profile.ktp ? esc(doMaskKtp ? maskId(profile.ktp) : profile.ktp) : '—';
+
+  // --- Talent's OWN view (staff=false): keep the original flat grid, unchanged. ---
+  if (!staff) {
+    const rows = [
+      [t('adm.profile.phone'), phoneCell],
+      [t('adm.profile.city'), esc(profile.city || '—')],
+      [t('adm.profile.ktp'), ktpCell],
+      [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
+      [t('adm.profile.gender'), esc(genderLabel)],
+      [t('adm.profile.instagram'), ig],
+      [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
+    ];
+    const grid = rows.map(([k, v]) => `<div style="min-width:110px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(k)}</div><div style="font-size:14px;margin-top:2px">${v}</div></div>`).join('');
+    const exp = profile.experience ? `<div style="margin-top:11px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.experience')}</div><div style="font-size:14px;margin-top:2px;white-space:pre-wrap">${esc(profile.experience)}</div></div>` : '';
+    return `<div style="display:flex;flex-wrap:wrap;gap:14px 22px">${grid}</div>${exp}`;
   }
-  if (staff && profile.cv_path && profile.id) {
-    rows.push([t('adm.profile.cv'), `<a href="/admin/talents/${esc(profile.id)}/cv" target="_blank" rel="noopener">${t('adm.profile.cvView')} ↗</a>`]);
-  }
-  if (staff && profile.hyrox_cert_status && profile.hyrox_cert_status !== 'none') {
-    const label = profile.hyrox_cert_status === 'verified' ? t('eo.ap.hyroxOk')
-      : profile.hyrox_cert_status === 'pending' ? t('eo.ap.hyroxPending') : profile.hyrox_cert_status;
+
+  // --- Staff view: grouped + ordered by screening importance, empty fields marked. ---
+  const NA = `<span class="muted" style="font-style:italic">${t('adm.profile.empty')}</span>`;
+  const age = (() => {
+    if (!profile.birthdate) return null;
+    const b = new Date(profile.birthdate); if (isNaN(b.getTime())) return null;
+    const now = new Date(); let a = now.getFullYear() - b.getFullYear();
+    const md = now.getMonth() - b.getMonth(); if (md < 0 || (md === 0 && now.getDate() < b.getDate())) a--;
+    return a >= 0 && a < 120 ? a : null;
+  })();
+  const field = (label, val) => `<div style="min-width:0"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(label)}</div><div style="font-size:14px;margin-top:3px;word-break:break-word">${val}</div></div>`;
+  const groupHead = (title) => `<div style="font:800 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--red);margin-bottom:9px">${esc(title)}</div>`;
+  const gridGroup = (title, cells) => `<div style="margin-top:16px">${groupHead(title)}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 20px">${cells.join('')}</div></div>`;
+
+  // 1) Identitas
+  const domicile = [profile.city, profile.province].filter(Boolean).map(esc).join(', ');
+  const birth = profile.birthdate ? esc(fmtDay(profile.birthdate)) + (age != null ? ` <span class="muted">(${esc(t('adm.profile.age', { n: age }))})</span>` : '') : NA;
+  const identitas = gridGroup(t('adm.profile.grpIdentity'), [
+    field(t('adm.profile.fullname'), profile.full_name ? esc(profile.full_name) : (profile.name ? esc(profile.name) : NA)),
+    field(t('adm.profile.gender'), profile.gender ? esc(genderLabel) : NA),
+    field(t('adm.profile.birthdate'), birth),
+    field(t('adm.profile.domicile'), domicile || NA),
+  ]);
+
+  // 2) Bukti kemampuan
+  const cvCell = (profile.cv_path && profile.id)
+    ? `<a href="/admin/talents/${esc(profile.id)}/cv" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">📄 ${t('adm.profile.cvOpen')} ↗</a>`
+    : `<span class="muted" style="font-style:italic">${t('adm.profile.notUploaded')}</span>`;
+  const pfCell = (profile.portfolio_url && String(profile.portfolio_url).trim())
+    ? `<a href="${esc(profile.portfolio_url)}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">🔗 ${t('adm.profile.portfolioOpen')} ↗</a>`
+    : NA;
+  const hxCell = (() => {
+    const s = profile.hyrox_cert_status;
+    if (!s || s === 'none') return NA;
+    const lbl = s === 'verified' ? t('eo.ap.hyroxOk') : s === 'pending' ? t('eo.ap.hyroxPending') : esc(s);
     const link = (profile.hyrox_cert_path && profile.id) ? ` · <a href="/admin/hyrox/${esc(profile.id)}/file" target="_blank" rel="noopener">${t('adm.profile.hyroxView')} ↗</a>` : '';
-    rows.push([t('adm.profile.hyrox'), esc(label) + link]);
-  }
-  const grid = rows.map(([k, v]) => `<div style="min-width:110px">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(k)}</div>
-    <div style="font-size:14px;margin-top:2px">${v}</div></div>`).join('');
-  const exp = profile.experience
-    ? `<div style="margin-top:11px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.experience')}</div><div style="font-size:14px;margin-top:2px;white-space:pre-wrap">${esc(profile.experience)}</div></div>`
-    : '';
-  return `<div style="display:flex;flex-wrap:wrap;gap:14px 22px">${grid}</div>${exp}`;
+    return `${lbl}${link}`;
+  })();
+  const expCell = profile.experience ? `<div style="white-space:pre-wrap;line-height:1.55">${linkifyText(profile.experience)}</div>` : NA;
+  const skills = `<div style="margin-top:16px">${groupHead(t('adm.profile.grpSkills'))}
+    <div style="display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start">${field(t('adm.profile.cv'), cvCell)}${field(t('adm.profile.portfolio'), pfCell)}${field(t('adm.profile.hyrox'), hxCell)}</div>
+    <div style="margin-top:12px">${field(t('adm.profile.experience'), expCell)}</div></div>`;
+
+  // 3) Media sosial
+  const sosmed = gridGroup(t('adm.profile.grpSocial'), [
+    field(t('adm.profile.instagram'), profile.instagram ? ig : NA),
+    field(t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : NA),
+  ]);
+
+  // 4) Kontak (masked)
+  const kontak = gridGroup(t('adm.profile.grpContact') + (doMaskPhone ? ' 🔒' : ''), [
+    field(t('adm.profile.phone'), phoneCell),
+    field(t('adm.profile.email'), profile.login ? esc(profile.login) : NA),
+    field(t('adm.profile.ktp'), ktpCell),
+  ]);
+
+  return `${identitas}${skills}${sosmed}${kontak}`;
 }
 
 /**
@@ -3303,6 +3365,10 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
     ${contactLine(a)}${hyroxBadge(a)}
     <div style="margin-top:10px">${choiceChips(a.choices, a.status)}</div>
     ${decision(a)}
+    <details style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('adm.profile.title')}</summary>
+      <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
+    </details>
   </div>`).join('');
 
   // By-position: group across events by position key.
@@ -5591,10 +5657,10 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
           <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
         </div>
-        <div style="margin-top:12px">
+        ${answerRows ? `<div style="margin-top:12px">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
-          ${answerRows || `<div class="muted" style="font-size:13px;margin-top:6px">—</div>`}
-        </div>
+          ${answerRows}
+        </div>` : ''}
       </details>
     </div>`;
   };

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview — Data Diri Pelamar Rapi (MOCKUP)</title>
+<style>
+  :root{--red:#E4121F;--ink:#17171d;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--card2:#f4f6f9;--ok:#0f7a45;--bg:#eef1f6}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .note{background:#17171d;color:#fff;padding:14px 18px;font-size:13.5px;line-height:1.6}
+  .note b{color:#ffd23f}
+  .wrap{max-width:1060px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:22px;margin:26px 0 4px}
+  h2{font-size:16px;margin:30px 0 6px;padding-top:18px;border-top:2px solid var(--line)}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .frames{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .desktop{flex:1;min-width:360px}
+  .mobile{width:390px;max-width:100%}
+  .device-label{font:700 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .between{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:#fdf3e3;color:#b7791f}
+  .tag{display:inline-block;background:#fdecec;color:var(--red);border-radius:8px;padding:3px 9px;font-size:12px;margin:0 5px 5px 0;font-weight:600}
+  .muted{color:var(--muted)}
+  .btn{display:inline-block;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:600;text-decoration:none}
+  .glabel{font:800 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--red);margin:16px 0 9px}
+  .g{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 20px}
+  .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+  .v{font-size:14px;margin-top:3px;word-break:break-word}
+  a{color:var(--red)}
+  .na{color:var(--muted);font-style:italic}
+  .ok{color:var(--ok)}
+  .sec-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="note">
+  <b>CATATAN:</b> Ini hanya <b>gambaran tampilan (mockup)</b> data diri pelamar yang sudah dirapikan — <b>bukan aplikasi yang berjalan</b>.
+  Telepon &amp; KTP disamarkan di sisi server; di sini hanya ilustrasi. Berlaku sama di kartu Super Admin maupun halaman EO.
+</div>
+<div class="wrap">
+  <h1>Data Diri Pelamar — Rapi &amp; Terkelompok</h1>
+  <p class="sub">Urutan: <b>Identitas → Bukti Kemampuan → Media Sosial → Kontak (tersamar)</b>. Telepon &amp; KTP tetap tersamar. CV &amp; portfolio jadi bagian tersendiri dengan tombol; yang belum ada diberi penanda.</p>
+
+  <!-- ID: FULL + SPARSE -->
+  <h2>Bahasa Indonesia — desktop</h2>
+  <div class="frames">
+    <div class="desktop">
+      <p class="device-label">🖥️ Data lengkap</p>
+      <div class="card">
+        <div class="between">
+          <div><b style="font-size:16px">Shayla Putri Jovitasari</b>
+            <div class="muted" style="font-size:12.5px;margin-top:2px">shaylajovitasari@gmail.com · Apply 6 Sep 2026</div>
+          </div><span class="pill">Sedang Ditinjau</span>
+        </div>
+        <div style="margin-top:10px"><span class="tag">P1 · Registration Staff</span></div>
+        <div class="sec-title">Data Diri</div>
+        <div class="glabel">Identitas</div>
+        <div class="g">
+          <div><div class="k">Nama lengkap</div><div class="v">Shayla Putri Jovitasari</div></div>
+          <div><div class="k">Gender</div><div class="v">Perempuan</div></div>
+          <div><div class="k">Tgl Lahir</div><div class="v">13 Jan 2006 <span class="muted">(20 th)</span></div></div>
+          <div><div class="k">Domisili</div><div class="v">Kota Depok, Jawa Barat</div></div>
+        </div>
+        <div class="glabel">Bukti Kemampuan</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start">
+          <div><div class="k">CV</div><div class="v"><a class="btn" href="#">📄 Buka CV ↗</a></div></div>
+          <div><div class="k">Portfolio</div><div class="v"><a class="btn" href="#">🔗 Buka Portfolio ↗</a></div></div>
+          <div><div class="k">Sertifikat HYROX</div><div class="v"><span class="ok">HYROX terverifikasi</span> · <a href="#">Lihat sertifikat ↗</a></div></div>
+        </div>
+        <div style="margin-top:12px"><div class="k">Pengalaman</div><div class="v">Beberapa pengalaman event. Portofolio: <a href="#">drive.google.com ↗</a> terima kasih</div></div>
+        <div class="glabel">Media Sosial</div>
+        <div class="g">
+          <div><div class="k">Instagram</div><div class="v"><a href="#">@chilashayla</a></div></div>
+          <div><div class="k">Followers IG</div><div class="v">1.000</div></div>
+        </div>
+        <div class="glabel">Kontak 🔒</div>
+        <div class="g">
+          <div><div class="k">WhatsApp</div><div class="v" title="Kontak dibuka setelah talent diterima &amp; konfirmasi">+62 ••••‑2928</div></div>
+          <div><div class="k">Email</div><div class="v">shaylajovitasari@gmail.com</div></div>
+          <div><div class="k">No. KTP</div><div class="v">3276••••••••0001</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="mobile">
+      <p class="device-label">📱 Banyak data kosong (390px)</p>
+      <div class="card">
+        <div class="between">
+          <div><b style="font-size:15px">Budi Santoso</b>
+            <div class="muted" style="font-size:12px;margin-top:2px">budi@mail.com</div>
+          </div><span class="pill">Ditinjau</span>
+        </div>
+        <div style="margin-top:8px"><span class="tag">P1 · Water Station</span></div>
+        <div class="glabel">Identitas</div>
+        <div class="g">
+          <div><div class="k">Nama lengkap</div><div class="v">Budi Santoso</div></div>
+          <div><div class="k">Gender</div><div class="v na">Belum diisi</div></div>
+          <div><div class="k">Tgl Lahir</div><div class="v na">Belum diisi</div></div>
+          <div><div class="k">Domisili</div><div class="v">Bandung</div></div>
+        </div>
+        <div class="glabel">Bukti Kemampuan</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 20px">
+          <div><div class="k">CV</div><div class="v na">Belum diunggah</div></div>
+          <div><div class="k">Portfolio</div><div class="v na">Belum diisi</div></div>
+          <div><div class="k">Sertifikat HYROX</div><div class="v na">Belum diisi</div></div>
+        </div>
+        <div style="margin-top:12px"><div class="k">Pengalaman</div><div class="v na">Belum diisi</div></div>
+        <div class="glabel">Kontak 🔒</div>
+        <div class="g">
+          <div><div class="k">WhatsApp</div><div class="v">+62 ••••‑8777</div></div>
+          <div><div class="k">No. KTP</div><div class="v">3273••••••••2222</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EN -->
+  <h2>English — desktop</h2>
+  <div class="frames">
+    <div class="desktop">
+      <p class="device-label">🖥️ Complete</p>
+      <div class="card">
+        <div class="between">
+          <div><b style="font-size:16px">Shayla Putri Jovitasari</b>
+            <div class="muted" style="font-size:12.5px;margin-top:2px">shaylajovitasari@gmail.com · Applied 6 Sep 2026</div>
+          </div><span class="pill">Under Review</span>
+        </div>
+        <div style="margin-top:10px"><span class="tag">P1 · Registration Staff</span></div>
+        <div class="glabel">Identity</div>
+        <div class="g">
+          <div><div class="k">Full name</div><div class="v">Shayla Putri Jovitasari</div></div>
+          <div><div class="k">Gender</div><div class="v">Female</div></div>
+          <div><div class="k">Birth Date</div><div class="v">13 Jan 2006 <span class="muted">(20 yrs)</span></div></div>
+          <div><div class="k">Domicile</div><div class="v">Kota Depok, Jawa Barat</div></div>
+        </div>
+        <div class="glabel">Capability</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start">
+          <div><div class="k">CV</div><div class="v"><a class="btn" href="#">📄 Open CV ↗</a></div></div>
+          <div><div class="k">Portfolio</div><div class="v"><a class="btn" href="#">🔗 Open Portfolio ↗</a></div></div>
+          <div><div class="k">HYROX Certificate</div><div class="v"><span class="ok">HYROX verified</span> · <a href="#">View certificate ↗</a></div></div>
+        </div>
+        <div style="margin-top:12px"><div class="k">Experience</div><div class="v">Several event experience. Portfolio: <a href="#">drive.google.com ↗</a> thank you</div></div>
+        <div class="glabel">Social Media</div>
+        <div class="g">
+          <div><div class="k">Instagram</div><div class="v"><a href="#">@chilashayla</a></div></div>
+          <div><div class="k">IG Followers</div><div class="v">1,000</div></div>
+        </div>
+        <div class="glabel">Contact 🔒</div>
+        <div class="g">
+          <div><div class="k">WhatsApp</div><div class="v">+62 ••••‑2928</div></div>
+          <div><div class="k">Email</div><div class="v">shaylajovitasari@gmail.com</div></div>
+          <div><div class="k">ID No.</div><div class="v">3276••••••••0001</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
