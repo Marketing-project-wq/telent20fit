@@ -1484,7 +1484,15 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
       appId = app.id;
       notifyApplicationReceived(req.account); // new application (Applied) → email a receipt; adding more choices reuses this app, so it fires once
     }
-    await st.addApplicationChoices(appId, [{ position_id: positionId, priority: (ctx.myChoices || []).length + 1 }]);
+    try {
+      await st.addApplicationChoices(appId, [{ position_id: positionId, priority: (ctx.myChoices || []).length + 1 }]);
+    } catch (err) {
+      // A double-click / concurrent submit can race to the same priority for this
+      // application; the DB unique constraint keeps the data correct. Treat that
+      // as "already saved" and return normally instead of a 500 error page.
+      if (err && err.code === 'DUP') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
+      throw err;
+    }
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
 });
