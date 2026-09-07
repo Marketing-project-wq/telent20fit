@@ -1183,5 +1183,17 @@
   "adm.profile.portfolio": "Portfolio",
   "adm.profile.hyrox": "HYROX Certificate",
   "adm.profile.hyroxView": "View certificate",
-  "adm.profile.contactLocked": "Contact unlocks after the talent is accepted & confirms"
+  "adm.profile.contactLocked": "Contact unlocks after the talent is accepted & confirms",
+  "adm.profile.empty": "Not provided",
+  "adm.profile.notUploaded": "Not uploaded",
+  "adm.profile.fullname": "Full name",
+  "adm.profile.domicile": "Domicile",
+  "adm.profile.age": "{n} yrs",
+  "adm.profile.email": "Email",
+  "adm.profile.grpIdentity": "Identity",
+  "adm.profile.grpSkills": "Capability",
+  "adm.profile.grpSocial": "Social Media",
+  "adm.profile.grpContact": "Contact",
+  "adm.profile.cvOpen": "Open CV",
+  "adm.profile.portfolioOpen": "Open Portfolio"
 }

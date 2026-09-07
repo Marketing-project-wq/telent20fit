@@ -3373,15 +3373,15 @@ app.get('/admin/hyrox', auth.requireStaff(['super_admin']), async (req, res, nex
 });
 
 // Stream a talent's uploaded HYROX certificate to the reviewing super admin.
-app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const acc = await st.getAccountById(req.params.talentId);
     const key = acc && acc.hyrox_cert_path;
-    if (!key) return res.redirect('/admin/hyrox');
+    if (!key) return res.status(404).send('Not found');
     const buf = await st.downloadImage(key);
-    if (!buf) return res.redirect('/admin/hyrox');
+    if (!buf) return res.status(404).send('Not found');
     const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
     const ct = ext === '.pdf' ? 'application/pdf'
       : ext === '.png' ? 'image/png'
@@ -3394,15 +3394,15 @@ app.get('/admin/hyrox/:talentId/file', auth.requireStaff(['super_admin']), async
 });
 
 // Stream a talent's uploaded CV to staff (for applicant assessment). Super admin only.
-app.get('/admin/talents/:talentId/cv', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/talents/:talentId/cv', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
     const acc = await st.getAccountById(req.params.talentId);
     const key = acc && acc.cv_path;
-    if (!key) return res.redirect('/admin/applications');
+    if (!key) return res.status(404).send('Not found');
     const buf = await st.downloadImage(key);
-    if (!buf) return res.redirect('/admin/applications');
+    if (!buf) return res.status(404).send('Not found');
     const ext = (String(key).match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
     const ct = ext === '.pdf' ? 'application/pdf'
       : ext === '.png' ? 'image/png'
