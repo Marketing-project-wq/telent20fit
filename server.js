@@ -2095,8 +2095,8 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [allEvents, apps, choicesAll, talents, master] = await Promise.all([
-      st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
+    const [allEvents, apps, choicesAll, talents, master, proposalsAll, reviewMarksAll] = await Promise.all([
+      st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(), st.listProposals(), st.listReviewMarks(),
     ]);
     const mine = allEvents.filter((e) => e.created_by === req.staff.id)
       .sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
@@ -2106,6 +2106,11 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
     const posMaster = new Map(master.map((p) => [p.id, p]));
     const choicesByApp = new Map();
     (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    // Two-layer selection: proposals + "reviewed, not proposed" marks per application.
+    const proposalsByApp = new Map();
+    (proposalsAll || []).forEach((p) => { const arr = proposalsByApp.get(p.application_id) || []; arr.push(p); proposalsByApp.set(p.application_id, arr); });
+    const reviewsByApp = new Map();
+    (reviewMarksAll || []).forEach((r) => { const arr = reviewsByApp.get(r.application_id) || []; arr.push(r); reviewsByApp.set(r.application_id, arr); });
 
     // Move applied/pending -> under_review for this EO's applications that carry
     // choices (idempotent; same transition the per-event list used to do), and
@@ -2146,17 +2151,20 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
         if (key && !posKeySeen.has(key)) posKeySeen.set(key, { key, label_id: mp.label_id, label_en: mp.label_en });
         return { priority: c.priority, position_id: c.position_id, key, label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
       });
+      const proposals = (proposalsByApp.get(a.id) || []).map((p) => { const mp2 = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp2.label_id, label_en: mp2.label_en, key: mp2.key }; });
+      const reviewMarks = (reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name);
       applicants.push({
         id: a.id, eventId: a.event_id, eventName: eventName.get(a.event_id) || '—',
         name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
         phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
         hyroxStatus: tt.hyrox_cert_status || 'none', profile: tt,
-        status: a.status || 'applied', createdAt: a.created_at, choices,
+        status: a.status || 'applied', createdAt: a.created_at, choices, proposals, reviewMarks,
       });
     }
     applicants.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
     const selectedEvent = myIds.has(String(req.query.event || '')) ? String(req.query.event) : '';
-    res.send(V.eoApplicantsPage({ staff: eoCtx(req), events: mine.map((e) => ({ id: e.id, name: e.name })), applicants, positionsUnion: [...posKeySeen.values()], selectedEvent, lang: req.lang }));
+    const knownReviewers = Array.from(new Set(applicants.flatMap((a) => [...(a.proposals || []).map((p) => p.reviewer_name), ...(a.reviewMarks || [])]))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
+    res.send(V.eoApplicantsPage({ staff: eoCtx(req), events: mine.map((e) => ({ id: e.id, name: e.name })), applicants, positionsUnion: [...posKeySeen.values()], selectedEvent, knownReviewers, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2564,6 +2572,192 @@ app.post('/eo/events/:id/applicants/:appId/reset', requireEo, async (req, res, n
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     res.redirect(safeNext(req.body.next) || ('/eo/events/' + found.ev.id + '?lang=' + req.lang));
+  } catch (e) { next(e); }
+});
+
+// ===========================================================================
+// EO — two-layer selection (LAPIS 1 proposals + LAPIS 2 decision meeting).
+// Mirrors the Super Admin flow but scoped to the EO's OWN events. Proposing never
+// changes status or emails; only a final accept (in the decision meeting, behind a
+// confirmation step) sends the generic, position-less decision email.
+// ---------------------------------------------------------------------------
+async function eoOwnedApp(st, staffId, appId) {
+  const app = (await st.listApplications()).find((a) => a.id === appId);
+  if (!app) return null;
+  const ev = await eoOwnedEvent(st, staffId, app.event_id);
+  if (!ev) return null;
+  return { ev, app };
+}
+function eoBackTo(v) { const s = String(v || ''); return s.startsWith('/eo/') ? s : '/eo/talents'; }
+
+app.post('/eo/applicants/:appId/propose', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const positionId = String(req.body.position_id || '');
+    const note = String(req.body.note || '').trim().slice(0, 500) || null;
+    if (!reviewer || !positionId) return res.redirect(back);
+    const choices = await st.listChoicesForApplication(found.app.id);
+    if (!choices.some((c) => c.position_id === positionId)) return res.redirect(back);
+    await st.addProposal(found.app.id, positionId, reviewer, note);
+    await st.removeReviewMark(found.app.id, reviewer).catch(() => {});
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+app.post('/eo/applicants/:appId/unpropose', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    const positionId = String(req.body.position_id || '');
+    if (reviewer && positionId) await st.removeProposal(found.app.id, positionId, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+app.post('/eo/applicants/:appId/mark-reviewed', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    if (reviewer) await st.addReviewMark(found.app.id, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+app.post('/eo/applicants/:appId/unmark-reviewed', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const reviewer = cleanReviewer(req.body.reviewer_name);
+    if (reviewer) await st.removeReviewMark(found.app.id, reviewer);
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+app.post('/eo/applicants/:appId/reset', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const prior = found.app.status;
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
+    if (prior !== 'applied') await st.addStatusLog(found.app.id, prior, 'applied', req.staff.id, cleanReviewer(req.body.actor_name) || null).catch(() => {});
+    res.redirect(back);
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/decision', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const eventId = String(req.query.event || '');
+    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll] = await Promise.all([
+      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(),
+    ]);
+    const myEventIds = new Set(events.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const eventById = new Map(events.map((e) => [e.id, e]));
+    const appById = new Map(apps.map((a) => [a.id, a]));
+    const acceptedByApp = new Map();
+    (choicesAll || []).forEach((c) => { if (c.accepted) acceptedByApp.set(c.application_id, c.position_id); });
+    const logByApp = new Map();
+    (logsAll || []).forEach((l) => { const arr = logByApp.get(l.application_id) || []; arr.push(l); logByApp.set(l.application_id, arr); });
+    const mount = { appBase: '/eo/applicants', resetPath: 'reset', decisionUrl: '/eo/decision', backUrl: '/eo/talents', active: 'talents' };
+    if (!eventId) {
+      const cnt = new Map();
+      (proposalsAll || []).forEach((p) => { const a = appById.get(p.application_id); if (a && myEventIds.has(a.event_id)) cnt.set(a.event_id, (cnt.get(a.event_id) || 0) + 1); });
+      const picker = [...cnt.entries()].map(([eid, n]) => ({ id: eid, name: (eventById.get(eid) || {}).name || '—', count: n }));
+      return res.send(V.decisionMeeting({ staff: eoCtx(req), event: null, picker, groups: [], lang: req.lang, mount }));
+    }
+    if (!myEventIds.has(eventId)) return res.redirect('/eo/decision');
+    const ev = eventById.get(eventId) || null;
+    const evPositions = await st.listEventPositions(eventId).catch(() => []);
+    const quotaByPos = new Map((evPositions || []).map((p) => [p.position_id, p.quota]));
+    const acceptedCountByPos = new Map();
+    (choicesAll || []).forEach((c) => { if (!c.accepted) return; const a = appById.get(c.application_id); if (!a || a.event_id !== eventId) return; acceptedCountByPos.set(c.position_id, (acceptedCountByPos.get(c.position_id) || 0) + 1); });
+    const byPosition = new Map();
+    (proposalsAll || []).forEach((p) => {
+      const a = appById.get(p.application_id);
+      if (!a || a.event_id !== eventId) return;
+      const arr = byPosition.get(p.position_id) || [];
+      let entry = arr.find((x) => x.app.id === a.id);
+      if (!entry) {
+        const tt = talentById.get(a.talent_id) || {};
+        const decidedLog = (logByApp.get(a.id) || []).filter((l) => l.to_status === 'approved' || l.to_status === 'rejected').slice(-1)[0];
+        entry = { app: { id: a.id, status: a.status, name: tt.name || '—', login: tt.login || '', created_at: a.created_at, acceptedPositionId: acceptedByApp.get(a.id) || null, decidedBy: decidedLog ? (decidedLog.actor_name || '') : '', decidedAt: decidedLog ? decidedLog.changed_at : '' }, proposers: [] };
+        arr.push(entry);
+      }
+      entry.proposers.push({ name: p.reviewer_name, note: p.note });
+      byPosition.set(p.position_id, arr);
+    });
+    const groups = [...byPosition.entries()].map(([pid, entries]) => {
+      const pp = posById.get(pid) || {};
+      const quota = quotaByPos.get(pid) || 0;
+      const acceptedHere = acceptedCountByPos.get(pid) || 0;
+      return { position_id: pid, label_id: pp.label_id, label_en: pp.label_en, key: pp.key, quota, acceptedHere, full: quota > 0 && acceptedHere >= quota, entries: entries.sort((a, b) => (b.proposers.length - a.proposers.length) || String(a.app.name).localeCompare(String(b.app.name))) };
+    }).sort((a, b) => b.entries.length - a.entries.length);
+    res.send(V.decisionMeeting({ staff: eoCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || ''), mount }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    if (!found) return res.redirect('/eo/decision');
+    const positionId = String(req.body.position_id || '');
+    const actor = cleanReviewer(req.body.actor_name);
+    const confirmed = String(req.body.confirmed || '') === '1';
+    const account = await st.getAccountById(found.app.talent_id);
+    let posName = '';
+    try { const evp = await st.listEventPositions(found.ev.id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
+    const mount = { appBase: '/eo/applicants', decisionUrl: '/eo/decision', active: 'talents' };
+    if (!confirmed) {
+      return res.send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, lang: req.lang, mount }));
+    }
+    await withEventLock(found.ev.id, async () => {
+      const apps = await st.listApplications();
+      const app = apps.find((a) => a.id === found.app.id);
+      if (!app) return;
+      const [evPositions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
+      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return;
+      const p = evPositions.find((pp) => pp.position_id === positionId);
+      const quota = p ? p.quota : 0;
+      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
+      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
+      if (quota > 0 && acceptedElsewhere >= quota) return;
+      const prior = app.status;
+      const wasApproved = app.status === 'approved';
+      await st.acceptApplicationChoice(app.id, positionId);
+      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
+      await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] eo accept failed:', e && e.message));
+      if (!wasApproved) notifyDecision(st, app, found.ev).catch((e) => console.error('[mail] eo decision email failed:', e && e.message));
+    });
+    res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=accept');
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/applicants/:appId/final-reject', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    if (!found) return res.redirect('/eo/decision');
+    const actor = cleanReviewer(req.body.actor_name);
+    const prior = found.app.status;
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.addStatusLog(found.app.id, prior, 'rejected', req.staff.id, actor || null).catch(() => {});
+    res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=reject');
   } catch (e) { next(e); }
 });
 
