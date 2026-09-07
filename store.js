@@ -244,7 +244,7 @@ function supabaseStore() {
     // ---- events / assignments / proofs ----
     async listTalents(talentType) {
       let q = sb.from('talent_accounts')
-        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status')
+        .select('id,talent_type,name,login,phone,city,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status,cv_path,portfolio_url,hyrox_cert_path')
         .order('name');
       if (talentType) q = q.eq('talent_type', talentType);
       const { data, error } = await q;

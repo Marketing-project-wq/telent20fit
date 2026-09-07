@@ -2171,25 +2171,60 @@ function maskId(v) {
   const head = digits.slice(0, 4);
   return head + '•'.repeat(Math.max(4, digits.length - 8)) + last;
 }
-function talentProfileBlock(profile, lang) {
+// Mask a phone number SERVER-SIDE so staff can tell applicants apart without
+// being able to contact them: keep the leading country code + last 4 digits,
+// e.g. "+62 ••••‑2928". The full value is never placed in the HTML.
+function maskPhone(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '—';
+  const d = s.replace(/\D/g, '').replace(/^0/, '62');
+  if (d.length < 4) return '••••';
+  return '+' + d.slice(0, 2) + ' ••••‑' + d.slice(-4);
+}
+// Renders the "Data Diri" grid. `opts` controls what a viewer may see:
+//   maskKtp   (default true)  — mask the KTP number (staff always; talent's own view passes false).
+//   maskPhone (default true)  — mask the phone + drop the click-to-call link
+//                               (staff before the talent is Assigned; false once contact is unlocked).
+//   staff     (default false) — show staff-only extras (CV / portfolio / HYROX file links).
+// Masking happens here on the server, so a masked value's full form is never sent to the browser.
+function talentProfileBlock(profile, lang, opts = {}) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   if (!profile || !profile.profile_completed_at) {
     return `<div class="muted" style="font-size:13px">${t('adm.profile.incomplete')}</div>`;
   }
+  const doMaskKtp = opts.maskKtp === undefined ? true : !!opts.maskKtp;
+  const doMaskPhone = opts.maskPhone === undefined ? true : !!opts.maskPhone;
+  const staff = !!opts.staff;
   const genderLabel = profile.gender === 'male' ? t('dd.gender.male') : profile.gender === 'female' ? t('dd.gender.female') : '—';
   const waDigits = String(profile.phone || '').replace(/[^0-9]/g, '').replace(/^0/, '62');
-  const wa = profile.phone ? `<a href="https://wa.me/${esc(waDigits)}" target="_blank" rel="noopener">${esc(profile.phone)}</a>` : '—';
+  const phoneCell = !profile.phone ? '—'
+    : (doMaskPhone
+      ? `<span title="${esc(t('adm.profile.contactLocked'))}">${esc(maskPhone(profile.phone))}</span>`
+      : `<a href="https://wa.me/${esc(waDigits)}" target="_blank" rel="noopener">${esc(profile.phone)}</a>`);
   const ig = profile.instagram ? `<a href="https://instagram.com/${encodeURIComponent(profile.instagram)}" target="_blank" rel="noopener">@${esc(profile.instagram)}</a>` : '—';
   const rows = [
-    [t('adm.profile.phone'), wa],
+    [t('adm.profile.phone'), phoneCell],
     [t('adm.profile.city'), esc(profile.city || '—')],
-    [t('adm.profile.ktp'), profile.ktp ? esc(maskId(profile.ktp)) : '—'],
+    [t('adm.profile.ktp'), profile.ktp ? esc(doMaskKtp ? maskId(profile.ktp) : profile.ktp) : '—'],
     [t('adm.profile.birthdate'), profile.birthdate ? esc(fmtDay(profile.birthdate)) : '—'],
     [t('adm.profile.gender'), esc(genderLabel)],
     [t('adm.profile.instagram'), ig],
     [t('adm.profile.followers'), profile.instagram_followers != null ? fmtNum(profile.instagram_followers) : '—'],
   ];
+  // Staff-only extras that help assessment: CV file, portfolio link, HYROX status.
+  if (staff && profile.portfolio_url) {
+    rows.push([t('adm.profile.portfolio'), `<a href="${esc(profile.portfolio_url)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(profile.portfolio_url)}</a>`]);
+  }
+  if (staff && profile.cv_path && profile.id) {
+    rows.push([t('adm.profile.cv'), `<a href="/admin/talents/${esc(profile.id)}/cv" target="_blank" rel="noopener">${t('adm.profile.cvView')} ↗</a>`]);
+  }
+  if (staff && profile.hyrox_cert_status && profile.hyrox_cert_status !== 'none') {
+    const label = profile.hyrox_cert_status === 'verified' ? t('eo.ap.hyroxOk')
+      : profile.hyrox_cert_status === 'pending' ? t('eo.ap.hyroxPending') : profile.hyrox_cert_status;
+    const link = (profile.hyrox_cert_path && profile.id) ? ` · <a href="/admin/hyrox/${esc(profile.id)}/file" target="_blank" rel="noopener">${t('adm.profile.hyroxView')} ↗</a>` : '';
+    rows.push([t('adm.profile.hyrox'), esc(label) + link]);
+  }
   const grid = rows.map(([k, v]) => `<div style="min-width:110px">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${esc(k)}</div>
     <div style="font-size:14px;margin-top:2px">${v}</div></div>`).join('');
@@ -3064,7 +3099,7 @@ function eoApplicantsSection(e, view, aps, L) {
   }).join('');
   const contactLine = (a) => {
     const bits = [];
-    if (a.phone) bits.push(`📱 ${esc(a.phone)}`);
+    if (a.phone) bits.push(`📱 ${esc(a.status === 'assigned' ? a.phone : maskPhone(a.phone))}`);
     if (a.instagram) bits.push(`📷 @${esc(a.instagram)}`);
     if (a.city) bits.push(`📍 ${esc(a.city)}`);
     if (a.login) bits.push(`✉️ ${esc(a.login)}`);
@@ -3225,7 +3260,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
     const title = on ? esc(t('eo.ap.acceptedHere')) : (closed ? esc(t('ta.autoClosed')) : '');
     return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}" title="${title}">P${c.priority} · ${esc(posOf(c))}${on ? ' ✓' : ''}</span>`;
   }).join('');
-  const contactLine = (a) => { const b = []; if (a.phone) b.push(`📱 ${esc(a.phone)}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; };
+  const contactLine = (a) => { const b = []; if (a.phone) b.push(`📱 ${esc(a.status === 'assigned' ? a.phone : maskPhone(a.phone))}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; };
   const hyroxBadge = (a) => { if (a.hyroxStatus === 'verified') return `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>`; if (a.hyroxStatus === 'pending') return `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>`; return ''; };
   // Approve (per still-open chosen position) / reject / undo. The forms post to
   // the event-scoped routes using the applicant's own event id, with next=
@@ -3846,7 +3881,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
           </span>
           <span class="muted tp-caret" style="font-size:12px;flex-shrink:0">${t('prof.showDetail')}</span>
         </summary>
-        <div style="margin-top:14px">${talentProfileBlock(acc, L)}</div>
+        <div style="margin-top:14px">${talentProfileBlock(acc, L, { staff: false, maskKtp: false, maskPhone: false })}</div>
       </details>
     </div>
 
@@ -4883,7 +4918,7 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   </div>
 
   <div class="section-head"><h2 style="margin:0">${t('adm.profile.title')}</h2></div>
-  <div class="card" style="margin-top:14px">${talentProfileBlock(talent, L)}</div>
+  <div class="card" style="margin-top:14px">${talentProfileBlock(talent, L, { staff: true, maskKtp: true, maskPhone: true })}</div>
 
   <div class="section-head" style="margin-top:22px"><h2 style="margin:0">${t('prof.completeness')}</h2></div>
   ${strengthDetailCard(talent, L)}
@@ -5554,7 +5589,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
         <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
         <div style="margin-top:10px">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
-          <div style="margin-top:8px">${talentProfileBlock(a.profile, L)}</div>
+          <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
         </div>
         <div style="margin-top:12px">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
