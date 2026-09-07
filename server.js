@@ -2620,13 +2620,48 @@ async function buildEoApplicant(st, staffId, appId) {
     reviewMarks: (allReviewMarks || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name),
   };
 }
-// After an EO lapis-1 mutation: return just the re-rendered card for an AJAX
-// (fetch) request so the page can swap it in place; otherwise redirect as before.
+// Rebuild one Super Admin applicant into the shape adminApplicantCard() expects,
+// for the in-place (AJAX) card refresh. Super Admin sees all events (no ownership scope).
+async function buildAdminApplicant(st, appId) {
+  const [apps, events, talents, certs, choicesAll, positions, proposalsAll, reviewMarksAll] = await Promise.all([
+    st.listApplications(), st.listEvents(), st.listTalents(), st.listCertificates(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listReviewMarks(),
+  ]);
+  const app = (apps || []).find((a) => a.id === appId);
+  if (!app) return null;
+  const ev = (events || []).find((e) => e.id === app.event_id) || {};
+  const tt = (talents || []).find((x) => x.id === app.talent_id) || {};
+  const posById = new Map((positions || []).map((p) => [p.id, p]));
+  const evPositions = await st.listEventPositions(app.event_id).catch(() => []);
+  const evPosById = new Map((evPositions || []).map((p) => [p.position_id, p]));
+  const appIdsThisEvent = new Set((apps || []).filter((a) => a.event_id === app.event_id).map((a) => a.id));
+  const acceptedByPos = new Map();
+  (choicesAll || []).forEach((c) => { if (c.accepted && appIdsThisEvent.has(c.application_id)) acceptedByPos.set(c.position_id, (acceptedByPos.get(c.position_id) || 0) + 1); });
+  const choices = (choicesAll || []).filter((c) => c.application_id === app.id).slice().sort((x, y) => x.priority - y.priority).map((c) => {
+    const p = posById.get(c.position_id) || {}; const ep = evPosById.get(c.position_id) || {}; const quota = ep.quota || 0;
+    const full = quota > 0 && !c.accepted && (acceptedByPos.get(c.position_id) || 0) >= quota;
+    return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
+  });
+  const certificate = (certs || []).find((cc) => cc.talent_id === app.talent_id && cc.event_id === app.event_id) || null;
+  const proposals = (proposalsAll || []).filter((p) => p.application_id === app.id).map((p) => { const mp = posById.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; });
+  const reviewMarks = (reviewMarksAll || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name);
+  return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks };
+}
+// After a lapis-1 mutation: return just the re-rendered card for an AJAX (fetch)
+// request so the page can swap it in place; otherwise redirect as before. Handles
+// both the EO (/eo/applicants/*) and Super Admin (/admin/applications/*) surfaces.
 async function eoCardOrRedirect(req, res, st, back) {
-  if ((req.get('X-Requested-With') || '') === 'fetch' && /^\/eo\/applicants\//.test(req.path)) {
-    const a = await buildEoApplicant(st, req.staff.id, req.params.appId);
-    if (a) return res.send(V.eoApplicantCard(a, req.lang));
-    return res.status(204).end();
+  if ((req.get('X-Requested-With') || '') === 'fetch') {
+    if (/^\/eo\/applicants\//.test(req.path)) {
+      const a = await buildEoApplicant(st, req.staff.id, req.params.appId);
+      if (a) return res.send(V.eoApplicantCard(a, req.lang));
+      return res.status(204).end();
+    }
+    if (/^\/admin\/applications\//.test(req.path)) {
+      const m = /[?&]cat=([a-z_]+)/.exec(String(req.body.next || '')); const cat = m ? m[1] : 'man_power';
+      const a = await buildAdminApplicant(st, req.params.id);
+      if (a) return res.send(V.adminApplicantCard(a, req.lang, cat));
+      return res.status(204).end();
+    }
   }
   return res.redirect(back);
 }
@@ -3176,8 +3211,9 @@ app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_adm
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'applied', reviewed_by: null, reviewed_at: null });
     if (prior !== 'applied') await st.addStatusLog(app.id, prior, 'applied', req.staff.id, String(req.body.actor_name || '').trim().slice(0, 80) || null).catch((e) => console.error('[log] reset failed:', e && e.message));
-    const back = String(req.body.next || '');
-    res.redirect(back.startsWith('/admin/applications') ? back : '/admin/applications');
+    const back0 = String(req.body.next || '');
+    const back = back0.startsWith('/admin/applications') ? back0 : '/admin/applications';
+    return eoCardOrRedirect(req, res, st, back);
   } catch (e) { next(e); }
 });
 

@@ -3156,23 +3156,24 @@ function proposalDisplayHtml(a, L) {
 // LAPIS-1 controls: propose per open position / mark reviewed / (decided → status+undo).
 // `appBase` is the per-applicant route prefix (e.g. `/eo/applicants/<id>`); a.choices
 // must carry label fields (label_id/label_en/key/custom_label).
-function lapis1CardControls(a, L, appBase, nextUrl) {
+function lapis1CardControls(a, L, appBase, nextUrl, resetPath) {
   const t = (k, v) => tr(L, k, v);
   const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
   const nx = `<input type="hidden" name="next" value="${esc(nextUrl)}">`;
+  const reset = resetPath || 'reset';
   const acc = (a.choices || []).find((c) => c.accepted);
   if ((a.status === 'approved' || a.status === 'assigned') && acc) {
     const confirmed = a.status === 'assigned';
     return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
       <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posOf(acc) }))}</span>
       ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
-      <form class="inline-form needs-reviewer" method="post" action="${appBase}/reset"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      <form class="inline-form needs-reviewer" method="post" action="${appBase}/${reset}"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
     </div>`;
   }
   if (a.status === 'rejected') {
     return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
       <span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span>
-      <form class="inline-form needs-reviewer" method="post" action="${appBase}/reset"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
+      <form class="inline-form needs-reviewer" method="post" action="${appBase}/${reset}"><input type="hidden" class="rvname" name="actor_name" value="">${nx}<button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
     </div>`;
   }
   const proposedSet = JSON.stringify((a.proposals || []).map((p) => p.position_id + '|' + p.reviewer_name));
@@ -5708,6 +5709,93 @@ function adminEventDetail({ staff, event, view, lang }) {
  * with approve (optionally assigning a station) / reject actions. Approved
  * applications keep a small form to set or update their station later.
  */
+// One Super Admin applicant card. Module-level so the in-place (AJAX) update can
+// re-render a single card server-side after a propose/mark action. Uses the shared
+// LAPIS-1 helpers so it stays identical to the EO card's controls (reset uses the
+// admin route 'reset-position').
+function adminApplicantCard(a, L, cat) {
+  const t = (k, v) => tr(L, k, v);
+  const p1keyOf = (x) => (x.choices && x.choices[0] && x.choices[0].key) || '';
+  const p1catOf = (x) => { const k = p1keyOf(x); return k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'); };
+  const ANSWER_LABEL = {
+    name: 'common.fullname', phone: 'dd.phone', city: 'dd.city',
+    ig_username: 'apply.igUser', ig_link: 'apply.igLink', followers: 'apply.followers', tiktok: 'apply.tiktok',
+    portfolio_link: 'apply.portfolio', camera: 'apply.camera',
+    bank_name: 'apply.bankName', bank_account: 'apply.bankAccount', bank_holder: 'apply.bankHolder',
+  };
+  const ans = a.answers || {};
+  const answerRows = Object.keys(ans)
+    .filter((k) => !k.startsWith('__') && ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
+    .map((k) => {
+      const raw = String(ans[k]);
+      let label; let val;
+      if (/^q[1-4]$/.test(k)) { label = t('mp.apply.' + k); val = k === 'q3' ? esc(raw) : esc(mpAnswerLabel(raw, L)); }
+      else { label = ANSWER_LABEL[k] ? t(ANSWER_LABEL[k]) : k; val = /^https?:\/\//i.test(raw) ? `<a href="${esc(raw)}" target="_blank" rel="noopener">${esc(raw)}</a>` : esc(raw); }
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="font-size:12.5px;color:var(--muted)">${esc(label)}</div>
+        <div style="font-size:14px;margin-top:2px;word-break:break-word">${val}</div></div>`;
+    }).join('');
+  const saveBtn = a.status === 'approved'
+    ? `<button class="btn btn-ghost btn-sm station-save" name="action" value="approve" data-clean="${esc(t('mpr.stationSaved'))}" data-dirty="${esc(t('mpr.updateStation'))}">${esc(t('mpr.stationSaved'))}</button>`
+    : `<button class="btn btn-sm" name="action" value="approve">${t('mpr.approve')}</button>`;
+  const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" class="station-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<select name="station">${stationOptions(a.station, t('mpr.stationPick'))}</select></label>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
+        <input type="hidden" name="note" value="${esc(a.note || '')}">
+        ${saveBtn}
+        ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
+      </form>`;
+  const stationLine = (a.status === 'approved' && !(a.choices && a.choices.length))
+    ? `<div style="margin-top:8px;font-size:13px">📍 <b>${a.station ? esc(a.station) + (a.station_loc ? ' · ' + esc(a.station_loc) : '') : `<span class="muted" style="font-weight:400">${t('mpr.noStation')}</span>`}</b></div>` : '';
+  const choices = a.choices || [];
+  const posBlock = choices.length
+    ? `<div style="margin-top:8px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.positionsTitle')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => `<span class="tag">P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}</span>`).join('')}</div>
+        </div>`
+    : '';
+  const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
+  const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position')) : stationForm;
+  const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
+  return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
+          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}</div>
+          <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
+          ${posBlock}
+        </div>
+        ${mpStatusBadge(a.status, L)}
+      </div>
+      ${stationLine}
+      ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        ${a.attended ? `<span class="pill pill-ok">✓ ${t('mpr.attended')}</span>` : `<span class="pill pill-off">${t('mpr.notAttended')}</span>`}
+        <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
+          <button class="btn btn-ghost btn-sm" title="${t('mpr.resendHint')}">✉ ${t('mpr.resendEmail')}</button>
+        </form>
+        ${a.attended ? (a.certificate
+          ? `<span class="pill ${a.certificate.revoked_at ? 'pill-off' : 'pill-ok'}">🎖️ ${esc(a.certificate.cert_no)}${a.certificate.revoked_at ? ` · ${t('cert.revoked')}` : ''}</span>
+             ${a.certificate.revoked_at ? '' : `<a href="/admin/certificates/${esc(a.certificate.id)}" class="btn btn-ghost btn-sm">⬇ ${t('cert.download')}</a>`}
+             <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
+          : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
+      </div>` : ''}
+      ${lapis1}
+      <div class="rv-msg" role="alert" hidden style="margin-top:10px;font-size:12.5px;color:var(--err);background:var(--err-soft);border-radius:8px;padding:8px 10px"></div>
+      <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
+        <div style="margin-top:10px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
+          <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
+        </div>
+        ${answerRows ? `<div style="margin-top:12px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
+          ${answerRows}
+        </div>` : ''}
+      </details>
+    </div>`;
+}
+
 function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
@@ -5739,132 +5827,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     bank_name: 'apply.bankName', bank_account: 'apply.bankAccount', bank_holder: 'apply.bankHolder',
   };
 
-  const renderCard = (a) => {
-    const ans = a.answers || {};
-    const answerRows = Object.keys(ans)
-      .filter((k) => !k.startsWith('__') && ans[k] !== undefined && ans[k] !== null && String(ans[k]) !== '')
-      .map((k) => {
-        const raw = String(ans[k]);
-        let label; let val;
-        if (/^q[1-4]$/.test(k)) { label = t('mp.apply.' + k); val = k === 'q3' ? esc(raw) : esc(mpAnswerLabel(raw, L)); }
-        else { label = ANSWER_LABEL[k] ? t(ANSWER_LABEL[k]) : k; val = /^https?:\/\//i.test(raw) ? `<a href="${esc(raw)}" target="_blank" rel="noopener">${esc(raw)}</a>` : esc(raw); }
-        return `<div style="padding:8px 0;border-bottom:1px solid var(--line)">
-        <div style="font-size:12.5px;color:var(--muted)">${esc(label)}</div>
-        <div style="font-size:14px;margin-top:2px;word-break:break-word">${val}</div></div>`;
-      }).join('');
-
-    // For an already-approved app the primary button starts in a muted "saved"
-    // state and only turns red again once the station inputs are edited (wired
-    // by the stationScript below). A pending app keeps the solid red "Setujui".
-    const saveBtn = a.status === 'approved'
-      ? `<button class="btn btn-ghost btn-sm station-save" name="action" value="approve" data-clean="${esc(t('mpr.stationSaved'))}" data-dirty="${esc(t('mpr.updateStation'))}">${esc(t('mpr.stationSaved'))}</button>`
-      : `<button class="btn btn-sm" name="action" value="approve">${t('mpr.approve')}</button>`;
-    const stationForm = `<form method="post" action="/admin/applications/${esc(a.id)}/review" class="station-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:14px">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationName')}<select name="station">${stationOptions(a.station, t('mpr.stationPick'))}</select></label>
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;min-width:130px">${t('mpr.stationLoc')}<input type="text" name="station_loc" maxlength="120" value="${esc(a.station_loc || '')}"></label>
-        <input type="hidden" name="note" value="${esc(a.note || '')}">
-        ${saveBtn}
-        ${a.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" name="action" value="reject" ${jsConfirm(t('confirm.rejectApp'))}>${t('mpr.reject')}</button>` : ''}
-      </form>`;
-
-    const stationLine = (a.status === 'approved' && !(a.choices && a.choices.length))
-      ? `<div style="margin-top:8px;font-size:13px">📍 <b>${a.station ? esc(a.station) + (a.station_loc ? ' · ' + esc(a.station_loc) : '') : `<span class="muted" style="font-weight:400">${t('mpr.noStation')}</span>`}</b></div>` : '';
-
-    // Position-based apps: show the ranked position picks (P1/P2/P3) the talent chose.
-    const choices = a.choices || [];
-    const posBlock = choices.length
-      ? `<div style="margin-top:8px">
-          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.positionsTitle')}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => `<span class="tag">P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}</span>`).join('')}</div>
-        </div>`
-      : '';
-
-    // LAPIS 1 — reviewer proposals. Show who has proposed this applicant (per
-    // position) and who reviewed-but-didn't-propose. NO accept/reject here — those
-    // live only in the decision meeting. Decided apps show their status + undo.
-    const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
-    const proposalDisplay = () => {
-      const byPos = new Map();
-      (a.proposals || []).forEach((p) => { const g = byPos.get(p.position_id) || { label: posLabel(p, L), names: [], notes: [] }; g.names.push(p.reviewer_name); if (p.note) g.notes.push(p.reviewer_name + ': ' + p.note); byPos.set(p.position_id, g); });
-      const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
-      const rev = (a.reviewMarks || []).length ? `<div class="muted" style="font-size:12.5px;margin-top:5px">👀 ${t('mpr2.reviewedNP')}: ${esc(a.reviewMarks.join(', '))}</div>` : '';
-      return (lines || rev) ? `<div style="margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px">${lines}${rev}</div>` : '';
-    };
-    const lapis1Controls = () => {
-      const base = `/admin/applications/${esc(a.id)}`;
-      const acc = choices.find((c) => c.accepted);
-      if ((a.status === 'approved' || a.status === 'assigned') && acc) {
-        const confirmed = a.status === 'assigned';
-        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-          <span class="pill pill-ok">✓ ${esc(t(confirmed ? 'eo.ap.assignedAs' : 'eo.ap.acceptedAs', { pos: posLabel(acc, L) }))}</span>
-          ${confirmed ? '' : `<span class="pill pill-off">${t('eo.ap.awaitingConfirm')}</span>`}
-          <form class="inline-form" method="post" action="${base}/reset-position"><input type="hidden" class="rvname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
-        </div>`;
-      }
-      if (a.status === 'rejected') {
-        return `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-          <span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span>
-          <form class="inline-form" method="post" action="${base}/reset-position"><input type="hidden" class="rvname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>
-        </div>`;
-      }
-      const proposedSet = JSON.stringify((a.proposals || []).map((p) => p.position_id + '|' + p.reviewer_name));
-      const reviewedSet = JSON.stringify(a.reviewMarks || []);
-      const posBtns = choices.map((c) => {
-        if (c.full) return `<button type="button" class="btn btn-ghost btn-sm" disabled style="opacity:.55">P${c.priority} ${esc(posLabel(c, L))} · ${t('eo.ap.posFull')}</button>`;
-        return `<span class="prop-pos" data-pid="${esc(c.position_id)}" style="display:inline-flex;gap:6px;align-items:center">
-          <form class="inline-form prop-form needs-reviewer" method="post" action="${base}/propose"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" class="prop-note" name="note" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-sm">➕ ${t('mpr2.proposeFor')}: P${c.priority} ${esc(posLabel(c, L))}</button></form>
-          <form class="inline-form unprop-form needs-reviewer" method="post" action="${base}/unpropose" style="display:none"><input type="hidden" name="position_id" value="${esc(c.position_id)}"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm" style="color:var(--red)">↩︎ ${t('mpr2.unpropose')}: P${c.priority}</button></form>
-        </span>`;
-      }).join('');
-      return `<div class="lapis1" data-proposed="${esc(proposedSet)}" data-reviewed="${esc(reviewedSet)}" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
-        <div class="muted" style="font-size:12.5px;margin-bottom:8px">${t('mpr2.proposeHint')}</div>
-        <input type="text" class="prop-note-input" maxlength="500" placeholder="${esc(t('mpr2.notePh'))}" style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:13px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${posBtns}</div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <form class="inline-form mark-form needs-reviewer" method="post" action="${base}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">👀 ${t('mpr2.markReviewed')}</button></form>
-          <form class="inline-form unmark-form needs-reviewer" method="post" action="${base}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
-        </div>
-      </div>`;
-    };
-
-    const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
-    return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
-      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="min-width:0">
-          <b style="font-size:16px">${esc(a.talent_name || '—')}</b>
-          <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
-          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}</div>
-          <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
-          ${posBlock}
-        </div>
-        ${mpStatusBadge(a.status, L)}
-      </div>
-      ${stationLine}
-      ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        ${a.attended ? `<span class="pill pill-ok">✓ ${t('mpr.attended')}</span>` : `<span class="pill pill-off">${t('mpr.notAttended')}</span>`}
-        <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
-          <button class="btn btn-ghost btn-sm" title="${t('mpr.resendHint')}">✉ ${t('mpr.resendEmail')}</button>
-        </form>
-        ${a.attended ? (a.certificate
-          ? `<span class="pill ${a.certificate.revoked_at ? 'pill-off' : 'pill-ok'}">🎖️ ${esc(a.certificate.cert_no)}${a.certificate.revoked_at ? ` · ${t('cert.revoked')}` : ''}</span>
-             ${a.certificate.revoked_at ? '' : `<a href="/admin/certificates/${esc(a.certificate.id)}" class="btn btn-ghost btn-sm">⬇ ${t('cert.download')}</a>`}
-             <form method="post" action="/admin/certificates/${esc(a.certificate.id)}/revoke" class="inline-form"><input type="hidden" name="revoke" value="${a.certificate.revoked_at ? '0' : '1'}"><button class="btn btn-ghost btn-sm">${a.certificate.revoked_at ? t('cert.restore') : t('cert.revoke')}</button></form>`
-          : `<form method="post" action="/admin/applications/${esc(a.id)}/issue-cert" class="inline-form"><button class="btn btn-sm">🎖️ ${t('cert.issue')}</button></form>`) : ''}
-      </div>` : ''}
-      ${choices.length ? proposalDisplay() + lapis1Controls() : stationForm}
-      <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
-        <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
-        <div style="margin-top:10px">
-          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
-          <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
-        </div>
-        ${answerRows ? `<div style="margin-top:12px">
-          <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.answersTitle')}</div>
-          ${answerRows}
-        </div>` : ''}
-      </details>
-    </div>`;
-  };
+  const renderCard = (a) => adminApplicantCard(a, L, cat);
 
   // Group applications into per-event folders so different events don't mix. Each
   // folder is a collapsible <details>; opening it reveals that event's applicants
@@ -6008,18 +5971,42 @@ ${rvModal}
   if(rvAdd)rvAdd.addEventListener('click',openModal);
   if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();saveModal();}});
   // Every LAPIS-1 action needs a reviewer name; copy the card note into the proposal.
+  // Propose/mark post via fetch and swap ONLY that card so the scroll never jumps;
+  // the button shows "saving…" (blocks a double click) and errors show in the card.
+  function ajaxSubmit(f, btn){
+    var card=f.closest('.adm-ap-item');
+    var msg=card&&card.querySelector('.rv-msg'); if(msg){msg.hidden=true;msg.textContent='';}
+    var oldTxt; if(btn){ oldTxt=btn.textContent; btn.disabled=true; btn.textContent=${JSON.stringify(t('mpr2.saving'))}; }
+    fetch(f.getAttribute('action'),{method:'POST',headers:{'X-Requested-With':'fetch'},body:new URLSearchParams(new FormData(f))})
+      .then(function(r){ if(!r.ok) throw new Error('http'); return r.text(); })
+      .then(function(html){ if(card&&html){ card.outerHTML=html; fillNames(); } })
+      .catch(function(){ if(btn){ btn.disabled=false; if(oldTxt!=null)btn.textContent=oldTxt; } if(msg){ msg.textContent=${JSON.stringify(t('mpr2.saveError'))}; msg.hidden=false; } });
+  }
+  var AJAX_RE=/\\/admin\\/applications\\/[^/]+\\/(propose|unpropose|mark-reviewed|unmark-reviewed|reset-position)$/;
   document.addEventListener('submit',function(e){
     var f=e.target;
-    if(f && f.classList && f.classList.contains('needs-reviewer')){
-      var n=getName();
-      if(!n){ e.preventDefault(); openModal(); return; }
-      var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
-      if(f.classList.contains('prop-form')){
-        var box=f.closest('.lapis1'); var noteInput=box&&box.querySelector('.prop-note-input');
-        var hidden=f.querySelector('.prop-note'); if(hidden&&noteInput)hidden.value=noteInput.value||'';
-      }
+    if(!(f && f.classList && f.classList.contains('needs-reviewer'))) return;
+    var n=getName();
+    if(!n){ e.preventDefault(); openModal(); return; }
+    var rv=f.querySelector('.rvname'); if(rv)rv.value=n;
+    if(f.classList.contains('prop-form')){
+      var box=f.closest('.lapis1'); var noteInput=box&&box.querySelector('.prop-note-input');
+      var hidden=f.querySelector('.prop-note'); if(hidden&&noteInput)hidden.value=noteInput.value||'';
+    }
+    if(f.closest('.adm-ap-item') && AJAX_RE.test(f.getAttribute('action')||'')){
+      e.preventDefault(); ajaxSubmit(f, f.querySelector('button'));
     }
   },true);
+  // Remember scroll position so returning to the applicant list lands where you left.
+  try{
+    var SKEY='adm_apps_scroll';
+    if(/^\\/admin\\/applications/.test(location.pathname)){
+      var _sv=sessionStorage.getItem(SKEY);
+      if(_sv){ var _y=parseInt(_sv,10)||0; requestAnimationFrame(function(){ window.scrollTo(0,_y); }); }
+      var _save=function(){ try{sessionStorage.setItem(SKEY,String(window.scrollY||window.pageYOffset||0));}catch(e){} };
+      window.addEventListener('pagehide',_save); window.addEventListener('beforeunload',_save);
+    }
+  }catch(e){}
 
   // --- Filters: position + status + proposal-status + search ---
   var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),pr=document.getElementById('admPrFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
@@ -6744,7 +6731,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
