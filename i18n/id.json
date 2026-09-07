@@ -1195,5 +1195,10 @@
   "adm.profile.grpSocial": "Media Sosial",
   "adm.profile.grpContact": "Kontak",
   "adm.profile.cvOpen": "Buka CV",
-  "adm.profile.portfolioOpen": "Buka Portfolio"
+  "adm.profile.portfolioOpen": "Buka Portfolio",
+  "mpr2.badgeProposed": "Diusulkan",
+  "mpr2.badgeReviewed": "Ditinjau",
+  "mpr2.badgeUnreviewed": "Belum ditinjau",
+  "mpr2.saving": "Menyimpan…",
+  "mpr2.saveError": "Gagal menyimpan, coba lagi"
 }
