@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Preview — Penyaring Bertahan Setelah Tindakan (MOCKUP)</title>
+<style>
+  :root{--red:#E4121F;--ink:#17171d;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--card2:#f4f6f9;--ok:#0f7a45;--ok-soft:#e7f6ee;--bg:#eef1f6;--url:#eaf1fb;--urltxt:#1a56c4}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .note{background:#17171d;color:#fff;padding:14px 18px;font-size:13.5px;line-height:1.6}
+  .note b{color:#ffd23f}
+  .wrap{max-width:1060px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:22px;margin:26px 0 4px}
+  h2{font-size:16px;margin:30px 0 6px;padding-top:18px;border-top:2px solid var(--line)}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+  .frames{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .desktop{flex:1;min-width:360px}.mobile{width:390px;max-width:100%}
+  .device-label{font:700 11px/1 Barlow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .urlbar{display:flex;align-items:center;gap:8px;background:var(--url);border:1px solid #cdddf6;border-radius:9px;padding:7px 11px;font:12.5px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--urltxt);word-break:break-all;margin-bottom:8px}
+  .urlbar .lock{color:var(--muted)}
+  .filterbar{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}
+  .fl{display:flex;flex-direction:column;gap:3px;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700}
+  .sel{border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:13px;background:#fff;min-width:130px;font-weight:600;color:var(--ink)}
+  .sel.on{border-color:var(--red);background:#fff5f5;color:var(--red)}
+  .inp{border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:13px;min-width:130px;flex:1}
+  .rbtn{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:600}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px}
+  .between{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .nameline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .b{font-size:15px;font-weight:700}
+  .pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .pill-ok{background:var(--ok-soft);color:var(--ok)}
+  .pill-status{background:#fdf3e3;color:#b7791f}
+  .tag{display:inline-block;background:#fdecec;color:var(--red);border-radius:8px;padding:3px 9px;font-size:12px;margin:3px 5px 0 0;font-weight:600}
+  .muted{color:var(--muted)}
+  .step{display:flex;gap:12px;margin-top:14px;align-items:flex-start}
+  .stepn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+  .stept{font-size:13.5px}
+  .stept b{color:var(--ink)}
+  .ok{color:var(--ok);font-weight:700}
+  .arrow{color:var(--muted);text-align:center;font-size:20px;margin:6px 0}
+</style>
+</head>
+<body>
+<div class="note"><b>CATATAN:</b> Ini hanya <b>gambaran tampilan (mockup)</b> — <b>bukan aplikasi berjalan</b>. Menggambarkan bahwa <b>pilihan penyaring tetap bertahan</b> setelah menekan tombol tindakan, setelah menyegarkan halaman, dan setelah keluar-masuk halaman. Berlaku sama di <b>Super Admin</b> dan <b>EO</b>.</div>
+<div class="wrap">
+  <h1>Penyaring Bertahan Setelah Tindakan</h1>
+  <p class="sub">Pilihan penyaring kini tersimpan di <b>alamat halaman (URL)</b> tanpa memuat ulang. Jadi penyaring <b>tidak kembali ke awal</b> setelah Usulkan/Tandai, setelah refresh, atau setelah keluar-masuk — dan alamatnya bisa <b>dibagikan</b> ke rekan agar mereka melihat daftar tersaring yang sama.</p>
+
+  <h2>Alurnya (ilustrasi) — Super Admin &amp; EO</h2>
+  <div class="frames">
+    <div class="desktop">
+      <p class="device-label">🖥️ Sebelum tindakan — penyaring dipilih</p>
+      <div class="urlbar"><span class="lock">🔒</span><span>/admin/applications?cat=man_power&amp;pos=registration_staff&amp;st=submitted</span></div>
+      <div class="filterbar">
+        <label class="fl">Kategori<span class="sel">Man Power</span></label>
+        <label class="fl">Posisi<span class="sel on">Registration Staff</span></label>
+        <label class="fl">Status<span class="sel on">Sedang Ditinjau</span></label>
+        <span class="inp muted" style="font-weight:400">Cari nama…</span>
+        <span class="rbtn">↺ Reset</span>
+      </div>
+      <div class="card"><div class="between"><div><div class="nameline"><span class="b">Budi</span> <span class="pill pill-ok">✔ Rara</span></div><div class="muted" style="font-size:12px;margin-top:2px">📅 Indonesia Sports Summit</div></div><span class="pill pill-status">Sedang Ditinjau</span></div><div><span class="tag">P1 · Registration Staff</span></div></div>
+    </div>
+
+    <div class="mobile">
+      <p class="device-label">📱 Setelah menekan Usulkan (390px)</p>
+      <div class="urlbar" style="font-size:11.5px"><span class="lock">🔒</span><span>…?cat=man_power&amp;pos=registration_staff&amp;st=submitted</span></div>
+      <div class="filterbar">
+        <label class="fl">Posisi<span class="sel on">Registration Staff</span></label>
+        <label class="fl">Status<span class="sel on">Sedang Ditinjau</span></label>
+        <span class="rbtn">↺ Reset</span>
+      </div>
+      <div class="card"><div class="nameline"><span class="b">Budi</span> <span class="pill pill-ok">✔ Rara, Sinta</span></div><div class="muted" style="font-size:12px;margin-top:6px"><span class="ok">✔ Diperbarui di tempat</span> — penyaring &amp; gulir tetap</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+  <div class="desktop" style="min-width:auto">
+    <div class="step"><div class="stepn">1</div><div class="stept">Pilih penyaring (mis. <b>Posisi = Registration Staff</b>, <b>Status = Sedang Ditinjau</b>). Alamat halaman ikut mencatat pilihan itu — <span class="muted">tanpa memuat ulang</span>.</div></div>
+    <div class="step"><div class="stepn">2</div><div class="stept">Tekan <b>Usulkan</b> / <b>Tandai</b>. Kartu diperbarui <b>di tempat</b>; daftar <b>tetap tersaring</b>, gulir tidak berpindah. <span class="ok">Penyaring tidak kembali ke awal.</span></div></div>
+    <div class="step"><div class="stepn">3</div><div class="stept"><b>Segarkan (refresh)</b> atau <b>keluar lalu kembali</b> ke halaman → penyaring dibaca lagi dari alamat, jadi tampilannya <b>persis seperti tadi</b>.</div></div>
+    <div class="step"><div class="stepn">4</div><div class="stept">Tombol <b>Reset</b> tetap bekerja: mengosongkan semua penyaring dan membersihkan alamat.</div></div>
+  </div>
+
+  <h2>English — same behavior</h2>
+  <div class="desktop" style="min-width:auto">
+    <div class="urlbar"><span class="lock">🔒</span><span>/eo/applicants?pos=registration_staff&amp;pr=proposed&amp;tab=position</span></div>
+    <div class="filterbar">
+      <label class="fl">Position<span class="sel on">Registration Staff</span></label>
+      <label class="fl">Proposal<span class="sel on">Proposed</span></label>
+      <span class="inp muted" style="font-weight:400">Search name…</span>
+      <span class="rbtn">↺ Reset</span>
+    </div>
+    <p class="sub" style="margin-top:10px">Filters are kept in the page URL (no reload), so they <b>survive an action, a refresh, and leaving/returning</b> — and the link can be <b>shared</b> so a colleague sees the same filtered list. Reset still clears everything.</p>
+  </div>
+</div>
+</body>
+</html>
