@@ -651,6 +651,8 @@ function memoryStore() {
     { id: 'ep-s-marshal', event_id: 'ev-sby', position_id: 'pos-marshal', quota: 6, closed_at: null, jobdesk: 'Pengarah & pengaman rute lari.', requirement: 'Fisik prima, sigap.', fee: 'Rp500.000/hari' },
   ];
   const applicationChoices = [];
+  const proposals = []; // LAPIS 1 reviewer proposals: { application_id, position_id, reviewer_name, note, created_at }
+  const reviewMarks = []; // "reviewed, not proposed" marks: { application_id, reviewer_name, created_at }
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
@@ -757,6 +759,26 @@ function memoryStore() {
       (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null, jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) }));
     },
     async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
+    // --- Two-layer selection (LAPIS 1): reviewer proposals + "reviewed" marks.
+    // In-memory mirror of the Supabase interface so the applicant lists / exports
+    // work in memory mode. A proposal never changes the application's status.
+    async listProposals() { return proposals.map((p) => ({ ...p })); },
+    async listProposalsForApplication(applicationId) { return proposals.filter((p) => p.application_id === applicationId).map((p) => ({ ...p })); },
+    async addProposal(applicationId, positionId, reviewerName, note) {
+      const ex = proposals.find((p) => p.application_id === applicationId && p.position_id === positionId && p.reviewer_name === reviewerName);
+      if (ex) { ex.note = note || null; return; }
+      proposals.push({ id: 'prop-' + (++seq), application_id: applicationId, position_id: positionId, reviewer_name: reviewerName, note: note || null, created_at: now() });
+    },
+    async removeProposal(applicationId, positionId, reviewerName) {
+      for (let j = proposals.length - 1; j >= 0; j--) { const p = proposals[j]; if (p.application_id === applicationId && p.position_id === positionId && p.reviewer_name === reviewerName) proposals.splice(j, 1); }
+    },
+    async listReviewMarks() { return reviewMarks.map((r) => ({ ...r })); },
+    async addReviewMark(applicationId, reviewerName) {
+      if (!reviewMarks.find((r) => r.application_id === applicationId && r.reviewer_name === reviewerName)) reviewMarks.push({ id: 'rev-' + (++seq), application_id: applicationId, reviewer_name: reviewerName, created_at: now() });
+    },
+    async removeReviewMark(applicationId, reviewerName) {
+      for (let j = reviewMarks.length - 1; j >= 0; j--) { const r = reviewMarks[j]; if (r.application_id === applicationId && r.reviewer_name === reviewerName) reviewMarks.splice(j, 1); }
+    },
     async listEvents() { return events.map((e) => ({ ...e, needs: eventNeeds.filter((n) => n.event_id === e.id) })); },
     async listActiveEvents() { return events.filter((e) => e.is_active).map((e) => ({ id: e.id, name: e.name })); },
     async toggleEvent(id) { const e = events.find((e) => e.id === id); if (e) e.is_active = !e.is_active; },
