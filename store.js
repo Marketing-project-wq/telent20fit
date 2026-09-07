@@ -391,7 +391,17 @@ function supabaseStore() {
     },
     async addApplicationChoices(applicationId, choices) {
       const rows = (choices || []).map((c) => ({ application_id: applicationId, position_id: c.position_id, priority: c.priority }));
-      if (rows.length) { const r = await sb.from('talent_application_choices').insert(rows); if (r.error) throw new Error(r.error.message); }
+      if (rows.length) {
+        const r = await sb.from('talent_application_choices').insert(rows);
+        if (r.error) {
+          // A double-click / concurrent submit can race two choices to the same
+          // (application_id, priority) or (application_id, position_id); the DB
+          // rejects the duplicate. Surface it as a catchable DUP so the caller
+          // can treat it as an already-saved no-op instead of a 500.
+          if (/duplicate|unique/i.test(r.error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+          throw new Error(r.error.message);
+        }
+      }
     },
     async replaceApplicationChoices(applicationId, choices) {
       await sb.from('talent_application_choices').delete().eq('application_id', applicationId);

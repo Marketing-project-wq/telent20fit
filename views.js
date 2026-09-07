@@ -6732,7 +6732,8 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       function openM(pid,label){posInput.value=pid;txt.textContent=QT.replace('{pos}',label).replace('{event}',EV);modal.hidden=false;}
       function closeM(){modal.hidden=true;}
       wrap.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('.pos-apply'):null;if(!b)return;ev.preventDefault();openM(b.getAttribute('data-pos'),b.getAttribute('data-label')||'');});
-      document.getElementById('applyModalYes').addEventListener('click',function(){form.submit();});
+      var applying=false;
+      document.getElementById('applyModalYes').addEventListener('click',function(){if(applying)return;applying=true;this.disabled=true;form.submit();});
       document.getElementById('applyModalNo').addEventListener('click',closeM);
       modal.addEventListener('click',function(ev){if(ev.target===modal)closeM();});
       document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&!modal.hidden)closeM();});
