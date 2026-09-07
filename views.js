@@ -3616,7 +3616,7 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   </div>`;
 
   const reviewerBar = mprReviewerBar(L, knownReviewers || []);
-  const decisionBtnRow = `<div style="margin-top:14px;display:flex;justify-content:flex-end"><a href="/eo/decision${selEv ? '?event=' + esc(selEv) + '&' : '?'}lang=${L}" class="btn btn-sm">🗳️ ${t('mpr2.toDecision')}</a></div>`;
+  const decisionBtnRow = `<div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap"><a id="apExportCsv" href="/eo/talents/export.csv" class="btn btn-ghost btn-sm">⬇ ${t('export.csv')}</a><a href="/eo/decision${selEv ? '?event=' + esc(selEv) + '&' : '?'}lang=${L}" class="btn btn-sm">🗳️ ${t('mpr2.toDecision')}</a></div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, t('nav.talents'), L)}
   <p class="sub">${t('eo.ap.pageSub')}</p>
@@ -3643,6 +3643,7 @@ function eoApplicantsPageScript() {
   var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
   var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),prSel=document.getElementById('apPrFilter'),reset=document.getElementById('apReset');
   var sortSel=document.getElementById('apSort'),folMin=document.getElementById('apFolMin'),folMax=document.getElementById('apFolMax');
+  var exportLink=document.getElementById('apExportCsv');
   var flt='all', tab='talent';
   // Numeric follower count of a card (null when the talent has none).
   function folNum(it){ var v=it.getAttribute('data-followers'); return (v===''||v==null)?null:parseInt(v,10); }
@@ -3706,6 +3707,7 @@ function eoApplicantsPageScript() {
     if(tab==='position'){[].slice.call(posBox.querySelectorAll('.pos-group')).forEach(function(g){var any=[].slice.call(g.querySelectorAll('.ap-item')).some(function(it){return it.style.display!=='none';});g.style.display=any?'':'none';});}
     if(noMatch)noMatch.style.display=(shown===0)?'':'none';
     writeUrl();
+    if(exportLink)exportLink.href='/eo/talents/export.csv'+location.search;
   }
   search.addEventListener('input',apply);
   statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
@@ -5983,6 +5985,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a id="admExportCsv" href="/admin/applications/export.csv?cat=${esc(cat)}" class="btn btn-ghost btn-sm">⬇ ${t('export.csv')}</a>
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
@@ -6090,6 +6093,7 @@ ${rvModal}
   var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),pr=document.getElementById('admPrFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
   var sortSel=document.getElementById('admSort'),folMin=document.getElementById('admFolMin'),folMax=document.getElementById('admFolMax');
   var catNav=document.getElementById('admCatNav');
+  var exportLink=document.getElementById('admExportCsv');
   var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
   var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
   // Keep the active filters in the URL (no reload) so they survive an in-place
@@ -6151,6 +6155,7 @@ ${rvModal}
     });
     if(nm)nm.style.display=shown===0?'':'none';
     writeUrl();
+    if(exportLink)exportLink.href='/admin/applications/export.csv'+location.search;
   }
   if(pos)pos.addEventListener('change',apply);
   if(st)st.addEventListener('change',apply);

@@ -2176,6 +2176,89 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// EO: export this EO's applicants (across their own events) as CSV, including the
+// Instagram follower count. Read-only (no status transition). Honors the same
+// filters/sort the page keeps in the query string so the file matches the view.
+app.get('/eo/talents/export.csv', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [allEvents, apps, choicesAll, talents, master, proposalsAll, reviewMarksAll] = await Promise.all([
+      st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(), st.listProposals(), st.listReviewMarks(),
+    ]);
+    const myIds = new Set(allEvents.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
+    const eventName = new Map(allEvents.map((e) => [e.id, e.name]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const posMaster = new Map(master.map((p) => [p.id, p]));
+    const choicesByApp = new Map();
+    (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    const proposalsByApp = new Map();
+    (proposalsAll || []).forEach((p) => { const arr = proposalsByApp.get(p.application_id) || []; arr.push(p); proposalsByApp.set(p.application_id, arr); });
+    const reviewsByApp = new Map();
+    (reviewMarksAll || []).forEach((r) => { const arr = reviewsByApp.get(r.application_id) || []; arr.push(r); reviewsByApp.set(r.application_id, arr); });
+    const L = req.lang;
+    const posText = (p) => ((L === 'id' ? (p.label_id || p.label_en) : (p.label_en || p.label_id)) || p.key || '');
+    const catKeyOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'));
+    const rows = [];
+    for (const a of apps) {
+      if (!myIds.has(a.event_id)) continue;
+      const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority);
+      if (!ch.length) continue;
+      const tt = talentById.get(a.talent_id) || {};
+      const chl = ch.map((c) => { const p = posMaster.get(c.position_id) || {}; return { priority: c.priority, key: p.key || '', label: posText(p) }; });
+      const p1key = (chl[0] && chl[0].key) || '';
+      const fol = (tt.instagram_followers != null && tt.instagram_followers !== '') ? parseInt(tt.instagram_followers, 10) : null;
+      const prStatus = (proposalsByApp.get(a.id) || []).length ? 'proposed' : ((reviewsByApp.get(a.id) || []).length ? 'reviewednp' : 'unreviewed');
+      rows.push({
+        eventId: a.event_id, cat: catKeyOf(p1key), p1key,
+        name: tt.name || '', email: tt.login || '',
+        positions: chl.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
+        status: a.status || 'applied', prStatus,
+        event: eventName.get(a.event_id) || '',
+        fol: (fol != null && !isNaN(fol)) ? fol : null,
+        pct: V.profileStrength(tt).pct,
+        created: a.created_at || '',
+      });
+    }
+    let out = rows;
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const posf = String(req.query.pos || ''), catf = String(req.query.cat || ''), evf = String(req.query.ev || ''), stf = String(req.query.st || ''), prf = String(req.query.pr || '');
+    const fmin = (req.query.fmin !== undefined && req.query.fmin !== '') ? parseInt(req.query.fmin, 10) : null;
+    const fmax = (req.query.fmax !== undefined && req.query.fmax !== '') ? parseInt(req.query.fmax, 10) : null;
+    if (posf) out = out.filter((r) => r.p1key === posf);
+    if (catf) out = out.filter((r) => r.cat === catf);
+    if (evf) out = out.filter((r) => r.eventId === evf);
+    if (stf) out = out.filter((r) => r.status === stf);
+    if (prf) out = out.filter((r) => r.prStatus === prf);
+    if (q) out = out.filter((r) => (r.name + ' ' + r.email).toLowerCase().indexOf(q) >= 0);
+    if (fmin != null && !isNaN(fmin)) out = out.filter((r) => r.fol != null && r.fol >= fmin);
+    if (fmax != null && !isNaN(fmax)) out = out.filter((r) => r.fol != null && r.fol <= fmax);
+    const sort = String(req.query.sort || 'new');
+    out.sort((x, y) => {
+      if (sort === 'folHi' || sort === 'folLo') {
+        const fa = x.fol, fb = y.fol;
+        if (fa == null && fb != null) return 1;
+        if (fb == null && fa != null) return -1;
+        if (fa != null && fb != null && fa !== fb) return sort === 'folHi' ? (fb - fa) : (fa - fb);
+      }
+      return String(y.created).localeCompare(String(x.created));
+    });
+    const catLabel = { kol: req.t('filter.cat.kol'), creative: req.t('filter.cat.creative'), manpower: req.t('filter.cat.manpower') };
+    const prLabel = { proposed: req.t('mpr2.prProposed'), reviewednp: req.t('mpr2.prReviewedNp'), unreviewed: req.t('mpr2.prUnreviewed') };
+    const headers = ['export.col.name', 'export.col.email', 'export.col.category', 'export.col.positions', 'export.col.status', 'export.col.proposal', 'export.col.event', 'export.col.followers', 'export.col.completeness', 'export.col.applied'].map((k) => req.t(k));
+    const data = out.map((r) => [
+      r.name, r.email, catLabel[r.cat] || r.cat, r.positions,
+      req.t('ta.status.' + r.status), prLabel[r.prStatus] || '',
+      r.event, (r.fol != null ? r.fol : ''), r.pct,
+      (r.created ? new Date(r.created).toISOString().slice(0, 10) : ''),
+    ]);
+    const fn = 'talents-' + new Date().toISOString().slice(0, 10) + '.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fn + '"');
+    res.send(toCsv(headers, data));
+  } catch (e) { next(e); }
+});
+
 // EO: Statistics page — per-event breakdown across this EO's own events.
 // Statistics is now embedded in the EO dashboard; keep this path working for old
 // links/bookmarks by redirecting (carrying any selected event through).
@@ -3851,6 +3934,94 @@ app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), as
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pdf"');
     res.send(buf);
+  } catch (e) { next(e); }
+});
+
+// Build a CSV document from a header row + array-of-array data rows. Values are
+// RFC-4180 escaped; a UTF-8 BOM is prepended so Excel opens Unicode text correctly.
+function toCsv(headers, rows) {
+  const cell = (v) => { const s = (v == null) ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [headers.map(cell).join(',')];
+  for (const r of rows) lines.push(r.map(cell).join(','));
+  return '﻿' + lines.join('\r\n') + '\r\n';
+}
+
+// Super admin: export the applicant list (scoped to the Talent Category tab) as
+// CSV, including the Instagram follower count. Honors the same filters/sort the
+// page keeps in the query string (status, position, proposal, search, min/max
+// followers, sort) so the file matches what's on screen.
+app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [apps, events, talents, choicesAll, positions, proposalsAll, reviewMarksAll] = await Promise.all([
+      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listReviewMarks(),
+    ]);
+    const eventName = new Map(events.map((e) => [e.id, e.name]));
+    const talentById = new Map(talents.map((tt) => [tt.id, tt]));
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    const choicesByApp = new Map();
+    (choicesAll || []).forEach((c) => { const arr = choicesByApp.get(c.application_id) || []; arr.push(c); choicesByApp.set(c.application_id, arr); });
+    const proposalsByApp = new Map();
+    (proposalsAll || []).forEach((p) => { const arr = proposalsByApp.get(p.application_id) || []; arr.push(p); proposalsByApp.set(p.application_id, arr); });
+    const reviewsByApp = new Map();
+    (reviewMarksAll || []).forEach((r) => { const arr = reviewsByApp.get(r.application_id) || []; arr.push(r); reviewsByApp.set(r.application_id, arr); });
+    const L = req.lang;
+    const posText = (p) => ((L === 'id' ? (p.label_id || p.label_en) : (p.label_en || p.label_id)) || p.key || '');
+    const catKeyOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'man_power'));
+    const rows = apps.map((a) => {
+      const tt = talentById.get(a.talent_id) || {};
+      const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
+        .map((c) => { const p = posById.get(c.position_id) || {}; return { priority: c.priority, key: p.key || '', label: posText(p) }; });
+      const p1key = (ch[0] && ch[0].key) || '';
+      const fol = (tt.instagram_followers != null && tt.instagram_followers !== '') ? parseInt(tt.instagram_followers, 10) : null;
+      const prStatus = (proposalsByApp.get(a.id) || []).length ? 'proposed' : ((reviewsByApp.get(a.id) || []).length ? 'reviewednp' : 'unreviewed');
+      return {
+        cat: catKeyOf(p1key || a.talent_type), p1key,
+        name: tt.name || '', email: tt.login || '',
+        positions: ch.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
+        status: a.status || 'applied', prStatus,
+        event: eventName.get(a.event_id) || '',
+        fol: (fol != null && !isNaN(fol)) ? fol : null,
+        pct: V.profileStrength(tt).pct,
+        created: a.created_at || '',
+      };
+    });
+    const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
+    let out = rows.filter((r) => r.cat === cat);
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const posf = String(req.query.pos || ''), stf = String(req.query.st || ''), prf = String(req.query.pr || '');
+    const fmin = (req.query.fmin !== undefined && req.query.fmin !== '') ? parseInt(req.query.fmin, 10) : null;
+    const fmax = (req.query.fmax !== undefined && req.query.fmax !== '') ? parseInt(req.query.fmax, 10) : null;
+    if (posf) out = out.filter((r) => r.p1key === posf);
+    if (stf) out = out.filter((r) => r.status === stf);
+    if (prf) out = out.filter((r) => r.prStatus === prf);
+    if (q) out = out.filter((r) => (r.name + ' ' + r.email).toLowerCase().indexOf(q) >= 0);
+    if (fmin != null && !isNaN(fmin)) out = out.filter((r) => r.fol != null && r.fol >= fmin);
+    if (fmax != null && !isNaN(fmax)) out = out.filter((r) => r.fol != null && r.fol <= fmax);
+    const sort = String(req.query.sort || 'new');
+    out.sort((x, y) => {
+      if (sort === 'folHi' || sort === 'folLo') {
+        const fa = x.fol, fb = y.fol;
+        if (fa == null && fb != null) return 1;
+        if (fb == null && fa != null) return -1;
+        if (fa != null && fb != null && fa !== fb) return sort === 'folHi' ? (fb - fa) : (fa - fb);
+      }
+      return String(y.created).localeCompare(String(x.created));
+    });
+    const catLabel = { kol: req.t('filter.cat.kol'), creative: req.t('filter.cat.creative'), man_power: req.t('filter.cat.manpower') };
+    const prLabel = { proposed: req.t('mpr2.prProposed'), reviewednp: req.t('mpr2.prReviewedNp'), unreviewed: req.t('mpr2.prUnreviewed') };
+    const headers = ['export.col.name', 'export.col.email', 'export.col.category', 'export.col.positions', 'export.col.status', 'export.col.proposal', 'export.col.event', 'export.col.followers', 'export.col.completeness', 'export.col.applied'].map((k) => req.t(k));
+    const data = out.map((r) => [
+      r.name, r.email, catLabel[r.cat] || r.cat, r.positions,
+      req.t('ta.status.' + r.status), prLabel[r.prStatus] || '',
+      r.event, (r.fol != null ? r.fol : ''), r.pct,
+      (r.created ? new Date(r.created).toISOString().slice(0, 10) : ''),
+    ]);
+    const fn = 'applicants-' + cat + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fn + '"');
+    res.send(toCsv(headers, data));
   } catch (e) { next(e); }
 });
 
