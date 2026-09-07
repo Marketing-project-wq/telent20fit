@@ -3635,6 +3635,22 @@ function eoApplicantsPageScript() {
   var tabChips=[].slice.call(document.querySelectorAll('[data-aptab]'));
   var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),prSel=document.getElementById('apPrFilter'),reset=document.getElementById('apReset');
   var flt='all', tab='talent';
+  // Keep the active filters in the URL (no reload) so they survive an in-place
+  // action, a manual refresh, or leaving and coming back — and can be shared.
+  function writeUrl(){
+    try{
+      var p=new URLSearchParams();
+      var q=search.value.trim(); if(q)p.set('q',q);
+      if(posSel&&posSel.value)p.set('pos',posSel.value);
+      if(catSel&&catSel.value)p.set('cat',catSel.value);
+      if(evSel&&evSel.value)p.set('ev',evSel.value);
+      if(prSel&&prSel.value)p.set('pr',prSel.value);
+      if(flt&&flt!=='all')p.set('st',flt);
+      if(tab&&tab!=='talent')p.set('tab',tab);
+      var qs=p.toString();
+      history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
+    }catch(e){}
+  }
   function apply(){
     var q=search.value.trim().toLowerCase();
     var pf=posSel?posSel.value:'', cf=catSel?catSel.value:'', ef=evSel?evSel.value:'', prf=prSel?prSel.value:'';
@@ -3652,6 +3668,7 @@ function eoApplicantsPageScript() {
     });
     if(tab==='position'){[].slice.call(posBox.querySelectorAll('.pos-group')).forEach(function(g){var any=[].slice.call(g.querySelectorAll('.ap-item')).some(function(it){return it.style.display!=='none';});g.style.display=any?'':'none';});}
     if(noMatch)noMatch.style.display=(shown===0)?'':'none';
+    writeUrl();
   }
   search.addEventListener('input',apply);
   statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
@@ -3661,6 +3678,17 @@ function eoApplicantsPageScript() {
   if(prSel)prSel.addEventListener('change',apply);
   if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';apply();});
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
+  // Restore filters previously written to the URL.
+  try{
+    var ip=new URLSearchParams(location.search);
+    if(ip.has('q'))search.value=ip.get('q');
+    if(posSel&&ip.has('pos'))posSel.value=ip.get('pos');
+    if(catSel&&ip.has('cat'))catSel.value=ip.get('cat');
+    if(evSel&&ip.has('ev'))evSel.value=ip.get('ev');
+    if(prSel&&ip.has('pr'))prSel.value=ip.get('pr');
+    if(ip.has('st')){flt=ip.get('st');statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')===flt);});}
+    if(ip.has('tab')){tab=ip.get('tab');tabChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-aptab')===tab);});talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';}
+  }catch(e){}
   apply();
 })();
 </script>`;
@@ -5862,7 +5890,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   applications.forEach((a) => { const c = a.choices && a.choices[0]; if (c && c.key && !p1PosSeen.has(c.key)) { p1PosSeen.add(c.key); p1PosOpts.push(`<option value="${esc(c.key)}">${esc(posLabel(c, L))}</option>`); } });
   const stOpts = Array.from(new Set(applications.map((a) => a.status))).map((s) => `<option value="${esc(s)}">${esc(t('ta.status.' + s))}</option>`).join('');
   const filterBar = `<div class="card" style="margin-top:14px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select style="min-width:160px" onchange="if(this.value)location.href='/admin/applications?cat='+this.value">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="admCatNav" style="min-width:160px">
       <option value="man_power"${cat === 'man_power' ? ' selected' : ''}>${esc(t('filter.cat.manpower'))}</option>
       <option value="kol"${cat === 'kol' ? ' selected' : ''}>${esc(t('filter.cat.kol'))}</option>
       <option value="creative"${cat === 'creative' ? ' selected' : ''}>${esc(t('filter.cat.creative'))}</option>
@@ -6010,8 +6038,24 @@ ${rvModal}
 
   // --- Filters: position + status + proposal-status + search ---
   var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),pr=document.getElementById('admPrFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
+  var catNav=document.getElementById('admCatNav');
   var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
   var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
+  // Keep the active filters in the URL (no reload) so they survive an in-place
+  // action, a manual refresh, or leaving and coming back — and can be shared.
+  // Starts from the current query so the server-scoped category ('cat') is kept.
+  function writeUrl(){
+    try{
+      var p=new URLSearchParams(location.search);
+      function setp(k,v){ if(v)p.set(k,v); else p.delete(k); }
+      setp('pos',pos?pos.value:'');
+      setp('st',st?st.value:'');
+      setp('pr',pr?pr.value:'');
+      setp('q',sr?sr.value.trim():'');
+      var qs=p.toString();
+      history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
+    }catch(e){}
+  }
   function apply(){
     var p=pos?pos.value:'',s=st?st.value:'',pf=pr?pr.value:'',q=sr?sr.value.trim().toLowerCase():'',shown=0,filtering=!!(p||s||pf||q);
     items.forEach(function(it){
@@ -6026,12 +6070,33 @@ ${rvModal}
       f.style.display=(filtering&&vis===0)?'none':'';if(filtering&&vis>0)f.open=true;
     });
     if(nm)nm.style.display=shown===0?'':'none';
+    writeUrl();
   }
   if(pos)pos.addEventListener('change',apply);
   if(st)st.addEventListener('change',apply);
   if(pr)pr.addEventListener('change',apply);
   if(sr)sr.addEventListener('input',apply);
   if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';apply();});
+  // Switching Talent Category re-scopes the list on the server (full navigation);
+  // carry the other filters along so they don't reset.
+  if(catNav)catNav.addEventListener('change',function(){
+    if(!this.value)return;
+    var p=new URLSearchParams();
+    p.set('cat',this.value);
+    if(pos&&pos.value)p.set('pos',pos.value);
+    if(st&&st.value)p.set('st',st.value);
+    if(pr&&pr.value)p.set('pr',pr.value);
+    var q=sr?sr.value.trim():''; if(q)p.set('q',q);
+    location.href='/admin/applications?'+p.toString();
+  });
+  // Restore filters previously written to the URL.
+  try{
+    var ip=new URLSearchParams(location.search);
+    if(pos&&ip.has('pos'))pos.value=ip.get('pos');
+    if(st&&ip.has('st'))st.value=ip.get('st');
+    if(pr&&ip.has('pr'))pr.value=ip.get('pr');
+    if(sr&&ip.has('q'))sr.value=ip.get('q');
+  }catch(e){}
 
   document.querySelectorAll('.station-save').forEach(function(btn){
     var form = btn.closest('form'); if(!form) return;
