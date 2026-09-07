@@ -5745,6 +5745,10 @@ function adminApplicantCard(a, L, cat) {
   const t = (k, v) => tr(L, k, v);
   const p1keyOf = (x) => (x.choices && x.choices[0] && x.choices[0].key) || '';
   const p1catOf = (x) => { const k = p1keyOf(x); return k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'manpower'); };
+  // Instagram followers (numeric, from the talent profile) + apply timestamp —
+  // fuel the client-side followers sort/filter and the on-card display.
+  const fol = (a.profile && a.profile.instagram_followers != null && a.profile.instagram_followers !== '') ? parseInt(a.profile.instagram_followers, 10) : null;
+  const createdMs = a.created_at ? (new Date(a.created_at).getTime() || 0) : 0;
   const ANSWER_LABEL = {
     name: 'common.fullname', phone: 'dd.phone', city: 'dd.city',
     ig_username: 'apply.igUser', ig_link: 'apply.igLink', followers: 'apply.followers', tiktok: 'apply.tiktok',
@@ -5785,12 +5789,12 @@ function adminApplicantCard(a, L, cat) {
   const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
   const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position')) : stationForm;
   const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
-  return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
+  return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
           <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
-          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}</div>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}${fol != null ? `<span class="muted" style="font-size:12px">·</span><span class="muted" style="font-size:12px">${t('filter.followers')}</span><b style="font-size:13px">${fmtNum(fol)}</b>` : ''}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
           ${posBlock}
         </div>
@@ -5898,6 +5902,9 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="admPosFilter" style="min-width:150px"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.status')}<select id="admStatusFilter" style="min-width:150px"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="admPrFilter" style="min-width:190px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('sort.by')}<select id="admSort" style="min-width:170px"><option value="new">${esc(t('sort.newest'))}</option><option value="folHi">${esc(t('sort.folDesc'))}</option><option value="folLo">${esc(t('sort.folAsc'))}</option></select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.minFollowers')}<input type="number" id="admFolMin" min="0" inputmode="numeric" placeholder="0" style="width:110px;box-sizing:border-box"></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.maxFollowers')}<input type="number" id="admFolMax" min="0" inputmode="numeric" placeholder="∞" style="width:110px;box-sizing:border-box"></label>
     <input type="text" id="admSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" style="flex:1;min-width:150px;box-sizing:border-box">
     <button type="button" id="admReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
   </div>
@@ -6038,6 +6045,7 @@ ${rvModal}
 
   // --- Filters: position + status + proposal-status + search ---
   var pos=document.getElementById('admPosFilter'),st=document.getElementById('admStatusFilter'),pr=document.getElementById('admPrFilter'),sr=document.getElementById('admSearch'),rs=document.getElementById('admReset'),nm=document.getElementById('admNoMatch');
+  var sortSel=document.getElementById('admSort'),folMin=document.getElementById('admFolMin'),folMax=document.getElementById('admFolMax');
   var catNav=document.getElementById('admCatNav');
   var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
   var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
@@ -6052,18 +6060,47 @@ ${rvModal}
       setp('st',st?st.value:'');
       setp('pr',pr?pr.value:'');
       setp('q',sr?sr.value.trim():'');
+      setp('sort',(sortSel&&sortSel.value!=='new')?sortSel.value:'');
+      setp('fmin',folMin?folMin.value.trim():'');
+      setp('fmax',folMax?folMax.value.trim():'');
       var qs=p.toString();
       history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
     }catch(e){}
   }
+  // Numeric follower count of a row (null when the talent has none).
+  function folNum(it){ var v=it.getAttribute('data-followers'); return (v===''||v==null)?null:parseInt(v,10); }
   function apply(){
-    var p=pos?pos.value:'',s=st?st.value:'',pf=pr?pr.value:'',q=sr?sr.value.trim().toLowerCase():'',shown=0,filtering=!!(p||s||pf||q);
+    var p=pos?pos.value:'',s=st?st.value:'',pf=pr?pr.value:'',q=sr?sr.value.trim().toLowerCase():'';
+    var mn=(folMin&&folMin.value!=='')?parseInt(folMin.value,10):null;
+    var mx=(folMax&&folMax.value!=='')?parseInt(folMax.value,10):null;
+    if(mn!=null&&isNaN(mn))mn=null; if(mx!=null&&isNaN(mx))mx=null;
+    var mode=sortSel?sortSel.value:'new';
+    var shown=0,filtering=!!(p||s||pf||q||mn!=null||mx!=null);
     items.forEach(function(it){
       var okP=!p||it.getAttribute('data-p1pos')===p;
       var okS=!s||it.getAttribute('data-status')===s;
       var okPr=!pf||it.getAttribute('data-prstatus')===pf;
       var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
-      var vis=okP&&okS&&okPr&&okQ;it.style.display=vis?'':'none';if(vis)shown++;
+      var f=folNum(it),okF=true;
+      if(mn!=null)okF=(f!=null&&f>=mn);
+      if(okF&&mx!=null)okF=(f!=null&&f<=mx);
+      var vis=okP&&okS&&okPr&&okQ&&okF;it.style.display=vis?'':'none';if(vis)shown++;
+    });
+    // Reorder the visible rows within each event folder by the chosen sort. For a
+    // followers sort, rows with no follower value sort to the bottom; ties (and the
+    // default) fall back to newest-applied-first.
+    folders.forEach(function(f){
+      var vis=[].slice.call(f.querySelectorAll('.adm-ap-item')).filter(function(x){return x.style.display!=='none';});
+      vis.sort(function(a,b){
+        if(mode==='folHi'||mode==='folLo'){
+          var fa=folNum(a),fb=folNum(b);
+          if(fa==null&&fb!=null)return 1;
+          if(fb==null&&fa!=null)return -1;
+          if(fa!=null&&fb!=null&&fa!==fb)return mode==='folHi'?(fb-fa):(fa-fb);
+        }
+        return (parseInt(b.getAttribute('data-created'),10)||0)-(parseInt(a.getAttribute('data-created'),10)||0);
+      });
+      vis.forEach(function(x){ f.appendChild(x); });
     });
     folders.forEach(function(f){
       var vis=[].slice.call(f.querySelectorAll('.adm-ap-item')).filter(function(x){return x.style.display!=='none';}).length;
@@ -6076,9 +6113,12 @@ ${rvModal}
   if(st)st.addEventListener('change',apply);
   if(pr)pr.addEventListener('change',apply);
   if(sr)sr.addEventListener('input',apply);
-  if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';apply();});
+  if(sortSel)sortSel.addEventListener('change',apply);
+  if(folMin)folMin.addEventListener('input',apply);
+  if(folMax)folMax.addEventListener('input',apply);
+  if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apply();});
   // Switching Talent Category re-scopes the list on the server (full navigation);
-  // carry the other filters along so they don't reset.
+  // carry the other filters + sort along so they don't reset.
   if(catNav)catNav.addEventListener('change',function(){
     if(!this.value)return;
     var p=new URLSearchParams();
@@ -6087,15 +6127,24 @@ ${rvModal}
     if(st&&st.value)p.set('st',st.value);
     if(pr&&pr.value)p.set('pr',pr.value);
     var q=sr?sr.value.trim():''; if(q)p.set('q',q);
+    if(sortSel&&sortSel.value!=='new')p.set('sort',sortSel.value);
+    if(folMin&&folMin.value.trim())p.set('fmin',folMin.value.trim());
+    if(folMax&&folMax.value.trim())p.set('fmax',folMax.value.trim());
     location.href='/admin/applications?'+p.toString();
   });
-  // Restore filters previously written to the URL.
+  // Restore filters/sort previously written to the URL, then apply once so a
+  // shared/refreshed link reflects them (untouched pristine view keeps server order).
   try{
     var ip=new URLSearchParams(location.search);
+    var had=ip.has('pos')||ip.has('st')||ip.has('pr')||ip.has('q')||ip.has('sort')||ip.has('fmin')||ip.has('fmax');
     if(pos&&ip.has('pos'))pos.value=ip.get('pos');
     if(st&&ip.has('st'))st.value=ip.get('st');
     if(pr&&ip.has('pr'))pr.value=ip.get('pr');
     if(sr&&ip.has('q'))sr.value=ip.get('q');
+    if(sortSel&&ip.has('sort'))sortSel.value=ip.get('sort');
+    if(folMin&&ip.has('fmin'))folMin.value=ip.get('fmin');
+    if(folMax&&ip.has('fmax'))folMax.value=ip.get('fmax');
+    if(had)apply();
   }catch(e){}
 
   document.querySelectorAll('.station-save').forEach(function(btn){
