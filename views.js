@@ -3507,11 +3507,11 @@ function apBulkControls(L) {
   // and hides everything again. All inline (no floating bar) so nothing covers a card.
   return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">
     <button type="button" id="apBulkToggle" class="btn btn-ghost btn-sm" title="${esc(t('bulk.selectMode'))}" aria-label="${esc(t('bulk.selectMode'))}"><span id="apBulkToggleLabel" style="font-size:16px;line-height:1">⋮</span></button>
-    <button type="button" id="apRejectAll" hidden class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apRejectAllLabel"></span></button>
-    <span id="apBulkPanel" hidden style="display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <button type="button" id="apRejectAll" class="btn btn-sm" style="display:none;background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apRejectAllLabel"></span></button>
+    <span id="apBulkPanel" style="display:none;gap:12px;align-items:center;flex-wrap:wrap">
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
       <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
-      <span id="apBulkBar" hidden style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span id="apBulkBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap">
         <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
       </span>
     </span>
@@ -3552,7 +3552,7 @@ function apBulkLogicJS(o) {
   var apRejectAll=document.getElementById('apRejectAll'),apRejectAllLbl=document.getElementById('apRejectAllLabel');
   var apRAModal=document.getElementById('apRejAllModal'),apRAMsg=document.getElementById('apRejAllMsg'),apRAScope=document.getElementById('apRejAllScope'),apRAConfirm=document.getElementById('apRejAllConfirm'),apRACancel=document.getElementById('apRejAllCancel');
   // Show/hide the whole selection UI (panel + per-row checkboxes) for the current mode.
-  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.hidden=!apSelMode; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?('✕ '+${S(o.cancelLabel)}):'⋮'; if(apBulkToggle){ var tt=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; apBulkToggle.title=tt; apBulkToggle.setAttribute('aria-label',tt); } applySelMode(); }
+  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.style.display=apSelMode?'inline-flex':'none'; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?('✕ '+${S(o.cancelLabel)}):'⋮'; if(apBulkToggle){ var tt=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; apBulkToggle.title=tt; apBulkToggle.setAttribute('aria-label',tt); } applySelMode(); }
   function apFill(t,n){ return String(t).split('{n}').join(n); }
   // Reject a set of rows via the shared endpoint, then reflect it in the DOM (status,
   // drop checkbox, swap the status pill). Returns a promise of the server-side count.
@@ -3580,11 +3580,13 @@ function apBulkLogicJS(o) {
     var vis=apVisRej(); var chk=vis.filter(function(it){ return it.querySelector('.ap-cb').checked; });
     if(apSelAll){ apSelAll.checked=vis.length>0&&chk.length===vis.length; apSelAll.indeterminate=chk.length>0&&chk.length<vis.length; }
     if(apSelCount)apSelCount.textContent=chk.length?apFill(${S(o.selectedTpl)},chk.length):'';
-    if(apBar){ if(chk.length){ apBar.hidden=false; if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else { apBar.hidden=true; } }
+    // NB: toggle style.display, not the [hidden] attribute — an author display: rule
+    // (inline, or from .btn) beats [hidden]{display:none}, so [hidden] wouldn't hide these.
+    if(apBar){ if(chk.length){ apBar.style.display='inline-flex'; if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else { apBar.style.display='none'; } }
     // Reject All (X): X = filter-matching rejectable rows. Hidden in selection mode or when 0.
     var vr=apVisibleRejectable();
     if(apRejectAllLbl)apRejectAllLbl.textContent=apFill(${S(o.rejectAllTpl)},vr.length);
-    if(apRejectAll)apRejectAll.hidden=apSelMode||vr.length===0;
+    if(apRejectAll)apRejectAll.style.display=(apSelMode||vr.length===0)?'none':'';
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
   // "Select Multiple" toggles the whole mode on/off. Turning it off clears any picks.
