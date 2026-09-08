@@ -3533,7 +3533,7 @@ function apBulkLogicJS(o) {
     var vis=apVisRej(); var chk=vis.filter(function(it){ return it.querySelector('.ap-cb').checked; });
     if(apSelAll){ apSelAll.checked=vis.length>0&&chk.length===vis.length; apSelAll.indeterminate=chk.length>0&&chk.length<vis.length; }
     if(apSelCount)apSelCount.textContent=chk.length?apFill(${S(o.selectedTpl)},chk.length):'';
-    if(apBar){ if(chk.length){ apBar.hidden=false; if(apBarCount)apBarCount.textContent=apFill(${S(o.selectedTpl)},chk.length); if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else apBar.hidden=true; }
+    if(apBar){ if(chk.length){ apBar.hidden=false; if(apBarCount)apBarCount.textContent=apFill(${S(o.selectedTpl)},chk.length); if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); try{document.body.style.paddingBottom=(apBar.offsetHeight+24)+'px';}catch(e){} } else { apBar.hidden=true; try{document.body.style.paddingBottom='';}catch(e){} } }
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
   if(apSelAll)apSelAll.addEventListener('change',function(){ apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=apSelAll.checked; }); apSummaryRefresh(); });
