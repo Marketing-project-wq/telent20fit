@@ -706,11 +706,12 @@ async function sendDecisionEmail({ to, name, eventName, eventDate }) {
   return { delivered: true };
 }
 
-// Final decision reached (two-layer selection, LAPIS 2 → rejected). App-first and
-// deliberately brief: the talent opens the 20FIT App to see the announcement. It
-// never names a position and needs no web action — the encouraging tone lives in
-// the in-app announcement. Neutral (not celebratory, not harsh). Always English.
-function decisionRejectedEmailHtml({ name }) {
+// Generic "selection result is out — open the 20FIT App" announcement. App-first
+// and deliberately brief: never names a position, needs no web action. Reused for
+// the position-based final REJECT and for Man Power results (both accepted and not)
+// — the app shows the announcement (e.g. the list of accepted names); station and
+// other details stay on the web. Neutral (not celebratory, not harsh). Always English.
+function resultAnnouncementEmailHtml({ name }) {
   const appUrl = APP_BASE + '/app'; // smart redirect → App Store / Play Store by device
   return `<!doctype html><html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -739,22 +740,22 @@ function decisionRejectedEmailHtml({ name }) {
 </body></html>`;
 }
 
-/** Final-decision (rejected) email — generic, never names the position, points to the app. English. Never throws for a missing key. */
-async function sendDecisionRejectedEmail({ to, name }) {
+/** Generic "result is out — open the 20FIT App" email (position reject + Man Power results). English. Never throws for a missing key. */
+async function sendResultAnnouncementEmail({ to, name }) {
   const subject = "There's an Update on Your Application";
   if (!API_KEY || process.env.MAIL_MOCK === '1') {
-    console.log('[mail] email service not configured — decision(rejected) email for ' + to);
+    console.log('[mail] email service not configured — result-announcement email for ' + to);
     return { delivered: false };
   }
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html: decisionRejectedEmailHtml({ name }) }),
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: resultAnnouncementEmailHtml({ name }) }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     if (res.status === 401 || /invalid api key/i.test(body)) {
-      console.warn('[mail] Resend API key is invalid; decision(rejected) email not sent to ' + to);
+      console.warn('[mail] Resend API key is invalid; result-announcement email not sent to ' + to);
       return { delivered: false, error: 'Invalid API key' };
     }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
@@ -762,4 +763,4 @@ async function sendDecisionRejectedEmail({ to, name }) {
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendDecisionEmail, sendDecisionRejectedEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, decisionEmailHtml, decisionRejectedEmailHtml };
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendDecisionEmail, sendResultAnnouncementEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, decisionEmailHtml, resultAnnouncementEmailHtml };

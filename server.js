@@ -2942,7 +2942,7 @@ app.post('/eo/applicants/:appId/final-reject', requireEo, async (req, res, next)
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     await st.addStatusLog(found.app.id, prior, 'rejected', req.staff.id, actor || null).catch(() => {});
-    if (prior !== 'rejected') notifyDecisionRejected(st, found.app).catch((e) => console.error('[mail] eo decision(rejected) email failed:', e && e.message));
+    if (prior !== 'rejected') notifyResultAnnouncement(st, found.app).catch((e) => console.error('[mail] eo result-announcement email failed:', e && e.message));
     res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=reject');
   } catch (e) { next(e); }
 });
@@ -3251,13 +3251,14 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
       patch.status = 'rejected';
     }
     await st.updateApplication(req.params.id, patch);
-    // On the first approval (transition into approved), email the talent their placement.
-    // Fire-and-forget: a mail hiccup must never block or fail the approval itself.
+    // Man Power result is announced via the 20FIT App: on the first approve OR reject
+    // (status transition), email the talent to open the app to see the announcement.
+    // Generic + app-first — no station in the email (it stays on the web dashboard).
+    // Fire-and-forget: a mail hiccup must never block or fail the review action.
     if (action === 'approve' && prior && !alreadyApproved) {
-      notifyAcceptance(st, prior, patch).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+      notifyResultAnnouncement(st, prior).catch((e) => console.error('[mail] result-announcement (mp approve) email failed:', e && e.message));
     } else if (action === 'reject' && prior && !alreadyRejected) {
-      const ev = (await st.listEvents()).find((e) => e.id === prior.event_id);
-      notifyPositionRejection(st, prior, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
+      notifyResultAnnouncement(st, prior).catch((e) => console.error('[mail] result-announcement (mp reject) email failed:', e && e.message));
     }
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
@@ -3523,7 +3524,7 @@ app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     await st.addStatusLog(app.id, prior, 'rejected', req.staff.id, actor || null).catch((e) => console.error('[log] reject failed:', e && e.message));
-    if (prior !== 'rejected') notifyDecisionRejected(st, app).catch((e) => console.error('[mail] decision(rejected) email failed:', e && e.message));
+    if (prior !== 'rejected') notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app.event_id) + '&done=reject');
   } catch (e) { next(e); }
 });
@@ -3630,16 +3631,16 @@ async function notifyDecision(st, app, ev) {
   });
 }
 
-// LAPIS 2: a talent whose application was finally REJECTED in the decision meeting.
-// Generic + app-first — the email never names the position; the talent opens the
-// 20FIT App to see the announcement (no web action needed). Best-effort. Wired only
-// to the explicit final-reject action — never to auto-decline or a talent's own
-// Decline (those flip status to 'rejected' for other reasons).
-async function notifyDecisionRejected(st, app) {
+// Generic "result is out — open the 20FIT App" announcement. App-first: never names
+// the position, needs no web action. Used for the position-based final REJECT and
+// for Man Power results (both accepted and not) — the app shows the announcement;
+// station/other details stay on the web. Best-effort. Wired only to explicit staff
+// decisions — never to auto-decline or a talent's own Decline.
+async function notifyResultAnnouncement(st, app) {
   const account = await st.getAccountById(app.talent_id);
   const to = account && account.login;
-  if (!to || !/@/.test(to)) { console.warn('[mail] decision(rejected) email skipped: talent has no email on file'); return; }
-  await mailer.sendDecisionRejectedEmail({ to, name: account.name });
+  if (!to || !/@/.test(to)) { console.warn('[mail] result-announcement email skipped: talent has no email on file'); return; }
+  await mailer.sendResultAnnouncementEmail({ to, name: account.name });
 }
 
 // Notify a talent their application was rejected (red email). Best-effort.
