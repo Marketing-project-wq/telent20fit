@@ -3501,14 +3501,15 @@ function apSummaryCards(L) {
 }
 function apBulkControls(L) {
   const t = (k) => tr(L, k);
-  return `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:10px">
+  // Inline (not a floating fixed bar) so it can never cover a card's own controls.
+  // The reject action + Clear appear right beside "Select all" once rows are picked.
+  return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
     <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
-  </div>
-  <div id="apBulkBar" hidden style="position:fixed;left:12px;right:12px;bottom:12px;z-index:900;max-width:620px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.22);padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap">
-    <span id="apBulkCount" style="font-weight:800"></span>
-    <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
-    <button type="button" id="apBulkClear" class="btn btn-ghost btn-sm">${t('bulk.clear')}</button>
+    <span id="apBulkBar" hidden style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
+      <button type="button" id="apBulkClear" class="btn btn-ghost btn-sm">${t('bulk.clear')}</button>
+    </span>
   </div>`;
 }
 function apBulkLogicJS(o) {
@@ -3525,7 +3526,7 @@ function apBulkLogicJS(o) {
   var apSumCards=[].slice.call(document.querySelectorAll('.ap-sum-card'));
   var apSumN={}; [].slice.call(document.querySelectorAll('.ap-sum-n')).forEach(function(b){ apSumN[b.getAttribute('data-k')]=b; });
   var apSelAll=document.getElementById('apSelectAll'),apSelCount=document.getElementById('apSelCount');
-  var apBar=document.getElementById('apBulkBar'),apBarCount=document.getElementById('apBulkCount'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel'),apClear=document.getElementById('apBulkClear');
+  var apBar=document.getElementById('apBulkBar'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel'),apClear=document.getElementById('apBulkClear');
   function apFill(t,n){ return String(t).split('{n}').join(n); }
   function apSummaryRefresh(){
     var c={accepted:0,notaccepted:0,pending:0};
@@ -3538,7 +3539,7 @@ function apBulkLogicJS(o) {
     var vis=apVisRej(); var chk=vis.filter(function(it){ return it.querySelector('.ap-cb').checked; });
     if(apSelAll){ apSelAll.checked=vis.length>0&&chk.length===vis.length; apSelAll.indeterminate=chk.length>0&&chk.length<vis.length; }
     if(apSelCount)apSelCount.textContent=chk.length?apFill(${S(o.selectedTpl)},chk.length):'';
-    if(apBar){ if(chk.length){ apBar.hidden=false; if(apBarCount)apBarCount.textContent=apFill(${S(o.selectedTpl)},chk.length); if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); try{document.body.style.paddingBottom=(apBar.offsetHeight+24)+'px';}catch(e){} } else { apBar.hidden=true; try{document.body.style.paddingBottom='';}catch(e){} } }
+    if(apBar){ if(chk.length){ apBar.hidden=false; if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else { apBar.hidden=true; } }
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
   if(apSelAll)apSelAll.addEventListener('change',function(){
