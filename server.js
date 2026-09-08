@@ -2634,7 +2634,7 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
       await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
       // Email the talent their acceptance only on the first approval (mirrors the
       // admin path's no-spam rule; re-accepting a different position won't resend).
-      if (!wasApproved) notifyPositionAcceptance(st, found.app, found.ev, positionId).catch((e) => console.error('[mail] EO acceptance email failed:', e && e.message));
+      if (!wasApproved) notifyResultAnnouncement(st, found.app).catch((e) => console.error('[mail] EO result-announcement email failed:', e && e.message));
       return 'ok';
     });
     if (outcome === 'full') return res.redirect(next || (backTo + '&err=full'));
@@ -2653,7 +2653,7 @@ app.post('/eo/events/:id/applicants/:appId/reject', requireEo, async (req, res, 
     const wasRejected = found.app.status === 'rejected';
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-    if (!wasRejected) notifyPositionRejection(st, found.app, found.ev).catch((e) => console.error('[mail] EO rejection email failed:', e && e.message));
+    if (!wasRejected) notifyResultAnnouncement(st, found.app).catch((e) => console.error('[mail] EO result-announcement email failed:', e && e.message));
     res.redirect(safeNext(req.body.next) || ('/eo/events/' + found.ev.id + '?lang=' + req.lang + '&ok=rejected'));
   } catch (e) { next(e); }
 });
@@ -3275,8 +3275,7 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
       await st.acceptApplicationChoice(app.id, positionId);
       await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
       await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
-      if (!wasApproved && ev) notifyPositionAcceptance(st, app, ev, positionId).catch((e) => console.error('[mail] acceptance email failed:', e && e.message));
+      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
     });
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
@@ -3291,10 +3290,7 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
     const wasRejected = app.status === 'rejected';
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-    if (!wasRejected) {
-      const ev = (await st.listEvents()).find((e) => e.id === app.event_id);
-      notifyPositionRejection(st, app, ev).catch((e) => console.error('[mail] rejection email failed:', e && e.message));
-    }
+    if (!wasRejected) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -3515,22 +3511,6 @@ app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin
   } catch (e) { next(e); }
 });
 
-// Email an approved talent their placement (event, location, station). Best-effort.
-async function notifyAcceptance(st, app, patch) {
-  const account = await st.getAccountById(app.talent_id);
-  const to = account && account.login;
-  if (!to || !/@/.test(to)) return; // no usable email on file
-  const ev = (await st.listEvents()).find((e) => e.id === app.event_id) || {};
-  await mailer.sendAcceptanceEmail({
-    to, name: account.name, lang: 'en',
-    eventName: ev.name || 'Event 20FIT',
-    eventDate: eventDateStrEn(ev),
-    location: ev.location || null,
-    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
-    station: patch.station, stationLoc: patch.station_loc,
-  });
-}
-
 // Fire-and-forget "Application Received" email the moment a talent submits a NEW
 // application (status Applied). Always English + generic (no event/position).
 // Logs the outcome clearly — sent / not-delivered / failed — so a send that fails
@@ -3544,27 +3524,6 @@ function notifyApplicationReceived(account) {
       else console.log('[mail] application-received sent to ' + to);
     })
     .catch((err) => console.error('[mail] application-received send FAILED for ' + to + ': ' + (err && err.message)));
-}
-
-// Email a talent whose EO/admin accepted them into a position, asking them to
-// confirm their spot (Agree on their profile → Assigned). Always English, per spec.
-// Best-effort — never blocks the accept response.
-async function notifyPositionAcceptance(st, app, ev, positionId) {
-  const account = await st.getAccountById(app.talent_id);
-  const to = account && account.login;
-  if (!to || !/@/.test(to)) return; // no usable email on file
-  let posLabel = 'Position';
-  try {
-    const positions = await st.listEventPositions(ev.id);
-    const pos = positions.find((p) => p.position_id === positionId);
-    if (pos) posLabel = pos.custom_label_en || pos.custom_label || pos.label_en || pos.label_id || 'Position';
-  } catch (_) { /* position label is best-effort */ }
-  await mailer.sendSpotConfirmEmail({
-    to, name: account.name,
-    eventName: ev.name || 'Event 20FIT',
-    positionName: posLabel,
-    eventDate: eventDateStrEn(ev),
-  });
 }
 
 // Point 4: email the event's WhatsApp/Telegram group link to its Assigned talents.
@@ -3613,20 +3572,6 @@ async function notifyResultAnnouncement(st, app) {
   const to = account && account.login;
   if (!to || !/@/.test(to)) { console.warn('[mail] result-announcement email skipped: talent has no email on file'); return; }
   await mailer.sendResultAnnouncementEmail({ to, name: account.name });
-}
-
-// Notify a talent their application was rejected (red email). Best-effort.
-async function notifyPositionRejection(st, app, ev) {
-  const account = await st.getAccountById(app.talent_id);
-  const to = account && account.login;
-  if (!to || !/@/.test(to)) return; // no usable email on file
-  await mailer.sendRejectionEmail({
-    to, name: account.name, lang: 'id',
-    eventName: (ev && ev.name) || 'Event 20FIT',
-    eventDate: ev ? eventDateStr(ev) : null,
-    location: (ev && ev.location) || null,
-    category: V.CAT_LABEL[app.talent_type] || app.talent_type,
-  });
 }
 
 // --- H-1 event reminders --------------------------------------------------
@@ -3812,9 +3757,9 @@ app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin
     let flash = 'error';
     if (app && app.status === 'approved') {
       try {
-        await notifyAcceptance(st, app, { station: app.station, station_loc: app.station_loc });
+        await notifyResultAnnouncement(st, app);
         flash = mailer.configured() ? 'sent' : 'mock';
-      } catch (e) { console.error('[mail] resend acceptance failed:', e && e.message); flash = 'error'; }
+      } catch (e) { console.error('[mail] resend result-announcement failed:', e && e.message); flash = 'error'; }
     }
     res.redirect('/admin/applications?mail=' + flash);
   } catch (e) { next(e); }
