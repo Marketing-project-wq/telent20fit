@@ -2913,7 +2913,7 @@ app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next)
       await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
       await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
       await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] eo accept failed:', e && e.message));
-      if (!wasApproved) notifyDecision(st, app, found.ev).catch((e) => console.error('[mail] eo decision email failed:', e && e.message));
+      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] eo result-announcement email failed:', e && e.message));
     });
     res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=accept');
   } catch (e) { next(e); }
@@ -3491,8 +3491,7 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
       await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
       await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
       await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] accept failed:', e && e.message));
-      const evx = (await st.listEvents()).find((e) => e.id === app.event_id);
-      if (!wasApproved && evx) notifyDecision(st, app, evx).catch((e) => console.error('[mail] decision email failed:', e && e.message));
+      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
     });
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + '&done=accept');
   } catch (e) { next(e); }
@@ -3602,20 +3601,6 @@ async function notifyGroupForAssigned(st, ev, opts = {}) {
     }
   }
   return sent;
-}
-
-// LAPIS 2: a talent whose application was finally ACCEPTED in the decision
-// meeting. Deliberately generic — the email never names the position; the talent
-// must log in (within 48h) to see their placement and respond. Best-effort.
-async function notifyDecision(st, app, ev) {
-  const account = await st.getAccountById(app.talent_id);
-  const to = account && account.login;
-  if (!to || !/@/.test(to)) { console.warn('[mail] decision email skipped: talent has no email on file'); return; }
-  await mailer.sendDecisionEmail({
-    to, name: account.name,
-    eventName: (ev && ev.name) || 'Event 20FIT',
-    eventDate: ev ? eventDateStrEn(ev) : null,
-  });
 }
 
 // Generic "result is out — open the 20FIT App" announcement. App-first: never names
