@@ -3506,7 +3506,7 @@ function apBulkControls(L) {
   // reads normally. The toggle reveals the panel; in that state it becomes "Cancel"
   // and hides everything again. All inline (no floating bar) so nothing covers a card.
   return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">
-    <button type="button" id="apBulkToggle" class="btn btn-ghost btn-sm">☑️ <span id="apBulkToggleLabel">${t('bulk.selectMode')}</span></button>
+    <button type="button" id="apBulkToggle" class="btn btn-ghost btn-sm" title="${esc(t('bulk.selectMode'))}" aria-label="${esc(t('bulk.selectMode'))}"><span id="apBulkToggleLabel" style="font-size:16px;line-height:1">⋮</span></button>
     <span id="apBulkPanel" hidden style="display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap">
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
       <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
@@ -3533,7 +3533,7 @@ function apBulkLogicJS(o) {
   var apBar=document.getElementById('apBulkBar'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel');
   var apBulkToggle=document.getElementById('apBulkToggle'),apBulkToggleLabel=document.getElementById('apBulkToggleLabel'),apBulkPanel=document.getElementById('apBulkPanel');
   // Show/hide the whole selection UI (panel + per-row checkboxes) for the current mode.
-  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.hidden=!apSelMode; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; applySelMode(); }
+  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.hidden=!apSelMode; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?('✕ '+${S(o.cancelLabel)}):'⋮'; if(apBulkToggle){ var tt=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; apBulkToggle.title=tt; apBulkToggle.setAttribute('aria-label',tt); } applySelMode(); }
   function apFill(t,n){ return String(t).split('{n}').join(n); }
   function apSummaryRefresh(){
     var c={accepted:0,notaccepted:0,pending:0};
