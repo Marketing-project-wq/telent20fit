@@ -420,6 +420,19 @@ app.get('/', async (req, res, next) => {
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 
+// "Open the 20FIT App" smart redirect used by the Approved/Rejected result emails.
+// Device-detects from the User-Agent: Android → Play Store (once configured),
+// everything else (iOS, desktop, unknown) → App Store. Destinations are fixed and
+// config-driven (no open-redirect from user input). Set PLAY_STORE_URL when the
+// Android listing exists; until then Android also falls back to the App Store.
+const APP_STORE_URL = (process.env.APP_STORE_URL || 'https://apps.apple.com/id/app/20fit-indonesia/id1475504793?l=id').trim();
+const PLAY_STORE_URL = (process.env.PLAY_STORE_URL || '').trim();
+app.get('/app', (req, res) => {
+  const ua = String(req.headers['user-agent'] || '').toLowerCase();
+  const dest = (/android/.test(ua) && PLAY_STORE_URL) ? PLAY_STORE_URL : APP_STORE_URL;
+  res.redirect(302, dest);
+});
+
 // Public sign-up / sign-in: a single account form, no talent-type picker.
 // New accounts default to KOL; login resolves the account by email across all
 // talent types and lands each on the dashboard for their type. Admin & EO still
@@ -2929,6 +2942,7 @@ app.post('/eo/applicants/:appId/final-reject', requireEo, async (req, res, next)
     await st.clearApplicationAccepted(found.app.id);
     await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     await st.addStatusLog(found.app.id, prior, 'rejected', req.staff.id, actor || null).catch(() => {});
+    if (prior !== 'rejected') notifyDecisionRejected(st, found.app).catch((e) => console.error('[mail] eo decision(rejected) email failed:', e && e.message));
     res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=reject');
   } catch (e) { next(e); }
 });
@@ -3509,6 +3523,7 @@ app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin
     await st.clearApplicationAccepted(app.id);
     await st.updateApplication(app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
     await st.addStatusLog(app.id, prior, 'rejected', req.staff.id, actor || null).catch((e) => console.error('[log] reject failed:', e && e.message));
+    if (prior !== 'rejected') notifyDecisionRejected(st, app).catch((e) => console.error('[mail] decision(rejected) email failed:', e && e.message));
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app.event_id) + '&done=reject');
   } catch (e) { next(e); }
 });
@@ -3613,6 +3628,18 @@ async function notifyDecision(st, app, ev) {
     eventName: (ev && ev.name) || 'Event 20FIT',
     eventDate: ev ? eventDateStrEn(ev) : null,
   });
+}
+
+// LAPIS 2: a talent whose application was finally REJECTED in the decision meeting.
+// Generic + app-first — the email never names the position; the talent opens the
+// 20FIT App to see the announcement (no web action needed). Best-effort. Wired only
+// to the explicit final-reject action — never to auto-decline or a talent's own
+// Decline (those flip status to 'rejected' for other reasons).
+async function notifyDecisionRejected(st, app) {
+  const account = await st.getAccountById(app.talent_id);
+  const to = account && account.login;
+  if (!to || !/@/.test(to)) { console.warn('[mail] decision(rejected) email skipped: talent has no email on file'); return; }
+  await mailer.sendDecisionRejectedEmail({ to, name: account.name });
 }
 
 // Notify a talent their application was rejected (red email). Best-effort.
