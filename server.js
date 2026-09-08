@@ -2762,6 +2762,20 @@ async function eoCardOrRedirect(req, res, st, back) {
   return res.redirect(back);
 }
 
+// EO: reject many undecided applications at once (from the "Pending" bulk-select
+// flow), scoped to this EO's own events and guarded to Applied/Under Review only.
+app.post('/eo/applicants/bulk-reject', requireEo, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ids = String(req.body.ids || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const allEvents = await st.listEvents();
+    const myIds = new Set(allEvents.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
+    const rejected = await bulkRejectApps(st, ids, req.staff.id, cleanReviewer(req.body.actor_name), myIds);
+    res.json({ ok: true, rejected });
+  } catch (e) { next(e); }
+});
+
 app.post('/eo/applicants/:appId/propose', requireEo, async (req, res, next) => {
   try {
     const st = db(); if (!st) return needConfig(req, res);
@@ -3295,6 +3309,18 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
   } catch (e) { next(e); }
 });
 
+// Super admin: reject many undecided applications at once (from the "Pending"
+// bulk-select flow). Guarded server-side to Applied/Under Review only. Returns JSON.
+app.post('/admin/applications/bulk-reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const ids = String(req.body.ids || '').split(',').map((s) => s.trim()).filter(Boolean);
+    const rejected = await bulkRejectApps(st, ids, req.staff.id, cleanReviewer(req.body.actor_name), null);
+    res.json({ ok: true, rejected });
+  } catch (e) { next(e); }
+});
+
 app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
@@ -3560,6 +3586,31 @@ async function notifyGroupForAssigned(st, ev, opts = {}) {
     }
   }
   return sent;
+}
+
+// Bulk-reject a set of still-undecided applications. Server-side guard: only
+// Applied / Under Review / pending can be rejected here — never Approved, Assigned,
+// Completed or already Rejected — so a crafted request can't reject a confirmed
+// talent. clearApplicationAccepted reopens any held quota (a no-op for undecided
+// apps); each rejected talent gets the neutral result email. Optional allowEventIds
+// scopes the action to an EO's own events. Returns how many were actually rejected.
+async function bulkRejectApps(st, ids, staffId, actor, allowEventIds) {
+  const wanted = new Set((ids || []).map((x) => String(x)).filter(Boolean));
+  if (!wanted.size) return 0;
+  const apps = await st.listApplications();
+  let n = 0;
+  for (const a of apps) {
+    if (!wanted.has(String(a.id))) continue;
+    if (allowEventIds && !allowEventIds.has(a.event_id)) continue; // not this EO's event
+    if (!['applied', 'under_review', 'pending'].includes(a.status)) continue; // only undecided
+    const prior = a.status;
+    await st.clearApplicationAccepted(a.id);
+    await st.updateApplication(a.id, { status: 'rejected', reviewed_by: staffId, reviewed_at: new Date().toISOString() });
+    await st.addStatusLog(a.id, prior, 'rejected', staffId, actor || null).catch((e) => console.error('[log] bulk reject failed:', e && e.message));
+    notifyResultAnnouncement(st, a).catch((e) => console.error('[mail] bulk result-announcement email failed:', e && e.message));
+    n++;
+  }
+  return n;
 }
 
 // Generic "result is out — open the 20FIT App" announcement. App-first: never names
