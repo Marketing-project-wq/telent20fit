@@ -3516,7 +3516,12 @@ function apBulkLogicJS(o) {
   return `
   function bucketOf(s){ return (s==='approved'||s==='assigned'||s==='completed')?'accepted':(s==='rejected'?'notaccepted':'pending'); }
   function apItems(){ return ${o.itemsExpr}; }
-  function apVisRej(){ return apItems().filter(function(it){ return it.offsetParent!==null && it.querySelector('.ap-cb'); }); }
+  // Selection mode: per-row checkboxes stay hidden until "Select all" turns it on,
+  // so the default list stays clean. apVisRej is empty while off, so nothing counts
+  // as selectable and the floating bar never shows.
+  var apSelMode=false;
+  function applySelMode(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.style.display=apSelMode?'':'none'; }); }
+  function apVisRej(){ if(!apSelMode)return []; return apItems().filter(function(it){ return it.offsetParent!==null && it.querySelector('.ap-cb'); }); }
   var apSumCards=[].slice.call(document.querySelectorAll('.ap-sum-card'));
   var apSumN={}; [].slice.call(document.querySelectorAll('.ap-sum-n')).forEach(function(b){ apSumN[b.getAttribute('data-k')]=b; });
   var apSelAll=document.getElementById('apSelectAll'),apSelCount=document.getElementById('apSelCount');
@@ -3536,9 +3541,13 @@ function apBulkLogicJS(o) {
     if(apBar){ if(chk.length){ apBar.hidden=false; if(apBarCount)apBarCount.textContent=apFill(${S(o.selectedTpl)},chk.length); if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); try{document.body.style.paddingBottom=(apBar.offsetHeight+24)+'px';}catch(e){} } else { apBar.hidden=true; try{document.body.style.paddingBottom='';}catch(e){} } }
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
-  if(apSelAll)apSelAll.addEventListener('change',function(){ apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=apSelAll.checked; }); apSummaryRefresh(); });
+  if(apSelAll)apSelAll.addEventListener('change',function(){
+    if(apSelAll.checked){ apSelMode=true; applySelMode(); apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=true; }); }
+    else { apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSelMode=false; applySelMode(); }
+    apSummaryRefresh();
+  });
   document.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ap-cb'))apSummaryRefresh(); });
-  if(apClear)apClear.addEventListener('click',function(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSummaryRefresh(); });
+  if(apClear)apClear.addEventListener('click',function(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSelMode=false; applySelMode(); apSummaryRefresh(); });
   if(apRejectBtn)apRejectBtn.addEventListener('click',function(){
     var chk=apVisRej().filter(function(it){ return it.querySelector('.ap-cb').checked; });
     if(!chk.length)return;
@@ -3553,11 +3562,12 @@ function apBulkLogicJS(o) {
           var cb=it.querySelector('.ap-cb'); if(cb)cb.remove();
           var pill=it.querySelector('.ap-status-pill'); if(pill)pill.innerHTML=${S('<span class="pill" style="background:var(--err-soft);color:var(--err)">')}+${S(o.rejectedLabel)}+${S('</span>')};
         });
-        apRejectBtn.disabled=false; apply();
+        apRejectBtn.disabled=false; apSelMode=false; applySelMode(); apply();
         try{ window.alert(apFill(${S(o.doneTpl)},(j&&j.rejected)||0)); }catch(e){}
       })
       .catch(function(){ apRejectBtn.disabled=false; try{ window.alert(${S(o.errorMsg)}); }catch(e){} });
   });
+  applySelMode();
   apSummaryRefresh();
 `;
 }
