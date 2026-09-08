@@ -2209,11 +2209,15 @@ app.get('/eo/talents/export.csv', requireEo, async (req, res, next) => {
       const p1key = (chl[0] && chl[0].key) || '';
       const fol = (tt.instagram_followers != null && tt.instagram_followers !== '') ? parseInt(tt.instagram_followers, 10) : null;
       const prStatus = (proposalsByApp.get(a.id) || []).length ? 'proposed' : ((reviewsByApp.get(a.id) || []).length ? 'reviewednp' : 'unreviewed');
+      const reviewer = Array.from(new Set([
+        ...(proposalsByApp.get(a.id) || []).map((p) => p.reviewer_name),
+        ...(reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name),
+      ].filter(Boolean))).join('; ');
       rows.push({
         eventId: a.event_id, cat: catKeyOf(p1key), p1key,
-        name: tt.name || '', email: tt.login || '',
+        name: tt.name || '', email: tt.login || '', phone: tt.phone || '',
         positions: chl.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
-        status: a.status || 'applied', prStatus,
+        status: a.status || 'applied', prStatus, reviewer,
         event: eventName.get(a.event_id) || '',
         fol: (fol != null && !isNaN(fol)) ? fol : null,
         pct: V.profileStrength(tt).pct,
@@ -2245,12 +2249,13 @@ app.get('/eo/talents/export.csv', requireEo, async (req, res, next) => {
     });
     const catLabel = { kol: req.t('filter.cat.kol'), creative: req.t('filter.cat.creative'), manpower: req.t('filter.cat.manpower') };
     const prLabel = { proposed: req.t('mpr2.prProposed'), reviewednp: req.t('mpr2.prReviewedNp'), unreviewed: req.t('mpr2.prUnreviewed') };
-    const headers = ['export.col.name', 'export.col.email', 'export.col.category', 'export.col.positions', 'export.col.status', 'export.col.proposal', 'export.col.event', 'export.col.followers', 'export.col.completeness', 'export.col.applied'].map((k) => req.t(k));
+    const headers = ['export.col.name', 'export.col.email', 'export.col.phone', 'export.col.category', 'export.col.positions', 'export.col.event', 'export.col.applied', 'export.col.status', 'export.col.completeness', 'export.col.followers', 'export.col.reviewer', 'export.col.proposal'].map((k) => req.t(k));
     const data = out.map((r) => [
-      r.name, r.email, catLabel[r.cat] || r.cat, r.positions,
-      req.t('ta.status.' + r.status), prLabel[r.prStatus] || '',
-      r.event, (r.fol != null ? r.fol : ''), r.pct,
+      r.name, r.email, csvExcelText(normPhoneIntl(r.phone)),
+      catLabel[r.cat] || r.cat, r.positions, r.event,
       (r.created ? new Date(r.created).toISOString().slice(0, 10) : ''),
+      req.t('ta.status.' + r.status), r.pct, (r.fol != null ? r.fol : ''),
+      r.reviewer, prLabel[r.prStatus] || '',
     ]);
     const fn = 'talents-' + new Date().toISOString().slice(0, 10) + '.csv';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -3946,6 +3951,32 @@ function toCsv(headers, rows) {
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
 
+// Normalize a phone number to a consistent +62 international form for exports.
+// Keeps an explicit non-+62 country code; falls back to the original when there's
+// nothing numeric. Display-only — never mutates the stored profile value.
+//   08123... -> +628123...   62123... -> +62123...   +62123... -> +62123...
+function normPhoneIntl(raw) {
+  if (raw == null) return '';
+  const orig = String(raw).trim();
+  if (!orig) return '';
+  const hadPlus = orig[0] === '+';
+  const d = orig.replace(/[^0-9]/g, '');
+  if (!d) return orig;
+  if (hadPlus) return '+' + d;               // already international (+62…, +1…, …)
+  if (d.startsWith('00')) return '+' + d.slice(2); // 00<cc> international prefix
+  if (d.startsWith('62')) return '+' + d;    // Indonesia country code, no +
+  if (d.startsWith('0')) return '+62' + d.slice(1); // local 0-prefixed
+  return '+62' + d;                          // bare local digits — assume Indonesia
+}
+
+// Force a value to render as TEXT in Excel/Sheets (no scientific notation, no lost
+// leading 0). Emits ="value", which spreadsheets read as the literal string; toCsv()
+// then RFC-4180-escapes the quotes. Empty stays empty. Safe: phone is +digits only.
+function csvExcelText(v) {
+  const s = (v == null) ? '' : String(v);
+  return s === '' ? '' : '="' + s + '"';
+}
+
 // Super admin: export the applicant list (scoped to the Talent Category tab) as
 // CSV, including the Instagram follower count. Honors the same filters/sort the
 // page keeps in the query string (status, position, proposal, search, min/max
@@ -3976,11 +4007,15 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
       const p1key = (ch[0] && ch[0].key) || '';
       const fol = (tt.instagram_followers != null && tt.instagram_followers !== '') ? parseInt(tt.instagram_followers, 10) : null;
       const prStatus = (proposalsByApp.get(a.id) || []).length ? 'proposed' : ((reviewsByApp.get(a.id) || []).length ? 'reviewednp' : 'unreviewed');
+      const reviewer = Array.from(new Set([
+        ...(proposalsByApp.get(a.id) || []).map((p) => p.reviewer_name),
+        ...(reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name),
+      ].filter(Boolean))).join('; ');
       return {
         cat: catKeyOf(p1key || a.talent_type), p1key,
-        name: tt.name || '', email: tt.login || '',
+        name: tt.name || '', email: tt.login || '', phone: tt.phone || '',
         positions: ch.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
-        status: a.status || 'applied', prStatus,
+        status: a.status || 'applied', prStatus, reviewer,
         event: eventName.get(a.event_id) || '',
         fol: (fol != null && !isNaN(fol)) ? fol : null,
         pct: V.profileStrength(tt).pct,
@@ -4011,12 +4046,13 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
     });
     const catLabel = { kol: req.t('filter.cat.kol'), creative: req.t('filter.cat.creative'), man_power: req.t('filter.cat.manpower') };
     const prLabel = { proposed: req.t('mpr2.prProposed'), reviewednp: req.t('mpr2.prReviewedNp'), unreviewed: req.t('mpr2.prUnreviewed') };
-    const headers = ['export.col.name', 'export.col.email', 'export.col.category', 'export.col.positions', 'export.col.status', 'export.col.proposal', 'export.col.event', 'export.col.followers', 'export.col.completeness', 'export.col.applied'].map((k) => req.t(k));
+    const headers = ['export.col.name', 'export.col.email', 'export.col.phone', 'export.col.category', 'export.col.positions', 'export.col.event', 'export.col.applied', 'export.col.status', 'export.col.completeness', 'export.col.followers', 'export.col.reviewer', 'export.col.proposal'].map((k) => req.t(k));
     const data = out.map((r) => [
-      r.name, r.email, catLabel[r.cat] || r.cat, r.positions,
-      req.t('ta.status.' + r.status), prLabel[r.prStatus] || '',
-      r.event, (r.fol != null ? r.fol : ''), r.pct,
+      r.name, r.email, csvExcelText(normPhoneIntl(r.phone)),
+      catLabel[r.cat] || r.cat, r.positions, r.event,
       (r.created ? new Date(r.created).toISOString().slice(0, 10) : ''),
+      req.t('ta.status.' + r.status), r.pct, (r.fol != null ? r.fol : ''),
+      r.reviewer, prLabel[r.prStatus] || '',
     ]);
     const fn = 'applicants-' + cat + '-' + new Date().toISOString().slice(0, 10) + '.csv';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
