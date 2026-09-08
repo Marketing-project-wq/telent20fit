@@ -19,6 +19,8 @@ const API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const FROM = (process.env.RESET_EMAIL_FROM || '20FIT Talent <onboarding@resend.dev>').trim();
 // Public base URL for links inside emails (e.g. "View Application Status").
 const APP_BASE = (process.env.APP_BASE_URL || 'https://talent.20fit.id').replace(/\/+$/, '');
+// 20FIT App store link used by the "Open 20FIT App" button in result emails.
+const APP_LINK = (process.env.APP_STORE_URL || 'https://apps.apple.com/id/app/20fit-indonesia/id1475504793?l=id').trim();
 
 function configured() { return !!API_KEY; }
 
@@ -650,7 +652,7 @@ async function sendApplicationReceivedEmail({ to, name }) {
 // announcement and their next steps, then confirms their spot on the web dashboard
 // within 48 hours. The event name is included only as context. Always English.
 function decisionEmailHtml({ name, eventName, eventDate }) {
-  const appUrl = APP_BASE + '/app'; // smart redirect → App Store / Play Store by device
+  const appUrl = APP_LINK; // direct App Store link
   const evLine = eventName
     ? `<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#4a4e57">This concerns your application for <b>${esc(eventName)}</b>${eventDate ? ` <span style="color:#8b8f97">(${esc(eventDate)})</span>` : ''}.</p>`
     : '';
@@ -712,7 +714,7 @@ async function sendDecisionEmail({ to, name, eventName, eventDate }) {
 // — the app shows the announcement (e.g. the list of accepted names); station and
 // other details stay on the web. Neutral (not celebratory, not harsh). Always English.
 function resultAnnouncementEmailHtml({ name }) {
-  const appUrl = APP_BASE + '/app'; // smart redirect → App Store / Play Store by device
+  const appUrl = APP_LINK; // direct App Store link
   return `<!doctype html><html lang="en"><head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
