@@ -3487,6 +3487,80 @@ function mprReviewerBadges(a, L) {
 }
 // One EO applicant card. Module-level so the AJAX in-place update can re-render a
 // single card server-side (source of truth) after a propose/mark action.
+// --- Accepted / Not-Accepted / Pending summary + bulk select-and-reject, shared
+// by the EO and Super Admin applicant lists. apSummaryCards + apBulkControls render
+// the UI; apBulkLogicJS(cfg) returns JS embedded INSIDE each page's filter IIFE so
+// it shares that page's apply() and closure vars (apBucket + the status control).
+// The summary counts follow the base filters (category/position/event/proposal/
+// search/followers) and always show all three buckets; clicking a card drills the
+// list into that bucket. Bulk reject only offers checkboxes on undecided rows.
+function apSummaryCards(L) {
+  const t = (k) => tr(L, k);
+  const card = (b, label, bg, fg) => `<button type="button" class="ap-sum-card" data-bucket="${b}" title="${esc(label)}" style="flex:0 0 auto;display:flex;flex-direction:column;gap:2px;min-width:104px;text-align:left;padding:9px 14px;border-radius:12px;border:1.5px solid transparent;background:${bg};color:${fg};cursor:pointer;font:inherit"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;opacity:.9">${esc(label)}</span><b class="ap-sum-n" data-k="${b}" style="font-size:20px;line-height:1.15">0</b></button>`;
+  return `<div id="apSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${card('accepted', t('summary.accepted'), 'var(--ok-soft)', 'var(--ok)')}${card('notaccepted', t('summary.notAccepted'), 'var(--err-soft)', 'var(--err)')}${card('pending', t('summary.pending'), 'var(--warn-soft)', 'var(--warn)')}</div>`;
+}
+function apBulkControls(L) {
+  const t = (k) => tr(L, k);
+  return `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:10px">
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
+    <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
+  </div>
+  <div id="apBulkBar" hidden style="position:fixed;left:12px;right:12px;bottom:12px;z-index:900;max-width:620px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.22);padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap">
+    <span id="apBulkCount" style="font-weight:800"></span>
+    <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
+    <button type="button" id="apBulkClear" class="btn btn-ghost btn-sm">${t('bulk.clear')}</button>
+  </div>`;
+}
+function apBulkLogicJS(o) {
+  const S = (v) => JSON.stringify(v);
+  return `
+  function bucketOf(s){ return (s==='approved'||s==='assigned'||s==='completed')?'accepted':(s==='rejected'?'notaccepted':'pending'); }
+  function apItems(){ return ${o.itemsExpr}; }
+  function apVisRej(){ return apItems().filter(function(it){ return it.offsetParent!==null && it.querySelector('.ap-cb'); }); }
+  var apSumCards=[].slice.call(document.querySelectorAll('.ap-sum-card'));
+  var apSumN={}; [].slice.call(document.querySelectorAll('.ap-sum-n')).forEach(function(b){ apSumN[b.getAttribute('data-k')]=b; });
+  var apSelAll=document.getElementById('apSelectAll'),apSelCount=document.getElementById('apSelCount');
+  var apBar=document.getElementById('apBulkBar'),apBarCount=document.getElementById('apBulkCount'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel'),apClear=document.getElementById('apBulkClear');
+  function apFill(t,n){ return String(t).split('{n}').join(n); }
+  function apSummaryRefresh(){
+    var c={accepted:0,notaccepted:0,pending:0};
+    apItems().forEach(function(it){ if(it.getAttribute('data-basematch')!=='1')return; c[bucketOf(it.getAttribute('data-status'))]++; });
+    if(apSumN.accepted)apSumN.accepted.textContent=c.accepted;
+    if(apSumN.notaccepted)apSumN.notaccepted.textContent=c.notaccepted;
+    if(apSumN.pending)apSumN.pending.textContent=c.pending;
+    apSumCards.forEach(function(cd){ cd.style.borderColor=(cd.getAttribute('data-bucket')===apBucket)?'currentColor':'transparent'; });
+    apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb&&cb.checked&&it.offsetParent===null)cb.checked=false; });
+    var vis=apVisRej(); var chk=vis.filter(function(it){ return it.querySelector('.ap-cb').checked; });
+    if(apSelAll){ apSelAll.checked=vis.length>0&&chk.length===vis.length; apSelAll.indeterminate=chk.length>0&&chk.length<vis.length; }
+    if(apSelCount)apSelCount.textContent=chk.length?apFill(${S(o.selectedTpl)},chk.length):'';
+    if(apBar){ if(chk.length){ apBar.hidden=false; if(apBarCount)apBarCount.textContent=apFill(${S(o.selectedTpl)},chk.length); if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else apBar.hidden=true; }
+  }
+  apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
+  if(apSelAll)apSelAll.addEventListener('change',function(){ apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=apSelAll.checked; }); apSummaryRefresh(); });
+  document.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ap-cb'))apSummaryRefresh(); });
+  if(apClear)apClear.addEventListener('click',function(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSummaryRefresh(); });
+  if(apRejectBtn)apRejectBtn.addEventListener('click',function(){
+    var chk=apVisRej().filter(function(it){ return it.querySelector('.ap-cb').checked; });
+    if(!chk.length)return;
+    if(!window.confirm(apFill(${S(o.confirmTpl)},chk.length)))return;
+    var ids=chk.map(function(it){ return it.querySelector('.ap-cb').getAttribute('data-id'); }).filter(Boolean);
+    apRejectBtn.disabled=true;
+    fetch(${S(o.endpoint)},{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},body:'ids='+encodeURIComponent(ids.join(','))})
+      .then(function(r){ if(!r.ok)throw new Error('http'); return r.json(); })
+      .then(function(j){
+        chk.forEach(function(it){
+          it.setAttribute('data-status','rejected');
+          var cb=it.querySelector('.ap-cb'); if(cb)cb.remove();
+          var pill=it.querySelector('.ap-status-pill'); if(pill)pill.innerHTML=${S('<span class="pill" style="background:var(--err-soft);color:var(--err)">')}+${S(o.rejectedLabel)}+${S('</span>')};
+        });
+        apRejectBtn.disabled=false; apply();
+        try{ window.alert(apFill(${S(o.doneTpl)},(j&&j.rejected)||0)); }catch(e){}
+      })
+      .catch(function(){ apRejectBtn.disabled=false; try{ window.alert(${S(o.errorMsg)}); }catch(e){} });
+  });
+  apSummaryRefresh();
+`;
+}
 function eoApplicantCard(a, L) {
   const t = (k, v) => tr(L, k, v);
   const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
@@ -3501,14 +3575,15 @@ function eoApplicantCard(a, L) {
   const contact = (() => { const b = []; if (a.phone) b.push(`📱 ${esc(a.status === 'assigned' ? a.phone : maskPhone(a.phone))}`); if (a.instagram) b.push(`📷 @${esc(a.instagram)}`); if (a.city) b.push(`📍 ${esc(a.city)}`); if (a.login) b.push(`✉️ ${esc(a.login)}`); return b.length ? `<div class="muted" style="font-size:12.5px;margin-top:6px">${b.join(' · ')}</div>` : ''; })();
   const hyrox = a.hyroxStatus === 'verified' ? `<div style="margin-top:8px"><span class="pill pill-ok">🏅 ${t('eo.ap.hyroxOk')}</span></div>` : a.hyroxStatus === 'pending' ? `<div style="margin-top:8px"><span class="pill pill-off">🏅 ${t('eo.ap.hyroxPending')}</span></div>` : '';
   const chips = (a.choices || []).map((c) => { const on = c.accepted; const closed = !on && a.status === 'approved'; const style = on ? ';background:var(--ok-soft);color:var(--ok);font-weight:700' : (closed ? ';opacity:.5;text-decoration:line-through' : ''); return `<span class="tag" style="margin:0 6px 6px 0;display:inline-block${style}">P${c.priority} · ${esc(posOf(c))}${on ? ' ✓' : ''}</span>`; }).join('');
+  const rejectable = a.status === 'applied' || a.status === 'under_review' || a.status === 'pending';
   return `<div class="card ap-item" id="apc-${esc(a.id)}" ${dataAttrs} style="margin-top:12px;padding:14px 16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
       <div style="min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:15px">${esc(a.name)}</b>${mprReviewerBadges(a, L)}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${rejectable ? `<input type="checkbox" class="ap-cb" data-id="${esc(a.id)}" aria-label="select" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">` : ''}<b style="font-size:15px">${esc(a.name)}</b>${mprReviewerBadges(a, L)}</div>
         <div class="muted" style="font-size:12px;margin-top:2px">📅 <a href="/eo/events/${esc(a.eventId)}?lang=${L}" style="font-weight:600;color:inherit">${esc(a.eventName)}</a></div>
         ${fol != null ? `<div style="font-size:12.5px;margin-top:4px">👥 <span class="muted">${t('filter.followers')}:</span> <b>${fmtNum(fol)}</b></div>` : ''}
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}${talentStatusBadge(a.status, L)}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0">${strengthBadge(a.profile, L)}<span class="ap-status-pill">${talentStatusBadge(a.status, L)}</span></div>
     </div>
     ${contact}${hyrox}
     <div style="margin-top:10px">${chips}</div>
@@ -3623,17 +3698,20 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   ${!aps.length
     ? `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.ap.noneAll')}</p></div>`
     : `${reviewerBar}${decisionBtnRow}${controls}
+  ${apSummaryCards(L)}
+  ${apBulkControls(L)}
   <div id="apTalent">${talentCards}</div>
   <div id="apPosition" style="display:none">${posGroups}</div>
   <p class="muted" id="apNoMatch" style="margin-top:16px;display:none">${t('eo.ap.noMatch')}</p>`}
-</div>${eoApplicantsPageScript()}${mprReviewerScript(L)}`;
+</div>${eoApplicantsPageScript(L)}${mprReviewerScript(L)}`;
   return appLayout({ title: t('nav.talents') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
 }
 
 // Client-side filtering for the Applicants page: search + Event + Position +
 // Category + status, all combinable, plus the By-talent / By-position toggle.
 // Runs once on load so a pre-selected Event (via ?event=) applies immediately.
-function eoApplicantsPageScript() {
+function eoApplicantsPageScript(L) {
+  const t = (k, v) => tr(L, k, v);
   return `<script>
 (function(){
   var search=document.getElementById('apSearch'); if(!search) return;
@@ -3644,7 +3722,7 @@ function eoApplicantsPageScript() {
   var posSel=document.getElementById('apPosFilter'),catSel=document.getElementById('apCatFilter'),evSel=document.getElementById('apEventFilter'),prSel=document.getElementById('apPrFilter'),reset=document.getElementById('apReset');
   var sortSel=document.getElementById('apSort'),folMin=document.getElementById('apFolMin'),folMax=document.getElementById('apFolMax');
   var exportLink=document.getElementById('apExportCsv');
-  var flt='all', tab='talent';
+  var flt='all', tab='talent', apBucket='';
   // Numeric follower count of a card (null when the talent has none).
   function folNum(it){ var v=it.getAttribute('data-followers'); return (v===''||v==null)?null:parseInt(v,10); }
   // Keep the active filters in the URL (no reload) so they survive an in-place
@@ -3661,6 +3739,7 @@ function eoApplicantsPageScript() {
       if(folMin&&folMin.value.trim())p.set('fmin',folMin.value.trim());
       if(folMax&&folMax.value.trim())p.set('fmax',folMax.value.trim());
       if(flt&&flt!=='all')p.set('st',flt);
+      if(apBucket)p.set('bkt',apBucket);
       if(tab&&tab!=='talent')p.set('tab',tab);
       var qs=p.toString();
       history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
@@ -3675,9 +3754,24 @@ function eoApplicantsPageScript() {
     var mode=sortSel?sortSel.value:'new';
     var box=tab==='talent'?talentBox:posBox;
     var items=[].slice.call(box.querySelectorAll('.ap-item'));
+    // Base-match (every filter EXCEPT status/bucket) on each talent row, so the
+    // summary cards count within the current filter context no matter which
+    // status chip / bucket is active or which tab is showing.
+    if(talentBox){[].slice.call(talentBox.querySelectorAll('.ap-item')).forEach(function(it){
+      var bq=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
+      var bp=!pf||(it.getAttribute('data-p1pos')===pf);
+      var bc=!cf||(it.getAttribute('data-category')===cf);
+      var be=!ef||(it.getAttribute('data-event')===ef);
+      var bpr=!prf||(it.getAttribute('data-prstatus')===prf);
+      var bf=folNum(it),bok=true;
+      if(mn!=null)bok=(bf!=null&&bf>=mn);
+      if(bok&&mx!=null)bok=(bf!=null&&bf<=mx);
+      it.setAttribute('data-basematch',(bq&&bp&&bc&&be&&bpr&&bok)?'1':'0');
+    });}
     var shown=0;
     items.forEach(function(it){
       var okS=(flt==='all')||(it.getAttribute('data-status')===flt);
+      var okB=!apBucket||(typeof bucketOf!=='function')||(bucketOf(it.getAttribute('data-status'))===apBucket);
       var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
       var okP=!pf||(it.getAttribute('data-p1pos')===pf);
       var okC=!cf||(it.getAttribute('data-category')===cf);
@@ -3686,7 +3780,7 @@ function eoApplicantsPageScript() {
       var f=folNum(it),okF=true;
       if(mn!=null)okF=(f!=null&&f>=mn);
       if(okF&&mx!=null)okF=(f!=null&&f<=mx);
-      var vis=okS&&okQ&&okP&&okC&&okE&&okPr&&okF; it.style.display=vis?'':'none'; if(vis)shown++;
+      var vis=okS&&okB&&okQ&&okP&&okC&&okE&&okPr&&okF; it.style.display=vis?'':'none'; if(vis)shown++;
     });
     // By-talent: reorder the visible cards by the chosen sort. Followers sorts push
     // talents with no follower value to the bottom; ties (and the default) fall back
@@ -3708,9 +3802,10 @@ function eoApplicantsPageScript() {
     if(noMatch)noMatch.style.display=(shown===0)?'':'none';
     writeUrl();
     if(exportLink)exportLink.href='/eo/talents/export.csv'+location.search;
+    if(typeof apSummaryRefresh==='function')apSummaryRefresh();
   }
   search.addEventListener('input',apply);
-  statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apply();});});
+  statusChips.forEach(function(c){c.addEventListener('click',function(){statusChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');flt=c.getAttribute('data-apstatus');apBucket='';apply();});});
   if(posSel)posSel.addEventListener('change',apply);
   if(catSel)catSel.addEventListener('change',apply);
   if(evSel)evSel.addEventListener('change',apply);
@@ -3718,7 +3813,7 @@ function eoApplicantsPageScript() {
   if(sortSel)sortSel.addEventListener('change',apply);
   if(folMin)folMin.addEventListener('input',apply);
   if(folMax)folMax.addEventListener('input',apply);
-  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apply();});
+  if(reset)reset.addEventListener('click',function(){search.value='';flt='all';apBucket='';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});if(posSel)posSel.value='';if(catSel)catSel.value='';if(evSel)evSel.value='';if(prSel)prSel.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apply();});
   tabChips.forEach(function(c){c.addEventListener('click',function(){tabChips.forEach(function(x){x.classList.remove('is-on');});c.classList.add('is-on');tab=c.getAttribute('data-aptab');talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';apply();});});
   // Restore filters previously written to the URL.
   try{
@@ -3732,8 +3827,10 @@ function eoApplicantsPageScript() {
     if(folMin&&ip.has('fmin'))folMin.value=ip.get('fmin');
     if(folMax&&ip.has('fmax'))folMax.value=ip.get('fmax');
     if(ip.has('st')){flt=ip.get('st');statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')===flt);});}
+    if(ip.has('bkt'))apBucket=ip.get('bkt');
     if(ip.has('tab')){tab=ip.get('tab');tabChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-aptab')===tab);});talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';}
   }catch(e){}
+${apBulkLogicJS({ itemsExpr: "[].slice.call(talentBox.querySelectorAll('.ap-item'))", statusReset: "flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});", endpoint: '/eo/applicants/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
   apply();
 })();
 </script>`;
@@ -5834,16 +5931,17 @@ function adminApplicantCard(a, L, cat) {
   const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
   const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position')) : stationForm;
   const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
+  const rejectable = a.status === 'applied' || a.status === 'under_review' || a.status === 'pending';
   return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${rejectable ? `<input type="checkbox" class="ap-cb" data-id="${esc(a.id)}" aria-label="select" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">` : ''}<b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
           <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
           <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}${fol != null ? `<span class="muted" style="font-size:12px">·</span><span class="muted" style="font-size:12px">${t('filter.followers')}</span><b style="font-size:13px">${fmtNum(fol)}</b>` : ''}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
           ${posBlock}
         </div>
-        ${mpStatusBadge(a.status, L)}
+        <span class="ap-status-pill">${mpStatusBadge(a.status, L)}</span>
       </div>
       ${stationLine}
       ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -5989,7 +6087,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
-  ${applications.length ? reviewerBar + filterBar + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
+  ${applications.length ? apSummaryCards(L) + reviewerBar + filterBar + apBulkControls(L) + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
 </div>
 ${rvModal}
 <script>
@@ -6096,6 +6194,7 @@ ${rvModal}
   var exportLink=document.getElementById('admExportCsv');
   var items=[].slice.call(document.querySelectorAll('.adm-ap-item'));
   var folders=[].slice.call(document.querySelectorAll('.ev-folder'));
+  var apBucket='';
   // Keep the active filters in the URL (no reload) so they survive an in-place
   // action, a manual refresh, or leaving and coming back — and can be shared.
   // Starts from the current query so the server-scoped category ('cat') is kept.
@@ -6110,6 +6209,7 @@ ${rvModal}
       setp('sort',(sortSel&&sortSel.value!=='new')?sortSel.value:'');
       setp('fmin',folMin?folMin.value.trim():'');
       setp('fmax',folMax?folMax.value.trim():'');
+      setp('bkt',apBucket);
       var qs=p.toString();
       history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
     }catch(e){}
@@ -6122,16 +6222,20 @@ ${rvModal}
     var mx=(folMax&&folMax.value!=='')?parseInt(folMax.value,10):null;
     if(mn!=null&&isNaN(mn))mn=null; if(mx!=null&&isNaN(mx))mx=null;
     var mode=sortSel?sortSel.value:'new';
-    var shown=0,filtering=!!(p||s||pf||q||mn!=null||mx!=null);
+    var shown=0,filtering=!!(p||s||pf||q||mn!=null||mx!=null||apBucket);
     items.forEach(function(it){
       var okP=!p||it.getAttribute('data-p1pos')===p;
       var okS=!s||it.getAttribute('data-status')===s;
+      var okB=!apBucket||(typeof bucketOf!=='function')||(bucketOf(it.getAttribute('data-status'))===apBucket);
       var okPr=!pf||it.getAttribute('data-prstatus')===pf;
       var okQ=!q||(it.getAttribute('data-search')||'').indexOf(q)>=0;
       var f=folNum(it),okF=true;
       if(mn!=null)okF=(f!=null&&f>=mn);
       if(okF&&mx!=null)okF=(f!=null&&f<=mx);
-      var vis=okP&&okS&&okPr&&okQ&&okF;it.style.display=vis?'':'none';if(vis)shown++;
+      // Base-match = every filter EXCEPT status/bucket, so summary cards count
+      // within the current filter context regardless of the active status/bucket.
+      it.setAttribute('data-basematch',(okP&&okPr&&okQ&&okF)?'1':'0');
+      var vis=okP&&okS&&okB&&okPr&&okQ&&okF;it.style.display=vis?'':'none';if(vis)shown++;
     });
     // Reorder the visible rows within each event folder by the chosen sort. For a
     // followers sort, rows with no follower value sort to the bottom; ties (and the
@@ -6156,15 +6260,16 @@ ${rvModal}
     if(nm)nm.style.display=shown===0?'':'none';
     writeUrl();
     if(exportLink)exportLink.href='/admin/applications/export.csv'+location.search;
+    if(typeof apSummaryRefresh==='function')apSummaryRefresh();
   }
   if(pos)pos.addEventListener('change',apply);
-  if(st)st.addEventListener('change',apply);
+  if(st)st.addEventListener('change',function(){apBucket='';apply();});
   if(pr)pr.addEventListener('change',apply);
   if(sr)sr.addEventListener('input',apply);
   if(sortSel)sortSel.addEventListener('change',apply);
   if(folMin)folMin.addEventListener('input',apply);
   if(folMax)folMax.addEventListener('input',apply);
-  if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apply();});
+  if(rs)rs.addEventListener('click',function(){if(pos)pos.value='';if(st)st.value='';if(pr)pr.value='';if(sr)sr.value='';if(sortSel)sortSel.value='new';if(folMin)folMin.value='';if(folMax)folMax.value='';apBucket='';apply();});
   // Switching Talent Category re-scopes the list on the server (full navigation);
   // carry the other filters + sort along so they don't reset.
   if(catNav)catNav.addEventListener('change',function(){
@@ -6178,13 +6283,14 @@ ${rvModal}
     if(sortSel&&sortSel.value!=='new')p.set('sort',sortSel.value);
     if(folMin&&folMin.value.trim())p.set('fmin',folMin.value.trim());
     if(folMax&&folMax.value.trim())p.set('fmax',folMax.value.trim());
+    if(apBucket)p.set('bkt',apBucket);
     location.href='/admin/applications?'+p.toString();
   });
   // Restore filters/sort previously written to the URL, then apply once so a
   // shared/refreshed link reflects them (untouched pristine view keeps server order).
   try{
     var ip=new URLSearchParams(location.search);
-    var had=ip.has('pos')||ip.has('st')||ip.has('pr')||ip.has('q')||ip.has('sort')||ip.has('fmin')||ip.has('fmax');
+    var had=ip.has('pos')||ip.has('st')||ip.has('pr')||ip.has('q')||ip.has('sort')||ip.has('fmin')||ip.has('fmax')||ip.has('bkt');
     if(pos&&ip.has('pos'))pos.value=ip.get('pos');
     if(st&&ip.has('st'))st.value=ip.get('st');
     if(pr&&ip.has('pr'))pr.value=ip.get('pr');
@@ -6192,6 +6298,7 @@ ${rvModal}
     if(sortSel&&ip.has('sort'))sortSel.value=ip.get('sort');
     if(folMin&&ip.has('fmin'))folMin.value=ip.get('fmin');
     if(folMax&&ip.has('fmax'))folMax.value=ip.get('fmax');
+    if(ip.has('bkt'))apBucket=ip.get('bkt');
     if(had)apply();
   }catch(e){}
 
@@ -6216,6 +6323,7 @@ ${rvModal}
     });
   });
 
+${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
   renderChips();
   fillNames();
   apply();

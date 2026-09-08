@@ -653,6 +653,7 @@ function memoryStore() {
   const applicationChoices = [];
   const proposals = []; // LAPIS 1 reviewer proposals: { application_id, position_id, reviewer_name, note, created_at }
   const reviewMarks = []; // "reviewed, not proposed" marks: { application_id, reviewer_name, created_at }
+  const statusLogs = []; // status transitions: { id, application_id, from_status, to_status, changed_by, actor_name, changed_at }
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
@@ -807,6 +808,11 @@ function memoryStore() {
     async listChoicesForApplication(applicationId) { return applicationChoices.filter((c) => c.application_id === applicationId).map((c) => ({ ...c })).sort((a, b) => a.priority - b.priority); },
     async acceptApplicationChoice(applicationId, positionId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); }); },
     async clearApplicationAccepted(applicationId) { applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = false; }); },
+    async addStatusLog(applicationId, fromStatus, toStatus, changedBy, actorName) {
+      statusLogs.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: fromStatus || null, to_status: toStatus, changed_by: changedBy || null, actor_name: actorName || null, changed_at: now() });
+    },
+    async listStatusLogForApplication(applicationId) { return statusLogs.filter((l) => l.application_id === applicationId).map((l) => ({ ...l })); },
+    async listStatusLogs() { return statusLogs.map((l) => ({ ...l })); },
     async deleteApplication(id) { const i = applications.findIndex((a) => a.id === id); if (i >= 0) applications.splice(i, 1); for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === id) applicationChoices.splice(j, 1); },
     async createCertificate(row) {
       if (certificates.find((c) => c.talent_id === row.talent_id && c.event_id === row.event_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
