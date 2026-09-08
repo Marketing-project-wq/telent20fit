@@ -420,19 +420,6 @@ app.get('/', async (req, res, next) => {
 });
 app.get('/about', (req, res) => res.send(V.aboutPage(req.lang)));
 
-// "Open the 20FIT App" smart redirect used by the Approved/Rejected result emails.
-// Device-detects from the User-Agent: Android → Play Store (once configured),
-// everything else (iOS, desktop, unknown) → App Store. Destinations are fixed and
-// config-driven (no open-redirect from user input). Set PLAY_STORE_URL when the
-// Android listing exists; until then Android also falls back to the App Store.
-const APP_STORE_URL = (process.env.APP_STORE_URL || 'https://apps.apple.com/id/app/20fit-indonesia/id1475504793?l=id').trim();
-const PLAY_STORE_URL = (process.env.PLAY_STORE_URL || '').trim();
-app.get('/app', (req, res) => {
-  const ua = String(req.headers['user-agent'] || '').toLowerCase();
-  const dest = (/android/.test(ua) && PLAY_STORE_URL) ? PLAY_STORE_URL : APP_STORE_URL;
-  res.redirect(302, dest);
-});
-
 // Public sign-up / sign-in: a single account form, no talent-type picker.
 // New accounts default to KOL; login resolves the account by email across all
 // talent types and lands each on the dashboard for their type. Admin & EO still
