@@ -551,6 +551,8 @@
   "bulk.none": "Tidak ada talent yang bisa ditolak.",
   "bulk.error": "Gagal menolak massal — coba lagi.",
   "bulk.clear": "Bersihkan",
+  "bulk.selectMode": "Pilih Beberapa",
+  "bulk.cancel": "Batal",
   "filter.allPositions": "Semua posisi",
   "filter.allStatuses": "Semua status",
   "filter.allCategories": "Semua kategori",
