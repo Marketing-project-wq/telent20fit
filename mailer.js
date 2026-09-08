@@ -204,102 +204,6 @@ function brandedEmailHtml(o) {
 </body></html>`;
 }
 
-function acceptanceEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) {
-  const id = lang === 'id';
-  const t = id ? {
-    hi: ('Halo ' + (name || '')).trim() + ',',
-    body: 'Selamat! Pendaftaran kamu untuk event di bawah ini sudah <b>disetujui</b>. Berikut detail penugasan kamu:',
-    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori', stn: 'Penugasan / Station',
-    stnPending: 'Akan diinformasikan lebih lanjut oleh tim.',
-    p1: 'Tim 20FIT Talent akan menghubungi kamu untuk info teknis, jadwal briefing, dan persiapan yang dibutuhkan sebelum event.',
-    p2: 'Mohon simpan email ini sebagai konfirmasi keberhasilan pendaftaran kamu.',
-    p3: 'Terima kasih sudah menjadi bagian dari event ini. Sampai jumpa di lokasi!',
-    regards: 'Salam hangat,',
-    team: '20FIT Talent Team',
-    foot: 'Ini adalah email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
-    hero: 'Pendaftaran Disetujui', heroSub: 'Kamu sudah siap untuk event ini',
-    pre: 'Kamu disetujui — ini detail penugasan kamu.',
-  } : {
-    hi: ('Hello ' + (name || '')).trim() + ',',
-    body: 'Congratulations! Your registration for the following event has been <b>approved</b>. Below are your assignment details:',
-    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category', stn: 'Assignment / Station',
-    stnPending: 'Will be shared by the team soon.',
-    p1: 'The 20FIT Talent team will contact you with technical information, the briefing schedule, and any preparations required before the event.',
-    p2: 'Please keep this email as confirmation of your successful registration.',
-    p3: 'Thank you for being part of the event. We look forward to seeing you there.',
-    regards: 'Best regards,',
-    team: '20FIT Talent Team',
-    foot: 'This is an automated email from 20FIT Talent. Please do not reply to this email.',
-    hero: 'Registration Approved', heroSub: "You're all set for the event",
-    pre: "You're approved — here are your assignment details.",
-  };
-  return brandedEmailHtml({
-    lang, pre: t.pre, hero: t.hero, heroSub: t.heroSub,
-    heroBg: '#178A54', heroGrad: 'linear-gradient(135deg,#22a866,#0f7a45)',
-    hi: t.hi, bodyHtml: t.body,
-    labels: { ev: t.ev, date: t.date, loc: t.loc, cat: t.cat, stn: t.stn }, stnPending: t.stnPending,
-    eventName, eventDate, location, category, station, stationLoc,
-    paras: [t.p1, t.p2, t.p3], regards: t.regards, team: t.team, foot: t.foot,
-  });
-}
-
-function rejectionEmailHtml({ name, lang, eventName, eventDate, location, category }) {
-  const id = lang === 'id';
-  const t = id ? {
-    hi: ('Halo ' + (name || '')).trim() + ',',
-    body: 'Terima kasih sudah mendaftar untuk event di bawah ini. Mohon maaf, untuk kesempatan ini pendaftaran kamu <b>belum bisa kami setujui</b>.',
-    ev: 'Event', date: 'Tanggal', loc: 'Lokasi', cat: 'Kategori',
-    p1: 'Jangan berkecil hati — kesempatan lain akan terus dibuka. Kami harap kamu tetap semangat dan mendaftar lagi di event 20FIT berikutnya.',
-    p2: 'Terima kasih atas minat dan waktu kamu.',
-    regards: 'Salam hangat,', team: '20FIT Talent Team',
-    foot: 'Ini adalah email otomatis dari 20FIT Talent. Mohon jangan balas email ini.',
-    hero: 'Pendaftaran Belum Disetujui',
-    pre: 'Update status pendaftaran kamu.',
-  } : {
-    hi: ('Hello ' + (name || '')).trim() + ',',
-    body: 'Thank you for registering for the event below. Unfortunately, your registration <b>has not been approved</b> this time.',
-    ev: 'Event', date: 'Date', loc: 'Location', cat: 'Category',
-    p1: "Please don't be discouraged — more opportunities keep opening up. We hope you'll apply again for the next 20FIT event.",
-    p2: 'Thank you for your interest and your time.',
-    regards: 'Best regards,', team: '20FIT Talent Team',
-    foot: 'This is an automated email from 20FIT Talent. Please do not reply to this email.',
-    hero: 'Registration Not Approved',
-    pre: 'An update on your registration status.',
-  };
-  return brandedEmailHtml({
-    lang, pre: t.pre, hero: t.hero,
-    heroBg: '#E4121F', heroGrad: 'linear-gradient(135deg,#ff3b47,#d10f1b)',
-    hi: t.hi, bodyHtml: t.body,
-    labels: { ev: t.ev, date: t.date, loc: t.loc, cat: t.cat },
-    eventName, eventDate, location, category,
-    paras: [t.p1, t.p2], regards: t.regards, team: t.team, foot: t.foot,
-  });
-}
-
-async function sendRejectionEmail({ to, name, lang, eventName, eventDate, location, category }) {
-  const subject = lang === 'id'
-    ? 'Update Pendaftaran Event Kamu — 20FIT Talent'
-    : 'An Update on Your Event Registration';
-  if (!API_KEY || process.env.MAIL_MOCK === '1') {
-    console.log('[mail] email service not configured — rejection for ' + to + ' (' + eventName + ')');
-    return { delivered: false };
-  }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html: rejectionEmailHtml({ name, lang, eventName, eventDate, location, category }) }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    if (res.status === 401 || /invalid api key/i.test(body)) {
-      console.warn('[mail] Resend API key is invalid; rejection email not sent to ' + to);
-      return { delivered: false, error: 'Invalid API key' };
-    }
-    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
-  }
-  return { delivered: true };
-}
-
 function reminderEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) {
   const id = lang === 'id';
   const t = id ? {
@@ -354,31 +258,6 @@ async function sendReminderEmail({ to, name, lang, eventName, eventDate, locatio
     const body = await res.text().catch(() => '');
     if (res.status === 401 || /invalid api key/i.test(body)) {
       console.warn('[mail] Resend API key is invalid; reminder email not sent to ' + to);
-      return { delivered: false, error: 'Invalid API key' };
-    }
-    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
-  }
-  return { delivered: true };
-}
-
-/** Notify a talent their application was approved. Returns { delivered }. Never throws for a missing key. */
-async function sendAcceptanceEmail({ to, name, lang, eventName, eventDate, location, category, station, stationLoc }) {
-  const subject = lang === 'id'
-    ? 'Pendaftaran Event Kamu Telah Disetujui — 20FIT Talent'
-    : 'Your Event Registration Has Been Approved';
-  if (!API_KEY || process.env.MAIL_MOCK === '1') {
-    console.log('[mail] email service not configured — acceptance for ' + to + ' (' + eventName + ')');
-    return { delivered: false };
-  }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html: acceptanceEmailHtml({ name, lang, eventName, eventDate, location, category, station, stationLoc }) }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    if (res.status === 401 || /invalid api key/i.test(body)) {
-      console.warn('[mail] Resend API key is invalid; acceptance email not sent to ' + to);
       return { delivered: false, error: 'Invalid API key' };
     }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
@@ -448,75 +327,6 @@ async function sendUnderReviewEmail({ to, name, eventName, positionName, eventDa
     const body = await res.text().catch(() => '');
     if (res.status === 401 || /invalid api key/i.test(body)) {
       console.warn('[mail] Resend API key is invalid; under-review email not sent to ' + to);
-      return { delivered: false, error: 'Invalid API key' };
-    }
-    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
-  }
-  return { delivered: true };
-}
-
-// "You've been accepted — confirm your spot" email. Always English. Sent when an
-// EO/admin approves a talent for a position; the talent then confirms (Agree) from
-// their profile to become Assigned. 48h is informational only (no auto-expiry).
-function spotConfirmEmailHtml({ name, eventName, positionName, eventDate }) {
-  const confirmUrl = APP_BASE + '/talent';
-  const row = (label, value, accent) => `<tr>
-      <td style="padding:13px 16px;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;color:#8b8f97;vertical-align:top;border-top:1px solid #eceff3">${esc(label)}</td>
-      <td style="padding:13px 16px;font-size:14px;font-weight:700;text-align:right;vertical-align:top;color:${accent ? '#E4121F' : '#17171d'};border-top:1px solid #eceff3">${esc(value)}</td>
-    </tr>`;
-  const rowsHtml = [
-    row('Event', eventName),
-    row('Position', positionName, true),
-    row('Event Date', eventDate || 'To be announced'),
-  ].join('').replace('border-top:1px solid #eceff3', 'border-top:0');
-  return `<!doctype html><html lang="en"><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
-  </head><body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">You've been accepted — confirm your spot to secure it.</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
-    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
-      ${logoBar()}
-      <tr><td bgcolor="#178A54" style="background:#178A54;background:linear-gradient(135deg,#1fb268,#127a45);padding:30px;text-align:center">
-        <div style="font-size:21px;font-weight:800;color:#fffffe">You're Accepted! 🎉</div>
-      </td></tr>
-      <tr><td style="padding:28px 30px 6px">
-        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">Hi ${esc(name || '')},</p>
-        <p style="margin:0 0 18px;font-size:14px;line-height:1.65;color:#4a4e57">Great news! You've been accepted for the <b style="color:#E4121F">${esc(positionName)}</b> role at <b>${esc(eventName)}</b>.</p>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafbfc;border:1px solid #eceff3;border-radius:14px">
-          ${rowsHtml}
-        </table>
-        <p style="margin:18px 0 0;font-size:14px;line-height:1.65;color:#4a4e57">Please log in to your account and <b>confirm your acceptance</b> to secure your spot.</p>
-      </td></tr>
-      <tr><td style="padding:22px 30px 6px;text-align:center">
-        <a href="${esc(confirmUrl)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">Confirm My Spot</a>
-      </td></tr>
-      <tr><td style="padding:18px 30px 4px">
-        <p style="margin:0 0 14px;font-size:13px;line-height:1.6;color:#8b8f97">If we don't hear from you within 48 hours, your spot may be offered to another talent.</p>
-        <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#4a4e57">Best,<br><b style="color:#17171d">20FIT Talent Team</b></p>
-      </td></tr>
-      <tr><td style="padding:20px 30px 26px;border-top:1px solid #eceff3"><p style="margin:0;font-size:11.5px;line-height:1.5;color:#9498a1">This is an automated email from 20FIT Talent. Please do not reply to this email.</p></td></tr>
-    </table>
-  </td></tr></table>
-</body></html>`;
-}
-
-/** Notify an accepted talent to confirm their spot. Always English. Never throws. */
-async function sendSpotConfirmEmail({ to, name, eventName, positionName, eventDate }) {
-  const subject = "You've Been Accepted for " + (positionName || 'a role') + ' at ' + (eventName || 'an event') + '!';
-  if (!API_KEY || process.env.MAIL_MOCK === '1') {
-    console.log('[mail] email service not configured — spot-confirm for ' + to + ' (' + eventName + ')');
-    return { delivered: false };
-  }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html: spotConfirmEmailHtml({ name, eventName, positionName, eventDate }) }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    if (res.status === 401 || /invalid api key/i.test(body)) {
-      console.warn('[mail] Resend API key is invalid; spot-confirm email not sent to ' + to);
       return { delivered: false, error: 'Invalid API key' };
     }
     throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
@@ -704,4 +514,4 @@ async function sendResultAnnouncementEmail({ to, name }) {
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendAcceptanceEmail, sendRejectionEmail, sendReminderEmail, sendUnderReviewEmail, sendSpotConfirmEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendResultAnnouncementEmail, acceptanceEmailHtml, rejectionEmailHtml, underReviewEmailHtml, spotConfirmEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, resultAnnouncementEmailHtml };
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendReminderEmail, sendUnderReviewEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendResultAnnouncementEmail, underReviewEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, resultAnnouncementEmailHtml };
