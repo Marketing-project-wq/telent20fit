@@ -551,6 +551,8 @@
   "bulk.none": "No eligible talent to reject.",
   "bulk.error": "Bulk reject failed — please try again.",
   "bulk.clear": "Clear",
+  "bulk.selectMode": "Select Multiple",
+  "bulk.cancel": "Cancel",
   "filter.allPositions": "All positions",
   "filter.allStatuses": "All statuses",
   "filter.allCategories": "All categories",

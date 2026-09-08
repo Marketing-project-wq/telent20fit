@@ -3501,14 +3501,18 @@ function apSummaryCards(L) {
 }
 function apBulkControls(L) {
   const t = (k) => tr(L, k);
-  // Inline (not a floating fixed bar) so it can never cover a card's own controls.
-  // The reject action + Clear appear right beside "Select all" once rows are picked.
+  // Opt-in selection mode. By default only the "Select Multiple" toggle shows; the
+  // whole panel (Select all + per-row checkboxes + Reject) stays hidden so the list
+  // reads normally. The toggle reveals the panel; in that state it becomes "Cancel"
+  // and hides everything again. All inline (no floating bar) so nothing covers a card.
   return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
-    <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
-    <span id="apBulkBar" hidden style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
-      <button type="button" id="apBulkClear" class="btn btn-ghost btn-sm">${t('bulk.clear')}</button>
+    <button type="button" id="apBulkToggle" class="btn btn-ghost btn-sm">☑️ <span id="apBulkToggleLabel">${t('bulk.selectMode')}</span></button>
+    <span id="apBulkPanel" hidden style="display:inline-flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
+      <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
+      <span id="apBulkBar" hidden style="display:inline-flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
+      </span>
     </span>
   </div>`;
 }
@@ -3526,7 +3530,10 @@ function apBulkLogicJS(o) {
   var apSumCards=[].slice.call(document.querySelectorAll('.ap-sum-card'));
   var apSumN={}; [].slice.call(document.querySelectorAll('.ap-sum-n')).forEach(function(b){ apSumN[b.getAttribute('data-k')]=b; });
   var apSelAll=document.getElementById('apSelectAll'),apSelCount=document.getElementById('apSelCount');
-  var apBar=document.getElementById('apBulkBar'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel'),apClear=document.getElementById('apBulkClear');
+  var apBar=document.getElementById('apBulkBar'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel');
+  var apBulkToggle=document.getElementById('apBulkToggle'),apBulkToggleLabel=document.getElementById('apBulkToggleLabel'),apBulkPanel=document.getElementById('apBulkPanel');
+  // Show/hide the whole selection UI (panel + per-row checkboxes) for the current mode.
+  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.hidden=!apSelMode; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; applySelMode(); }
   function apFill(t,n){ return String(t).split('{n}').join(n); }
   function apSummaryRefresh(){
     var c={accepted:0,notaccepted:0,pending:0};
@@ -3542,13 +3549,15 @@ function apBulkLogicJS(o) {
     if(apBar){ if(chk.length){ apBar.hidden=false; if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else { apBar.hidden=true; } }
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
-  if(apSelAll)apSelAll.addEventListener('change',function(){
-    if(apSelAll.checked){ apSelMode=true; applySelMode(); apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=true; }); }
-    else { apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSelMode=false; applySelMode(); }
-    apSummaryRefresh();
+  // "Select Multiple" toggles the whole mode on/off. Turning it off clears any picks.
+  if(apBulkToggle)apBulkToggle.addEventListener('click',function(){
+    apSelMode=!apSelMode;
+    if(!apSelMode)apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; });
+    applyBulkMode(); apSummaryRefresh();
   });
+  // In mode, "Select all" just checks/unchecks every visible rejectable row.
+  if(apSelAll)apSelAll.addEventListener('change',function(){ apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=apSelAll.checked; }); apSummaryRefresh(); });
   document.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ap-cb'))apSummaryRefresh(); });
-  if(apClear)apClear.addEventListener('click',function(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; }); apSelMode=false; applySelMode(); apSummaryRefresh(); });
   if(apRejectBtn)apRejectBtn.addEventListener('click',function(){
     var chk=apVisRej().filter(function(it){ return it.querySelector('.ap-cb').checked; });
     if(!chk.length)return;
@@ -3563,12 +3572,12 @@ function apBulkLogicJS(o) {
           var cb=it.querySelector('.ap-cb'); if(cb)cb.remove();
           var pill=it.querySelector('.ap-status-pill'); if(pill)pill.innerHTML=${S('<span class="pill" style="background:var(--err-soft);color:var(--err)">')}+${S(o.rejectedLabel)}+${S('</span>')};
         });
-        apRejectBtn.disabled=false; apSelMode=false; applySelMode(); apply();
+        apRejectBtn.disabled=false; apSelMode=false; applyBulkMode(); apply();
         try{ window.alert(apFill(${S(o.doneTpl)},(j&&j.rejected)||0)); }catch(e){}
       })
       .catch(function(){ apRejectBtn.disabled=false; try{ window.alert(${S(o.errorMsg)}); }catch(e){} });
   });
-  applySelMode();
+  applyBulkMode();
   apSummaryRefresh();
 `;
 }
@@ -3841,7 +3850,7 @@ function eoApplicantsPageScript(L) {
     if(ip.has('bkt'))apBucket=ip.get('bkt');
     if(ip.has('tab')){tab=ip.get('tab');tabChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-aptab')===tab);});talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';}
   }catch(e){}
-${apBulkLogicJS({ itemsExpr: "[].slice.call(talentBox.querySelectorAll('.ap-item'))", statusReset: "flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});", endpoint: '/eo/applicants/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
+${apBulkLogicJS({ itemsExpr: "[].slice.call(talentBox.querySelectorAll('.ap-item'))", statusReset: "flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});", endpoint: '/eo/applicants/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error'), selectModeLabel: t('bulk.selectMode'), cancelLabel: t('bulk.cancel') })}
   apply();
 })();
 </script>`;
@@ -6334,7 +6343,7 @@ ${rvModal}
     });
   });
 
-${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
+${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error'), selectModeLabel: t('bulk.selectMode'), cancelLabel: t('bulk.cancel') })}
   renderChips();
   fillNames();
   apply();
