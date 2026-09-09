@@ -2231,7 +2231,7 @@ app.get('/eo/talents/export.csv', requireEo, async (req, res, next) => {
         name: tt.name || '', email: tt.login || '', phone: tt.phone || '',
         positions: chl.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
         status: a.status || 'applied', prStatus, reviewer,
-        event: eventName.get(a.event_id) || '',
+        eventId: a.event_id, event: eventName.get(a.event_id) || '',
         fol: (fol != null && !isNaN(fol)) ? fol : null,
         pct: V.profileStrength(tt).pct,
         created: a.created_at || '',
@@ -3254,8 +3254,21 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       if (primary === 'fotografer' || primary === 'videografer') return 'creative';
       return 'man_power';
     };
-    const filtered = applications.filter((a) => catOf(a) === cat);
-    res.send(V.adminApplications({ staff: staffCtx(req), applications: filtered, attendanceLinks, cat, lang: req.lang, flash: String(req.query.mail || '') }));
+    const inCat = applications.filter((a) => catOf(a) === cat);
+    // One event at a time: no ?event → show the event picker; ?event=<id> → that
+    // event's own dashboard (summary/filters/list all scoped to it), so events never mix.
+    const selEv = String(req.query.event || '');
+    if (!selEv) {
+      const evCount = new Map();
+      inCat.forEach((a) => evCount.set(a.event_id, (evCount.get(a.event_id) || 0) + 1));
+      const pickEvents = events.filter((e) => evCount.has(e.id))
+        .map((e) => ({ id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, count: evCount.get(e.id) }))
+        .sort((a, b) => String(b.starts_at || '').localeCompare(String(a.starts_at || '')) || String(a.name).localeCompare(String(b.name)));
+      return res.send(V.adminApplicationsEventPicker({ staff: staffCtx(req), cat, events: pickEvents, total: inCat.length, lang: req.lang }));
+    }
+    const filtered = inCat.filter((a) => a.event_id === selEv);
+    const selEvent = eventById.get(selEv) || null;
+    res.send(V.adminApplications({ staff: staffCtx(req), applications: filtered, attendanceLinks, cat, event: selEvent ? { id: selEvent.id, name: selEvent.name } : { id: selEv, name: '—' }, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -4000,8 +4013,9 @@ app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), as
     const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
     const evById = new Map(events.map((e) => [e.id, e]));
     const tById = new Map(talents.map((tt) => [tt.id, tt]));
+    const evf = String(req.query.event || ''); // scope the attendance report to one event when opened per-event
     const rows = apps
-      .filter((a) => a.status === 'approved' && a.talent_type === 'main_power' && attDates(a).length > 0)
+      .filter((a) => a.status === 'approved' && a.talent_type === 'main_power' && attDates(a).length > 0 && (!evf || a.event_id === evf))
       .map((a) => {
         const tt = tById.get(a.talent_id) || {}; const ans = a.answers || {};
         return {
@@ -4092,7 +4106,7 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
         name: tt.name || '', email: tt.login || '', phone: tt.phone || '',
         positions: ch.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
         status: a.status || 'applied', prStatus, reviewer,
-        event: eventName.get(a.event_id) || '',
+        eventId: a.event_id, event: eventName.get(a.event_id) || '',
         fol: (fol != null && !isNaN(fol)) ? fol : null,
         pct: V.profileStrength(tt).pct,
         created: a.created_at || '',
@@ -4100,6 +4114,8 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
     });
     const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
     let out = rows.filter((r) => r.cat === cat);
+    const evf = String(req.query.event || ''); // scope the export to one event when the page is
+    if (evf) out = out.filter((r) => r.eventId === evf); // opened per-event (matches what's on screen)
     const q = String(req.query.q || '').trim().toLowerCase();
     const posf = String(req.query.pos || ''), stf = String(req.query.st || ''), prf = String(req.query.pr || '');
     const fmin = (req.query.fmin !== undefined && req.query.fmin !== '') ? parseInt(req.query.fmin, 10) : null;
