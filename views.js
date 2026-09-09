@@ -5998,12 +5998,6 @@ function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
   const catTitle = cat === 'kol' ? t('mpr.titleKol') : cat === 'creative' ? t('mpr.titleCreative') : t('mpr.title');
   const catActive = cat === 'kol' ? 'applications-kol' : cat === 'creative' ? 'applications-creative' : 'applications';
   const catEmpty = cat === 'kol' ? t('mpr.emptyKol') : cat === 'creative' ? t('mpr.emptyCreative') : t('mpr.empty');
-  // Category switcher (same three tabs) so you can jump categories from here too.
-  const catNav = `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);margin-top:12px;max-width:220px">${t('filter.talentCategory')}<select onchange="if(this.value)location.href='/admin/applications?cat='+this.value" style="min-width:160px">
-    <option value="man_power"${cat === 'man_power' ? ' selected' : ''}>${esc(t('filter.cat.manpower'))}</option>
-    <option value="kol"${cat === 'kol' ? ' selected' : ''}>${esc(t('filter.cat.kol'))}</option>
-    <option value="creative"${cat === 'creative' ? ' selected' : ''}>${esc(t('filter.cat.creative'))}</option>
-  </select></label>`;
   const cards = evs.map((e) => {
     const s = e.starts_at ? fmtDay(e.starts_at) : '';
     const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
@@ -6020,7 +6014,6 @@ function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
   <p class="muted" style="font-size:13px;margin:8px 0 0">${t('mpr.count', { n: total || 0 })} · ${t('mpr.pickEvent')}</p>
-  ${catNav}
   ${grid}
 </div>`;
   return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
@@ -6091,11 +6084,6 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   applications.forEach((a) => { const c = a.choices && a.choices[0]; if (c && c.key && !p1PosSeen.has(c.key)) { p1PosSeen.add(c.key); p1PosOpts.push(`<option value="${esc(c.key)}">${esc(posLabel(c, L))}</option>`); } });
   const stOpts = Array.from(new Set(applications.map((a) => a.status))).map((s) => `<option value="${esc(s)}">${esc(t('ta.status.' + s))}</option>`).join('');
   const filterBar = `<div class="card" style="margin-top:14px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="admCatNav" style="min-width:160px">
-      <option value="man_power"${cat === 'man_power' ? ' selected' : ''}>${esc(t('filter.cat.manpower'))}</option>
-      <option value="kol"${cat === 'kol' ? ' selected' : ''}>${esc(t('filter.cat.kol'))}</option>
-      <option value="creative"${cat === 'creative' ? ' selected' : ''}>${esc(t('filter.cat.creative'))}</option>
-    </select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="admPosFilter" style="min-width:150px"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.status')}<select id="admStatusFilter" style="min-width:150px"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
     <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="admPrFilter" style="min-width:190px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
