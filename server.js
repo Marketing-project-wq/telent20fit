@@ -797,6 +797,15 @@ const DECLINED_BY_TALENT = 'Declined by talent';
 // Note set on a talent's OTHER apps in an event that are auto-rejected because they
 // were accepted for a different position there — also skipped by the reject pop-up.
 const AUTO_DECLINED_NOTE = 'Otomatis: kamu diterima di posisi lain pada event ini.';
+// Note set when an approved talent is auto-rejected for not confirming their spot
+// within the window — treated like a passive self-decline (no "not selected" pop-up).
+const CONFIRM_TIMEOUT_NOTE = 'Otomatis: tidak konfirmasi kehadiran dalam batas waktu.';
+// The confirmation timeout is enforced ONLY for approvals made at/after this instant,
+// so applications already Approved before the feature shipped are grandfathered (kept
+// under the old no-auto-expiry behaviour — never auto-rejected by surprise). Override
+// with the CONFIRM_ENFORCED_SINCE env var; the confirmation window length itself lives
+// in one place (views.CONFIRM_WINDOW_HOURS).
+const CONFIRM_ENFORCED_SINCE = process.env.CONFIRM_ENFORCED_SINCE || '2026-09-09T05:00:00Z';
 
 // Has this talent confirmed the KOL category yet? True once they have at least one
 // application to a KOL-category position (position.key === 'kol'). This gates the
@@ -839,7 +848,7 @@ async function buildAppliedEvents(st, myApps, eventById) {
       const ref = (chs.length && (ev.slug || ev.id)) || null;
       // rejectNotify: a genuine "not selected" rejection (skip self-declines + the
       // auto-decline of other picks when accepted elsewhere) → drives the pop-up.
-      const rejectNotify = a.status === 'rejected' && a.note !== DECLINED_BY_TALENT && a.note !== AUTO_DECLINED_NOTE;
+      const rejectNotify = a.status === 'rejected' && a.note !== DECLINED_BY_TALENT && a.note !== AUTO_DECLINED_NOTE && a.note !== CONFIRM_TIMEOUT_NOTE;
       return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, groupUrl: ev.group_url || null };
     })
     .filter(Boolean);
@@ -3704,6 +3713,36 @@ async function runDueReminders(st) {
   }
 }
 
+// Auto-reject approved talents who never confirmed (Agree) their spot within the
+// confirmation window, so the slot reopens for others. Same reject logic as the
+// manual actions: clear the accepted choice (reopen quota) → status 'rejected'.
+// Silent (no email; treated like a passive self-decline, so no "not selected"
+// pop-up). Idempotent + safe to run repeatedly. Only enforced for approvals made
+// at/after CONFIRM_ENFORCED_SINCE (older ones are grandfathered). Returns the count.
+async function runConfirmTimeouts(st) {
+  if (!st) return { expired: 0 };
+  let apps;
+  try { apps = await st.listApplications(); } catch (e) { console.warn('[confirm-timeout] list failed:', e && e.message); return { expired: 0 }; }
+  const windowMs = (V.CONFIRM_WINDOW_HOURS || 10) * 60 * 60 * 1000;
+  const sinceMs = new Date(CONFIRM_ENFORCED_SINCE).getTime() || 0;
+  const now = Date.now();
+  let n = 0;
+  for (const a of apps) {
+    if (a.status !== 'approved') continue; // only pending-confirmation spots
+    const startMs = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0;
+    if (!startMs || startMs < sinceMs) continue; // grandfathered (approved before enforcement) or no timestamp
+    if (now - startMs < windowMs) continue;      // still within the confirmation window
+    try {
+      await st.clearApplicationAccepted(a.id); // reopen the position quota
+      await st.updateApplication(a.id, { status: 'rejected', reviewed_at: new Date().toISOString(), note: CONFIRM_TIMEOUT_NOTE });
+      await st.addStatusLog(a.id, 'approved', 'rejected', null, 'auto: confirmation timeout').catch(() => {});
+      n++;
+    } catch (e) { console.error('[confirm-timeout] failed for ' + a.id + ':', e && e.message); }
+  }
+  if (n) console.log('[confirm-timeout] auto-rejected ' + n + ' unconfirmed application(s)');
+  return { expired: n };
+}
+
 // Hourly scheduler: run the H-1 job once per day during daytime WIB (so nobody
 // is pinged at 3am). reminder_sent_at guarantees a single reminder per talent
 // even though the check runs every hour. Disable with REMINDERS_DISABLED=1.
@@ -3711,6 +3750,10 @@ let _remTimer = null;
 function startReminderScheduler() {
   if (_remTimer || process.env.REMINDERS_DISABLED === '1') return;
   const tick = () => {
+    // Confirmation-timeout auto-reject runs every hour, any time of day (a window
+    // can lapse overnight) — it sends no notifications, so the quiet-hours gate
+    // below (which only guards outbound reminders) does not apply to it.
+    runConfirmTimeouts(db()).catch((e) => console.warn('[confirm-timeout] tick skipped:', e && e.message));
     const h = jakartaHour();
     if (h < 8 || h >= 21) return; // only send between 08:00–20:59 WIB
     runDueReminders(db()).catch((e) => console.warn('[reminders] tick skipped:', e && e.message));
@@ -3734,6 +3777,16 @@ app.post('/admin/reminders/run', auth.requireStaff(['super_admin']), async (req,
       flash = due === 0 ? 'rem0' : (sent > 0 ? 'remsent' : 'remmock');
     } catch (e) { console.error('[reminders] manual run failed:', e && e.message); flash = 'remerr'; }
     res.redirect('/admin/applications?mail=' + flash);
+  } catch (e) { next(e); }
+});
+
+// Super admin: run the confirmation-timeout auto-reject on demand (testing / catch-up).
+app.post('/admin/confirm-timeouts/run', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const { expired } = await runConfirmTimeouts(st);
+    res.json({ ok: true, expired });
   } catch (e) { next(e); }
 });
 
@@ -4398,6 +4451,6 @@ if (require.main === module) {
 // Exported for tests (require()'d as a module — the guard above keeps the
 // listener from starting in that case).
 module.exports = {
-  app, issueCertsForApps, maybeIssueCerts, runDueCertificates, loadCertCtx,
+  app, issueCertsForApps, maybeIssueCerts, runDueCertificates, runConfirmTimeouts, loadCertCtx,
   certEventDateEn, titleCaseName, certPrintName, eventFinished,
 };

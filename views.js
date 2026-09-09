@@ -7103,6 +7103,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 }
 
 module.exports = {
+  CONFIRM_WINDOW_HOURS,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
