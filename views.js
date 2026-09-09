@@ -6013,7 +6013,7 @@ function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
     : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
-  <p class="muted" style="font-size:13px;margin:8px 0 0">${t('mpr.count', { n: total || 0 })} · ${t('mpr.pickEvent')}</p>
+  <p class="muted" style="font-size:13px;margin:8px 0 0">${t('mpr.pickEvent')}</p>
   ${grid}
 </div>`;
   return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
