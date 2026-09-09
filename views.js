@@ -485,13 +485,23 @@ function toggles(lang) {
 }
 
 /** Plain shell (top logo bar, no sidebar) — landing/auth/picker/error pages. */
+// Google Analytics 4. One Measurement ID shared across *.20fit.id so a visitor who
+// crosses subdomains stays a single user — cookie_domain:'auto' writes the cookie at
+// the registrable .20fit.id level, not just talent.20fit.id. This is an SSR app (full
+// page loads on navigation), so gtag fires page_view on every load; no SPA hook needed.
+// Override the ID via the GA_MEASUREMENT_ID env var; empty string disables the tag.
+const GA_MEASUREMENT_ID = (process.env.GA_MEASUREMENT_ID != null ? process.env.GA_MEASUREMENT_ID : 'G-70JD631GZC').trim();
+const GA4_HEAD = GA_MEASUREMENT_ID
+  ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}"></script>`
+    + `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_MEASUREMENT_ID}',{cookie_domain:'auto'});</script>`
+  : '';
 function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
   const topbar = hideBrand ? '' : `<div class="topbar"><div class="in">
   <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
 </div></div>`;
-  return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>
+  return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>${GA4_HEAD}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
@@ -516,7 +526,7 @@ ${body}
 function publicLayout({ title, body, lang, account, active, cities, search = true, searchValue }) {
   const L = normLang(lang);
   const nav = landingNav(L, active || '', account || null, { search, cities: cities || [], searchValue: searchValue || '' });
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}${NAV_CSS}</style>${THEME_HEAD}</head>
@@ -597,7 +607,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
   // Talent pages reuse the public landingNav header (logo + ID/EN toggle + account
   // dropdown) so the dashboard matches the Events pages — so the head also pulls in
   // NAV_CSS (the .lp-* header rules) + Barlow. Both are inert on staff pages.
-  const head = `<!doctype html><html lang="${L}" data-theme="light"><head>
+  const head = `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}${NAV_CSS}</style>${THEME_HEAD}</head>`;
@@ -865,7 +875,7 @@ function landingPage(lang, opts = {}) {
     <script>(function(){var chips=[].slice.call(document.querySelectorAll('.lp-city-chip')),cards=[].slice.call(document.querySelectorAll('.lp-ev-grid .lp-ev-card'));if(!chips.length)return;chips.forEach(function(ch){ch.addEventListener('click',function(){var city=ch.getAttribute('data-city');chips.forEach(function(c){c.classList.toggle('on',c===ch);});cards.forEach(function(cd){cd.style.display=(!city||cd.getAttribute('data-city')===city)?'':'none';});});});})();</script>
   </section>` : '';
 
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1413,7 +1423,7 @@ function aboutPage(lang) {
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
   const { lede, sectionsHtml } = aboutContent(L);
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t('nav.about'))} · 20FIT</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
