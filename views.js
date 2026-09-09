@@ -6012,7 +6012,8 @@ function adminApplicantCard(a, L, cat) {
       ${stationLine}
       ${a.status === 'approved' ? `<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         ${a.attended ? `<span class="pill pill-ok">✓ ${t('mpr.attended')}</span>` : `<span class="pill pill-off">${t('mpr.notAttended')}</span>`}
-        <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form">
+        <form method="post" action="/admin/applications/${esc(a.id)}/resend-email" class="inline-form ap-resend-form">
+          <input type="hidden" name="next" value="/admin/applications?cat=${esc(cat)}${a.event_id ? '&event=' + esc(a.event_id) : ''}#ap-${esc(a.id)}">
           <button class="btn btn-ghost btn-sm" title="${t('mpr.resendHint')}">✉ ${t('mpr.resendEmail')}</button>
         </form>
         ${a.attended ? (a.certificate
@@ -6415,6 +6416,18 @@ ${rvModal}
   });
 
 ${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
+  // Resend the result-announcement email in place: POST via fetch and show a toast,
+  // so the admin stays on the exact same event view / scroll position (no reload,
+  // no bounce back to the event picker). Non-JS falls back to a normal submit.
+  document.addEventListener('submit',function(e){
+    var f=e.target; if(!f||!f.classList||!f.classList.contains('ap-resend-form'))return;
+    e.preventDefault();
+    var btn=f.querySelector('button'); if(btn)btn.disabled=true;
+    fetch(f.getAttribute('action'),{method:'POST',headers:{'X-Requested-With':'fetch','Accept':'application/json'}})
+      .then(function(r){return r.ok?r.json():{flash:'error'};})
+      .then(function(j){ if(btn)btn.disabled=false; apToast((j&&j.flash==='error')?${JSON.stringify(t('mpr.resendFail'))}:${JSON.stringify(t('mpr.resendDone'))}); })
+      .catch(function(){ if(btn)btn.disabled=false; apToast(${JSON.stringify(t('mpr.resendFail'))}); });
+  });
   renderChips();
   fillNames();
   apply();

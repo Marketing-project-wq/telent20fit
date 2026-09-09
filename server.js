@@ -3920,7 +3920,18 @@ app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin
         flash = mailer.configured() ? 'sent' : 'mock';
       } catch (e) { console.error('[mail] resend result-announcement failed:', e && e.message); flash = 'error'; }
     }
-    res.redirect('/admin/applications?mail=' + flash);
+    // AJAX (fetch): return JSON so the page can toast in place — the admin stays
+    // exactly where they were (same event, scroll position, filters), instead of
+    // being bounced back to the (now event-picker) list.
+    if ((req.get('X-Requested-With') || '') === 'fetch') return res.json({ ok: flash !== 'error', flash });
+    // No-JS fallback: return to the same scoped view carried in ?next (open-redirect
+    // guarded to this list), not the bare list which would land on the event picker.
+    let back = String(req.body.next || '');
+    if (!/^\/admin\/applications(\?|#|$)/.test(back)) back = '/admin/applications';
+    const hashAt = back.indexOf('#');
+    const hash = hashAt >= 0 ? back.slice(hashAt) : '';
+    const path = hashAt >= 0 ? back.slice(0, hashAt) : back;
+    res.redirect(path + (path.indexOf('?') >= 0 ? '&' : '?') + 'mail=' + flash + hash);
   } catch (e) { next(e); }
 });
 

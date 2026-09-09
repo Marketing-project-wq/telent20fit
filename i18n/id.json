@@ -983,6 +983,8 @@
   "mpr.unattend": "Batal Hadir",
   "mpr.resendEmail": "Kirim ulang email",
   "mpr.resendHint": "Kirim ulang email penerimaan ke peserta",
+  "mpr.resendDone": "Email terkirim",
+  "mpr.resendFail": "Gagal mengirim email — coba lagi",
   "mpr.mailSent": "Email penerimaan berhasil dikirim ke peserta.",
   "mpr.mailMock": "Layanan email belum aktif — email tidak benar-benar terkirim (cek konfigurasi RESEND_API_KEY).",
   "mpr.mailError": "Gagal mengirim email. Coba lagi nanti.",

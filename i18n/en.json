@@ -983,6 +983,8 @@
   "mpr.unattend": "Unmark",
   "mpr.resendEmail": "Resend email",
   "mpr.resendHint": "Resend the acceptance email to this talent",
+  "mpr.resendDone": "Email sent",
+  "mpr.resendFail": "Couldn't send the email — try again",
   "mpr.mailSent": "Acceptance email sent to the talent.",
   "mpr.mailMock": "Email service is not configured — no email was actually sent (check RESEND_API_KEY).",
   "mpr.mailError": "Failed to send the email. Please try again later.",
