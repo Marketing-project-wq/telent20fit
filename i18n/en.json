@@ -953,6 +953,8 @@
   "nav.appKol": "KOL",
   "nav.appCreative": "Photographer / Videographer",
   "mpr.title": "Man Power Applications",
+  "mpr.pickEvent": "Choose an event to review its applications.",
+  "mpr.backToEvents": "All events",
   "mpr.titleKol": "KOL Applications",
   "mpr.titleCreative": "Photographer / Videographer Applications",
   "mpr.sub": "Review Man Power applications, approve or reject, then assign a station.",

@@ -5988,7 +5988,44 @@ function adminApplicantCard(a, L, cat) {
     </div>`;
 }
 
-function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat }) {
+// Event picker for a Super Admin applicant category (Man Power / KOL / Photographer).
+// Shown when no ?event is selected, so each event opens its OWN scoped dashboard and
+// applications never mix across events. Clicking a card → /admin/applications?cat&event.
+function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const evs = events || [];
+  const catTitle = cat === 'kol' ? t('mpr.titleKol') : cat === 'creative' ? t('mpr.titleCreative') : t('mpr.title');
+  const catActive = cat === 'kol' ? 'applications-kol' : cat === 'creative' ? 'applications-creative' : 'applications';
+  const catEmpty = cat === 'kol' ? t('mpr.emptyKol') : cat === 'creative' ? t('mpr.emptyCreative') : t('mpr.empty');
+  // Category switcher (same three tabs) so you can jump categories from here too.
+  const catNav = `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);margin-top:12px;max-width:220px">${t('filter.talentCategory')}<select onchange="if(this.value)location.href='/admin/applications?cat='+this.value" style="min-width:160px">
+    <option value="man_power"${cat === 'man_power' ? ' selected' : ''}>${esc(t('filter.cat.manpower'))}</option>
+    <option value="kol"${cat === 'kol' ? ' selected' : ''}>${esc(t('filter.cat.kol'))}</option>
+    <option value="creative"${cat === 'creative' ? ' selected' : ''}>${esc(t('filter.cat.creative'))}</option>
+  </select></label>`;
+  const cards = evs.map((e) => {
+    const s = e.starts_at ? fmtDay(e.starts_at) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const date = s ? (en ? s + ' – ' + en : s) : '';
+    return `<a href="/admin/applications?cat=${esc(cat)}&event=${esc(e.id)}&lang=${L}" class="card" style="display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;padding:16px 18px;margin:0">
+      <div style="font-weight:800;font-size:16px">📁 ${esc(e.name)}</div>
+      ${date ? `<div class="muted" style="font-size:12.5px">${esc(date)}</div>` : ''}
+      <div style="font-size:13px"><b>${t('mpr.count', { n: e.count })}</b> →</div>
+    </a>`;
+  }).join('');
+  const grid = evs.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px">${cards}</div>`
+    : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`;
+  const body = `<div class="wrap">
+  ${staffHead(staff, catTitle, L)}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">${t('mpr.count', { n: total || 0 })} · ${t('mpr.pickEvent')}</p>
+  ${catNav}
+  ${grid}
+</div>`;
+  return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
+}
+function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat, event }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
@@ -6091,14 +6128,17 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
       </div>
     </div>
   </div>`;
+  const evId = event && event.id ? event.id : '';
+  const evQ = evId ? '&event=' + encodeURIComponent(evId) : '';
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
   ${flashBanner}
+  <a href="/admin/applications?cat=${esc(cat)}&lang=${L}" class="btn btn-ghost btn-sm" style="margin-top:8px">← ${t('mpr.backToEvents')}</a>
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
-    <p class="muted" style="font-size:13px;margin:0">${t('mpr.count', { n: applications.length })}</p>
+    <p class="muted" style="font-size:13px;margin:0">${event && event.name ? '<b>' + esc(event.name) + '</b> · ' : ''}${t('mpr.count', { n: applications.length })}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a id="admExportCsv" href="/admin/applications/export.csv?cat=${esc(cat)}" class="btn btn-ghost btn-sm">⬇ ${t('export.csv')}</a>
-      <a href="/admin/applications/report.pdf" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
+      <a id="admExportCsv" href="/admin/applications/export.csv?cat=${esc(cat)}${evQ}" class="btn btn-ghost btn-sm">⬇ ${t('export.csv')}</a>
+      <a href="/admin/applications/report.pdf?cat=${esc(cat)}${evQ}" class="btn btn-sm" title="${t('mpr.reportHint')}">📄 ${t('mpr.report')}</a>
     </div>
   </div>
   ${applications.length ? apSummaryCards(L) + reviewerBar + filterBar + apBulkControls(L) + folders : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`}
@@ -7017,7 +7057,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
