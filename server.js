@@ -3644,8 +3644,9 @@ async function bulkRejectApps(st, ids, staffId, actor, allowEventIds) {
 // Generic "result is out — open the 20FIT App" announcement. App-first: never names
 // the position, needs no web action. Used for the position-based final REJECT and
 // for Man Power results (both accepted and not) — the app shows the announcement;
-// station/other details stay on the web. Best-effort. Wired only to explicit staff
-// decisions — never to auto-decline or a talent's own Decline.
+// station/other details stay on the web. Best-effort. Wired to explicit staff
+// decisions and to the confirmation-timeout auto-reject — never to a talent's own
+// Decline or the auto-decline of their other picks.
 async function notifyResultAnnouncement(st, app) {
   const account = await st.getAccountById(app.talent_id);
   const to = account && account.login;
@@ -3717,9 +3718,11 @@ async function runDueReminders(st) {
 // Auto-reject approved talents who never confirmed (Agree) their spot within the
 // confirmation window, so the slot reopens for others. Same reject logic as the
 // manual actions: clear the accepted choice (reopen quota) → status 'rejected'.
-// Silent (no email; treated like a passive self-decline, so no "not selected"
-// pop-up). Idempotent + safe to run repeatedly. Only enforced for approvals made
-// at/after CONFIRM_ENFORCED_SINCE (older ones are grandfathered). Returns the count.
+// Emails the talent the same neutral result-announcement as a manual result, so a
+// released spot isn't silent. (The in-app "not selected" pop-up stays suppressed
+// for a timeout — it still reads as a passive decline.) Idempotent + safe to run
+// repeatedly. Only enforced for approvals made at/after CONFIRM_ENFORCED_SINCE
+// (older ones are grandfathered). Returns the count.
 async function runConfirmTimeouts(st) {
   if (!st) return { expired: 0 };
   let apps;
@@ -3737,6 +3740,8 @@ async function runConfirmTimeouts(st) {
       await st.clearApplicationAccepted(a.id); // reopen the position quota
       await st.updateApplication(a.id, { status: 'rejected', reviewed_at: new Date().toISOString(), note: CONFIRM_TIMEOUT_NOTE });
       await st.addStatusLog(a.id, 'approved', 'rejected', null, 'auto: confirmation timeout').catch(() => {});
+      // Notify the talent their unconfirmed spot was released — same neutral email as a manual result.
+      notifyResultAnnouncement(st, a).catch((e) => console.error('[confirm-timeout] result email failed for ' + a.id + ':', e && e.message));
       n++;
     } catch (e) { console.error('[confirm-timeout] failed for ' + a.id + ':', e && e.message); }
   }
