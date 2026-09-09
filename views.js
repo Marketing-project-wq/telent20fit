@@ -3632,7 +3632,34 @@ function eoApplicantCard(a, L) {
   </div>`;
 }
 
-function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, knownReviewers, lang }) {
+// Event picker for the EO Talents page — mirrors the Super Admin lists: shown when no
+// ?event is selected so each event opens its own scoped dashboard (applicants never mix
+// across events). Clicking a card → /eo/talents?event=<id>.
+function eoApplicantsEventPicker({ staff, events, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const evs = events || [];
+  const cards = evs.map((e) => {
+    const s = e.starts_at ? fmtDay(e.starts_at) : '';
+    const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
+    const date = s ? (en ? s + ' – ' + en : s) : '';
+    return `<a href="/eo/talents?event=${esc(e.id)}&lang=${L}" class="card" style="display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;padding:16px 18px;margin:0">
+      <div style="font-weight:800;font-size:16px">📁 ${esc(e.name)}</div>
+      ${date ? `<div class="muted" style="font-size:12.5px">${esc(date)}</div>` : ''}
+      <div style="font-size:13px"><b>${t('mpr.count', { n: e.count })}</b> →</div>
+    </a>`;
+  }).join('');
+  const grid = evs.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px">${cards}</div>`
+    : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.ap.noneAll')}</p></div>`;
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('nav.talents'), L)}
+  <p class="sub">${t('mpr.pickEvent')}</p>
+  ${grid}
+</div>`;
+  return appLayout({ title: t('nav.talents') + ' — 20FIT', body, role: 'eo', active: 'talents', user: staff.name, lang: L });
+}
+function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedEvent, event, knownReviewers, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const aps = applicants || [];
@@ -3710,7 +3737,6 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   const controls = `<div class="card" style="margin-top:16px;padding:12px 14px">
     <input type="text" id="apSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.event')}<select id="apEventFilter" style="min-width:170px;max-width:240px">${evOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="apPosFilter" style="min-width:140px">${posOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.talentCategory')}<select id="apCatFilter" style="min-width:140px">${catOpts}</select></label>
       <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="apPrFilter" style="min-width:175px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
@@ -3727,7 +3753,8 @@ function eoApplicantsPage({ staff, events, applicants, positionsUnion, selectedE
   const decisionBtnRow = `<div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap"><a id="apExportCsv" href="/eo/talents/export.csv" class="btn btn-ghost btn-sm">⬇ ${t('export.csv')}</a><a href="/eo/decision${selEv ? '?event=' + esc(selEv) + '&' : '?'}lang=${L}" class="btn btn-sm">🗳️ ${t('mpr2.toDecision')}</a></div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, t('nav.talents'), L)}
-  <p class="sub">${t('eo.ap.pageSub')}</p>
+  <a href="/eo/talents?lang=${L}" class="btn btn-ghost btn-sm" style="margin-top:8px">← ${t('mpr.backToEvents')}</a>
+  <p class="sub" style="margin-top:8px">${event && event.name ? '<b>' + esc(event.name) + '</b>' : t('eo.ap.pageSub')}</p>
   ${!aps.length
     ? `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('eo.ap.noneAll')}</p></div>`
     : `${reviewerBar}${decisionBtnRow}${controls}
@@ -3760,20 +3787,23 @@ function eoApplicantsPageScript(L) {
   function folNum(it){ var v=it.getAttribute('data-followers'); return (v===''||v==null)?null:parseInt(v,10); }
   // Keep the active filters in the URL (no reload) so they survive an in-place
   // action, a manual refresh, or leaving and coming back — and can be shared.
+  // Start from the current query so the route-level event scope ('event') and
+  // 'lang' survive; then set-or-delete each filter key.
   function writeUrl(){
     try{
-      var p=new URLSearchParams();
-      var q=search.value.trim(); if(q)p.set('q',q);
-      if(posSel&&posSel.value)p.set('pos',posSel.value);
-      if(catSel&&catSel.value)p.set('cat',catSel.value);
-      if(evSel&&evSel.value)p.set('ev',evSel.value);
-      if(prSel&&prSel.value)p.set('pr',prSel.value);
-      if(sortSel&&sortSel.value!=='new')p.set('sort',sortSel.value);
-      if(folMin&&folMin.value.trim())p.set('fmin',folMin.value.trim());
-      if(folMax&&folMax.value.trim())p.set('fmax',folMax.value.trim());
-      if(flt&&flt!=='all')p.set('st',flt);
-      if(apBucket)p.set('bkt',apBucket);
-      if(tab&&tab!=='talent')p.set('tab',tab);
+      var p=new URLSearchParams(location.search);
+      function setp(k,v){ if(v)p.set(k,v); else p.delete(k); }
+      setp('q',search.value.trim());
+      setp('pos',posSel?posSel.value:'');
+      setp('cat',catSel?catSel.value:'');
+      setp('ev',evSel?evSel.value:'');
+      setp('pr',prSel?prSel.value:'');
+      setp('sort',(sortSel&&sortSel.value!=='new')?sortSel.value:'');
+      setp('fmin',folMin?folMin.value.trim():'');
+      setp('fmax',folMax?folMax.value.trim():'');
+      setp('st',(flt&&flt!=='all')?flt:'');
+      setp('bkt',apBucket);
+      setp('tab',(tab&&tab!=='talent')?tab:'');
       var qs=p.toString();
       history.replaceState(null,'',location.pathname+(qs?('?'+qs):''));
     }catch(e){}
@@ -7069,5 +7099,5 @@ module.exports = {
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
-  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, eoApplicantCard, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, eoApplicantsEventPicker, eoApplicantCard, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
 };

@@ -2184,8 +2184,23 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
     }
     applicants.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
     const selectedEvent = myIds.has(String(req.query.event || '')) ? String(req.query.event) : '';
+    // Pick an event first (like the Super Admin lists), then open that event's own
+    // scoped dashboard — so an EO's events never mix their applicants together.
+    if (!selectedEvent) {
+      const evCount = new Map();
+      applicants.forEach((a) => evCount.set(a.eventId, (evCount.get(a.eventId) || 0) + 1));
+      const pickEvents = mine.filter((e) => evCount.has(e.id))
+        .map((e) => ({ id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, count: evCount.get(e.id) }));
+      return res.send(V.eoApplicantsEventPicker({ staff: eoCtx(req), events: pickEvents, lang: req.lang }));
+    }
+    const scoped = applicants.filter((a) => a.eventId === selectedEvent);
+    // Position union scoped to the selected event, so the by-position view and the
+    // position filter never surface other events' positions.
+    const posSeenScoped = new Map();
+    scoped.forEach((a) => (a.choices || []).forEach((c) => { if (c.key && !posSeenScoped.has(c.key)) posSeenScoped.set(c.key, { key: c.key, label_id: c.label_id, label_en: c.label_en }); }));
+    const selEvObj = mine.find((e) => e.id === selectedEvent) || null;
     const knownReviewers = Array.from(new Set(applicants.flatMap((a) => [...(a.proposals || []).map((p) => p.reviewer_name), ...(a.reviewMarks || [])]))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
-    res.send(V.eoApplicantsPage({ staff: eoCtx(req), events: mine.map((e) => ({ id: e.id, name: e.name })), applicants, positionsUnion: [...posKeySeen.values()], selectedEvent, knownReviewers, lang: req.lang }));
+    res.send(V.eoApplicantsPage({ staff: eoCtx(req), events: mine.map((e) => ({ id: e.id, name: e.name })), applicants: scoped, positionsUnion: [...posSeenScoped.values()], selectedEvent, event: selEvObj ? { id: selEvObj.id, name: selEvObj.name } : { id: selectedEvent, name: '—' }, knownReviewers, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2239,7 +2254,7 @@ app.get('/eo/talents/export.csv', requireEo, async (req, res, next) => {
     }
     let out = rows;
     const q = String(req.query.q || '').trim().toLowerCase();
-    const posf = String(req.query.pos || ''), catf = String(req.query.cat || ''), evf = String(req.query.ev || ''), stf = String(req.query.st || ''), prf = String(req.query.pr || '');
+    const posf = String(req.query.pos || ''), catf = String(req.query.cat || ''), evf = String(req.query.event || req.query.ev || ''), stf = String(req.query.st || ''), prf = String(req.query.pr || '');
     const fmin = (req.query.fmin !== undefined && req.query.fmin !== '') ? parseInt(req.query.fmin, 10) : null;
     const fmax = (req.query.fmax !== undefined && req.query.fmax !== '') ? parseInt(req.query.fmax, 10) : null;
     if (posf) out = out.filter((r) => r.p1key === posf);
