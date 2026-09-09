@@ -3156,11 +3156,19 @@ function proposalDisplayHtml(a, L) {
 // LAPIS-1 controls: propose per open position / mark reviewed / (decided → status+undo).
 // `appBase` is the per-applicant route prefix (e.g. `/eo/applicants/<id>`); a.choices
 // must carry label fields (label_id/label_en/key/custom_label).
-function lapis1CardControls(a, L, appBase, nextUrl, resetPath) {
+function lapis1CardControls(a, L, appBase, nextUrl, resetPath, rejectPath) {
   const t = (k, v) => tr(L, k, v);
   const posOf = (c) => posLabel({ label_id: c.label_id, label_en: c.label_en, key: c.key, custom_label: c.custom_label }, L);
   const nx = `<input type="hidden" name="next" value="${esc(nextUrl)}">`;
   const reset = resetPath || 'reset';
+  const talentName = a.name || a.talent_name || '—';
+  // Individual per-card Reject (undecided talents only) — full reject via the same
+  // logic as the bulk actions (status→rejected, neutral email, quota reopen), with a
+  // named confirm. Coexists with Select-Multiple and Reject All.
+  const rejectableOne = a.status === 'applied' || a.status === 'under_review' || a.status === 'pending';
+  const rejectOneBtn = (rejectPath && rejectableOne)
+    ? `<form class="inline-form" method="post" action="${appBase}/${rejectPath}" ${jsConfirm(t('confirm.rejectTalent', { name: talentName }))}>${nx}<button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('eo.ap.reject')}</button></form>`
+    : '';
   const acc = (a.choices || []).find((c) => c.accepted);
   if ((a.status === 'approved' || a.status === 'assigned') && acc) {
     const confirmed = a.status === 'assigned';
@@ -3192,6 +3200,7 @@ function lapis1CardControls(a, L, appBase, nextUrl, resetPath) {
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">👀 ${t('mpr2.markReviewed')}</button></form>
       <form class="inline-form unmark-form needs-reviewer" method="post" action="${appBase}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
+      ${rejectOneBtn}
     </div>
   </div>`;
 }
@@ -3654,7 +3663,7 @@ function eoApplicantCard(a, L) {
     ${contact}${hyrox}
     <div style="margin-top:10px">${chips}</div>
     <div class="rv-msg" role="alert" hidden style="margin-top:10px;font-size:12.5px;color:var(--err);background:var(--err-soft);border-radius:8px;padding:8px 10px"></div>
-    ${proposalDisplayHtml(a, L)}${lapis1CardControls(a, L, '/eo/applicants/' + esc(a.id), '/eo/talents')}
+    ${proposalDisplayHtml(a, L)}${lapis1CardControls(a, L, '/eo/applicants/' + esc(a.id), '/eo/talents', 'reset', 'reject-position')}
     <details style="margin-top:12px;border-top:1px solid var(--line);padding-top:6px">
       <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('adm.profile.title')}</summary>
       <div style="margin-top:8px">${talentProfileBlock(a.profile, L, { staff: true, maskKtp: true, maskPhone: a.status !== 'assigned' })}</div>
@@ -6007,7 +6016,7 @@ function adminApplicantCard(a, L, cat) {
         </div>`
     : '';
   const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
-  const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position')) : stationForm;
+  const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position', 'reject-position')) : stationForm;
   const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
   const rejectable = a.status === 'applied' || a.status === 'under_review' || a.status === 'pending';
   return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
