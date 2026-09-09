@@ -3521,7 +3521,7 @@ function apBulkControls(L) {
   // (Applied/Under Review) rows — no mode toggle, no select-all, no reject-all.
   // Ticking any row reveals this floating bar with a single "Reject selected (X)"
   // action (gated by a confirm). The individual per-card Reject stays separate.
-  return `<div id="apBulkBar" style="display:none;position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:1100;align-items:center;gap:10px;background:#111827;color:#fff;padding:11px 16px;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.3);max-width:calc(100vw - 24px)">
+  return `<div id="apBulkBar" style="display:none;position:fixed;right:16px;bottom:20px;z-index:1100;align-items:center;gap:10px;background:#111827;color:#fff;padding:11px 16px;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.3);max-width:calc(100vw - 32px)">
     <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff;white-space:nowrap;margin:0">🚫 <span id="apBulkRejectLabel"></span></button>
   </div>`;
 }
