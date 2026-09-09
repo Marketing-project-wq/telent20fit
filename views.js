@@ -3517,32 +3517,12 @@ function apSummaryCards(L) {
   return `<div id="apSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${card('accepted', t('summary.accepted'), 'var(--ok-soft)', 'var(--ok)')}${card('notaccepted', t('summary.notAccepted'), 'var(--err-soft)', 'var(--err)')}${card('pending', t('summary.pending'), 'var(--warn-soft)', 'var(--warn)')}</div>`;
 }
 function apBulkControls(L) {
-  const t = (k) => tr(L, k);
-  // Opt-in selection mode. By default only the "Select Multiple" toggle shows; the
-  // whole panel (Select all + per-row checkboxes + Reject) stays hidden so the list
-  // reads normally. The toggle reveals the panel; in that state it becomes "Cancel"
-  // and hides everything again. All inline (no floating bar) so nothing covers a card.
-  return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">
-    <button type="button" id="apBulkToggle" class="btn btn-ghost btn-sm" title="${esc(t('bulk.selectMode'))}" aria-label="${esc(t('bulk.selectMode'))}"><span id="apBulkToggleLabel" style="font-size:16px;line-height:1">⋮</span></button>
-    <button type="button" id="apRejectAll" class="btn btn-sm" style="display:none;background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apRejectAllLabel"></span></button>
-    <span id="apBulkPanel" style="display:none;gap:12px;align-items:center;flex-wrap:wrap">
-      <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="apSelectAll" style="width:16px;height:16px"> ${t('bulk.selectAll')}</label>
-      <span id="apSelCount" class="muted" style="font-size:12.5px"></span>
-      <span id="apBulkBar" style="display:none;gap:10px;align-items:center;flex-wrap:wrap">
-        <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">🚫 <span id="apBulkRejectLabel"></span></button>
-      </span>
-    </span>
-  </div>
-  <div id="apRejAllModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
-    <div class="card" style="max-width:460px;width:100%;margin:0">
-      <h3 style="margin:0 0 8px;font-size:18px">${t('bulk.rejectAllTitle')}</h3>
-      <p id="apRejAllMsg" style="font-size:14px;margin:0 0 8px"></p>
-      <p id="apRejAllScope" class="muted" style="font-size:13px;margin:0 0 14px"></p>
-      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-        <button type="button" id="apRejAllCancel" class="btn btn-ghost btn-sm">${t('bulk.cancel')}</button>
-        <button type="button" id="apRejAllConfirm" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff">${t('bulk.rejectAllConfirmBtn')}</button>
-      </div>
-    </div>
+  // ONE bulk-reject flow. Per-row checkboxes are always visible on undecided
+  // (Applied/Under Review) rows — no mode toggle, no select-all, no reject-all.
+  // Ticking any row reveals this floating bar with a single "Reject selected (X)"
+  // action (gated by a confirm). The individual per-card Reject stays separate.
+  return `<div id="apBulkBar" style="display:none;position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:1100;align-items:center;gap:10px;background:#111827;color:#fff;padding:11px 16px;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.3);max-width:calc(100vw - 24px)">
+    <button type="button" id="apBulkReject" class="btn btn-sm" style="background:var(--err);border-color:var(--err);color:#fff;white-space:nowrap;margin:0">🚫 <span id="apBulkRejectLabel"></span></button>
   </div>`;
 }
 function apBulkLogicJS(o) {
@@ -3550,27 +3530,14 @@ function apBulkLogicJS(o) {
   return `
   function bucketOf(s){ return (s==='approved'||s==='assigned'||s==='completed')?'accepted':(s==='rejected'?'notaccepted':'pending'); }
   function apItems(){ return ${o.itemsExpr}; }
-  // Selection mode: per-row checkboxes stay hidden until "Select all" turns it on,
-  // so the default list stays clean. apVisRej is empty while off, so nothing counts
-  // as selectable and the floating bar never shows.
-  var apSelMode=false;
-  function applySelMode(){ apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.style.display=apSelMode?'':'none'; }); }
-  function apVisRej(){ if(!apSelMode)return []; return apItems().filter(function(it){ return it.offsetParent!==null && it.querySelector('.ap-cb'); }); }
-  // Rows matching the CURRENT filter that can still be rejected (Applied/Under Review) —
-  // independent of selection mode. Powers the one-click "Reject All (X)". Uses the
-  // filter's display flag (not offsetParent) so a collapsed event folder still counts.
-  function apVisibleRejectable(){ return apItems().filter(function(it){ return it.style.display!=='none' && it.querySelector('.ap-cb'); }); }
   function apToast(msg){ try{ var el=document.createElement('div'); el.textContent=msg; el.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:1200;font-size:14px;font-weight:600;opacity:0;transition:opacity .2s'; document.body.appendChild(el); requestAnimationFrame(function(){ el.style.opacity='1'; }); setTimeout(function(){ el.style.opacity='0'; setTimeout(function(){ if(el.parentNode)el.parentNode.removeChild(el); },260); },2800); }catch(e){ try{ window.alert(msg); }catch(e2){} } }
   var apSumCards=[].slice.call(document.querySelectorAll('.ap-sum-card'));
   var apSumN={}; [].slice.call(document.querySelectorAll('.ap-sum-n')).forEach(function(b){ apSumN[b.getAttribute('data-k')]=b; });
-  var apSelAll=document.getElementById('apSelectAll'),apSelCount=document.getElementById('apSelCount');
   var apBar=document.getElementById('apBulkBar'),apRejectBtn=document.getElementById('apBulkReject'),apRejectLbl=document.getElementById('apBulkRejectLabel');
-  var apBulkToggle=document.getElementById('apBulkToggle'),apBulkToggleLabel=document.getElementById('apBulkToggleLabel'),apBulkPanel=document.getElementById('apBulkPanel');
-  var apRejectAll=document.getElementById('apRejectAll'),apRejectAllLbl=document.getElementById('apRejectAllLabel');
-  var apRAModal=document.getElementById('apRejAllModal'),apRAMsg=document.getElementById('apRejAllMsg'),apRAScope=document.getElementById('apRejAllScope'),apRAConfirm=document.getElementById('apRejAllConfirm'),apRACancel=document.getElementById('apRejAllCancel');
-  // Show/hide the whole selection UI (panel + per-row checkboxes) for the current mode.
-  function applyBulkMode(){ if(apBulkPanel)apBulkPanel.style.display=apSelMode?'inline-flex':'none'; if(apBulkToggleLabel)apBulkToggleLabel.textContent=apSelMode?('✕ '+${S(o.cancelLabel)}):'⋮'; if(apBulkToggle){ var tt=apSelMode?${S(o.cancelLabel)}:${S(o.selectModeLabel)}; apBulkToggle.title=tt; apBulkToggle.setAttribute('aria-label',tt); } applySelMode(); }
   function apFill(t,n){ return String(t).split('{n}').join(n); }
+  // Every ticked checkbox on a still-visible row. Rows filtered out of view are
+  // auto-unticked in apSummaryRefresh, so they can never be swept into a reject.
+  function apChecked(){ return apItems().filter(function(it){ var cb=it.querySelector('.ap-cb'); return cb&&cb.checked&&it.offsetParent!==null; }); }
   // Reject a set of rows via the shared endpoint, then reflect it in the DOM (status,
   // drop checkbox, swap the status pill). Returns a promise of the server-side count.
   function apReject(rows){
@@ -3593,54 +3560,22 @@ function apBulkLogicJS(o) {
     if(apSumN.notaccepted)apSumN.notaccepted.textContent=c.notaccepted;
     if(apSumN.pending)apSumN.pending.textContent=c.pending;
     apSumCards.forEach(function(cd){ cd.style.borderColor=(cd.getAttribute('data-bucket')===apBucket)?'currentColor':'transparent'; });
+    // Untick any checkbox whose row is now filtered out of view.
     apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb&&cb.checked&&it.offsetParent===null)cb.checked=false; });
-    var vis=apVisRej(); var chk=vis.filter(function(it){ return it.querySelector('.ap-cb').checked; });
-    if(apSelAll){ apSelAll.checked=vis.length>0&&chk.length===vis.length; apSelAll.indeterminate=chk.length>0&&chk.length<vis.length; }
-    if(apSelCount)apSelCount.textContent=chk.length?apFill(${S(o.selectedTpl)},chk.length):'';
-    // NB: toggle style.display, not the [hidden] attribute — an author display: rule
-    // (inline, or from .btn) beats [hidden]{display:none}, so [hidden] wouldn't hide these.
-    if(apBar){ if(chk.length){ apBar.style.display='inline-flex'; if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length); } else { apBar.style.display='none'; } }
-    // Reject All (X): X = filter-matching rejectable rows. Hidden in selection mode or when 0.
-    var vr=apVisibleRejectable();
-    if(apRejectAllLbl)apRejectAllLbl.textContent=apFill(${S(o.rejectAllTpl)},vr.length);
-    if(apRejectAll)apRejectAll.style.display=(apSelMode||vr.length===0)?'none':'';
+    var chk=apChecked();
+    if(apRejectLbl)apRejectLbl.textContent=apFill(${S(o.rejectTpl)},chk.length);
+    // The floating "Reject selected (X)" bar shows only while at least one row is ticked.
+    if(apBar){ apBar.style.display=chk.length?'inline-flex':'none'; try{ document.body.style.paddingBottom=chk.length?'84px':''; }catch(e){} }
   }
   apSumCards.forEach(function(cd){ cd.addEventListener('click',function(){ var b=cd.getAttribute('data-bucket'); apBucket=(apBucket===b)?'':b; ${o.statusReset} apply(); }); });
-  // "Select Multiple" toggles the whole mode on/off. Turning it off clears any picks.
-  if(apBulkToggle)apBulkToggle.addEventListener('click',function(){
-    apSelMode=!apSelMode;
-    if(!apSelMode)apItems().forEach(function(it){ var cb=it.querySelector('.ap-cb'); if(cb)cb.checked=false; });
-    applyBulkMode(); apSummaryRefresh();
-  });
-  // In mode, "Select all" just checks/unchecks every visible rejectable row.
-  if(apSelAll)apSelAll.addEventListener('change',function(){ apVisRej().forEach(function(it){ it.querySelector('.ap-cb').checked=apSelAll.checked; }); apSummaryRefresh(); });
   document.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ap-cb'))apSummaryRefresh(); });
   if(apRejectBtn)apRejectBtn.addEventListener('click',function(){
-    var chk=apVisRej().filter(function(it){ return it.querySelector('.ap-cb').checked; });
-    if(!chk.length)return;
+    var chk=apChecked(); if(!chk.length)return;
     if(!window.confirm(apFill(${S(o.confirmTpl)},chk.length)))return;
     apRejectBtn.disabled=true;
-    apReject(chk).then(function(n){ apRejectBtn.disabled=false; apSelMode=false; applyBulkMode(); apply(); apToast(apFill(${S(o.doneTpl)},n)); })
+    apReject(chk).then(function(n){ apRejectBtn.disabled=false; apply(); apToast(apFill(${S(o.doneTpl)},n)); })
       .catch(function(){ apRejectBtn.disabled=false; apToast(${S(o.errorMsg)}); });
   });
-  // One-click "Reject All (X)": no checkboxes. A mandatory modal spells out the count
-  // and the active filter before it fires against every filter-matching rejectable row.
-  function apCloseRA(){ if(apRAModal)apRAModal.style.display='none'; }
-  if(apRACancel)apRACancel.addEventListener('click',apCloseRA);
-  if(apRAModal)apRAModal.addEventListener('click',function(e){ if(e.target===apRAModal)apCloseRA(); });
-  if(apRejectAll)apRejectAll.addEventListener('click',function(){
-    var rows=apVisibleRejectable(); if(!rows.length)return;
-    if(apRAMsg)apRAMsg.textContent=apFill(${S(o.rejectAllMsgTpl)},rows.length);
-    if(apRAScope){ var sum=(typeof apFilterSummary==='function'?apFilterSummary():''); apRAScope.textContent=${S(o.filterLabel)}+': '+(sum||${S(o.filterNone)}); }
-    if(apRAModal)apRAModal.style.display='flex';
-  });
-  if(apRAConfirm)apRAConfirm.addEventListener('click',function(){
-    var rows=apVisibleRejectable(); if(!rows.length){ apCloseRA(); return; }
-    apRAConfirm.disabled=true;
-    apReject(rows).then(function(n){ apRAConfirm.disabled=false; apCloseRA(); apply(); apToast(apFill(${S(o.toastTpl)},n)); })
-      .catch(function(){ apRAConfirm.disabled=false; apCloseRA(); apToast(${S(o.errorMsg)}); });
-  });
-  applyBulkMode();
   apSummaryRefresh();
 `;
 }
@@ -3913,19 +3848,7 @@ function eoApplicantsPageScript(L) {
     if(ip.has('bkt'))apBucket=ip.get('bkt');
     if(ip.has('tab')){tab=ip.get('tab');tabChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-aptab')===tab);});talentBox.style.display=tab==='talent'?'':'none';posBox.style.display=tab==='position'?'':'none';}
   }catch(e){}
-  // Human-readable summary of the active filters, for the Reject All confirmation.
-  function apFilterSummary(){
-    var p=[];
-    if(apBucket){ var cd=document.querySelector('.ap-sum-card[data-bucket="'+apBucket+'"] span'); p.push(${JSON.stringify(t('filter.status'))}+' = '+(cd?cd.textContent.trim():apBucket)); }
-    else if(flt&&flt!=='all'){ var ch=document.querySelector('[data-apstatus="'+flt+'"]'); p.push(${JSON.stringify(t('filter.status'))}+' = '+(ch?ch.textContent.trim():flt)); }
-    if(posSel&&posSel.value)p.push(${JSON.stringify(t('filter.position'))}+' = '+posSel.options[posSel.selectedIndex].text.trim());
-    if(catSel&&catSel.value)p.push(${JSON.stringify(t('filter.talentCategory'))}+' = '+catSel.options[catSel.selectedIndex].text.trim());
-    if(evSel&&evSel.value)p.push(${JSON.stringify(t('filter.event'))}+' = '+evSel.options[evSel.selectedIndex].text.trim());
-    var q=search?search.value.trim():''; if(q)p.push(${JSON.stringify(t('bulk.search'))}+' = "'+q+'"');
-    var mn=folMin?folMin.value.trim():'',mx=folMax?folMax.value.trim():''; if(mn||mx)p.push(${JSON.stringify(t('filter.followers'))}+' '+(mn||'0')+'–'+(mx||'∞'));
-    return p.join(', ');
-  }
-${apBulkLogicJS({ itemsExpr: "[].slice.call(talentBox.querySelectorAll('.ap-item'))", statusReset: "flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});", endpoint: '/eo/applicants/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error'), selectModeLabel: t('bulk.selectMode'), cancelLabel: t('bulk.cancel'), rejectAllTpl: t('bulk.rejectAll'), rejectAllMsgTpl: t('bulk.rejectAllMsg'), filterLabel: t('bulk.filterLabel'), filterNone: t('bulk.filterNone'), toastTpl: t('bulk.rejectedToast') })}
+${apBulkLogicJS({ itemsExpr: "[].slice.call(talentBox.querySelectorAll('.ap-item'))", statusReset: "flt='all';statusChips.forEach(function(x){x.classList.toggle('is-on',x.getAttribute('data-apstatus')==='all');});", endpoint: '/eo/applicants/bulk-reject', rejectedLabel: t('ta.status.rejected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
   apply();
 })();
 </script>`;
@@ -6420,18 +6343,7 @@ ${rvModal}
     });
   });
 
-  // Human-readable summary of the active filters, for the Reject All confirmation.
-  function apFilterSummary(){
-    var p=[];
-    if(apBucket){ var cd=document.querySelector('.ap-sum-card[data-bucket="'+apBucket+'"] span'); p.push(${JSON.stringify(t('filter.status'))}+' = '+(cd?cd.textContent.trim():apBucket)); }
-    else if(st&&st.value)p.push(${JSON.stringify(t('filter.status'))}+' = '+st.options[st.selectedIndex].text.trim());
-    if(catNav&&catNav.value)p.push(${JSON.stringify(t('filter.talentCategory'))}+' = '+catNav.options[catNav.selectedIndex].text.trim());
-    if(pos&&pos.value)p.push(${JSON.stringify(t('filter.position'))}+' = '+pos.options[pos.selectedIndex].text.trim());
-    var q=sr?sr.value.trim():''; if(q)p.push(${JSON.stringify(t('bulk.search'))}+' = "'+q+'"');
-    var mn=folMin?folMin.value.trim():'',mx=folMax?folMax.value.trim():''; if(mn||mx)p.push(${JSON.stringify(t('filter.followers'))}+' '+(mn||'0')+'–'+(mx||'∞'));
-    return p.join(', ');
-  }
-${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), selectedTpl: t('bulk.selected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error'), selectModeLabel: t('bulk.selectMode'), cancelLabel: t('bulk.cancel'), rejectAllTpl: t('bulk.rejectAll'), rejectAllMsgTpl: t('bulk.rejectAllMsg'), filterLabel: t('bulk.filterLabel'), filterNone: t('bulk.filterNone'), toastTpl: t('bulk.rejectedToast') })}
+${apBulkLogicJS({ itemsExpr: 'items', statusReset: "if(st)st.value='';", endpoint: '/admin/applications/bulk-reject', rejectedLabel: t('ta.status.rejected'), rejectTpl: t('bulk.rejectSelected'), confirmTpl: t('bulk.confirm'), doneTpl: t('bulk.done'), errorMsg: t('bulk.error') })}
   renderChips();
   fillNames();
   apply();
