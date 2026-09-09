@@ -2841,6 +2841,24 @@ app.post('/eo/applicants/:appId/reset', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// EO individual per-card reject (from the applicant list). Same full-reject logic as
+// the bulk actions: quota reopen + status→rejected + neutral result email. Redirects
+// back to the list. Mirrors /admin/applications/:id/reject-position.
+app.post('/eo/applicants/:appId/reject-position', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    const back = eoBackTo(req.body.next);
+    if (!found) return res.redirect('/eo/talents');
+    const prior = found.app.status;
+    await st.clearApplicationAccepted(found.app.id);
+    await st.updateApplication(found.app.id, { status: 'rejected', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
+    await st.addStatusLog(found.app.id, prior, 'rejected', req.staff.id, cleanReviewer(req.body.actor_name) || null).catch(() => {});
+    if (prior !== 'rejected') notifyResultAnnouncement(st, found.app).catch((e) => console.error('[mail] eo card reject email failed:', e && e.message));
+    return res.redirect(back);
+  } catch (e) { next(e); }
+});
+
 app.get('/eo/decision', requireEo, async (req, res, next) => {
   try {
     const st = db(); if (!st) return needConfig(req, res);

@@ -1012,6 +1012,7 @@
   "mpr.reviewedBy": "Reviewed",
   "mpr.noStation": "No station yet",
   "confirm.rejectApp": "Reject this application?",
+  "confirm.rejectTalent": "Reject {name}? This action cannot be undone.",
   "manage.mpQuota": "MP Quota",
   "manage.mockup": "Mockup photo",
   "manage.mockupHint": "Event image/mockup. Shows automatically on the event page for talents. Max 6 MB.",

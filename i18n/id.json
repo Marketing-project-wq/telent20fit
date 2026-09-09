@@ -1012,6 +1012,7 @@
   "mpr.reviewedBy": "Sudah ditinjau",
   "mpr.noStation": "Belum ada station",
   "confirm.rejectApp": "Tolak aplikasi ini?",
+  "confirm.rejectTalent": "Tolak {name}? Tindakan ini tidak bisa dibatalkan.",
   "manage.mpQuota": "Kuota MP",
   "manage.mockup": "Mockup foto",
   "manage.mockupHint": "Gambar/mockup event. Otomatis tampil di halaman event untuk talent. Maks 6 MB.",
