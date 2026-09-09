@@ -4195,7 +4195,9 @@ function applicationCard(e, isCreator, L) {
       ${applicationTracker(e.status, L)}
       ${(e.status === 'approved' && e.acceptedPos && e.otherPos && e.otherPos.length) ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(t('tp.acceptedExplain', { pos: posLabel(e.acceptedPos, L), others: e.otherPos.map((o) => posLabel(o, L)).join(', ') }))}</div>` : ''}
       ${(e.picks && e.picks.length > 1) ? `<div class="muted" style="font-size:12px;margin-top:8px">${t('tp.yourPicks')}: ${e.picks.map((pk) => `${pk.priority}. ${esc(pk.pos ? posLabel(pk.pos, L) : '—')}${pk.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : ''}
-      ${e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : ''}
+      ${e.confirmTimeout
+        ? `<div style="font-size:12.5px;margin-top:8px;padding:9px 11px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;color:#9a3412;line-height:1.55">${esc(t('ta.timeoutRejected', { hours: CONFIRM_WINDOW_HOURS }))}</div>`
+        : (e.status === 'rejected' && e.note ? `<div class="muted" style="font-size:12.5px;margin-top:8px">${esc(e.note)}</div>` : '')}
       ${gj ? `<div class="tp-ev-group">${gj}</div>` : ''}
       ${foot ? `<div class="tp-ev-foot">${foot}</div>` : ''}
     </div>`;

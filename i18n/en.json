@@ -81,6 +81,7 @@
   "ta.status.assigned": "Assigned",
   "ta.status.completed": "Completed",
   "ta.status.rejected": "Rejected",
+  "ta.timeoutRejected": "You were selected for this event, but because you didn't confirm your attendance within {hours} hours, your spot was released and offered to another talent.",
   "ta.applyConfirmTitle": "Confirm Application",
   "ta.applyConfirmQ": "Are you sure you want to apply as {pos} for {event}?",
   "ta.applyConfirmYes": "Yes, Apply",

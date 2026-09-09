@@ -850,7 +850,10 @@ async function buildAppliedEvents(st, myApps, eventById) {
       // rejectNotify: a genuine "not selected" rejection (skip self-declines + the
       // auto-decline of other picks when accepted elsewhere) → drives the pop-up.
       const rejectNotify = a.status === 'rejected' && a.note !== DECLINED_BY_TALENT && a.note !== AUTO_DECLINED_NOTE && a.note !== CONFIRM_TIMEOUT_NOTE;
-      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, groupUrl: ev.group_url || null };
+      // confirmTimeout: rejected specifically because the approved talent never confirmed
+      // in time → the dashboard explains why an accepted spot became rejected.
+      const confirmTimeout = a.status === 'rejected' && a.note === CONFIRM_TIMEOUT_NOTE;
+      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, confirmTimeout, groupUrl: ev.group_url || null };
     })
     .filter(Boolean);
 }
