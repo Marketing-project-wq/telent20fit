@@ -2,6 +2,14 @@
 
 const { t: tr, normLang } = require('./i18n');
 
+// ── Talent confirmation window ───────────────────────────────────────────────
+// How long a talent has to confirm (Agree) a spot they were accepted for before
+// it may be offered to someone else. This is the SINGLE source of truth for that
+// number — change it here (e.g. back to 48) and every place that shows it updates.
+// NOTE: this is the stated policy shown to talents/EO; it is not auto-enforced by
+// a background job (a slot is released when the talent Declines or an EO re-decides).
+const CONFIRM_WINDOW_HOURS = 10;
+
 /** HTML-escape a value for safe interpolation. */
 function esc(s) {
   return String(s == null ? '' : s)
@@ -4227,7 +4235,7 @@ function confirmationBanner(events, lang) {
       <div class="cf-badge">🎉 ${t('confirm.badge')}</div>
       <div class="cf-title">${esc(t('confirm.title', { pos: posLbl || '—', event: e.name }))}</div>
       <div class="cf-meta">${esc(e.name)}${posLbl ? ' · <b>' + esc(posLbl) + '</b>' : ''}${date ? ' · ' + esc(date) : ''}</div>
-      <div class="cf-sub">${t('confirm.sub')}</div>
+      <div class="cf-sub">${t('confirm.sub', { hours: CONFIRM_WINDOW_HOURS })}</div>
       <div class="cf-actions">
         <form method="post" action="/talent/applications/${esc(e.appId)}/agree?lang=${L}" style="margin:0"><button type="submit" class="btn cf-agree">✓ ${t('confirm.agree')}</button></form>
         <form method="post" action="/talent/applications/${esc(e.appId)}/decline?lang=${L}" style="margin:0" onsubmit="return confirm('${esc(t('confirm.declineConfirm'))}')"><button type="submit" class="btn btn-ghost cf-decline">${t('confirm.decline')}</button></form>
@@ -6588,7 +6596,7 @@ function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, 
         <div>✉️ ${t('mpr2.cf.email')}: <b>${esc(talentLogin || '—')}</b></div>
         ${actorName ? `<div>🖊️ ${t('mpr2.cf.actor')}: <b>${esc(actorName)}</b></div>` : ''}
       </div>
-      <p class="muted" style="font-size:13px;margin:14px 0 16px">${t('mpr2.cf.note')}</p>
+      <p class="muted" style="font-size:13px;margin:14px 0 16px">${t('mpr2.cf.note', { hours: CONFIRM_WINDOW_HOURS })}</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <form method="post" action="${appBase}/${esc(appId)}/final-accept">
           <input type="hidden" name="position_id" value="${esc(positionId)}">
