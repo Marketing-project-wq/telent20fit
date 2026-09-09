@@ -491,9 +491,17 @@ function toggles(lang) {
 // page loads on navigation), so gtag fires page_view on every load; no SPA hook needed.
 // Override the ID via the GA_MEASUREMENT_ID env var; empty string disables the tag.
 const GA_MEASUREMENT_ID = (process.env.GA_MEASUREMENT_ID != null ? process.env.GA_MEASUREMENT_ID : 'G-70JD631GZC').trim();
+// page_location/page_referrer are sanitized before sending: sensitive query params
+// (reset/verify tokens, the attendance HMAC `k`, name searches `q`, etc.) are stripped
+// so no secret or PII ever reaches Google. Campaign params (utm_*, gclid, …) are kept,
+// and the path is left intact (it only carries opaque UUIDs, never PII).
 const GA4_HEAD = GA_MEASUREMENT_ID
   ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}"></script>`
-    + `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_MEASUREMENT_ID}',{cookie_domain:'auto'});</script>`
+    + `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());`
+    + `(function(){var DENY=['token','k','code','key','otp','secret','password','pwd','q','email'];`
+    + `function clean(h){try{var u=new URL(h);DENY.forEach(function(p){u.searchParams.delete(p);});return u.toString();}catch(e){return String(h).split('?')[0];}}`
+    + `var cfg={cookie_domain:'auto',page_location:clean(location.href)};if(document.referrer)cfg.page_referrer=clean(document.referrer);`
+    + `gtag('config','${GA_MEASUREMENT_ID}',cfg);})();</script>`
   : '';
 function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
@@ -5395,7 +5403,8 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   </table></div></div>
   <p class="muted" style="font-size:13px;margin-top:14px">${t('score.formula')}</p>
 </div>`;
-  return appLayout({ title: (talent ? talent.name : 'KOL') + ' — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
+  // Generic title (no talent name) so the person's name is never sent to GA as page_title.
+  return appLayout({ title: 'KOL — 20FIT', body, role: staff && staff.role, active: 'dashboard', user: staff && staff.name, lang: L });
 }
 
 // Tab — Analisis: deeper breakdown of the engagement metrics.
