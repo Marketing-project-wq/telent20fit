@@ -800,12 +800,13 @@ const AUTO_DECLINED_NOTE = 'Otomatis: kamu diterima di posisi lain pada event in
 // Note set when an approved talent is auto-rejected for not confirming their spot
 // within the window — treated like a passive self-decline (no "not selected" pop-up).
 const CONFIRM_TIMEOUT_NOTE = 'Otomatis: tidak konfirmasi kehadiran dalam batas waktu.';
-// The confirmation timeout is enforced ONLY for approvals made at/after this instant,
-// so applications already Approved before the feature shipped are grandfathered (kept
-// under the old no-auto-expiry behaviour — never auto-rejected by surprise). Override
-// with the CONFIRM_ENFORCED_SINCE env var; the confirmation window length itself lives
-// in one place (views.CONFIRM_WINDOW_HOURS).
-const CONFIRM_ENFORCED_SINCE = process.env.CONFIRM_ENFORCED_SINCE || '2026-09-09T05:00:00Z';
+// The confirmation timeout is enforced ONLY for approvals made at/after this instant.
+// It is set well before any live approval so the 10h rule reliably applies to every
+// current and future approval (the one pre-feature backlog of approvals was resolved
+// manually on 2026-09-09). It stays configurable so enforcement can be paused/rewound
+// from a single place. Override with the CONFIRM_ENFORCED_SINCE env var; the confirmation
+// window length itself lives in one place (views.CONFIRM_WINDOW_HOURS).
+const CONFIRM_ENFORCED_SINCE = process.env.CONFIRM_ENFORCED_SINCE || '2026-09-01T00:00:00Z';
 
 // Has this talent confirmed the KOL category yet? True once they have at least one
 // application to a KOL-category position (position.key === 'kol'). This gates the
