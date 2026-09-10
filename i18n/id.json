@@ -41,6 +41,7 @@
   "common.optional": "opsional",
   "common.transPending": "Terjemahan untuk bahasa ini belum tersedia",
   "role.super_admin": "Super Admin",
+  "role.kol_manager": "KOL Manager",
   "role.eo": "Event Organizer",
   "ta.openTitle": "Cari Event (Semua EO)",
   "ta.openSub": "Event yang sedang buka pendaftaran dari semua Event Organizer.",

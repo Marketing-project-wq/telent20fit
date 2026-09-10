@@ -584,15 +584,19 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const isEo = role === 'eo';
-  const isStaff = role === 'super_admin' || isEo;
+  const isKolMgr = role === 'kol_manager';
+  const isStaff = role === 'super_admin' || isEo || isKolMgr;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isEo ? '/eo' : isStaff ? '/admin' : '/talent';
+  const homeHref = isEo ? '/eo' : isKolMgr ? '/admin/proofs' : isStaff ? '/admin' : '/talent';
   const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
+    : isKolMgr
+      ? navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
+        + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'applications', t('nav.appKol'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
         + navLink('/admin/overview', 'overview', active, 'overview', t('nav.overview'))
@@ -5676,11 +5680,11 @@ function adminOverview({ staff, proofs, lang }) {
   return appLayout({ title: t('ov.title') + ' — 20FIT', body, role: staff && staff.role, active: 'overview', user: staff && staff.name, lang: L });
 }
 
-// Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
+// Tab 2 — Bukti Post: every proof + extraction (super admin / KOL Manager can act on them).
 function adminProofs({ staff, proofs, lang, settings }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const isSuper = staff && staff.role === 'super_admin';
+  const isSuper = staff && (staff.role === 'super_admin' || staff.role === 'kol_manager');
   const body = `<div class="wrap">
   ${staffHead(staff, t('proofs.pageTitle'))}
   ${proofTable(proofs, isSuper, L, settings)}

@@ -1778,14 +1778,14 @@ app.post('/reset-password', async (req, res, next) => {
 // ----------------------------------------------------------------- admin ----
 
 // Where a signed-in staff member belongs, based on their role.
-function staffHome(type) { return type === 'eo' ? '/eo' : '/admin'; }
+function staffHome(type) { return type === 'eo' ? '/eo' : type === 'kol_manager' ? '/admin/proofs' : '/admin'; }
 
 app.get('/admin/login', (req, res) => {
-  // Only skip the form when ALREADY signed in as Super Admin. An EO session must
-  // not bounce this page — the /admin and /eo areas stay independent, and each
-  // login page is always reachable regardless of any other-role session.
-  const t = auth.anySession(req, ['super_admin']);
-  if (t) return res.redirect('/admin');
+  // Only skip the form when ALREADY signed in as Super Admin or KOL Manager. An EO
+  // session must not bounce this page — the /admin and /eo areas stay independent,
+  // and each login page is always reachable regardless of any other-role session.
+  const t = auth.anySession(req, ['super_admin', 'kol_manager']);
+  if (t) return res.redirect(staffHome(t.type));
   res.send(V.staffLogin({ lang: req.lang, variant: 'admin' }));
 });
 
@@ -1946,7 +1946,7 @@ app.post('/staff/reset-password', async (req, res, next) => {
 
 // Each staff area logs out only its own session, so signing out of EO doesn't
 // touch a Super Admin session open in another tab (and vice versa).
-app.post('/admin/logout', (req, res) => { auth.clearSession(res, 'super_admin'); res.redirect('/admin/login'); });
+app.post('/admin/logout', (req, res) => { auth.clearSession(res, ['super_admin', 'kol_manager']); res.redirect('/admin/login'); });
 app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/login/eo'); });
 
 // ------------------------------------------------------------------- EO ----
@@ -3019,6 +3019,17 @@ app.get('/admin/health', async (req, res) => {
 
 function staffCtx(req) { return { role: req.staff.type, name: req.staff.name }; }
 
+const KOL_MGR_ALLOWED = ['/admin/proofs', '/admin/kol/', '/admin/applications', '/admin/logout', '/admin/login'];
+app.use('/admin', (req, res, next) => {
+  const s = auth.sessionFor(req, 'kol_manager');
+  if (!s) return next();
+  req.staff = s;
+  const path = req.path;
+  if (path === '/admin/applications' && req.query.cat !== 'kol') return res.redirect('/admin/proofs');
+  if (KOL_MGR_ALLOWED.some((p) => path === p || path.startsWith(p))) return next();
+  res.redirect('/admin/proofs');
+});
+
 // Tab 1 — Dashboard: aggregate KOL statistics. Attaches talent names to proofs
 // but skips thumbnail signing (not shown here).
 app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => {
@@ -3047,7 +3058,7 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
 });
 
 // Per-KOL eligibility detail (both staff roles).
-app.get('/admin/kol/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3133,7 +3144,7 @@ app.get('/admin/overview/insight', auth.requireStaff(['super_admin']), async (re
 });
 
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
-app.get('/admin/proofs', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/proofs', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3203,7 +3214,7 @@ app.post('/admin/landing', auth.requireStaff(['super_admin']), uploadLanding, as
 });
 
 // Aplikasi MP (super admin only): review Man Power event applications.
-app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/applications', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3288,7 +3299,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
 });
 
 // Super admin: approve (optionally assign station) or reject an application.
-app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3326,7 +3337,7 @@ app.post('/admin/applications/:id/review', auth.requireStaff(['super_admin']), a
 
 // Super Admin per-position review of position-based applications (mirrors the EO
 // flow so both roles can accept a talent into any of their ranked picks).
-app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3354,7 +3365,7 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
   } catch (e) { next(e); }
 });
 
-app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3370,7 +3381,7 @@ app.post('/admin/applications/:id/reject-position', auth.requireStaff(['super_ad
 
 // Super admin: reject many undecided applications at once (from the "Pending"
 // bulk-select flow). Guarded server-side to Applied/Under Review only. Returns JSON.
-app.post('/admin/applications/bulk-reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/bulk-reject', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3380,7 +3391,7 @@ app.post('/admin/applications/bulk-reject', auth.requireStaff(['super_admin']), 
   } catch (e) { next(e); }
 });
 
-app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3407,7 +3418,7 @@ app.post('/admin/applications/:id/reset-position', auth.requireStaff(['super_adm
 function cleanReviewer(v) { return String(v || '').trim().replace(/\s+/g, ' ').slice(0, 80); }
 function backTo(v) { const s = String(v || ''); return s.startsWith('/admin/applications') ? s : '/admin/applications'; }
 
-app.post('/admin/applications/:id/propose', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/propose', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3429,7 +3440,7 @@ app.post('/admin/applications/:id/propose', auth.requireStaff(['super_admin']), 
   } catch (e) { next(e); }
 });
 
-app.post('/admin/applications/:id/unpropose', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/unpropose', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3441,7 +3452,7 @@ app.post('/admin/applications/:id/unpropose', auth.requireStaff(['super_admin'])
   } catch (e) { next(e); }
 });
 
-app.post('/admin/applications/:id/mark-reviewed', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/mark-reviewed', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3452,7 +3463,7 @@ app.post('/admin/applications/:id/mark-reviewed', auth.requireStaff(['super_admi
   } catch (e) { next(e); }
 });
 
-app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3466,7 +3477,7 @@ app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_ad
 // LAPIS 2 — the decision meeting. Shows ONLY proposed applicants for one event,
 // grouped by the position they were proposed for, with proposers + notes. The
 // final accept / reject buttons live only here.
-app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/applications/decision', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3539,7 +3550,7 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
 // LAPIS 2 — final ACCEPT. Two-step: the first POST (no confirmed flag) renders a
 // confirmation page summarising who will be accepted + emailed; the confirmed POST
 // performs the accept, logs it, and sends the generic (position-less) decision email.
-app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3580,7 +3591,7 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
 
 // LAPIS 2 — final REJECT. Status → rejected, logged. Sends NO acceptance email
 // (and, per the decision, no email at all — the talent is simply not taken on).
-app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/final-reject', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3908,7 +3919,7 @@ app.post('/admin/hyrox/:talentId/review', auth.requireStaff(['super_admin']), as
 // Super admin: manually (re)send the acceptance email for an approved application.
 // Unlike the auto-send on approval, this always sends — used to re-notify a talent
 // who was approved before the auto-email existed, or whose placement changed.
-app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3936,7 +3947,7 @@ app.post('/admin/applications/:id/resend-email', auth.requireStaff(['super_admin
 });
 
 // Super admin: mark a talent as attended (basis for the digital certificate).
-app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/attend', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4032,7 +4043,7 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
 
 // Super admin: download a PDF report of Man Power who have checked in — bank
 // details, phone, and how many days each attended. Payment/reconciliation aid.
-app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4097,7 +4108,7 @@ function csvExcelText(v) {
 // CSV, including the Instagram follower count. Honors the same filters/sort the
 // page keeps in the query string (status, position, proposal, search, min/max
 // followers, sort) so the file matches what's on screen.
-app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4195,7 +4206,7 @@ app.post('/admin/events/:id/complete', auth.requireStaff(['super_admin']), async
 });
 
 // Super admin: manually issue a certificate for an attended applicant.
-app.post('/admin/applications/:id/issue-cert', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/applications/:id/issue-cert', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4358,14 +4369,14 @@ app.post('/admin/assignments', auth.requireStaff(['super_admin']), async (req, r
 async function setProofStatus(st, id, status, staffId) {
   await st.updateProof(id, { status, verified_by: staffId || null, verified_at: new Date().toISOString() });
 }
-app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
-app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
-// Super admin: delete a proof (also removes its stored screenshot).
-app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+// Super admin / KOL Manager: delete a proof (also removes its stored screenshot).
+app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try { const st = db(); if (!st) return needConfig(req, res); await st.deleteProof(req.params.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
 });
 // Super admin: delete an event (with its needs & assignments) or an EO account.
@@ -4442,7 +4453,7 @@ app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res,
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
-app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin', 'kol_manager']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);

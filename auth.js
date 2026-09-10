@@ -14,7 +14,7 @@ const SECRET = process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_K
 const COOKIE_PREFIX = 'ts_';
 const LEGACY_COOKIE = 'tsid';
 const TALENT_TYPES = ['kol', 'main_power', 'fotografer'];
-const STAFF_TYPES = ['super_admin', 'eo'];
+const STAFF_TYPES = ['super_admin', 'eo', 'kol_manager'];
 const ALL_TYPES = TALENT_TYPES.concat(STAFF_TYPES);
 function cookieName(type) { return COOKIE_PREFIX + type; }
 const MAX_AGE_MS = 60 * 24 * 3600 * 1000; // 60 days — rolling (see touchSession)

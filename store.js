@@ -609,6 +609,9 @@ function memoryStore() {
   }, {
     id: 'staff-eo', role: 'eo', name: 'Demo EO', login: 'eo1@gmail.com',
     password_hash: hashPassword('Eo_12345'), created_at: now(), status: 'active', email_verified_at: now(),
+  }, {
+    id: 'staff-kolmgr', role: 'kol_manager', name: 'KOL Manager', login: 'kol_manager',
+    password_hash: hashPassword('Kol_12345'), created_at: now(), status: 'active', email_verified_at: now(),
   }];
   const eoProfiles = [];
   const staffResets = [];

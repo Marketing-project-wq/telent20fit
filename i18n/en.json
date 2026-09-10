@@ -41,6 +41,7 @@
   "common.optional": "optional",
   "common.transPending": "Translation for this language isn't available yet",
   "role.super_admin": "Super Admin",
+  "role.kol_manager": "KOL Manager",
   "role.eo": "Event Organizer",
   "ta.openTitle": "Find Events (All EOs)",
   "ta.openSub": "Events open for registration from all Event Organizers.",
