@@ -585,15 +585,19 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
   const t = (k, v) => tr(L, k, v);
   const isEo = role === 'eo';
   const isKolMgr = role === 'kol_manager';
-  const isStaff = role === 'super_admin' || isEo || isKolMgr;
+  const isEoKol = role === 'eo_kol';
+  const isStaff = role === 'super_admin' || isEo || isKolMgr || isEoKol;
   const roleLabel = t('role.' + (role || 'kol'));
-  const homeHref = isEo ? '/eo' : isKolMgr ? '/admin/proofs' : isStaff ? '/admin' : '/talent';
-  const logoutAction = isEo ? '/eo/logout' : isStaff ? '/admin/logout' : '/logout';
+  const homeHref = isEo ? '/eo' : isKolMgr ? '/admin/proofs' : isEoKol ? '/eo-kol' : isStaff ? '/admin' : '/talent';
+  const logoutAction = isEo ? '/eo/logout' : isEoKol ? '/eo-kol/logout' : isStaff ? '/admin/logout' : '/logout';
   const items = isEo
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
+    : isEoKol
+      ? navLink('/eo-kol', 'kol-saya', active, 'profile', t('nav.kolSaya'))
+        + navLink('/eo-kol/upload-post', 'upload-post', active, 'proofs', t('nav.uploadPost'))
     : isKolMgr
       ? navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
         + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'applications', t('nav.appKol'))
@@ -2490,11 +2494,12 @@ function staffLogin(opts = {}) {
   const t = (k, v) => tr(L, k, v);
   const v = opts.values || {};
   const isEo = opts.variant === 'eo';
-  const action = isEo ? '/login/eo' : '/admin/login';
-  const title = isEo ? t('staffLogin.titleEo') : t('staffLogin.titleAdmin');
-  const sub = isEo ? t('staffLogin.subEo') : t('staffLogin.subAdmin');
-  const otherHref = (isEo ? '/admin/login' : '/login/eo') + '?lang=' + L;
-  const otherText = isEo ? t('staffLogin.toAdmin') : t('staffLogin.toEo');
+  const isEoKol = opts.variant === 'eo_kol';
+  const action = isEoKol ? '/login/eo-kol' : isEo ? '/login/eo' : '/admin/login';
+  const title = isEoKol ? t('eoKol.loginTitle') : isEo ? t('staffLogin.titleEo') : t('staffLogin.titleAdmin');
+  const sub = isEoKol ? t('eoKol.loginSub') : isEo ? t('staffLogin.subEo') : t('staffLogin.subAdmin');
+  const otherHref = isEoKol ? ('/admin/login?lang=' + L) : (isEo ? '/admin/login' : '/login/eo') + '?lang=' + L;
+  const otherText = isEoKol ? t('eoKol.toAdmin') : isEo ? t('staffLogin.toAdmin') : t('staffLogin.toEo');
   const errorBanner = (opts.errors && opts.errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
   const body = `<div class="wrap narrow" style="max-width:440px">
@@ -2511,7 +2516,7 @@ function staffLogin(opts = {}) {
       <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
       <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
     </form>
-    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
+    ${!isEoKol ? `<p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>` : ''}
     ${isEo ? `<p style="text-align:center;margin:10px 0 0;font-size:14px">${t('eo.login.noAccount')} <a href="/eo/register?lang=${L}">${t('eo.login.registerLink')}</a></p>` : ''}
   </div>
   <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
@@ -5193,7 +5198,7 @@ function proofTable(proofs, isSuper, lang, settings) {
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
   const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}${p.submitted_by_staff ? ` · ${t('eoKol.submittedBy', { name: esc(p.submitted_by_staff) })}` : ''}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
     <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
     <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
@@ -7104,6 +7109,100 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   return browseLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: 'event', cities: cities || [], search: true, searchValue: e.name || '' });
 }
 
+// --------------------------------------------------------- EO KOL views ----
+
+function eoKolKolSaya({ staff, kols, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const cards = (kols && kols.length) ? kols.map((k) => `
+    <div class="card" style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
+      <div style="width:48px;height:48px;border-radius:14px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font:800 20px/1 'Barlow Condensed',sans-serif;flex-shrink:0">${esc((k.name || '?')[0].toUpperCase())}</div>
+      <div style="flex:1;min-width:0">
+        <b>${esc(k.name || '-')}</b>
+        ${k.instagram ? `<div class="muted" style="font-size:13px">@${esc(k.instagram)}</div>` : ''}
+        <div class="muted" style="font-size:13px">${t('eoKol.proofCount', { n: k.proof_count || 0 })}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <a href="/eo-kol/kol/${esc(k.id)}" class="btn btn-sm btn-ghost">${t('eoKol.viewProofs')}</a>
+          <a href="/eo-kol/upload-post?kol=${esc(k.id)}" class="btn btn-sm">${t('nav.uploadPost')}</a>
+        </div>
+      </div>
+    </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('eoKol.empty')}</p>`;
+
+  const body = `<div class="wrap narrow">
+  <h1 style="margin-top:0">${t('eoKol.kolSayaTitle')}</h1>
+  <p class="sub">${t('eoKol.kolSayaSub')}</p>
+  ${cards}
+</div>`;
+  return appLayout({ title: t('eoKol.kolSayaTitle') + ' — 20FIT', body, role: 'eo_kol', active: 'kol-saya', user: (staff && staff.name) || '', lang: L });
+}
+
+function eoKolUploadPost({ staff, kols, events, errors, success, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const errorBanner = (errors && errors.length)
+    ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const successBanner = success ? `<div class="banner banner-ok">${t('eoKol.uploaded')}</div>` : '';
+  const noKols = !kols || kols.length === 0;
+  const noEvents = !events || events.length === 0;
+  const kolOpts = (kols || []).map((k) => `<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+  const eventOpts = (events || []).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
+  const body = `<div class="wrap narrow">
+  <h1 style="margin-top:0">${t('eoKol.uploadTitle')}</h1>
+  <p class="sub">${t('eoKol.uploadSub')}</p>
+  ${errorBanner}${successBanner}
+  ${noKols ? `<div class="banner banner-warn">${t('eoKol.noKols')}</div>` : ''}
+  <form class="card" method="post" action="/eo-kol/upload-post" enctype="multipart/form-data">
+    <div class="field">
+      <label for="talent_id">${t('eoKol.kolLabel')}</label>
+      <select id="talent_id" name="talent_id" required ${noKols ? 'disabled' : ''}>
+        <option value="" disabled selected>${t('eoKol.pickKol')}</option>${kolOpts}
+      </select>
+    </div>
+    <div class="field">
+      <label for="event_id">${t('kol.eventLabel')}</label>
+      <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}>
+        <option value="" disabled selected>${t('kol.pickEvent')}</option>${eventOpts}
+      </select>
+    </div>
+    <div class="field">
+      <label>${t('kol.ssLabel')} <span class="hint">${t('kol.ssHint')}</span></label>
+      <input type="file" name="screenshot" accept="image/*" required>
+    </div>
+    <div class="field">
+      <label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label>
+      <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…">
+    </div>
+    <div class="field">
+      <label for="posted_at">${t('kol.postedLabel')} <span class="hint">${t('kol.postedHint')}</span></label>
+      <input type="datetime-local" id="posted_at" name="posted_at">
+    </div>
+    <button type="submit" class="btn btn-block" ${(noKols || noEvents) ? 'disabled' : ''}>${t('eoKol.uploadBtn')}</button>
+  </form>
+</div>`;
+  return appLayout({ title: t('eoKol.uploadTitle') + ' — 20FIT', body, role: 'eo_kol', active: 'upload-post', user: (staff && staff.name) || '', lang: L });
+}
+
+function eoKolKolProofs({ staff, talent, proofs, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const proofCards = (proofs && proofs.length) ? proofs.map((p) => `
+    <div class="card" style="display:flex;gap:14px;align-items:flex-start;margin-top:12px">
+      ${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0"></a>` : ''}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
+        ${p.submitted_by_staff ? `<div class="muted" style="font-size:12px;margin-top:4px">${t('eoKol.submittedBy', { name: esc(p.submitted_by_staff) })}</div>` : ''}
+      </div>
+    </div>`).join('') : `<p class="muted" style="margin-top:12px">${t('eoKol.kolProofsEmpty')}</p>`;
+
+  const body = `<div class="wrap narrow">
+  <a href="/eo-kol" class="btn btn-ghost btn-sm" style="margin-bottom:16px">${t('common.back')}</a>
+  <h1 style="margin-top:0">${t('eoKol.kolProofs', { name: esc((talent && talent.name) || '') })}</h1>
+  ${proofCards}
+</div>`;
+  return appLayout({ title: t('eoKol.kolDetail') + ' — 20FIT', body, role: 'eo_kol', active: 'kol-saya', user: (staff && staff.name) || '', lang: L });
+}
+
 module.exports = {
   CONFIRM_WINDOW_HOURS,
   talentStatusBadge, talentOpenEvents, talentEventApply,
@@ -7117,4 +7216,5 @@ module.exports = {
   staffLogin, configError, adminNoService, page500,
   staffForgot, staffForgotSent, staffReset, staffResetDone, eoDashboard, eoProfile,
   eoEvents, eoEventForm, eoEventDetail, eoApplicantsPage, eoApplicantsEventPicker, eoApplicantCard, profileStrength, eoRegister, eoVerifySent, eoVerifyResult, eoVerifyNeeded,
+  eoKolKolSaya, eoKolUploadPost, eoKolKolProofs,
 };

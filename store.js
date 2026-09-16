@@ -565,6 +565,21 @@ function supabaseStore() {
       const { error } = await sb.from('staff_accounts').delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
+    async listEoKolAssignments(staffId) {
+      let q = sb.from('eo_kol_assignments').select('id,staff_id,talent_id,assigned_at').order('assigned_at', { ascending: false });
+      if (staffId) q = q.eq('staff_id', staffId);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async assignKolToEoKol(staffId, talentId) {
+      const { error } = await sb.from('eo_kol_assignments').insert({ staff_id: staffId, talent_id: talentId });
+      if (error && !/duplicate|unique/i.test(error.message)) throw new Error(error.message);
+    },
+    async removeEoKolAssignment(staffId, talentId) {
+      const { error } = await sb.from('eo_kol_assignments').delete().eq('staff_id', staffId).eq('talent_id', talentId);
+      if (error) throw new Error(error.message);
+    },
     async getSettings() {
       const { data } = await sb.from('talent_settings').select(SETTING_KEYS.join(',')).eq('id', 1).maybeSingle();
       return { ...DEFAULT_SETTINGS, ...(data || {}) };
@@ -601,6 +616,9 @@ function memoryStore() {
   const hashPassword = require('./auth').hashPassword;
   const accounts = [
     { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now(), phone: '081234567890', city: 'Jakarta', birthdate: '1996-05-20', gender: 'male', instagram: 'budi.santoso', instagram_followers: 3200, experience: 'Marshal Jakarta Marathon 2024, 2025.', profile_completed_at: now() },
+    { id: 'kol-rina', talent_type: 'kol', name: 'Rina Fitri', login: 'rina@example.com', password_hash: hashPassword('Kol_12345'), created_at: now(), phone: '081298765432', city: 'Bandung', birthdate: '1998-03-15', gender: 'female', instagram: 'rina.fitri', instagram_followers: 12000, experience: 'KOL fitness 3 tahun.', profile_completed_at: now() },
+    { id: 'kol-dani', talent_type: 'kol', name: 'Dani Pratama', login: 'dani@example.com', password_hash: hashPassword('Kol_12345'), created_at: now(), phone: '081356789012', city: 'Surabaya', birthdate: '1995-07-22', gender: 'male', instagram: 'dani.pratama', instagram_followers: 8500, experience: 'Content creator olahraga.', profile_completed_at: now() },
+    { id: 'kol-sari', talent_type: 'kol', name: 'Sari Dewi', login: 'sari@example.com', password_hash: hashPassword('Kol_12345'), created_at: now(), phone: '081412345678', city: 'Jakarta', birthdate: '1997-11-08', gender: 'female', instagram: 'sari.dewi', instagram_followers: 15000, experience: 'KOL lifestyle & sport.', profile_completed_at: now() },
   ];
   const images = new Map();
   const staff = [{
@@ -612,10 +630,18 @@ function memoryStore() {
   }, {
     id: 'staff-kolmgr', role: 'kol_manager', name: 'KOL Manager', login: 'kol_manager',
     password_hash: hashPassword('Kol_12345'), created_at: now(), status: 'active', email_verified_at: now(),
+  }, {
+    id: 'staff-eokol1', role: 'eo_kol', name: 'EO KOL Demo', login: 'eo_kol_1',
+    password_hash: hashPassword('EoKol_12345'), created_at: now(), status: 'active', email_verified_at: now(),
   }];
   const eoProfiles = [];
   const staffResets = [];
   const staffVerifications = [];
+  const eoKolAssignments = [
+    { id: 'eka-1', staff_id: 'staff-eokol1', talent_id: 'kol-rina', assigned_at: now() },
+    { id: 'eka-2', staff_id: 'staff-eokol1', talent_id: 'kol-dani', assigned_at: now() },
+    { id: 'eka-3', staff_id: 'staff-eokol1', talent_id: 'kol-sari', assigned_at: now() },
+  ];
   const dOff = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   const events = [
     { id: 'ev-jakarta', name: 'Jakarta Run Series 2026', description: null, location: 'Gelora Bung Karno, Jakarta', starts_at: dOff(-5), ends_at: dOff(2), is_active: true, status: 'published', created_by: null, created_at: now(), mp_sow: 'Judges menilai peserta di station sesuai peraturan lomba. Briefing H-1 pukul 17.00, hari-H 05.00–14.00. Honorarium Rp750.000 + konsumsi + kaos event + sertifikat.' },
@@ -842,6 +868,9 @@ function memoryStore() {
       for (let j = applications.length - 1; j >= 0; j--) if (applications[j].event_id === id) applications.splice(j, 1);
     },
     async deleteStaff(id) { const i = staff.findIndex((s) => s.id === id); if (i >= 0) staff.splice(i, 1); },
+    async listEoKolAssignments(staffId) { return (staffId ? eoKolAssignments.filter((a) => a.staff_id === staffId) : eoKolAssignments).slice().reverse().map((a) => ({ ...a })); },
+    async assignKolToEoKol(staffId, talentId) { if (!eoKolAssignments.find((a) => a.staff_id === staffId && a.talent_id === talentId)) eoKolAssignments.push({ id: 'eka-' + (++seq), staff_id: staffId, talent_id: talentId, assigned_at: now() }); },
+    async removeEoKolAssignment(staffId, talentId) { const i = eoKolAssignments.findIndex((a) => a.staff_id === staffId && a.talent_id === talentId); if (i >= 0) eoKolAssignments.splice(i, 1); },
     async getSettings() { return { ...settings }; },
     async updateSettings(patch) { for (const k of SETTING_KEYS) if (Number.isFinite(patch[k])) settings[k] = patch[k]; },
   };

@@ -754,11 +754,18 @@ async function enrichProofs(st, proofs, ctx) {
   const paths = proofs.map((p) => p.screenshot_path).filter(Boolean);
   const signed = paths.length ? await st.signImageUrls(paths) : [];
   const urlByPath = new Map(paths.map((p, i) => [p, signed[i]]));
+  let staffNameById = ctx.staffNameById || null;
+  if (!staffNameById && proofs.some((p) => p.submitted_by_staff)) {
+    const st2 = ctx._store || st;
+    const allStaff = await st2.listStaff();
+    staffNameById = new Map(allStaff.map((s) => [s.id, s.name]));
+  }
   return proofs.map((p) => ({
     ...p,
     event_name: eventName.get(p.event_id) || null,
     talent_name: (ctx.talentNameById && ctx.talentNameById.get(p.talent_id)) || p.submitter_name || null,
     thumb: p.screenshot_path ? urlByPath.get(p.screenshot_path) : null,
+    submitted_by_staff: p.submitted_by_staff && staffNameById ? (staffNameById.get(p.submitted_by_staff) || p.submitted_by_staff) : p.submitted_by_staff || null,
   }));
 }
 
@@ -1778,7 +1785,7 @@ app.post('/reset-password', async (req, res, next) => {
 // ----------------------------------------------------------------- admin ----
 
 // Where a signed-in staff member belongs, based on their role.
-function staffHome(type) { return type === 'eo' ? '/eo' : type === 'kol_manager' ? '/admin/proofs' : '/admin'; }
+function staffHome(type) { return type === 'eo' ? '/eo' : type === 'kol_manager' ? '/admin/proofs' : type === 'eo_kol' ? '/eo-kol' : '/admin'; }
 
 app.get('/admin/login', (req, res) => {
   // Only skip the form when ALREADY signed in as Super Admin or KOL Manager. An EO
@@ -1825,6 +1832,13 @@ function staffLoginHandler(variant) {
 app.post('/admin/login', staffLoginHandler('admin'));
 app.post('/login/eo', staffLoginHandler('eo'));
 app.post('/eo/login', staffLoginHandler('eo')); // alias for stale forms
+
+app.get('/login/eo-kol', (req, res) => {
+  const t = auth.anySession(req, ['eo_kol']);
+  if (t) return res.redirect('/eo-kol');
+  res.send(V.staffLogin({ lang: req.lang, variant: 'eo_kol' }));
+});
+app.post('/login/eo-kol', staffLoginHandler('eo_kol'));
 
 // EO self-registration: an EO creates their own account, then completes their
 // profile before they can create events.
@@ -1948,6 +1962,110 @@ app.post('/staff/reset-password', async (req, res, next) => {
 // touch a Super Admin session open in another tab (and vice versa).
 app.post('/admin/logout', (req, res) => { auth.clearSession(res, ['super_admin', 'kol_manager']); res.redirect('/admin/login'); });
 app.post('/eo/logout', (req, res) => { auth.clearSession(res, 'eo'); res.redirect('/login/eo'); });
+app.post('/eo-kol/logout', (req, res) => { auth.clearSession(res, 'eo_kol'); res.redirect('/login/eo-kol'); });
+
+// --------------------------------------------------------------- EO KOL ----
+const requireEoKol = auth.requireStaff(['eo_kol'], '/login/eo-kol');
+
+function eoKolCtx(req) { return { role: 'eo_kol', name: req.staff.name }; }
+
+app.get('/eo-kol', requireEoKol, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const assignments = await st.listEoKolAssignments(req.staff.id);
+    const talentIds = assignments.map((a) => a.talent_id);
+    const allTalents = await st.listTalents();
+    const talentById = new Map(allTalents.map((t) => [t.id, t]));
+    const allProofs = await st.listProofs();
+    const proofCountByTalent = {};
+    allProofs.forEach((p) => { if (talentIds.includes(p.talent_id)) proofCountByTalent[p.talent_id] = (proofCountByTalent[p.talent_id] || 0) + 1; });
+    const kols = talentIds.map((tid) => {
+      const t = talentById.get(tid);
+      if (!t) return null;
+      return { id: t.id, name: t.name, instagram: t.instagram, proof_count: proofCountByTalent[tid] || 0 };
+    }).filter(Boolean);
+    res.send(V.eoKolKolSaya({ staff: eoKolCtx(req), kols, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo-kol/kol/:id', requireEoKol, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const assignments = await st.listEoKolAssignments(req.staff.id);
+    const allowed = assignments.map((a) => a.talent_id);
+    if (!allowed.includes(req.params.id)) return res.redirect('/eo-kol');
+    const [talent, rawProofs, events] = await Promise.all([
+      st.getAccountById(req.params.id), st.listProofsForTalent(req.params.id), st.listEvents(),
+    ]);
+    if (!talent) return res.redirect('/eo-kol');
+    const proofs = await enrichProofs(st, rawProofs, { events });
+    res.send(V.eoKolKolProofs({ staff: eoKolCtx(req), talent, proofs, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.get('/eo-kol/upload-post', requireEoKol, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const assignments = await st.listEoKolAssignments(req.staff.id);
+    const allTalents = await st.listTalents();
+    const talentById = new Map(allTalents.map((t) => [t.id, t]));
+    const kols = assignments.map((a) => talentById.get(a.talent_id)).filter(Boolean).map((t) => ({ id: t.id, name: t.name }));
+    const events = await st.listActiveEvents();
+    res.send(V.eoKolUploadPost({ staff: eoKolCtx(req), kols, events, lang: req.lang, success: req.query.ok === '1' }));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo-kol/upload-post', requireEoKol, upload.single('screenshot'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const talentId = String(req.body.talent_id || '').trim();
+    const eventId = String(req.body.event_id || '').trim();
+    const postLink = String(req.body.post_link || '').trim();
+    const file = req.file;
+
+    const assignments = await st.listEoKolAssignments(req.staff.id);
+    const allowed = assignments.map((a) => a.talent_id);
+
+    const errors = [];
+    if (!talentId || !allowed.includes(talentId)) errors.push(req.t('eoKol.errKol'));
+    if (!eventId) errors.push(req.t('err.eventRequired'));
+    if (!file) errors.push(req.t('err.ssRequired'));
+    else if (!/^image\//i.test(file.mimetype || '')) errors.push(req.t('err.fileMustBeImage'));
+    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push(req.t('err.badLink'));
+
+    if (errors.length) {
+      const allTalents = await st.listTalents();
+      const talentById = new Map(allTalents.map((t) => [t.id, t]));
+      const kols = assignments.map((a) => talentById.get(a.talent_id)).filter(Boolean).map((t) => ({ id: t.id, name: t.name }));
+      const events = await st.listActiveEvents();
+      return res.status(400).send(V.eoKolUploadPost({ staff: eoKolCtx(req), kols, events, errors, lang: req.lang }));
+    }
+
+    const postedRaw = String(req.body.posted_at || '').trim();
+    let postedAt = null;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(postedRaw)) {
+      const d = new Date((postedRaw.length === 16 ? postedRaw + ':00' : postedRaw) + '+07:00');
+      if (!isNaN(d.getTime())) postedAt = d.toISOString();
+    }
+
+    const proofId = crypto.randomUUID();
+    const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+    const key = `proofs/${proofId}${ext}`;
+    await st.uploadImage(key, file.buffer, file.mimetype);
+    await st.createProof({
+      id: proofId, talent_id: talentId, talent_type: 'kol',
+      event_id: eventId, screenshot_path: key, post_link: postLink || null, posted_at: postedAt, status: 'pending',
+      submitted_by_staff: req.staff.id,
+    });
+
+    runExtraction(st, proofId, file.buffer, file.mimetype);
+    res.redirect('/eo-kol/upload-post?ok=1');
+  } catch (e) { next(e); }
+});
 
 // ------------------------------------------------------------------- EO ----
 // Event Organizer area. EO staff see only their own data (events created_by
