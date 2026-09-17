@@ -2325,10 +2325,17 @@ function eoSelMap(positions) {
 function eoEventView(ev, positions, apps, choices) {
   const evApps = apps.filter((a) => a.event_id === ev.id);
   const appIds = new Set(evApps.map((a) => a.id));
+  const statusByApp = new Map(evApps.map((a) => [a.id, a.status]));
   const evChoices = (choices || []).filter((c) => appIds.has(c.application_id));
-  const filled = {}; const applicants = {};
-  evChoices.forEach((c) => { applicants[c.position_id] = (applicants[c.position_id] || 0) + 1; if (c.accepted) filled[c.position_id] = (filled[c.position_id] || 0) + 1; });
-  const pos = (positions || []).map((p) => { const f = filled[p.position_id] || 0; return Object.assign({}, p, { filled: f, applicants: applicants[p.position_id] || 0, full: p.quota > 0 && f >= p.quota }); });
+  const filled = {}; const applicants = {}; const pending = {};
+  evChoices.forEach((c) => {
+    applicants[c.position_id] = (applicants[c.position_id] || 0) + 1;
+    if (c.accepted) { filled[c.position_id] = (filled[c.position_id] || 0) + 1; return; }
+    // "Pending" = still awaiting a decision (not accepted, not a decided app).
+    const s = statusByApp.get(c.application_id);
+    if (s !== 'approved' && s !== 'rejected') pending[c.position_id] = (pending[c.position_id] || 0) + 1;
+  });
+  const pos = (positions || []).map((p) => { const f = filled[p.position_id] || 0; const q = p.quota || 0; return Object.assign({}, p, { filled: f, approved: f, applicants: applicants[p.position_id] || 0, pending: pending[p.position_id] || 0, remaining: q > 0 ? Math.max(q - f, 0) : null, full: q > 0 && f >= q }); });
   const allFull = pos.length > 0 && pos.every((p) => p.full);
   let display;
   if (ev.completed_at) display = 'done';
@@ -2339,11 +2346,18 @@ function eoEventView(ev, positions, apps, choices) {
 }
 
 // Parse the create/edit event form. positionsMaster gives the valid position ids.
-function parseEventForm(req, positionsMaster) {
+function parseEventForm(req, positionsMaster, eventTypes) {
   const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
   const st = s('status', 12);
+  // Event type is now persisted (event_type_id). category (a text label) is
+  // derived from the chosen type for back-compat with existing filters/exports;
+  // it falls back to a free-typed category when no type is selected.
+  const eventTypeId = s('event_type_id', 40) || null;
+  const ty = (eventTypes || []).find((t) => String(t.id) === eventTypeId) || null;
   const data = {
-    name: s('name', 140), description: s('description', 4000) || null, description_en: s('description_en', 4000) || null, category: s('category', 80) || null,
+    name: s('name', 140), description: s('description', 4000) || null, description_en: s('description_en', 4000) || null,
+    category: ty ? (ty.label_id || ty.label_en || null) : (s('category', 80) || null),
+    event_type_id: eventTypeId,
     location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
     start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
@@ -2352,6 +2366,7 @@ function parseEventForm(req, positionsMaster) {
   };
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
   const keyById = new Map((positionsMaster || []).map((p) => [String(p.id), p.key]));
+  const posById = new Map((positionsMaster || []).map((p) => [String(p.id), p]));
   const chosen = [].concat(req.body.pos || []);
   const seen = new Set(); const positions = [];
   chosen.forEach((id) => {
@@ -2367,8 +2382,12 @@ function parseEventForm(req, positionsMaster) {
     // Per-field getter (trim + cap length; empty -> null).
     const g = (f, max) => String(req.body[f + '_' + id] || '').trim().slice(0, max) || null;
     const key = keyById.get(id);
+    const master = posById.get(id) || {};
     const pos = {
       position_id: id, quota: q, key,
+      // Snapshotted onto talent_event_positions so the detail page can group by
+      // division and keep a stable order independent of later template edits.
+      division: master.division || null, sort_order: master.sort || 0,
       // Short role description shown on the talent card face; auto-filled from a
       // per-role template but freely editable by the EO. _en holds the optional
       // English version the EO can type; display falls back across languages.
@@ -2431,8 +2450,8 @@ app.get('/eo/events/new', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, eventTypes, selected: {}, lang: req.lang }));
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, eventTypes, roleTemplates, selected: {}, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2441,10 +2460,10 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
-    const f = parseEventForm(req, positionsMaster);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, eventTypes, selected: eoSelMap(f.positions), errors, lang: req.lang }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
@@ -2460,9 +2479,9 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), st.listAllRoleTemplates()]);
     await attachMockups(st, ev);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, selected: eoSelMap(evPos), lang: req.lang }));
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(evPos), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2472,8 +2491,8 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, apps, choices, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes()]);
-    const f = parseEventForm(req, positionsMaster);
+    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
     // Guards: a position with applicants can't be removed; quota can't drop below accepted.
     const view = eoEventView(ev, evPos, apps, choices);
@@ -2482,7 +2501,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
       if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, roleTemplates, selected: newByPos, errors, lang: req.lang }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
@@ -2513,6 +2532,107 @@ app.post('/eo/events/:id/delete', requireEo, async (req, res, next) => {
       else await st.deleteEvent(ev.id);
     }
     res.redirect('/eo/events');
+  } catch (e) { next(e); }
+});
+
+// --- Per-event role management (quota / add / close / reset) ----------------
+// Shared helpers used by both the EO and Super Admin role routes.
+function quotaErrInfo(err) {
+  const msg = (err && err.message) || '';
+  const m = /QUOTA_BELOW_APPROVED:(\d+)/.exec(msg);
+  if (m) return { code: 'below', approved: parseInt(m[1], 10) };
+  if (/QUOTA_NEGATIVE/.test(msg)) return { code: 'negative' };
+  return null;
+}
+async function findEventRole(st, eventId, roleId) {
+  return (await st.listEventPositions(eventId)).find((p) => String(p.id) === String(roleId)) || null;
+}
+// Reset every event role's quota back to its type's template default, never
+// dropping below the number already approved for that role.
+async function resetEventRolesToTemplate(st, ev, actorId) {
+  if (!ev.event_type_id) return 0;
+  const [positions, apps, choices, templates] = await Promise.all([
+    st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listRoleTemplates(ev.event_type_id),
+  ]);
+  if (!templates.length) return 0;
+  const view = eoEventView(ev, positions, apps, choices);
+  const tplByPos = new Map(templates.map((t) => [String(t.position_id), t]));
+  let n = 0;
+  for (const p of view.positions) {
+    const t = tplByPos.get(String(p.position_id));
+    if (!t) continue;
+    const target = Math.max(t.default_quota, p.approved || 0); // never below approved
+    if (target !== p.quota) { try { await st.setEventRoleQuota(p.id, target, actorId); n++; } catch (_) { /* keep going */ } }
+  }
+  return n;
+}
+
+app.post('/eo/events/:id/roles/:roleId/quota', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const q = parseInt(req.body.quota, 10);
+    if (!Number.isFinite(q) || q < 0) return res.redirect(backTo + '&err=quota');
+    try { await st.setEventRoleQuota(role.id, q, req.staff.id); }
+    catch (e) { const info = quotaErrInfo(e); if (info && info.code === 'below') return res.redirect(backTo + '&err=qmin&n=' + info.approved); throw e; }
+    res.redirect(backTo + '&ok=quota');
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/roles', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    const q = parseInt(req.body.quota, 10);
+    const master = (await st.listPositions()).find((p) => String(p.id) === positionId);
+    if (!master) return res.redirect(backTo + '&err=role');
+    await st.addEventRole(ev.id, { position_id: positionId, division: master.division || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, sort_order: master.sort || 0 });
+    res.redirect(backTo + '&ok=added');
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/roles/:roleId/close', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const reopen = !!req.body.reopen;
+    await st.closeEventRole(role.id, !reopen);
+    res.redirect(backTo + (reopen ? '&ok=reopen' : '&ok=closed'));
+  } catch (e) { next(e); }
+});
+
+app.post('/eo/events/:id/roles/reset', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    if (!ev.event_type_id) return res.redirect(backTo + '&err=notpl');
+    await resetEventRolesToTemplate(st, ev, req.staff.id);
+    res.redirect(backTo + '&ok=reset');
+  } catch (e) { next(e); }
+});
+
+app.get('/eo/events/:id/roles/:roleId/logs', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang);
+    const logs = await st.listEventRoleQuotaLogs(role.id);
+    res.send(V.roleQuotaLogs({ staff: eoCtx(req), event: ev, role, logs, backHref: '/eo/events/' + ev.id, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2560,8 +2680,8 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positions, apps, choices, talents] = await Promise.all([
-      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(),
+    const [positions, apps, choices, talents, positionsMaster] = await Promise.all([
+      st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listTalents(), st.listPositions(),
     ]);
     const view = eoEventView(ev, positions, apps, choices);
     // Tahap 6: applicants for this event, each with their prioritised choices + contact.
@@ -2597,9 +2717,9 @@ app.get('/eo/events/:id', requireEo, async (req, res, next) => {
       })
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
     await attachMockups(st, ev);
-    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || ''),
+    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || ''), n: String(req.query.n || ''),
       gok: req.query.gok, gcleared: req.query.gcleared, gerr: req.query.gerr, gresent: req.query.gresent };
-    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, flash, lang: req.lang }));
+    res.send(V.eoEventDetail({ staff: eoCtx(req), event: ev, view, applicants, positionsMaster, flash, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2637,6 +2757,21 @@ async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, revi
   }
   return others.length;
 }
+// Race-safe accept into one chosen position via the DB RPC (row lock on the
+// event role + quota guard + status log, all in one transaction). Keeps the
+// app-side side effects: auto-decline the talent's other still-open picks and
+// email the acceptance once. Returns 'ok' | 'full' | 'skip' | 'not_found'.
+async function acceptIntoPosition(st, app, positionId, reviewerId, actorName) {
+  const wasApproved = app && app.status === 'approved';
+  const outcome = await st.approveApplicationChoice(app.id, positionId, reviewerId, actorName || null);
+  if (outcome === 'ok') {
+    const apps = await st.listApplications();
+    await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, reviewerId);
+    app.status = 'approved';
+    if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
+  }
+  return outcome;
+}
 app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2646,27 +2781,9 @@ app.post('/eo/events/:id/applicants/:appId/accept', requireEo, async (req, res, 
     const backTo = '/eo/events/' + found.ev.id + '?lang=' + req.lang;
     const next = safeNext(req.body.next); // e.g. /eo/talents when acting from the Applicants page
     const positionId = String(req.body.position_id || '');
-    const outcome = await withEventLock(found.ev.id, async () => {
-      const [positions, apps, choices] = await Promise.all([st.listEventPositions(found.ev.id), st.listApplications(), st.listApplicationChoices()]);
-      const myChoices = choices.filter((c) => c.application_id === found.app.id);
-      if (!myChoices.some((c) => c.position_id === positionId)) return 'skip'; // not one of their choices
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      // Quota check: accepted choices for this position across the event, excluding this application.
-      const appIds = new Set(apps.filter((a) => a.event_id === found.ev.id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== found.app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return 'full';
-      const wasApproved = found.app.status === 'approved';
-      await st.acceptApplicationChoice(found.app.id, positionId);
-      await st.updateApplication(found.app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, found.ev.id, found.app.talent_id, found.app.id, req.staff.id);
-      // Email the talent their acceptance only on the first approval (mirrors the
-      // admin path's no-spam rule; re-accepting a different position won't resend).
-      if (!wasApproved) notifyResultAnnouncement(st, found.app).catch((e) => console.error('[mail] EO result-announcement email failed:', e && e.message));
-      return 'ok';
-    });
+    const outcome = await acceptIntoPosition(st, found.app, positionId, req.staff.id, null);
     if (outcome === 'full') return res.redirect(next || (backTo + '&err=full'));
-    if (outcome === 'skip') return res.redirect(next || backTo);
+    if (outcome === 'skip' || outcome === 'not_found') return res.redirect(next || backTo);
     res.redirect(next || (backTo + '&ok=accepted'));
   } catch (e) { next(e); }
 });
@@ -2956,26 +3073,8 @@ app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next)
     if (!confirmed) {
       return res.send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, lang: req.lang, mount }));
     }
-    await withEventLock(found.ev.id, async () => {
-      const apps = await st.listApplications();
-      const app = apps.find((a) => a.id === found.app.id);
-      if (!app) return;
-      const [evPositions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return;
-      const p = evPositions.find((pp) => pp.position_id === positionId);
-      const quota = p ? p.quota : 0;
-      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return;
-      const prior = app.status;
-      const wasApproved = app.status === 'approved';
-      await st.acceptApplicationChoice(app.id, positionId);
-      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] eo accept failed:', e && e.message));
-      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] eo result-announcement email failed:', e && e.message));
-    });
-    res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=accept');
+    const outcome = await acceptIntoPosition(st, found.app, positionId, req.staff.id, actor || null);
+    res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
   } catch (e) { next(e); }
 });
 
@@ -3333,23 +3432,7 @@ app.post('/admin/applications/:id/accept-position', auth.requireStaff(['super_ad
     const positionId = String(req.body.position_id || '');
     const app0 = (await st.listApplications()).find((a) => a.id === req.params.id);
     if (!app0) return res.redirect('/admin/applications');
-    await withEventLock(app0.event_id, async () => {
-      const apps = await st.listApplications();
-      const app = apps.find((a) => a.id === req.params.id);
-      if (!app) return;
-      const [positions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return; // not one of their picks
-      const pos = positions.find((p) => p.position_id === positionId);
-      const quota = pos ? pos.quota : 0;
-      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
-      const wasApproved = app.status === 'approved';
-      await st.acceptApplicationChoice(app.id, positionId);
-      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
-    });
+    await acceptIntoPosition(st, app0, positionId, req.staff.id, null);
     res.redirect('/admin/applications');
   } catch (e) { next(e); }
 });
@@ -3555,26 +3638,8 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
     if (!confirmed) {
       return res.send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, lang: req.lang }));
     }
-    await withEventLock(app0.event_id, async () => {
-      const apps = await st.listApplications();
-      const app = apps.find((a) => a.id === req.params.id);
-      if (!app) return;
-      const [evPositions, choices] = await Promise.all([st.listEventPositions(app.event_id), st.listApplicationChoices()]);
-      if (!choices.some((c) => c.application_id === app.id && c.position_id === positionId)) return;
-      const p = evPositions.find((pp) => pp.position_id === positionId);
-      const quota = p ? p.quota : 0;
-      const appIds = new Set(apps.filter((a) => a.event_id === app.event_id).map((a) => a.id));
-      const acceptedElsewhere = choices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== app.id && appIds.has(c.application_id)).length;
-      if (quota > 0 && acceptedElsewhere >= quota) return; // position full
-      const prior = app.status;
-      const wasApproved = app.status === 'approved';
-      await st.acceptApplicationChoice(app.id, positionId);
-      await st.updateApplication(app.id, { status: 'approved', reviewed_by: req.staff.id, reviewed_at: new Date().toISOString() });
-      await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, req.staff.id);
-      await st.addStatusLog(app.id, prior, 'approved', req.staff.id, actor || null).catch((e) => console.error('[log] accept failed:', e && e.message));
-      if (!wasApproved) notifyResultAnnouncement(st, app).catch((e) => console.error('[mail] result-announcement email failed:', e && e.message));
-    });
-    res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + '&done=accept');
+    const outcome = await acceptIntoPosition(st, app0, positionId, req.staff.id, actor || null);
+    res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
   } catch (e) { next(e); }
 });
 
@@ -4256,8 +4321,8 @@ app.get('/admin/events/new', auth.requireStaff(['super_admin']), async (req, res
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
-    res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, eventTypes, selected: {}, lang: req.lang, admin: true }));
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, eventTypes, roleTemplates, selected: {}, lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -4265,10 +4330,10 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('pos
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [positionsMaster, eventTypes] = await Promise.all([st.listPositions(), st.listEventTypes()]);
-    const f = parseEventForm(req, positionsMaster);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, eventTypes, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
@@ -4285,9 +4350,9 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), st.listAllRoleTemplates()]);
     await attachMockups(st, event);
-    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
+    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -4298,10 +4363,11 @@ app.get('/admin/events/:id', auth.requireStaff(['super_admin']), async (req, res
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [evPos, apps, choices] = await Promise.all([st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices()]);
+    const [evPos, apps, choices, positionsMaster] = await Promise.all([st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listPositions()]);
     await attachMockups(st, event);
     const view = eoEventView(event, evPos, apps, choices);
-    res.send(V.adminEventDetail({ staff: staffCtx(req), event, view, lang: req.lang }));
+    const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || ''), n: String(req.query.n || '') };
+    res.send(V.adminEventDetail({ staff: staffCtx(req), event, view, positionsMaster, flash, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -4311,8 +4377,8 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, apps, choices, eventTypes] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes()]);
-    const f = parseEventForm(req, positionsMaster);
+    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
     // Same guards as EO: a position with applicants can't be removed; quota can't drop below accepted.
     const view = eoEventView(event, evPos, apps, choices);
@@ -4321,7 +4387,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
       if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, selected: newByPos, errors, lang: req.lang, admin: true }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, roleTemplates, selected: newByPos, errors, lang: req.lang, admin: true }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, event.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(event.id, patch);
@@ -4336,6 +4402,117 @@ app.post('/admin/events/:id/toggle', auth.requireStaff(['super_admin']), async (
     if (!st) return needConfig(req, res);
     await st.toggleEvent(req.params.id);
     res.redirect('/admin/manage');
+  } catch (e) { next(e); }
+});
+
+// --- Super Admin: per-event role management (any event) ---------------------
+async function adminEventById(st, id) { return (await st.listEvents()).find((e) => e.id === id) || null; }
+
+app.post('/admin/events/:id/roles/:roleId/quota', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const q = parseInt(req.body.quota, 10);
+    if (!Number.isFinite(q) || q < 0) return res.redirect(backTo + '&err=quota');
+    try { await st.setEventRoleQuota(role.id, q, req.staff.id); }
+    catch (e) { const info = quotaErrInfo(e); if (info && info.code === 'below') return res.redirect(backTo + '&err=qmin&n=' + info.approved); throw e; }
+    res.redirect(backTo + '&ok=quota');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/roles', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    const positionId = String(req.body.position_id || '');
+    const q = parseInt(req.body.quota, 10);
+    const master = (await st.listPositions()).find((p) => String(p.id) === positionId);
+    if (!master) return res.redirect(backTo + '&err=role');
+    await st.addEventRole(ev.id, { position_id: positionId, division: master.division || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, sort_order: master.sort || 0 });
+    res.redirect(backTo + '&ok=added');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/roles/:roleId/close', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const reopen = !!req.body.reopen;
+    await st.closeEventRole(role.id, !reopen);
+    res.redirect(backTo + (reopen ? '&ok=reopen' : '&ok=closed'));
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/roles/reset', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    if (!ev.event_type_id) return res.redirect(backTo + '&err=notpl');
+    await resetEventRolesToTemplate(st, ev, req.staff.id);
+    res.redirect(backTo + '&ok=reset');
+  } catch (e) { next(e); }
+});
+
+app.get('/admin/events/:id/roles/:roleId/logs', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect('/admin/events/' + ev.id + '?lang=' + req.lang);
+    const logs = await st.listEventRoleQuotaLogs(role.id);
+    res.send(V.roleQuotaLogs({ staff: staffCtx(req), event: ev, role, logs, backHref: '/admin/events/' + ev.id, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// --- Super Admin: role template management (per event type) -----------------
+app.get('/admin/role-templates', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const [eventTypes, positionsMaster, templates] = await Promise.all([st.listEventTypes(), st.listPositions(), st.listAllRoleTemplates()]);
+    res.send(V.roleTemplatesPage({ staff: staffCtx(req), eventTypes, positionsMaster, templates, flash: { ok: String(req.query.ok || ''), err: String(req.query.err || '') }, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/role-templates', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const event_type_id = String(req.body.event_type_id || '');
+    const position_id = String(req.body.position_id || '');
+    const master = (await st.listPositions()).find((p) => String(p.id) === position_id);
+    if (!event_type_id || !master) return res.redirect('/admin/role-templates?lang=' + req.lang + '&err=input');
+    const default_quota = Math.max(0, parseInt(req.body.default_quota, 10) || 0);
+    const sort_order = parseInt(req.body.sort_order, 10) || 0;
+    const division = String(req.body.division || '').trim() || master.division || null;
+    try { await st.createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description: String(req.body.description || '').trim() || null }); }
+    catch (e) { if (e && e.code === 'DUP') return res.redirect('/admin/role-templates?lang=' + req.lang + '&err=dup'); throw e; }
+    res.redirect('/admin/role-templates?lang=' + req.lang + '&ok=added');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/role-templates/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const patch = {};
+    if (req.body.default_quota !== undefined) patch.default_quota = Math.max(0, parseInt(req.body.default_quota, 10) || 0);
+    if (req.body.sort_order !== undefined) patch.sort_order = parseInt(req.body.sort_order, 10) || 0;
+    if (req.body.division !== undefined) patch.division = String(req.body.division || '').trim() || null;
+    if (req.body.description !== undefined) patch.description = String(req.body.description || '').trim() || null;
+    if (req.body.is_active !== undefined) patch.is_active = String(req.body.is_active) === '1';
+    await st.updateRoleTemplate(req.params.id, patch);
+    res.redirect('/admin/role-templates?lang=' + req.lang + '&ok=saved');
   } catch (e) { next(e); }
 });
 
