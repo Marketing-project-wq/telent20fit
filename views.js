@@ -2901,7 +2901,7 @@ function manpowerKeysForType(typeKey) {
   return MANPOWER_SHARED.concat(MANPOWER_TYPE_ONLY[typeKey]);
 }
 
-function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes }) {
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes, roleTemplates }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
@@ -2946,7 +2946,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
     // data-cat marks the group so the event-type filter only touches Manpower rows.
     const rowCat = p.key === 'other' ? 'other' : (KOL_KEYS.includes(p.key) ? 'kol' : 'mp');
-    return `<div class="posm-row" data-key="${esc(p.key)}" data-cat="${rowCat}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
+    return `<div class="posm-row" data-key="${esc(p.key)}" data-cat="${rowCat}" data-pid="${pid}" data-div="${esc(p.division || '')}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
       <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
         <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
         <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
@@ -2977,7 +2977,16 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   const mpRows = (positionsMaster || []).filter((p) => p.key !== 'other' && !KOL_KEYS.includes(p.key));
   const otherRows = (positionsMaster || []).filter((p) => p.key === 'other');
   const kolRows = (positionsMaster || []).filter((p) => KOL_KEYS.includes(p.key));
-  const posRows = `${gHead(t('eo.ev.grp.manpower'))}${mpRows.map(posRow).join('')}${otherRows.map(posRow).join('')}${kolRows.length ? gHead(t('eo.ev.grp.kol')) + kolRows.map(posRow).join('') : ''}`;
+  // Group Manpower roles by division (roles without one fall under "General").
+  const mpByDiv = {};
+  mpRows.forEach((p) => { const d = p.division || ''; (mpByDiv[d] = mpByDiv[d] || []).push(p); });
+  const divKeys = Object.keys(mpByDiv).sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
+  const divHead = (label, dv) => `<div style="display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 2px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">${esc(label)}</div><div class="muted" style="font-size:12px">${t('eo.ev.divSubtotal')}: <b class="divsubtotal" data-div="${esc(dv)}">0</b></div></div>`;
+  const mpSection = divKeys.map((d) => `${divHead(d || t('eo.ev.divGeneral'), d)}${mpByDiv[d].map(posRow).join('')}`).join('');
+  const posRows = `${gHead(t('eo.ev.grp.manpower'))}${mpSection}${otherRows.map(posRow).join('')}${kolRows.length ? gHead(t('eo.ev.grp.kol')) + kolRows.map(posRow).join('') : ''}`;
+  // Template map for the client: event type id -> { pos:[position ids], quota:{id:default} }.
+  const tplByType = {};
+  (roleTemplates || []).forEach((rt) => { if (rt.is_active === false) return; const k = String(rt.event_type_id); (tplByType[k] = tplByType[k] || { pos: [], quota: {} }); tplByType[k].pos.push(String(rt.position_id)); tplByType[k].quota[String(rt.position_id)] = rt.default_quota; });
   const body = `<div class="wrap">
   <a href="${listHref}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
@@ -2986,13 +2995,14 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   <form method="post" action="${action}" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:720px">
     <div style="font-weight:700;margin-bottom:6px">${t('eo.ev.sec.info')}</div>
     ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
-    <div class="field"><label for="category">${t('eo.ev.f.eventType')}${rq}</label>
-      <select id="category" name="category" required>
+    <div class="field"><label for="event_type_id">${t('eo.ev.f.eventType')}${rq}</label>
+      <select id="event_type_id" name="event_type_id" required>
         <option value="">${t('eo.ev.f.eventTypePick')}</option>
-        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; const mk = manpowerKeysForType(ty.key); return `<option value="${esc(lab)}" data-mpkeys="${esc(mk ? mk.join(',') : '')}"${e.category === lab ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
-        ${(e.category && !(eventTypes || []).some((ty) => ((L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '') === e.category)) ? `<option value="${esc(e.category)}" data-mpkeys="" selected>${esc(e.category)}</option>` : ''}
+        ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; return `<option value="${esc(ty.id)}"${String(e.event_type_id || '') === String(ty.id) ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
       </select>
+      <input type="hidden" name="category" value="${esc(e.category || '')}">
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
+      <div id="tplEmptyInfo" class="banner banner-warn" style="display:none;margin-top:8px;padding:9px 12px;font-size:12.5px">${t('eo.ev.tplEmpty')}</div>
     </div>
     <div class="field"><label for="description">${t('eo.ev.f.descId')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
     <div class="field"><label for="description_en">${t('eo.ev.f.descEn')} <span class="muted" style="font-weight:400;font-size:12px">(${t('common.optional')})</span></label><textarea id="description_en" name="description_en" rows="4" maxlength="4000" placeholder="${t('eo.ev.f.descEnPh')}">${esc(e.description_en || '')}</textarea></div>
@@ -3033,6 +3043,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
     <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
     <div id="posmList">${posRows}</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:10px;border-top:2px solid var(--line);font-weight:700">${t('eo.ev.totalNeed')}<span><b id="posmGrandTotal">0</b> ${t('eo.ev.people')}</span></div>
     <button type="submit" class="btn btn-block" style="margin-top:22px">${editing ? t('btn.save') : t('eo.ev.saveEvent')}</button>
   </form>
 </div>
@@ -3061,27 +3072,43 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     var el=r.querySelector(m[0]), val=r.getAttribute(m[1]);
     if(el&&val!=null){ el.value=val; el.focus(); }
   });
-  // Point 5: pick an event type -> show only the Manpower sub-roles allowed for it
-  // (shared + type-specific). KOL/Photographer/Videographer/Lainnya are never
-  // filtered. On first load a pre-existing (checked) pick is kept visible so editing
-  // an event never silently drops a role; an explicit change hides+unchecks it.
-  var cat=document.getElementById('category');
-  function filterByType(initial){
-    if(!cat||cat.tagName!=='SELECT') return;
-    var opt=cat.options[cat.selectedIndex]; if(!opt) return;
-    var raw=opt.getAttribute('data-mpkeys'); // '' => no filter (unknown/custom type)
-    var allow=(raw!==null&&raw!=='')?raw.split(','):null;
-    rows.forEach(function(r){
-      if(r.getAttribute('data-cat')!=='mp') return; // only Manpower rows are type-filtered
-      var cb=r.querySelector('.posm-cb');
-      var ok=!allow||allow.indexOf(r.getAttribute('data-key'))>=0;
-      if(ok){ r.style.display=''; return; }
-      if(initial && cb && cb.checked){ r.style.display=''; return; } // keep an existing pick
-      r.style.display='none';
-      if(cb&&cb.checked){ cb.checked=false; sync(r); }
-    });
+  // Pick an event type -> apply its role template: tick template roles + prefill
+  // their default quota; hide/untick non-template Manpower roles (unless already
+  // picked). Unknown/custom types apply no filter. An empty template (e.g. HYROX)
+  // pre-ticks nothing — the EO adds roles manually.
+  var TPL=${JSON.stringify(tplByType)};
+  var cat=document.getElementById('event_type_id');
+  var emptyInfo=document.getElementById('tplEmptyInfo');
+  function recalcTotals(){
+    var grand=0, byDiv={};
+    rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-quota'); if(!cb||!cb.checked) return; var n=parseInt(q&&q.value,10)||0; grand+=n; var dv=r.getAttribute('data-div')||''; byDiv[dv]=(byDiv[dv]||0)+n; });
+    var g=document.getElementById('posmGrandTotal'); if(g) g.textContent=grand;
+    [].slice.call(document.querySelectorAll('.divsubtotal')).forEach(function(el){ el.textContent=byDiv[el.getAttribute('data-div')||'']||0; });
   }
-  if(cat && cat.tagName==='SELECT'){ cat.addEventListener('change',function(){ filterByType(false); }); filterByType(true); }
+  function applyType(initial){
+    if(!cat) return;
+    var tpl=TPL[cat.value||'']||null;
+    var posList=tpl?tpl.pos:null, qmap=tpl?tpl.quota:{};
+    if(emptyInfo) emptyInfo.style.display=(tpl&&posList&&posList.length===0)?'':'none';
+    rows.forEach(function(r){
+      if(r.getAttribute('data-cat')!=='mp') return; // only Manpower rows are template-driven
+      var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-quota'), pid=r.getAttribute('data-pid');
+      if(!tpl){ r.style.display=''; return; } // unknown/custom type: show all
+      if(posList.indexOf(pid)>=0){
+        r.style.display='';
+        if(!initial && cb && !cb.checked){ cb.checked=true; sync(r); fillTpl(r); }
+        if(!initial && q && !q.value && qmap[pid]!=null){ q.value=qmap[pid]; }
+      } else {
+        if(initial && cb && cb.checked){ r.style.display=''; return; } // keep an existing pick
+        r.style.display='none';
+        if(cb&&cb.checked){ cb.checked=false; sync(r); }
+      }
+    });
+    recalcTotals();
+  }
+  list.addEventListener('input',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-quota')) recalcTotals(); });
+  list.addEventListener('change',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-cb')) recalcTotals(); });
+  if(cat){ cat.addEventListener('change',function(){ applyType(false); }); applyType(true); } else { recalcTotals(); }
 })();
 (function(){
   var s=document.getElementById('starts_at'), d=document.getElementById('reg_deadline'), w=document.getElementById('regWarn');
@@ -3098,7 +3125,102 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   return appLayout({ title: (editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle')) + ' — 20FIT', body, role: isAdmin ? 'super_admin' : 'eo', active: isAdmin ? 'manage' : 'events', user: staff.name, lang: L });
 }
 
-function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
+// Shared per-event role manager: division-grouped table with inline quota edit,
+// approved/pending/remaining columns, per-division subtotals + grand total, an
+// add-role picker, per-role close/reopen + quota-log link, and reset-to-template.
+// base is '/eo/events' or '/admin/events'.
+function eventRolesManager(e, view, positionsMaster, flash, base, L) {
+  const t = (k, v) => tr(L, k, v);
+  const f = flash || {};
+  const UNLIM = 100000;
+  const banner = f.ok === 'quota' ? `<div class="banner banner-ok">${t('eo.role.okQuota')}</div>`
+    : f.ok === 'added' ? `<div class="banner banner-ok">${t('eo.role.okAdded')}</div>`
+    : f.ok === 'closed' ? `<div class="banner banner-ok">${t('eo.role.okClosed')}</div>`
+    : f.ok === 'reopen' ? `<div class="banner banner-ok">${t('eo.role.okReopen')}</div>`
+    : f.ok === 'reset' ? `<div class="banner banner-ok">${t('eo.role.okReset')}</div>`
+    : f.err === 'qmin' ? `<div class="banner banner-err">${t('eo.role.errQmin', { n: parseInt(f.n, 10) || 0 })}</div>`
+    : f.err === 'quota' ? `<div class="banner banner-err">${t('eo.role.errQuota')}</div>`
+    : f.err === 'role' ? `<div class="banner banner-err">${t('eo.role.errRole')}</div>`
+    : f.err === 'notpl' ? `<div class="banner banner-err">${t('eo.role.errNoTpl')}</div>` : '';
+  const positions = (view.positions || []).slice();
+  const byDiv = new Map();
+  positions.forEach((p) => { const d = p.division || ''; const a = byDiv.get(d) || []; a.push(p); byDiv.set(d, a); });
+  const divKeys = [...byDiv.keys()].sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
+  let grandQuota = 0, grandApproved = 0;
+  const th = (x, al) => `<th style="text-align:${al || 'left'};font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:6px 8px;font-weight:700">${x}</th>`;
+  const roleRow = (p) => {
+    const closed = !!p.closed_at;
+    const unlimited = p.quota >= UNLIM;
+    grandQuota += unlimited ? 0 : (p.quota || 0); grandApproved += (p.approved || 0);
+    const remaining = unlimited ? '∞' : Math.max((p.quota || 0) - (p.approved || 0), 0);
+    const quotaCell = `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/quota" style="display:flex;gap:4px;align-items:center">
+        <input type="number" name="quota" min="0" max="99999" value="${unlimited ? '' : (p.quota || 0)}" style="width:60px;padding:3px 6px;font-size:13px" aria-label="${t('eo.pos.quotaLabel')}">
+        <button class="btn btn-ghost btn-sm" type="submit" style="padding:3px 8px" title="${t('btn.save')}">✓</button>
+      </form>`;
+    const closeForm = closed
+      ? `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm" style="padding:2px 7px">${t('eo.role.reopen')}</button></form>`
+      : `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/close" ${jsConfirm(t('eo.role.closeConfirm'))}><button class="btn btn-ghost btn-sm" style="padding:2px 7px;color:var(--red)">${t('eo.role.close')}</button></form>`;
+    return `<tr style="border-top:1px solid var(--line)${closed ? ';opacity:.55' : ''}">
+      <td style="padding:6px 8px"><b>${esc(posLabel(p, L))}</b>${closed ? ` <span class="pill pill-off" style="font-size:10px">${t('eo.role.closedTag')}</span>` : ''}</td>
+      <td style="padding:6px 8px">${quotaCell}</td>
+      <td style="padding:6px 8px;text-align:center">${p.approved || 0}</td>
+      <td style="padding:6px 8px;text-align:center">${p.pending || 0}</td>
+      <td style="padding:6px 8px;text-align:center;font-weight:700">${remaining}</td>
+      <td style="padding:6px 8px;text-align:right;white-space:nowrap">${closeForm} <a href="${base}/${esc(e.id)}/roles/${esc(p.id)}/logs?lang=${L}" class="btn btn-ghost btn-sm" style="padding:2px 7px">${t('eo.role.logs')}</a></td>
+    </tr>`;
+  };
+  const groups = divKeys.map((d) => {
+    const rows = byDiv.get(d);
+    const subQ = rows.reduce((s, p) => s + (p.quota >= UNLIM ? 0 : (p.quota || 0)), 0);
+    const subA = rows.reduce((s, p) => s + (p.approved || 0), 0);
+    return `<tr style="background:var(--card2)"><td colspan="6" style="padding:6px 8px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">${esc(d || t('eo.ev.divGeneral'))} · ${t('eo.role.sub', { q: subQ, a: subA })}</td></tr>${rows.map(roleRow).join('')}`;
+  }).join('');
+  const table = positions.length ? `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13.5px">
+    <thead><tr>${th(t('eo.role.colRole'))}${th(t('eo.role.colQuota'))}${th(t('eo.role.colApproved'), 'center')}${th(t('eo.role.colPending'), 'center')}${th(t('eo.role.colRemaining'), 'center')}${th('', 'right')}</tr></thead>
+    <tbody>${groups}
+      <tr style="border-top:2px solid var(--line);font-weight:800"><td style="padding:8px">${t('eo.role.grand')}</td><td style="padding:8px">${grandQuota}</td><td style="padding:8px;text-align:center">${grandApproved}</td><td colspan="3"></td></tr>
+    </tbody></table></div>` : `<p class="muted">${t('eo.ev.noPositions')}</p>`;
+  const openIds = new Set(positions.map((p) => String(p.position_id)));
+  const addable = (positionsMaster || []).filter((p) => !openIds.has(String(p.id)));
+  const addForm = addable.length ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">＋ ${t('eo.role.add')}</summary>
+    <form method="post" action="${base}/${esc(e.id)}/roles" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+      <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colRole')}</label>
+        <select name="position_id" required style="padding:4px 8px">${addable.map((p) => `<option value="${esc(p.id)}">${esc(posLabel(p, L))}${p.division ? ' — ' + esc(p.division) : ''}</option>`).join('')}</select></div>
+      <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colQuota')}</label>
+        <input type="number" name="quota" min="0" max="99999" value="0" style="width:70px;padding:4px 6px"></div>
+      <button class="btn btn-sm" type="submit">${t('eo.role.addBtn')}</button>
+    </form></details>` : '';
+  const resetBtn = e.event_type_id ? `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/reset" ${jsConfirm(t('eo.role.resetConfirm'))}><button class="btn btn-ghost btn-sm">↺ ${t('eo.role.reset')}</button></form>` : '';
+  return `${banner}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px">
+    <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>${resetBtn}
+  </div>
+  <div class="card" style="margin-top:10px;padding:12px 14px">${table}${addForm}</div>`;
+}
+
+// Small page: quota-change history for one event role.
+function roleQuotaLogs({ staff, event, role, logs, backHref, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {}; const r = role || {};
+  const rows = (logs || []).map((l) => `<tr style="border-top:1px solid var(--line)">
+    <td style="padding:6px 8px;white-space:nowrap">${esc(String(l.changed_at || '').replace('T', ' ').slice(0, 16))}</td>
+    <td style="padding:6px 8px;text-align:center">${l.old_quota == null ? '—' : l.old_quota}</td>
+    <td style="padding:6px 8px;text-align:center">→</td>
+    <td style="padding:6px 8px;text-align:center;font-weight:700">${l.new_quota}</td>
+  </tr>`).join('') || `<tr><td colspan="4" class="muted" style="padding:10px 8px">${t('eo.role.logsEmpty')}</td></tr>`;
+  const body = `<div class="wrap">
+    <a href="${esc(backHref)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    <h1 style="margin:0">${t('eo.role.logsTitle')}</h1>
+    <p class="sub" style="margin:4px 0 0">${esc(e.name || '')} · <b>${esc(posLabel(r, L))}</b></p>
+    <div class="card" style="margin-top:14px;padding:12px 14px"><table style="width:100%;border-collapse:collapse;font-size:13.5px">
+      <thead><tr><th style="text-align:left;font-size:11px;color:var(--muted);padding:6px 8px">${t('eo.role.logWhen')}</th><th style="font-size:11px;color:var(--muted);padding:6px 8px">${t('eo.role.logFrom')}</th><th></th><th style="font-size:11px;color:var(--muted);padding:6px 8px">${t('eo.role.logTo')}</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+  </div>`;
+  return appLayout({ title: t('eo.role.logsTitle') + ' — 20FIT', body, role: (staff && staff.role) === 'super_admin' ? 'super_admin' : 'eo', active: (staff && staff.role) === 'super_admin' ? 'manage' : 'events', user: staff && staff.name, lang: L });
+}
+
+function eoEventDetail({ staff, event, view, applicants, positionsMaster, flash, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
@@ -3152,11 +3274,8 @@ function eoEventDetail({ staff, event, view, applicants, flash, lang }) {
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
   ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
   ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
-  <div style="display:flex;gap:12px;align-items:center;margin-top:20px">
-    <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>
-    <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px">${posCards}</div>
+  ${eventRolesManager(e, view, positionsMaster, f, '/eo/events', L)}
+  <div class="muted" style="font-size:13px;margin-top:8px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></div>
   <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
   ${positionStatsChart(view.positions, L)}
   ${groupSection}
@@ -5915,7 +6034,7 @@ function adminEventEdit({ staff, event, lang }) {
  * statistics (total vs approved). The full applicant review lives on
  * /admin/applications; this page is the "event detail" home for the stats.
  */
-function adminEventDetail({ staff, event, view, lang }) {
+function adminEventDetail({ staff, event, view, positionsMaster, flash, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
@@ -5927,17 +6046,69 @@ function adminEventDetail({ staff, event, view, lang }) {
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">${t('adm.event.manageApps')} →</a>
+      <a href="/admin/role-templates?lang=${L}" class="btn btn-ghost btn-sm">${t('tpl.manageLink')}</a>
       <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
     </div>
   </div>
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
-  <div style="display:flex;gap:12px;align-items:center;margin-top:22px">
-    <div style="font-weight:700">${t('stat.pos.title')}</div>
-    <span class="muted" style="font-size:13px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></span>
-  </div>
+  ${eventRolesManager(e, view, positionsMaster, flash, '/admin/events', L)}
+  <div class="muted" style="font-size:13px;margin-top:8px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></div>
+  <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
   ${positionStatsChart(view.positions, L)}
 </div>`;
   return appLayout({ title: e.name + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff.name, lang: L });
+}
+
+// Super Admin: manage role templates per event type (add / edit default quota,
+// division, order / activate-deactivate). Editing a template never changes events
+// already created — templates only seed new events + the "reset to default".
+function roleTemplatesPage({ staff, eventTypes, positionsMaster, templates, flash, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const f = flash || {};
+  const banner = f.ok === 'added' ? `<div class="banner banner-ok">${t('tpl.okAdded')}</div>`
+    : f.ok === 'saved' ? `<div class="banner banner-ok">${t('tpl.okSaved')}</div>`
+    : f.err === 'dup' ? `<div class="banner banner-err">${t('tpl.errDup')}</div>`
+    : f.err === 'input' ? `<div class="banner banner-err">${t('tpl.errInput')}</div>` : '';
+  const byType = new Map();
+  (templates || []).forEach((rt) => { const k = String(rt.event_type_id); const a = byType.get(k) || []; a.push(rt); byType.set(k, a); });
+  const numI = (name, val, w) => `<input type="number" name="${name}" value="${esc(val)}" min="0" style="width:${w || 66}px;padding:3px 6px;font-size:13px">`;
+  const activeSel = (on) => `<select name="is_active" style="padding:3px 6px;font-size:13px"><option value="1"${on ? ' selected' : ''}>${t('tpl.active')}</option><option value="0"${on ? '' : ' selected'}>${t('tpl.inactive')}</option></select>`;
+  const typeCards = (eventTypes || []).map((ty) => {
+    const label = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || '';
+    const rows = (byType.get(String(ty.id)) || []).slice().sort((a, b) => a.sort_order - b.sort_order);
+    const rowHtml = rows.map((rt) => `<form class="inline-form" method="post" action="/admin/role-templates/${esc(rt.id)}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)${rt.is_active ? '' : ';opacity:.55'}">
+      <b style="flex:1 1 160px;min-width:140px">${esc(posLabel(rt, L))}</b>
+      <label style="font-size:11px;color:var(--muted)">${t('eo.role.colDivision')} <input name="division" value="${esc(rt.division || '')}" style="width:120px;padding:3px 6px;font-size:13px"></label>
+      <label style="font-size:11px;color:var(--muted)">${t('tpl.defaultQuota')} ${numI('default_quota', rt.default_quota, 66)}</label>
+      <label style="font-size:11px;color:var(--muted)">${t('tpl.order')} ${numI('sort_order', rt.sort_order, 60)}</label>
+      ${activeSel(rt.is_active)}
+      <button class="btn btn-ghost btn-sm" type="submit">${t('btn.save')}</button>
+    </form>`).join('') || `<p class="muted" style="font-size:13px;margin:8px 0">${t('tpl.empty')}</p>`;
+    const usedPos = new Set(rows.map((r) => String(r.position_id)));
+    const addable = (positionsMaster || []).filter((p) => p.key !== 'other' && !usedPos.has(String(p.id)));
+    const addForm = addable.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;font-size:13px">＋ ${t('tpl.addRole')}</summary>
+      <form method="post" action="/admin/role-templates" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">
+        <input type="hidden" name="event_type_id" value="${esc(ty.id)}">
+        <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colRole')}</label><select name="position_id" required style="padding:4px 8px">${addable.map((p) => `<option value="${esc(p.id)}">${esc(posLabel(p, L))}</option>`).join('')}</select></div>
+        <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colDivision')}</label><input name="division" style="width:120px;padding:4px 6px"></div>
+        <div><label class="muted" style="font-size:11px;display:block">${t('tpl.defaultQuota')}</label>${numI('default_quota', 1, 70)}</div>
+        <div><label class="muted" style="font-size:11px;display:block">${t('tpl.order')}</label>${numI('sort_order', (rows.length + 1) * 10, 64)}</div>
+        <button class="btn btn-sm" type="submit">${t('tpl.addRole')}</button>
+      </form></details>` : '';
+    return `<div class="card" style="margin-top:14px;padding:14px 16px">
+      <div style="font-weight:700;font-size:15px">${esc(label)} <span class="muted" style="font-weight:400;font-size:12px">(${esc(ty.key)})</span></div>
+      <div style="margin-top:6px">${rowHtml}</div>${addForm}
+    </div>`;
+  }).join('');
+  const body = `<div class="wrap">
+    <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+    <h1 style="margin:0">${t('tpl.title')}</h1>
+    <p class="sub" style="margin:4px 0 0">${t('tpl.subtitle')}</p>
+    ${banner}
+    ${typeCards}
+  </div>`;
+  return appLayout({ title: t('tpl.title') + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
 /**
@@ -7107,7 +7278,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
