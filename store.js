@@ -20,6 +20,22 @@ const BUCKET = 'kol-uploads';
 const POS_DETAIL_COLS = ['description', 'description_en', 'custom_label', 'custom_label_en', 'jobdesk_en', 'requirement_en', 'work_hours', 'venue_detail', 'dresscode', 'meeting_point', 'kol_content', 'kol_deadline', 'kol_min_followers', 'kol_hashtags', 'photo_output', 'photo_deadline', 'photo_equipment'];
 const pickPosDetails = (src) => { const o = {}; for (const c of POS_DETAIL_COLS) o[c] = (src && src[c]) || null; return o; };
 
+// Flatten a role_templates row (with its joined talent_positions) to the shape
+// the routes/views consume. Division falls back to the master position's.
+const mapRoleTemplate = (r) => ({
+  id: r.id, event_type_id: r.event_type_id, position_id: r.position_id,
+  division: r.division || (r.talent_positions && r.talent_positions.division) || null,
+  default_quota: r.default_quota, sort_order: r.sort_order,
+  description: r.description || null, is_active: r.is_active,
+  key: r.talent_positions && r.talent_positions.key,
+  label_id: r.talent_positions && r.talent_positions.label_id,
+  label_en: r.talent_positions && r.talent_positions.label_en,
+});
+
+// Memory-store mirrors of the two helpers above.
+const memRoleTpl = (t, positions) => { const m = (positions || []).find((p) => p.id === t.position_id) || {}; return { id: t.id, event_type_id: t.event_type_id, position_id: t.position_id, division: t.division || m.division || null, default_quota: t.default_quota, sort_order: t.sort_order, description: t.description || null, is_active: t.is_active, key: m.key, label_id: m.label_id, label_en: m.label_en }; };
+const memApprovedCount = (applications, choices, eventId, positionId) => (choices || []).filter((c) => c.position_id === positionId && c.accepted && ((applications || []).find((a) => a.id === c.application_id) || {}).event_id === eventId).length;
+
 // Per-metric "reasonable per day" thresholds (green ceiling, yellow ceiling).
 const SETTING_KEYS = [
   'vpd_green', 'vpd_yellow', 'lpd_green', 'lpd_yellow', 'cpd_green', 'cpd_yellow',
@@ -251,9 +267,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
+    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, event_type_id, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
       const { data, error } = await sb.from('talent_events')
-        .insert({ name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published' })
+        .insert({ name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, created_by: created_by || null, mp_sow: mp_sow || null, category: category || null, event_type_id: event_type_id || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published' })
         .select('id,name,is_active,created_at').maybeSingle();
       if (error) throw new Error(error.message);
       const list = (needs || []).filter((n) => n && n.talent_type)
@@ -273,6 +289,7 @@ function supabaseStore() {
       if (patch.mp_sow !== undefined) row.mp_sow = patch.mp_sow || null;
       if (patch.mockup_path !== undefined) row.mockup_path = patch.mockup_path || null;
       if (patch.category !== undefined) row.category = patch.category || null;
+      if (patch.event_type_id !== undefined) row.event_type_id = patch.event_type_id || null;
       if (patch.start_time !== undefined) row.start_time = patch.start_time || null;
       if (patch.end_time !== undefined) row.end_time = patch.end_time || null;
       if (patch.reg_deadline !== undefined) row.reg_deadline = patch.reg_deadline || null;
@@ -306,21 +323,120 @@ function supabaseStore() {
       return data || [];
     },
     async listEventTypes() {
-      const { data, error } = await sb.from('event_types').select('key,label_id,label_en,default_position_ids,sort').eq('is_active', true).order('sort');
+      const { data, error } = await sb.from('event_types').select('id,key,label_id,label_en,default_position_ids,sort').eq('is_active', true).order('sort');
       if (error) throw new Error(error.message);
       return data || [];
     },
+    async getEventType(idOrKey) {
+      if (!idOrKey) return null;
+      const col = /^[0-9a-f-]{36}$/i.test(String(idOrKey)) ? 'id' : 'key';
+      const { data } = await sb.from('event_types').select('id,key,label_id,label_en,sort').eq(col, idOrKey).maybeSingle();
+      return data || null;
+    },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
-        .select('id,quota,closed_at,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort)').eq('event_id', eventId);
+        .select('id,quota,closed_at,division,sort_order,updated_at,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division)').eq('event_id', eventId);
       if (error) throw new Error(error.message);
-      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
-        .sort((a, b) => a.sort - b.sort);
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+        .sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
+    // Diff/upsert instead of delete+reinsert so row ids (and their quota logs)
+    // survive an edit, updated_at is maintained, and quota changes flow through
+    // the DB guard/log triggers. Callers guard against removing a role that has
+    // applicants and against dropping quota below approved.
     async setEventPositions(eventId, positions) {
-      await sb.from('talent_event_positions').delete().eq('event_id', eventId);
-      const rows = (positions || []).filter((p) => p && p.position_id && p.quota > 0).map((p) => ({ event_id: eventId, position_id: p.position_id, quota: p.quota, jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) }));
-      if (rows.length) { const r = await sb.from('talent_event_positions').insert(rows); if (r.error) throw new Error(r.error.message); }
+      const incoming = (positions || []).filter((p) => p && p.position_id && p.quota > 0);
+      const ex = await sb.from('talent_event_positions').select('id,position_id').eq('event_id', eventId);
+      if (ex.error) throw new Error(ex.error.message);
+      const exByPos = new Map((ex.data || []).map((r) => [String(r.position_id), r]));
+      const keep = new Set();
+      for (const p of incoming) {
+        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: new Date().toISOString(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) };
+        const found = exByPos.get(String(p.position_id));
+        if (found) {
+          keep.add(String(p.position_id));
+          const r = await sb.from('talent_event_positions').update(cols).eq('id', found.id);
+          if (r.error) throw new Error(r.error.message);
+        } else {
+          const r = await sb.from('talent_event_positions').insert(Object.assign({ event_id: eventId, position_id: p.position_id }, cols));
+          if (r.error) throw new Error(r.error.message);
+        }
+      }
+      const toDelete = (ex.data || []).filter((r) => !keep.has(String(r.position_id)));
+      for (const r of toDelete) { const d = await sb.from('talent_event_positions').delete().eq('id', r.id); if (d.error) throw new Error(d.error.message); }
+    },
+    // --- Role templates (per event type) --------------------------------------
+    async listRoleTemplates(eventTypeId) {
+      if (!eventTypeId) return [];
+      const { data, error } = await sb.from('role_templates')
+        .select('id,event_type_id,position_id,division,default_quota,sort_order,description,is_active,talent_positions(key,label_id,label_en,division,sort)')
+        .eq('event_type_id', eventTypeId).order('sort_order');
+      if (error) throw new Error(error.message);
+      return (data || []).map(mapRoleTemplate);
+    },
+    async listAllRoleTemplates() {
+      const { data, error } = await sb.from('role_templates')
+        .select('id,event_type_id,position_id,division,default_quota,sort_order,description,is_active,talent_positions(key,label_id,label_en,division,sort)')
+        .order('event_type_id').order('sort_order');
+      if (error) throw new Error(error.message);
+      return (data || []).map(mapRoleTemplate);
+    },
+    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description }) {
+      const { data, error } = await sb.from('role_templates')
+        .insert({ event_type_id, position_id, division: division || null, default_quota: default_quota != null ? default_quota : 1, sort_order: sort_order || 0, description: description || null })
+        .select('id').maybeSingle();
+      if (error) { if (/duplicate|unique/i.test(error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; } throw new Error(error.message); }
+      return data;
+    },
+    async updateRoleTemplate(id, patch) {
+      const row = { updated_at: new Date().toISOString() };
+      if (patch.division !== undefined) row.division = patch.division || null;
+      if (patch.default_quota !== undefined) row.default_quota = patch.default_quota;
+      if (patch.sort_order !== undefined) row.sort_order = patch.sort_order;
+      if (patch.description !== undefined) row.description = patch.description || null;
+      if (patch.is_active !== undefined) row.is_active = !!patch.is_active;
+      const { error } = await sb.from('role_templates').update(row).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    // Copy an event type's active template roles onto a freshly created event.
+    async snapshotTemplateToEvent(eventId, eventTypeId) {
+      if (!eventTypeId) return 0;
+      const { data, error } = await sb.from('role_templates')
+        .select('position_id,division,default_quota,sort_order').eq('event_type_id', eventTypeId).eq('is_active', true).order('sort_order');
+      if (error) throw new Error(error.message);
+      const rows = (data || []).map((t) => ({ event_id: eventId, position_id: t.position_id, quota: t.default_quota, division: t.division || null, sort_order: t.sort_order || 0 }));
+      if (!rows.length) return 0;
+      const r = await sb.from('talent_event_positions').upsert(rows, { onConflict: 'event_id,position_id', ignoreDuplicates: true });
+      if (r.error) throw new Error(r.error.message);
+      return rows.length;
+    },
+    // --- Per-event role quota (race-safe RPCs) --------------------------------
+    async setEventRoleQuota(eventRoleId, newQuota, changedBy) {
+      const { data, error } = await sb.rpc('set_event_role_quota', { p_event_role_id: eventRoleId, p_new_quota: newQuota, p_changed_by: changedBy || null });
+      if (error) { const e = new Error(error.message || 'RPC_ERROR'); e.code = error.code || 'RPC'; throw e; }
+      return data;
+    },
+    async approveApplicationChoice(applicationId, positionId, reviewerId, actorName) {
+      const { data, error } = await sb.rpc('approve_application_choice', { p_application_id: applicationId, p_position_id: positionId, p_reviewer_id: reviewerId || null, p_actor_name: actorName || null });
+      if (error) throw new Error(error.message);
+      return data; // 'ok' | 'full' | 'skip' | 'not_found'
+    },
+    async listEventRoleQuotaLogs(eventRoleId) {
+      const { data, error } = await sb.from('event_role_quota_logs')
+        .select('id,event_role_id,old_quota,new_quota,changed_by,changed_at').eq('event_role_id', eventRoleId).order('changed_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    async addEventRole(eventId, { position_id, division, quota, sort_order }) {
+      const row = { event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, closed_at: null };
+      const { data, error } = await sb.from('talent_event_positions').upsert(row, { onConflict: 'event_id,position_id' }).select('id').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async closeEventRole(eventRoleId, closed) {
+      const patch = closed ? { closed_at: new Date().toISOString(), updated_at: new Date().toISOString() } : { closed_at: null, updated_at: new Date().toISOString() };
+      const { error } = await sb.from('talent_event_positions').update(patch).eq('id', eventRoleId);
+      if (error) throw new Error(error.message);
     },
     async listApplicationChoices() {
       const { data, error } = await sb.from('talent_application_choices').select('id,application_id,position_id,priority,accepted');
@@ -633,15 +749,37 @@ function memoryStore() {
     ['registration_staff', 'Registration Staff', 'Registration Staff', 40], ['water_station', 'Water Station', 'Water Station', 50],
     ['time_chip_management', 'Time Chip Management', 'Time Chip Management', 60], ['fotografer', 'Fotografer', 'Photographer', 70],
     ['videografer', 'Videografer', 'Videographer', 80], ['marshal', 'Marshal', 'Marshal', 90], ['drop_bag', 'Drop Bag', 'Drop Bag', 100],
+    // Granular Running roles (mirror of the SQL seed), grouped by division.
+    ['run_marshall_static', 'Marshall Statis', 'Static Marshall', 300, 'Marshall'],
+    ['run_mobile_marshall', 'Mobile Marshall', 'Mobile Marshall', 301, 'Marshall'],
+    ['run_mobile_marshall_pw', 'Mobile Marshall Potential Winner', 'Mobile Marshall (Pot. Winner)', 302, 'Marshall'],
+    ['run_crew_start_finish', 'Crew Start Finish', 'Start/Finish Crew', 310, 'Start/Finish'],
+    ['run_crew_floor_runners_line', 'Crew Floor - Runners Line', 'Floor Crew - Runners Line', 311, 'Start/Finish'],
+    ['run_crew_water_station', 'Crew Water Station', 'Water Station Crew', 320, 'Water Station'],
+    ['run_deploy_water_station', 'Tim Deploy Water Station', 'Water Station Deploy Team', 321, 'Water Station'],
+    ['run_crew_refreshment', 'Crew Refreshment', 'Refreshment Crew', 330, 'Refreshment'],
+    ['run_deploy_refreshment', 'Tim Deploy Refreshment', 'Refreshment Deploy Team', 331, 'Refreshment'],
+    ['run_crew_drop_bag', 'Crew Drop Bag', 'Drop Bag Crew', 340, 'Drop Bag'],
+    ['run_information_crew', 'Information Crew', 'Information Crew', 350, 'Information'],
     ['other', 'Lainnya', 'Other', 200],
-  ].map(([key, label_id, label_en, sort]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, is_active: true }));
+  ].map(([key, label_id, label_en, sort, division]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, division: division || null, is_active: true }));
   // Managed event types (HYROX + Lari active); each auto-fills its default positions in the form.
   // 'other' (Lainnya) is the custom slot — never part of a type's default set.
   const ALL_POS_IDS = positions.filter((p) => p.key !== 'other').map((p) => p.id);
   const eventTypes = [
-    { key: 'lari', label_id: 'Lari', label_en: 'Running', sort: 10, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
-    { key: 'hyrox', label_id: 'HYROX', label_en: 'HYROX', sort: 20, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
+    { id: 'et-lari', key: 'lari', label_id: 'Lari', label_en: 'Running', sort: 10, is_active: true, default_position_ids: ALL_POS_IDS.slice() },
+    { id: 'et-hyrox', key: 'hyrox', label_id: 'HYROX', label_en: 'HYROX', sort: 20, is_active: true, default_position_ids: [] },
   ];
+  // Running role template (mirror of the SQL seed): [position key, division, default quota, sort].
+  const roleTemplates = [
+    ['run_marshall_static', 'Marshall', 20, 300], ['run_mobile_marshall', 'Marshall', 10, 301],
+    ['run_mobile_marshall_pw', 'Marshall', 4, 302], ['run_crew_start_finish', 'Start/Finish', 10, 310],
+    ['run_crew_floor_runners_line', 'Start/Finish', 8, 311], ['run_crew_water_station', 'Water Station', 10, 320],
+    ['run_deploy_water_station', 'Water Station', 5, 321], ['run_crew_refreshment', 'Refreshment', 10, 330],
+    ['run_deploy_refreshment', 'Refreshment', 15, 331], ['run_crew_drop_bag', 'Drop Bag', 4, 340],
+    ['run_information_crew', 'Information', 2, 350],
+  ].map(([key, division, default_quota, sort_order]) => ({ id: 'rt-' + key, event_type_id: 'et-lari', position_id: 'pos-' + key, division, default_quota, sort_order, description: null, is_active: true }));
+  const quotaLogs = []; // { id, event_role_id, old_quota, new_quota, changed_by, changed_at }
   const eventPositions = [
     { id: 'ep-j-kol', event_id: 'ev-jakarta', position_id: 'pos-kol', quota: 2, closed_at: null, jobdesk: 'Buat 3 konten (reels/story) selama event & tag akun 20FIT. Hadir di lokasi hari-H.', requirement: 'Followers IG 5.000+, engagement bagus, terbiasa bikin konten olahraga.', fee: 'Rp750.000 + merchandise event' },
     { id: 'ep-j-foto', event_id: 'ev-jakarta', position_id: 'pos-fotografer', quota: 2, closed_at: null, jobdesk: 'Dokumentasi foto di area start/finish & sepanjang rute. Deliver min. 150 foto terkurasi H+2.', requirement: 'Punya kamera mirrorless/DSLR sendiri, pengalaman foto event olahraga.', fee: 'Rp600.000/hari' },
@@ -717,8 +855,8 @@ function memoryStore() {
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
     async listHyroxCerts() { return accounts.filter((a) => a.hyrox_cert_path).map(accountProfile); },
-    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
-      const ev = { id: 'ev-' + (++seq), name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published', reg_closed_at: null, group_url: null };
+    async createEvent({ name, description, description_en, location, starts_at, ends_at, created_by, needs, mp_sow, category, event_type_id, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
+      const ev = { id: 'ev-' + (++seq), name, description: description || null, description_en: description_en || null, location: location || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, event_type_id: event_type_id || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published', reg_closed_at: null, group_url: null };
       events.unshift(ev);
       (needs || []).filter((n) => n && n.talent_type).forEach((n) => eventNeeds.push({ event_id: ev.id, talent_type: n.talent_type, headcount: n.headcount || 1 }));
       return { id: ev.id, name: ev.name, is_active: ev.is_active, created_at: ev.created_at };
@@ -736,6 +874,7 @@ function memoryStore() {
       if (patch.mp_sow !== undefined) ev.mp_sow = patch.mp_sow || null;
       if (patch.mockup_path !== undefined) ev.mockup_path = patch.mockup_path || null;
       if (patch.category !== undefined) ev.category = patch.category || null;
+      if (patch.event_type_id !== undefined) ev.event_type_id = patch.event_type_id || null;
       if (patch.start_time !== undefined) ev.start_time = patch.start_time || null;
       if (patch.end_time !== undefined) ev.end_time = patch.end_time || null;
       if (patch.reg_deadline !== undefined) ev.reg_deadline = patch.reg_deadline || null;
@@ -752,13 +891,81 @@ function memoryStore() {
     },
     async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
     async listEventTypes() { return eventTypes.filter((t) => t.is_active).slice().sort((a, b) => a.sort - b.sort).map((t) => ({ ...t, default_position_ids: (t.default_position_ids || []).slice() })); },
+    async getEventType(idOrKey) { const t = eventTypes.find((x) => x.id === idOrKey || x.key === idOrKey); return t ? { ...t } : null; },
     async listEventPositions(eventId) {
-      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => a.sort - b.sort);
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     async setEventPositions(eventId, poss) {
-      for (let j = eventPositions.length - 1; j >= 0; j--) if (eventPositions[j].event_id === eventId) eventPositions.splice(j, 1);
-      (poss || []).filter((p) => p && p.position_id && p.quota > 0).forEach((p) => eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id, quota: p.quota, closed_at: null, jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) }));
+      const incoming = (poss || []).filter((p) => p && p.position_id && p.quota > 0);
+      const keep = new Set();
+      incoming.forEach((p) => {
+        keep.add(String(p.position_id));
+        const found = eventPositions.find((ep) => ep.event_id === eventId && ep.position_id === p.position_id);
+        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: now(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) };
+        if (found) Object.assign(found, cols);
+        else eventPositions.push(Object.assign({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id }, cols));
+      });
+      for (let j = eventPositions.length - 1; j >= 0; j--) { const ep = eventPositions[j]; if (ep.event_id === eventId && !keep.has(String(ep.position_id))) eventPositions.splice(j, 1); }
     },
+    // --- Role templates (memory mirror) ---------------------------------------
+    async listRoleTemplates(eventTypeId) {
+      return roleTemplates.filter((t) => t.event_type_id === eventTypeId).map((t) => memRoleTpl(t, positions)).sort((a, b) => a.sort_order - b.sort_order);
+    },
+    async listAllRoleTemplates() {
+      return roleTemplates.map((t) => memRoleTpl(t, positions)).sort((a, b) => (a.event_type_id < b.event_type_id ? -1 : a.event_type_id > b.event_type_id ? 1 : a.sort_order - b.sort_order));
+    },
+    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description }) {
+      if (roleTemplates.find((t) => t.event_type_id === event_type_id && t.position_id === position_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
+      const rec = { id: 'rt-' + (++seq), event_type_id, position_id, division: division || null, default_quota: default_quota != null ? default_quota : 1, sort_order: sort_order || 0, description: description || null, is_active: true };
+      roleTemplates.push(rec); return { id: rec.id };
+    },
+    async updateRoleTemplate(id, patch) {
+      const t = roleTemplates.find((x) => x.id === id); if (!t) return;
+      if (patch.division !== undefined) t.division = patch.division || null;
+      if (patch.default_quota !== undefined) t.default_quota = patch.default_quota;
+      if (patch.sort_order !== undefined) t.sort_order = patch.sort_order;
+      if (patch.description !== undefined) t.description = patch.description || null;
+      if (patch.is_active !== undefined) t.is_active = !!patch.is_active;
+    },
+    async snapshotTemplateToEvent(eventId, eventTypeId) {
+      const tpls = roleTemplates.filter((t) => t.event_type_id === eventTypeId && t.is_active);
+      let n = 0;
+      tpls.forEach((t) => {
+        if (eventPositions.find((ep) => ep.event_id === eventId && ep.position_id === t.position_id)) return;
+        eventPositions.push({ id: 'ep-' + (++seq), event_id: eventId, position_id: t.position_id, quota: t.default_quota, division: t.division || null, sort_order: t.sort_order || 0, closed_at: null, updated_at: now() }); n++;
+      });
+      return n;
+    },
+    async setEventRoleQuota(eventRoleId, newQuota, changedBy) {
+      const ep = eventPositions.find((x) => x.id === eventRoleId);
+      if (!ep) { const e = new Error('ROLE_NOT_FOUND'); e.code = 'RPC'; throw e; }
+      const approved = memApprovedCount(applications, applicationChoices, ep.event_id, ep.position_id);
+      if (newQuota < 0) { const e = new Error('QUOTA_NEGATIVE'); e.code = 'RPC'; throw e; }
+      if (newQuota < approved) { const e = new Error('QUOTA_BELOW_APPROVED:' + approved); e.code = 'RPC'; throw e; }
+      if (newQuota !== ep.quota) { quotaLogs.push({ id: 'ql-' + (++seq), event_role_id: ep.id, old_quota: ep.quota, new_quota: newQuota, changed_by: changedBy || null, changed_at: now() }); ep.quota = newQuota; ep.updated_at = now(); }
+      return { ...ep };
+    },
+    async approveApplicationChoice(applicationId, positionId, reviewerId, actorName) {
+      const app = applications.find((a) => a.id === applicationId);
+      if (!app) return 'not_found';
+      if (!applicationChoices.some((c) => c.application_id === applicationId && c.position_id === positionId)) return 'skip';
+      const ep = eventPositions.find((x) => x.event_id === app.event_id && x.position_id === positionId);
+      const quota = ep ? ep.quota : 0;
+      const approved = applicationChoices.filter((c) => c.position_id === positionId && c.accepted && c.application_id !== applicationId && (applications.find((a) => a.id === c.application_id) || {}).event_id === app.event_id).length;
+      if (quota > 0 && approved >= quota) return 'full';
+      applicationChoices.forEach((c) => { if (c.application_id === applicationId) c.accepted = (c.position_id === positionId); });
+      const prev = app.status; app.status = 'approved'; app.reviewed_by = reviewerId || null; app.reviewed_at = now();
+      statusLogs.push({ id: 'sl-' + (++seq), application_id: applicationId, from_status: prev || null, to_status: 'approved', changed_by: reviewerId || null, actor_name: actorName || null, changed_at: now() });
+      return 'ok';
+    },
+    async listEventRoleQuotaLogs(eventRoleId) { return quotaLogs.filter((l) => l.event_role_id === eventRoleId).slice().reverse(); },
+    async addEventRole(eventId, { position_id, division, quota, sort_order }) {
+      let ep = eventPositions.find((x) => x.event_id === eventId && x.position_id === position_id);
+      if (ep) { ep.closed_at = null; ep.updated_at = now(); return { id: ep.id }; }
+      ep = { id: 'ep-' + (++seq), event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, closed_at: null, updated_at: now() };
+      eventPositions.push(ep); return { id: ep.id };
+    },
+    async closeEventRole(eventRoleId, closed) { const ep = eventPositions.find((x) => x.id === eventRoleId); if (ep) { ep.closed_at = closed ? now() : null; ep.updated_at = now(); } },
     async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
     // --- Two-layer selection (LAPIS 1): reviewer proposals + "reviewed" marks.
     // In-memory mirror of the Supabase interface so the applicant lists / exports
