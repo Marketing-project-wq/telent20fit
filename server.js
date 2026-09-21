@@ -2432,6 +2432,39 @@ function validateEventForm(f, req) {
   return e;
 }
 
+// Does this event already have any application? (locks the type dropdown + blocks
+// deleting a role / changing the type once talents are in the funnel.)
+async function eventHasApplicants(st, eventId) {
+  return (await st.listApplications()).some((a) => a.event_id === eventId);
+}
+// Custom ("Tambahan") roles typed straight into the create form (parallel arrays).
+function parseCustomRoles(req) {
+  const names = [].concat(req.body.custom_name || []);
+  const divs = [].concat(req.body.custom_division || []);
+  const quotas = [].concat(req.body.custom_quota || []);
+  const descs = [].concat(req.body.custom_desc || []);
+  const tpls = [].concat(req.body.custom_tpl || []); // '1' => also save to this type's template
+  const out = [];
+  names.forEach((nm, i) => {
+    const name = String(nm || '').trim().slice(0, 80);
+    if (!name) return;
+    const q = parseInt(quotas[i], 10);
+    out.push({ name, division: String(divs[i] || '').trim().slice(0, 60) || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, description: String(descs[i] || '').trim().slice(0, 600) || null, saveTpl: String(tpls[i] || '') === '1' });
+  });
+  return out;
+}
+// Persist typed custom roles onto an event: a master position each (is_custom) +
+// an is_optional event role; optionally also add it to the type's template.
+async function applyCustomRoles(st, evId, eventTypeId, customRoles, sortBase) {
+  let i = 0;
+  for (const c of customRoles) {
+    const pos = await st.createCustomPosition({ name: c.name, division: c.division });
+    await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description });
+    if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description }); } catch (_) { /* ignore dup */ } }
+    i++;
+  }
+}
+
 app.get('/eo/events', requireEo, async (req, res, next) => {
   try {
     const st = db();
@@ -2467,6 +2500,7 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
+      await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
       const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
     }
     res.redirect('/eo/events');
@@ -2479,9 +2513,10 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), st.listAllRoleTemplates(), st.listApplications()]);
     await attachMockups(st, ev);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(evPos), lang: req.lang }));
+    const hasApplicants = apps.some((a) => a.event_id === ev.id);
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2494,6 +2529,10 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
+    // Once an event has applicants its type is locked — ignore any change to it.
+    const applicantsExist = apps.some((a) => a.event_id === ev.id);
+    if (applicantsExist) { f.data.event_type_id = ev.event_type_id || null; f.data.category = ev.category || f.data.category; }
+    const typeChanged = !applicantsExist && String(f.data.event_type_id || '') !== String(ev.event_type_id || '');
     // Guards: a position with applicants can't be removed; quota can't drop below accepted.
     const view = eoEventView(ev, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
@@ -2501,11 +2540,15 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
       if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, roleTemplates, selected: newByPos, errors, lang: req.lang }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
+    // Changing the type on an event with no applicants replaces the whole role set
+    // (incl. custom roles) with the new template — clear first, then write the form.
+    if (typeChanged) { for (const p of evPos) { try { await st.deleteEventRole(p.id); } catch (_) { /* keep going */ } } }
     await st.setEventPositions(ev.id, f.positions);
+    await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
     res.redirect('/eo/events');
   } catch (e) { next(e); }
 });
@@ -2633,6 +2676,42 @@ app.get('/eo/events/:id/roles/:roleId/logs', requireEo, async (req, res, next) =
     if (!role) return res.redirect('/eo/events/' + ev.id + '?lang=' + req.lang);
     const logs = await st.listEventRoleQuotaLogs(role.id);
     res.send(V.roleQuotaLogs({ staff: eoCtx(req), event: ev, role, logs, backHref: '/eo/events/' + ev.id, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// Add a custom ("Tambahan") role to one event (creates a master position + an
+// is_optional event role; optionally also saves it to the type's template).
+app.post('/eo/events/:id/roles/custom', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    const name = String(req.body.name || '').trim().slice(0, 80);
+    if (!name) return res.redirect(backTo + '&err=role');
+    const division = String(req.body.division || '').trim().slice(0, 60) || null;
+    const q = parseInt(req.body.quota, 10);
+    const description = String(req.body.description || '').trim().slice(0, 600) || null;
+    const saveTpl = String(req.body.save_to_template || '') === '1';
+    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, saveTpl }], 900);
+    res.redirect(backTo + '&ok=added');
+  } catch (e) { next(e); }
+});
+
+// Delete an optional/custom role outright — only while it has no applicants.
+app.post('/eo/events/:id/roles/:roleId/delete', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
+    if (!ev) return res.redirect('/eo/events');
+    const backTo = '/eo/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const [apps, choices] = await Promise.all([st.listApplications(), st.listApplicationChoices()]);
+    const appIds = new Set(apps.filter((a) => a.event_id === ev.id).map((a) => a.id));
+    if (choices.some((c) => c.position_id === role.position_id && appIds.has(c.application_id))) return res.redirect(backTo + '&err=hasApplicants');
+    await st.deleteEventRole(role.id);
+    res.redirect(backTo + '&ok=deleted');
   } catch (e) { next(e); }
 });
 
@@ -4337,6 +4416,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('pos
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
+      await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
       const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
     }
     res.redirect('/admin/manage');
@@ -4350,9 +4430,10 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), st.listAllRoleTemplates(), st.listApplications()]);
     await attachMockups(st, event);
-    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
+    const hasApplicants = apps.some((a) => a.event_id === event.id);
+    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -4380,6 +4461,9 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
+    const applicantsExist = apps.some((a) => a.event_id === event.id);
+    if (applicantsExist) { f.data.event_type_id = event.event_type_id || null; f.data.category = event.category || f.data.category; }
+    const typeChanged = !applicantsExist && String(f.data.event_type_id || '') !== String(event.event_type_id || '');
     // Same guards as EO: a position with applicants can't be removed; quota can't drop below accepted.
     const view = eoEventView(event, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
@@ -4387,11 +4471,13 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
       if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
-    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, roleTemplates, selected: newByPos, errors, lang: req.lang, admin: true }));
+    if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang, admin: true }));
     const patch = Object.assign({}, f.data);
     const poster = await saveMockup(st, event.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(event.id, patch);
+    if (typeChanged) { for (const p of evPos) { try { await st.deleteEventRole(p.id); } catch (_) { /* keep going */ } } }
     await st.setEventPositions(event.id, f.positions);
+    await applyCustomRoles(st, event.id, f.data.event_type_id, parseCustomRoles(req), 900);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
@@ -4474,6 +4560,39 @@ app.get('/admin/events/:id/roles/:roleId/logs', auth.requireStaff(['super_admin'
     if (!role) return res.redirect('/admin/events/' + ev.id + '?lang=' + req.lang);
     const logs = await st.listEventRoleQuotaLogs(role.id);
     res.send(V.roleQuotaLogs({ staff: staffCtx(req), event: ev, role, logs, backHref: '/admin/events/' + ev.id, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/roles/custom', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    const name = String(req.body.name || '').trim().slice(0, 80);
+    if (!name) return res.redirect(backTo + '&err=role');
+    const division = String(req.body.division || '').trim().slice(0, 60) || null;
+    const q = parseInt(req.body.quota, 10);
+    const description = String(req.body.description || '').trim().slice(0, 600) || null;
+    const saveTpl = String(req.body.save_to_template || '') === '1';
+    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, saveTpl }], 900);
+    res.redirect(backTo + '&ok=added');
+  } catch (e) { next(e); }
+});
+
+app.post('/admin/events/:id/roles/:roleId/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ev = await adminEventById(st, req.params.id);
+    if (!ev) return res.redirect('/admin/manage');
+    const backTo = '/admin/events/' + ev.id + '?lang=' + req.lang;
+    const role = await findEventRole(st, ev.id, req.params.roleId);
+    if (!role) return res.redirect(backTo);
+    const [apps, choices] = await Promise.all([st.listApplications(), st.listApplicationChoices()]);
+    const appIds = new Set(apps.filter((a) => a.event_id === ev.id).map((a) => a.id));
+    if (choices.some((c) => c.position_id === role.position_id && appIds.has(c.application_id))) return res.redirect(backTo + '&err=hasApplicants');
+    await st.deleteEventRole(role.id);
+    res.redirect(backTo + '&ok=deleted');
   } catch (e) { next(e); }
 });
 

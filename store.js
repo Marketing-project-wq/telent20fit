@@ -322,6 +322,16 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
+    // Create a one-off master position for a custom ("Tambahan") event role, so it
+    // can be applied to + counted like any role. Marked is_custom so it stays out
+    // of the standard type filters / pickers.
+    async createCustomPosition({ name, name_en, division }) {
+      const key = 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const row = { key, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true };
+      const { data, error } = await sb.from('talent_positions').insert(row).select('id,key,label_id,label_en,division').maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
     async listEventTypes() {
       const { data, error } = await sb.from('event_types').select('id,key,label_id,label_en,default_position_ids,sort').eq('is_active', true).order('sort');
       if (error) throw new Error(error.message);
@@ -335,9 +345,9 @@ function supabaseStore() {
     },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
-        .select('id,quota,closed_at,division,sort_order,updated_at,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division)').eq('event_id', eventId);
+        .select('id,quota,closed_at,division,sort_order,updated_at,is_optional,is_custom,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division)').eq('event_id', eventId);
       if (error) throw new Error(error.message);
-      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, is_optional: !!r.is_optional, is_custom: !!r.is_custom, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
         .sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     // Diff/upsert instead of delete+reinsert so row ids (and their quota logs)
@@ -346,7 +356,7 @@ function supabaseStore() {
     // applicants and against dropping quota below approved.
     async setEventPositions(eventId, positions) {
       const incoming = (positions || []).filter((p) => p && p.position_id && p.quota > 0);
-      const ex = await sb.from('talent_event_positions').select('id,position_id').eq('event_id', eventId);
+      const ex = await sb.from('talent_event_positions').select('id,position_id,is_custom').eq('event_id', eventId);
       if (ex.error) throw new Error(ex.error.message);
       const exByPos = new Map((ex.data || []).map((r) => [String(r.position_id), r]));
       const keep = new Set();
@@ -362,7 +372,9 @@ function supabaseStore() {
           if (r.error) throw new Error(r.error.message);
         }
       }
-      const toDelete = (ex.data || []).filter((r) => !keep.has(String(r.position_id)));
+      // Custom ("Tambahan") roles are managed on the detail page, not the form —
+      // never drop them just because they aren't among the form's checkboxes.
+      const toDelete = (ex.data || []).filter((r) => !r.is_custom && !keep.has(String(r.position_id)));
       for (const r of toDelete) { const d = await sb.from('talent_event_positions').delete().eq('id', r.id); if (d.error) throw new Error(d.error.message); }
     },
     // --- Role templates (per event type) --------------------------------------
@@ -427,8 +439,8 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async addEventRole(eventId, { position_id, division, quota, sort_order }) {
-      const row = { event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, closed_at: null };
+    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description }) {
+      const row = { event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, is_optional: !!is_optional, is_custom: !!is_custom, description: description || null, closed_at: null, updated_at: new Date().toISOString() };
       const { data, error } = await sb.from('talent_event_positions').upsert(row, { onConflict: 'event_id,position_id' }).select('id').maybeSingle();
       if (error) throw new Error(error.message);
       return data;
@@ -436,6 +448,12 @@ function supabaseStore() {
     async closeEventRole(eventRoleId, closed) {
       const patch = closed ? { closed_at: new Date().toISOString(), updated_at: new Date().toISOString() } : { closed_at: null, updated_at: new Date().toISOString() };
       const { error } = await sb.from('talent_event_positions').update(patch).eq('id', eventRoleId);
+      if (error) throw new Error(error.message);
+    },
+    // Delete an event role outright (used for an optional/custom role with no
+    // applicants; the caller enforces the no-applicants guard).
+    async deleteEventRole(eventRoleId) {
+      const { error } = await sb.from('talent_event_positions').delete().eq('id', eventRoleId);
       if (error) throw new Error(error.message);
     },
     async listApplicationChoices() {
@@ -762,7 +780,7 @@ function memoryStore() {
     ['run_crew_drop_bag', 'Crew Drop Bag', 'Drop Bag Crew', 340, 'Drop Bag'],
     ['run_information_crew', 'Information Crew', 'Information Crew', 350, 'Information'],
     ['other', 'Lainnya', 'Other', 200],
-  ].map(([key, label_id, label_en, sort, division]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, division: division || null, is_active: true }));
+  ].map(([key, label_id, label_en, sort, division]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, division: division || null, is_active: true, is_custom: false }));
   // Managed event types (HYROX + Lari active); each auto-fills its default positions in the form.
   // 'other' (Lainnya) is the custom slot — never part of a type's default set.
   const ALL_POS_IDS = positions.filter((p) => p.key !== 'other').map((p) => p.id);
@@ -890,10 +908,15 @@ function memoryStore() {
       }
     },
     async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
+    async createCustomPosition({ name, name_en, division }) {
+      const rec = { id: 'pos-custom-' + (++seq), key: 'custom_' + seq, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true };
+      positions.push(rec);
+      return { id: rec.id, key: rec.key, label_id: rec.label_id, label_en: rec.label_en, division: rec.division };
+    },
     async listEventTypes() { return eventTypes.filter((t) => t.is_active).slice().sort((a, b) => a.sort - b.sort).map((t) => ({ ...t, default_position_ids: (t.default_position_ids || []).slice() })); },
     async getEventType(idOrKey) { const t = eventTypes.find((x) => x.id === idOrKey || x.key === idOrKey); return t ? { ...t } : null; },
     async listEventPositions(eventId) {
-      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     async setEventPositions(eventId, poss) {
       const incoming = (poss || []).filter((p) => p && p.position_id && p.quota > 0);
@@ -905,7 +928,7 @@ function memoryStore() {
         if (found) Object.assign(found, cols);
         else eventPositions.push(Object.assign({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id }, cols));
       });
-      for (let j = eventPositions.length - 1; j >= 0; j--) { const ep = eventPositions[j]; if (ep.event_id === eventId && !keep.has(String(ep.position_id))) eventPositions.splice(j, 1); }
+      for (let j = eventPositions.length - 1; j >= 0; j--) { const ep = eventPositions[j]; if (ep.event_id === eventId && !ep.is_custom && !keep.has(String(ep.position_id))) eventPositions.splice(j, 1); }
     },
     // --- Role templates (memory mirror) ---------------------------------------
     async listRoleTemplates(eventTypeId) {
@@ -959,13 +982,14 @@ function memoryStore() {
       return 'ok';
     },
     async listEventRoleQuotaLogs(eventRoleId) { return quotaLogs.filter((l) => l.event_role_id === eventRoleId).slice().reverse(); },
-    async addEventRole(eventId, { position_id, division, quota, sort_order }) {
+    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description }) {
       let ep = eventPositions.find((x) => x.event_id === eventId && x.position_id === position_id);
       if (ep) { ep.closed_at = null; ep.updated_at = now(); return { id: ep.id }; }
-      ep = { id: 'ep-' + (++seq), event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, closed_at: null, updated_at: now() };
+      ep = { id: 'ep-' + (++seq), event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, is_optional: !!is_optional, is_custom: !!is_custom, description: description || null, closed_at: null, updated_at: now() };
       eventPositions.push(ep); return { id: ep.id };
     },
     async closeEventRole(eventRoleId, closed) { const ep = eventPositions.find((x) => x.id === eventRoleId); if (ep) { ep.closed_at = closed ? now() : null; ep.updated_at = now(); } },
+    async deleteEventRole(eventRoleId) { const i = eventPositions.findIndex((x) => x.id === eventRoleId); if (i >= 0) eventPositions.splice(i, 1); },
     async listApplicationChoices() { return applicationChoices.map((c) => ({ ...c })); },
     // --- Two-layer selection (LAPIS 1): reviewer proposals + "reviewed" marks.
     // In-memory mirror of the Supabase interface so the applicant lists / exports

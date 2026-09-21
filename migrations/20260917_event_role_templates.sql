@@ -238,7 +238,32 @@ GRANT EXECUTE ON FUNCTION set_event_role_quota(uuid, integer, uuid)          TO 
 GRANT EXECUTE ON FUNCTION approve_application_choice(uuid, uuid, uuid, text)  TO service_role;
 
 ------------------------------------------------------------------------------
--- 10) OPTIONAL hardening / backfill — review, then uncomment to run.
+-- 10) (v2) Optional / custom per-event roles + HYROX template seed
+------------------------------------------------------------------------------
+-- Optional ("Tambahan") and custom (free-typed, event-only) role markers.
+ALTER TABLE talent_event_positions
+  ADD COLUMN IF NOT EXISTS is_optional boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_custom   boolean NOT NULL DEFAULT false;
+-- A custom role is an auto-created master position (so it can be applied to &
+-- counted) that must stay OUT of the standard type filters / "add existing" pickers.
+ALTER TABLE talent_positions
+  ADD COLUMN IF NOT EXISTS is_custom boolean NOT NULL DEFAULT false;
+
+-- Seed the HYROX template from the roles the system ALREADY defines for it
+-- (event_types.default_position_ids), preserving their order, names & activeness.
+-- No per-role quota exists today, so default_quota starts at 0 (admin fills it in).
+-- These generic roles carry no division yet -> NULL (they group under "General"
+-- until a proper HYROX division breakdown is entered via the template admin page).
+INSERT INTO role_templates (event_type_id, position_id, division, default_quota, sort_order)
+SELECT et.id, p.id, p.division, 0, (ord.rn * 10)
+FROM event_types et
+CROSS JOIN LATERAL unnest(et.default_position_ids) WITH ORDINALITY AS ord(pid, rn)
+JOIN talent_positions p ON p.id = ord.pid AND p.is_active
+WHERE et.key = 'hyrox'
+ON CONFLICT (event_type_id, position_id) DO NOTHING;
+
+------------------------------------------------------------------------------
+-- 11) OPTIONAL hardening / backfill — review, then uncomment to run.
 ------------------------------------------------------------------------------
 -- Enable RLS on event_types (currently OFF). Safe: the app uses the service role.
 -- ALTER TABLE event_types ENABLE ROW LEVEL SECURITY;

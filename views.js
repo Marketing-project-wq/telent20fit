@@ -2901,7 +2901,7 @@ function manpowerKeysForType(typeKey) {
   return MANPOWER_SHARED.concat(MANPOWER_TYPE_ONLY[typeKey]);
 }
 
-function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes, roleTemplates }) {
+function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, admin, eventTypes, roleTemplates, hasApplicants }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const e = event || {};
@@ -2996,10 +2996,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     <div style="font-weight:700;margin-bottom:6px">${t('eo.ev.sec.info')}</div>
     ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
     <div class="field"><label for="event_type_id">${t('eo.ev.f.eventType')}${rq}</label>
-      <select id="event_type_id" name="event_type_id" required>
+      <select id="event_type_id" name="event_type_id"${hasApplicants ? ' disabled' : ' required'}>
         <option value="">${t('eo.ev.f.eventTypePick')}</option>
         ${(eventTypes || []).map((ty) => { const lab = (L === 'en' ? (ty.label_en || ty.label_id) : ty.label_id) || ''; return `<option value="${esc(ty.id)}"${String(e.event_type_id || '') === String(ty.id) ? ' selected' : ''}>${esc(lab)}</option>`; }).join('')}
       </select>
+      ${hasApplicants ? `<input type="hidden" name="event_type_id" value="${esc(e.event_type_id || '')}"><p class="muted" style="font-size:12px;margin:6px 0 0;color:var(--red)">🔒 ${t('eo.ev.typeLocked')}</p>` : ''}
       <input type="hidden" name="category" value="${esc(e.category || '')}">
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
       <div id="tplEmptyInfo" class="banner banner-warn" style="display:none;margin-top:8px;padding:9px 12px;font-size:12.5px">${t('eo.ev.tplEmpty')}</div>
@@ -3044,6 +3045,10 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
     <div id="posmList">${posRows}</div>
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:10px;border-top:2px solid var(--line);font-weight:700">${t('eo.ev.totalNeed')}<span><b id="posmGrandTotal">0</b> ${t('eo.ev.people')}</span></div>
+    <div style="font-weight:700;margin:22px 0 2px">${t('eo.ev.customSection')}</div>
+    <p class="muted" style="font-size:12.5px;margin:2px 0 6px">${t('eo.ev.customHint')}</p>
+    <div id="customList"></div>
+    <button type="button" id="addCustomBtn" class="btn btn-ghost btn-sm" style="margin-top:6px">＋ ${t('eo.role.addCustom')}</button>
     <button type="submit" class="btn btn-block" style="margin-top:22px">${editing ? t('btn.save') : t('eo.ev.saveEvent')}</button>
   </form>
 </div>
@@ -3106,9 +3111,30 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     });
     recalcTotals();
   }
-  list.addEventListener('input',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-quota')) recalcTotals(); });
-  list.addEventListener('change',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-cb')) recalcTotals(); });
-  if(cat){ cat.addEventListener('change',function(){ applyType(false); }); applyType(true); } else { recalcTotals(); }
+  var _dirty=false;
+  list.addEventListener('input',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-quota')){ _dirty=true; recalcTotals(); } });
+  list.addEventListener('change',function(ev){ if(ev.target&&ev.target.classList&&ev.target.classList.contains('posm-cb')){ _dirty=true; recalcTotals(); } });
+  var _prevType=cat?cat.value:'';
+  if(cat){ cat.addEventListener('change',function(){ if(_dirty && _prevType && !confirm(${JSON.stringify(t('eo.ev.typeChangeConfirm'))})){ cat.value=_prevType; return; } _prevType=cat.value; _dirty=false; applyType(false); }); applyType(true); _prevType=cat.value; } else { recalcTotals(); }
+})();
+(function(){
+  var list=document.getElementById('customList'), btn=document.getElementById('addCustomBtn'); if(!list||!btn) return;
+  var LB=${JSON.stringify({ name: t('eo.role.customName'), div: t('eo.role.colDivision'), quota: t('eo.role.colQuota'), desc: t('eo.role.customDesc'), tpl: t('eo.role.saveToTemplate') })};
+  function ce(s){ return String(s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
+  function addRow(){
+    var d=document.createElement('div'); d.className='custom-row'; d.style.cssText='border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px';
+    d.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div style="flex:2;min-width:150px"><label style="font-size:11px;color:var(--muted)">'+ce(LB.name)+'</label><input name="custom_name[]" maxlength="80" style="width:100%;box-sizing:border-box"></div>'
+      +'<div style="flex:1;min-width:110px"><label style="font-size:11px;color:var(--muted)">'+ce(LB.div)+'</label><input name="custom_division[]" maxlength="60" style="width:100%;box-sizing:border-box"></div>'
+      +'<div style="width:80px"><label style="font-size:11px;color:var(--muted)">'+ce(LB.quota)+'</label><input type="number" name="custom_quota[]" min="0" value="0" style="width:100%;box-sizing:border-box"></div>'
+      +'<button type="button" class="btn btn-ghost btn-sm rm" style="color:var(--red)">✕</button></div>'
+      +'<textarea name="custom_desc[]" rows="2" maxlength="600" placeholder="'+ce(LB.desc)+'" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px"></textarea>'
+      +'<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:4px"><input type="hidden" name="custom_tpl[]" value="0" class="ctpl"><input type="checkbox" class="ctpl-cb">'+ce(LB.tpl)+'</label>';
+    list.appendChild(d);
+  }
+  btn.addEventListener('click',addRow);
+  list.addEventListener('click',function(e){ var b=e.target&&e.target.closest?e.target.closest('.rm'):null; if(b){ var r=b.closest('.custom-row'); if(r) r.remove(); } });
+  list.addEventListener('change',function(e){ if(e.target&&e.target.classList&&e.target.classList.contains('ctpl-cb')){ var h=e.target.closest('.custom-row').querySelector('.ctpl'); if(h) h.value=e.target.checked?'1':'0'; } });
 })();
 (function(){
   var s=document.getElementById('starts_at'), d=document.getElementById('reg_deadline'), w=document.getElementById('regWarn');
@@ -3140,7 +3166,9 @@ function eventRolesManager(e, view, positionsMaster, flash, base, L) {
     : f.ok === 'reset' ? `<div class="banner banner-ok">${t('eo.role.okReset')}</div>`
     : f.err === 'qmin' ? `<div class="banner banner-err">${t('eo.role.errQmin', { n: parseInt(f.n, 10) || 0 })}</div>`
     : f.err === 'quota' ? `<div class="banner banner-err">${t('eo.role.errQuota')}</div>`
+    : f.ok === 'deleted' ? `<div class="banner banner-ok">${t('eo.role.okDeleted')}</div>`
     : f.err === 'role' ? `<div class="banner banner-err">${t('eo.role.errRole')}</div>`
+    : f.err === 'hasApplicants' ? `<div class="banner banner-err">${t('eo.role.errHasApplicants')}</div>`
     : f.err === 'notpl' ? `<div class="banner banner-err">${t('eo.role.errNoTpl')}</div>` : '';
   const positions = (view.positions || []).slice();
   const byDiv = new Map();
@@ -3160,13 +3188,17 @@ function eventRolesManager(e, view, positionsMaster, flash, base, L) {
     const closeForm = closed
       ? `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/close"><input type="hidden" name="reopen" value="1"><button class="btn btn-ghost btn-sm" style="padding:2px 7px">${t('eo.role.reopen')}</button></form>`
       : `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/close" ${jsConfirm(t('eo.role.closeConfirm'))}><button class="btn btn-ghost btn-sm" style="padding:2px 7px;color:var(--red)">${t('eo.role.close')}</button></form>`;
+    const optTag = p.is_optional ? ` <span class="pill" style="font-size:10px;background:#eef1f6;color:#41454d">${t('eo.role.optionalTag')}</span>` : '';
+    const delForm = (p.is_optional || p.is_custom)
+      ? `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/${esc(p.id)}/delete" ${jsConfirm(t('eo.role.deleteConfirm'))}><button class="btn btn-ghost btn-sm" style="padding:2px 7px;color:var(--red)">${t('eo.role.delete')}</button></form>`
+      : '';
     return `<tr style="border-top:1px solid var(--line)${closed ? ';opacity:.55' : ''}">
-      <td style="padding:6px 8px"><b>${esc(posLabel(p, L))}</b>${closed ? ` <span class="pill pill-off" style="font-size:10px">${t('eo.role.closedTag')}</span>` : ''}</td>
+      <td style="padding:6px 8px"><b>${esc(posLabel(p, L))}</b>${optTag}${closed ? ` <span class="pill pill-off" style="font-size:10px">${t('eo.role.closedTag')}</span>` : ''}</td>
       <td style="padding:6px 8px">${quotaCell}</td>
       <td style="padding:6px 8px;text-align:center">${p.approved || 0}</td>
       <td style="padding:6px 8px;text-align:center">${p.pending || 0}</td>
       <td style="padding:6px 8px;text-align:center;font-weight:700">${remaining}</td>
-      <td style="padding:6px 8px;text-align:right;white-space:nowrap">${closeForm} <a href="${base}/${esc(e.id)}/roles/${esc(p.id)}/logs?lang=${L}" class="btn btn-ghost btn-sm" style="padding:2px 7px">${t('eo.role.logs')}</a></td>
+      <td style="padding:6px 8px;text-align:right;white-space:nowrap">${closeForm} ${delForm} <a href="${base}/${esc(e.id)}/roles/${esc(p.id)}/logs?lang=${L}" class="btn btn-ghost btn-sm" style="padding:2px 7px">${t('eo.role.logs')}</a></td>
     </tr>`;
   };
   const groups = divKeys.map((d) => {
@@ -3191,11 +3223,21 @@ function eventRolesManager(e, view, positionsMaster, flash, base, L) {
       <button class="btn btn-sm" type="submit">${t('eo.role.addBtn')}</button>
     </form></details>` : '';
   const resetBtn = e.event_type_id ? `<form class="inline-form" method="post" action="${base}/${esc(e.id)}/roles/reset" ${jsConfirm(t('eo.role.resetConfirm'))}><button class="btn btn-ghost btn-sm">↺ ${t('eo.role.reset')}</button></form>` : '';
+  // "+ Tambah Posisi" (custom / optional) — a free-typed role, event-only.
+  const customAdd = `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600;font-size:13px">＋ ${t('eo.role.addCustom')}</summary>
+    <form method="post" action="${base}/${esc(e.id)}/roles/custom" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+      <div style="flex:2;min-width:150px"><label class="muted" style="font-size:11px;display:block">${t('eo.role.customName')}</label><input name="name" maxlength="80" required style="width:100%;box-sizing:border-box;padding:4px 8px"></div>
+      <div style="flex:1;min-width:110px"><label class="muted" style="font-size:11px;display:block">${t('eo.role.colDivision')}</label><input name="division" maxlength="60" style="width:100%;box-sizing:border-box;padding:4px 8px"></div>
+      <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colQuota')}</label><input type="number" name="quota" min="0" value="0" style="width:70px;padding:4px 6px"></div>
+      <div style="flex:1 1 100%"><textarea name="description" rows="2" maxlength="600" placeholder="${t('eo.role.customDesc')}" style="width:100%;box-sizing:border-box;font-size:13px"></textarea></div>
+      ${e.event_type_id ? `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;flex:1 1 100%"><input type="checkbox" name="save_to_template" value="1"> ${t('eo.role.saveToTemplate')}</label>` : ''}
+      <button class="btn btn-sm" type="submit">${t('eo.role.addCustom')}</button>
+    </form></details>`;
   return `${banner}
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px">
     <div style="font-weight:700">${t('eo.ev.positionsQuota')}</div>${resetBtn}
   </div>
-  <div class="card" style="margin-top:10px;padding:12px 14px">${table}${addForm}</div>`;
+  <div class="card" style="margin-top:10px;padding:12px 14px">${table}${addForm}${customAdd}</div>`;
 }
 
 // Small page: quota-change history for one event role.
@@ -7080,7 +7122,10 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 
   // Per-position "job listing" cards.
   const HIDDEN_POSITION_KEYS = ['judge'];
-  const posSorted = (ctx.positions || []).filter((p) => !HIDDEN_POSITION_KEYS.includes(p.key)).slice().sort((a, b) => (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
+  // Landing hides roles that are closed (is_active=false) or quota 0; a full role
+  // (quota>0, no slots left) still shows, marked "Kuota penuh" with apply disabled.
+  const posSorted = (ctx.positions || []).filter((p) => !HIDDEN_POSITION_KEYS.includes(p.key) && !p.closed_at && p.quota !== 0)
+    .slice().sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort) || posLabel(a, L).localeCompare(posLabel(b, L), 'id'));
   const bstyle = 'display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap';
   const sec = (icon, label, txt, cls) => `<div class="pos-sec${cls ? ' ' + cls : ''}"><div style="font-size:11.5px;font-weight:700;color:var(--muted,#6b6b70)">${icon} ${label}</div><div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;margin-top:2px">${esc(txt)}</div></div>`;
   // Soft-red line icon per position family (falls back to a clipboard), shown in
@@ -7117,9 +7162,10 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
     // applicants can't gauge scarcity and rush to apply. The Open / Full / Closed
     // status still shows via the corner badge below, and EO + Super Admin keep the
     // real counts on their own pages (event detail, applicants, stats).
-    const badge = p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
+    const optBadge = p.is_optional ? `<span style="${bstyle};background:#eef1f6;color:#41454d">${t('ta.posOptional')}</span> ` : '';
+    const badge = optBadge + (p.closed_at ? `<span style="${bstyle};background:#eceae5;color:#6b6b70">${t('ta.posClosed')}</span>`
       : p.full ? `<span style="${bstyle};background:#fdeccd;color:#8a5a00">${t('ta.posFull')}</span>`
-        : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`;
+        : `<span style="${bstyle};background:#d8f3e3;color:#0f7a45">${t('ta.posOpen')}</span>`);
     // Per-position action. If the talent already applied to THIS position, show
     // its live status (+ cancel while still pending); otherwise the Lamar button
     // that opens the confirmation modal; a docs-lock hint blocks creator roles.
@@ -7187,7 +7233,15 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       id: 'pos-' + esc(p.position_id),
     });
   };
-  const cardsHtml = posSorted.map(card).join('');
+  // Group the position cards by division (full-width heading spans the grid).
+  const divHeadL = (label) => `<div style="grid-column:1/-1;width:100%;flex-basis:100%;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#6b6b70);margin:8px 0 0">${esc(label)}</div>`;
+  const byDivL = new Map();
+  posSorted.forEach((p) => { const d = p.division || ''; const a = byDivL.get(d) || []; a.push(p); byDivL.set(d, a); });
+  const divKeysL = [...byDivL.keys()].sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
+  const showDivHeads = divKeysL.some((d) => d) && divKeysL.length > 1;
+  const cardsHtml = showDivHeads
+    ? divKeysL.map((d) => divHeadL(d || t('eo.ev.divGeneral')) + byDivL.get(d).map(card).join('')).join('')
+    : posSorted.map(card).join('');
 
   // Shared confirmation modal for every per-position "Lamar" button. Clicking a
   // Lamar button fills in the position + event name and asks to confirm; "Ya,
