@@ -2493,24 +2493,59 @@ function staffLogin(opts = {}) {
   const otherText = isEo ? t('staffLogin.toAdmin') : t('staffLogin.toEo');
   const errorBanner = (opts.errors && opts.errors.length)
     ? `<div class="banner banner-err"><b>${t('err.header')}</b><ul>${opts.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
-  const body = `<div class="wrap narrow" style="max-width:440px">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+  const sv = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const roleIcon = isEo
+    ? sv('<rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="16" y1="2.5" x2="16" y2="6.5"/>')
+    : sv('<path d="M12 3l7 3v5c0 4.6-3 7.7-7 9-4-1.3-7-4.4-7-9V6z"/><path d="M9.3 12l1.9 1.9L15 10.2"/>');
+  const mailIcon = sv('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7.5l8 5.5 8-5.5"/>');
+  const lockIcon = sv('<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>');
+  const body = `<div class="authp">
+  <style>
+    .authp{max-width:420px;margin:0 auto;padding:26px 18px 44px;min-height:calc(100dvh - 58px);display:flex;flex-direction:column;justify-content:center}
+    .authp .authtop{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+    .authp .authcard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 26px;box-shadow:0 12px 34px rgba(16,16,29,.07)}
+    .authp .authbadge{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:var(--red-soft);color:var(--red);margin:0 auto 14px}
+    .authp .authbadge svg{width:28px;height:28px}
+    .authp .authcard h1{font-size:23px;text-align:center;margin:0}
+    .authp .authsub{color:var(--muted);text-align:center;font-size:14px;margin:6px 0 20px}
+    .authp .ifield{margin-bottom:15px}
+    .authp .ifield label{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+    .authp .iwrap{position:relative;display:flex;align-items:center}
+    .authp .iwrap>svg{position:absolute;left:13px;width:18px;height:18px;color:var(--muted);pointer-events:none}
+    .authp .iwrap input{padding-left:40px}
+    .authp .pw-toggle{position:absolute;right:6px;background:none;border:0;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;padding:8px 10px;font-family:inherit}
+    .authp .authlinks{margin-top:18px;padding-top:15px;border-top:1px solid var(--line);text-align:center}
+    .authp .authlinks p{margin:0;font-size:14px;color:var(--muted)}
+    .authp .authlinks p+p{margin-top:8px}
+    .authp .authlinks a{font-weight:700}
+    .authp .otherlink{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:18px;color:var(--muted);font-size:13.5px;font-weight:600;text-decoration:none}
+    .authp .otherlink:hover{color:var(--ink)}
+  </style>
+  <div class="authtop">
     <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
     ${toggles(L)}
   </div>
-  <h1>${esc(title)}</h1>
-  <p class="sub">${esc(sub)}</p>
-  ${errorBanner}
-  <div class="card">
+  <div class="authcard">
+    <div class="authbadge">${roleIcon}</div>
+    <h1>${esc(title)}</h1>
+    <p class="authsub">${esc(sub)}</p>
+    ${errorBanner}
     <form method="post" action="${action}">
-      <div class="field"><label for="login">${t('common.email')}</label><input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}"></div>
-      <div class="field"><label for="password">${t('common.password')}</label><input type="password" id="password" name="password" required autocomplete="current-password"></div>
-      <button type="submit" class="btn btn-block">${t('btn.signin')}</button>
+      <div class="ifield"><label for="login">${t('common.email')}</label>
+        <div class="iwrap">${mailIcon}<input type="text" id="login" name="login" required autocomplete="username" value="${esc(v.login || '')}" placeholder="you@email.com"></div>
+      </div>
+      <div class="ifield"><label for="password">${t('common.password')}</label>
+        <div class="iwrap">${lockIcon}<input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••"><button type="button" class="pw-toggle" data-for="password">${t('auth.show')}</button></div>
+      </div>
+      <button type="submit" class="btn btn-block" style="margin-top:4px">${t('btn.signin')}</button>
     </form>
-    <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
-    ${isEo ? `<p style="text-align:center;margin:10px 0 0;font-size:14px">${t('eo.login.noAccount')} <a href="/eo/register?lang=${L}">${t('eo.login.registerLink')}</a></p>` : ''}
+    <div class="authlinks">
+      <p><a href="${isEo ? '/eo' : '/admin'}/forgot-password?lang=${L}">${t('auth.forgot.link')}</a></p>
+      ${isEo ? `<p>${t('eo.login.noAccount')} <a href="/eo/register?lang=${L}">${t('eo.login.registerLink')}</a></p>` : ''}
+    </div>
   </div>
-  <p style="text-align:center;margin-top:18px;font-size:14px"><a href="${otherHref}" style="color:var(--muted)">${esc(otherText)}</a></p>
+  <a href="${otherHref}" class="otherlink">${esc(otherText)} →</a>
+  <script>(function(){var b=document.querySelector('.authp .pw-toggle');if(!b)return;b.addEventListener('click',function(){var i=document.getElementById(b.getAttribute('data-for'));if(!i)return;var show=i.type==='password';i.type=show?'text':'password';b.textContent=show?${JSON.stringify(t('auth.hide'))}:${JSON.stringify(t('auth.show'))};});})();</script>
 </div>`;
   return layout({ title: title + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
 }

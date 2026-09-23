@@ -236,6 +236,8 @@
   "auth.foot.toRegister": "Belum punya akun? <a href=\"{href}\">Daftar di sini</a>",
   "auth.foot.toLogin": "Sudah punya akun? <a href=\"{href}\">Masuk di sini</a>",
   "auth.forgot.link": "Lupa password?",
+  "auth.show": "Lihat",
+  "auth.hide": "Sembunyikan",
   "auth.forgot.title": "Lupa Password",
   "auth.forgot.sub": "Masukkan email akunmu. Kami kirim link untuk membuat password baru.",
   "auth.forgot.btn": "Kirim Link Reset",

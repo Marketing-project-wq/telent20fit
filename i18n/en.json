@@ -236,6 +236,8 @@
   "auth.foot.toRegister": "No account yet? <a href=\"{href}\">Sign up here</a>",
   "auth.foot.toLogin": "Already have an account? <a href=\"{href}\">Sign in here</a>",
   "auth.forgot.link": "Forgot password?",
+  "auth.show": "Show",
+  "auth.hide": "Hide",
   "auth.forgot.title": "Forgot Password",
   "auth.forgot.sub": "Enter your account email. We'll send a link to set a new password.",
   "auth.forgot.btn": "Send Reset Link",
