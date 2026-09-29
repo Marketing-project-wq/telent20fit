@@ -6063,18 +6063,24 @@ function proofsFilterBar(query, events, L, count) {
   const kolTab = q.tab === 'kol';
   const fl = 'display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)';
   const statuses = ['pending', 'processing', 'extracted', 'verified', 'rejected', 'failed'];
-  return `<form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end">
+  const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end';
+  return `<form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:14px;display:flex;flex-direction:column;gap:12px">
     ${kolTab ? '<input type="hidden" name="tab" value="kol">' : ''}
-    <label style="${fl};grid-column:1/-1;max-width:340px">${t('proofs.search')}<input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off" style="box-sizing:border-box;width:100%"></label>
-    <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
-    <label style="${fl}">${t('proofs.platform')}<select name="platform" onchange="this.form.submit()">${proofSelectOptions(PLATFORM_OPTIONS, q.platform || '', t('proofs.all'), true)}</select></label>
-    <label style="${fl}">${t('proofs.ctype')}<select name="ctype" onchange="this.form.submit()">${proofSelectOptions(CONTENT_TYPES, q.ctype || '', t('proofs.all'), true)}</select></label>
-    <label style="${fl}">${t('th.status')}<select name="status" onchange="this.form.submit()">${proofSelectOptions(statuses, q.status || '', t('proofs.all'), true)}</select></label>
-    <label style="${fl}">${t('proofs.from')}<input type="date" name="from" value="${esc(q.from || '')}" onchange="this.form.submit()"></label>
-    <label style="${fl}">${t('proofs.to')}<input type="date" name="to" value="${esc(q.to || '')}" onchange="this.form.submit()"></label>
-    <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" type="submit">${t('proofs.applyFilter')}</button><a class="btn btn-ghost btn-sm" href="/admin/proofs${kolTab ? '?tab=kol' : ''}">${t('proofs.reset')}</a></div>
-  </form>
-  <div class="muted" style="font-size:13px;margin-top:8px">${t('proofs.resultCount', { n: count })}</div>`;
+    <label style="${fl};max-width:360px">${t('proofs.search')}<input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off" style="box-sizing:border-box;width:100%"></label>
+    <div style="${gridStyle}">
+      <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
+      <label style="${fl}">${t('proofs.platform')}<select name="platform" onchange="this.form.submit()">${proofSelectOptions(PLATFORM_OPTIONS, q.platform || '', t('proofs.allPlatforms'), true)}</select></label>
+      <label style="${fl}">${t('proofs.ctype')}<select name="ctype" onchange="this.form.submit()">${proofSelectOptions(CONTENT_TYPES, q.ctype || '', t('proofs.allCtypes'), true)}</select></label>
+      <label style="${fl}">${t('th.status')}<select name="status" onchange="this.form.submit()">${proofSelectOptions(statuses, q.status || '', t('proofs.allStatuses'), true)}</select></label>
+      <label style="${fl}">${t('proofs.from')}<input type="date" name="from" value="${esc(q.from || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
+      <label style="${fl}">${t('proofs.to')}<input type="date" name="to" value="${esc(q.to || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-sm" type="submit">${t('proofs.applyFilter')}</button>
+      <a class="btn btn-ghost btn-sm" href="/admin/proofs${kolTab ? '?tab=kol' : ''}">${t('proofs.reset')}</a>
+      <span class="muted" style="font-size:13px;margin-left:auto">${t('proofs.resultCount', { n: count })}</span>
+    </div>
+  </form>`;
 }
 // Edit + manual-add modals and their shared client script (KOL search,
 // select-all, debounced search, modal fill/open).
