@@ -503,13 +503,22 @@ const GA4_HEAD = GA_MEASUREMENT_ID
     + `var cfg={cookie_domain:'auto',page_location:clean(location.href)};if(document.referrer)cfg.page_referrer=clean(document.referrer);`
     + `gtag('config','${GA_MEASUREMENT_ID}',cfg);})();</script>`
   : '';
+
+// Universal Nav 20FIT — bar app-switcher lintas subdomain, di-load dari my.20fit.id
+// (sumber TUNGGAL). Classic <script defer> cross-origin: menyuntik bar-nya sendiri di atas
+// <body>, tidak mengubah markup/flow talent. Talent auth-nya sendiri (bukan Supabase) → bar
+// menampilkan tombol "Masuk", navigasi ke produk lain = redirect biasa (tanpa token).
+// Sumbernya https://my.20fit.id/js/universal-nav.js (SUDAH live di produksi my.20fit —
+// tanpa nunggu deploy route alias /universal-nav.js), jadi bar langsung jalan begitu talent
+// rilis. URL bersih https://my.20fit.id/universal-nav.js juga tersedia (alias) setelahnya.
+const UNIV_NAV = '<script src="https://my.20fit.id/js/universal-nav.js" defer></script>';
 function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
   const topbar = hideBrand ? '' : `<div class="topbar"><div class="in">
   <a href="${homeHref}" class="logo brand">${brandMark(label)}</a>
 </div></div>`;
-  return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>${GA4_HEAD}
+  return `<!doctype html><html lang="${normLang(lang)}" data-theme="light"><head>${GA4_HEAD}${UNIV_NAV}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}</style>${THEME_HEAD}</head>
@@ -534,7 +543,7 @@ ${body}
 function publicLayout({ title, body, lang, account, active, cities, search = true, searchValue }) {
   const L = normLang(lang);
   const nav = landingNav(L, active || '', account || null, { search, cities: cities || [], searchValue: searchValue || '' });
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}${UNIV_NAV}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <title>${esc(title)}</title><style>${STYLE}${NAV_CSS}</style>${THEME_HEAD}</head>
@@ -645,7 +654,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
   }
   // Talent: sticky top bar + bottom nav bar (mobile-app style).
   return `${head}
-<body class="app-body talent-app">
+<body class="app-body talent-app">${UNIV_NAV}
 ${landingNav(L, active, user ? { name: user } : null, { search: !!search, cities: cities || [], searchValue: searchValue || '', home: `${homeHref}?lang=${L}`, back: back === undefined ? `/?lang=${L}` : back })}
 <div class="app-main">
   ${body}
@@ -883,7 +892,7 @@ function landingPage(lang, opts = {}) {
     <script>(function(){var chips=[].slice.call(document.querySelectorAll('.lp-city-chip')),cards=[].slice.call(document.querySelectorAll('.lp-ev-grid .lp-ev-card'));if(!chips.length)return;chips.forEach(function(ch){ch.addEventListener('click',function(){var city=ch.getAttribute('data-city');chips.forEach(function(c){c.classList.toggle('on',c===ch);});cards.forEach(function(cd){cd.style.display=(!city||cd.getAttribute('data-city')===city)?'':'none';});});});})();</script>
   </section>` : '';
 
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}${UNIV_NAV}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20FIT Talent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1431,7 +1440,7 @@ function aboutPage(lang) {
   const t = (k, v) => tr(L, k, v);
   const q = `?lang=${L}`;
   const { lede, sectionsHtml } = aboutContent(L);
-  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}
+  return `<!doctype html><html lang="${L}" data-theme="light"><head>${GA4_HEAD}${UNIV_NAV}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t('nav.about'))} · 20FIT</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
