@@ -1394,17 +1394,18 @@ function landingNav(lang, active, account, opts = {}) {
   const appsIcon = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>';
   const appsCss = `<style id="lp-apps-css">
     .lp-apps{position:relative;flex:0 0 auto}
-    .lp-apps-btn{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:0;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+    .lp-apps-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 14px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:10px;cursor:pointer;font:700 14px/1 Barlow,sans-serif;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+    .lp-apps-ic{display:inline-flex;line-height:0}
     .lp-apps-btn:hover{background:var(--lp-chip);color:var(--lp-tx)}
     .lp-apps-btn[aria-expanded="true"]{background:var(--lp-chip);color:var(--lp-tx);border-color:var(--lp-line2)}
     .lp-apps-pop{position:absolute;top:calc(100% + 10px);right:0;width:322px;max-width:calc(100vw - 28px);max-height:min(72vh,560px);overflow:auto;padding:12px;background:var(--lp-card);color:var(--lp-tx);border:1px solid var(--lp-line);border-radius:16px;box-shadow:0 18px 48px -12px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.08);z-index:200}
     .lp-apps-pop[hidden]{display:none}
     .lp-apps-pop .un-glabel{color:var(--lp-tx3)}
     :root:not([data-theme="light"]) .lp-apps-pop{box-shadow:0 20px 52px -12px rgba(0,0,0,.62)}
-    @media(max-width:600px){.lp-apps-btn{width:38px;height:38px}.lp-apps-pop{width:294px;right:-4px}}
+    @media(max-width:600px){.lp-apps-btn{gap:0;padding:0;width:38px;height:38px}.lp-apps-lb{display:none}.lp-apps-pop{width:294px;right:-4px}}
   </style>`;
   const appsLauncher = `<div class="lp-apps" id="lpApps" hidden>
-      <button type="button" class="lp-apps-btn" id="lpAppsBtn" aria-label="${esc(t('nav.apps'))}" aria-expanded="false" aria-haspopup="true">${appsIcon}</button>
+      <button type="button" class="lp-apps-btn" id="lpAppsBtn" aria-label="${esc(t('nav.apps'))}" aria-expanded="false" aria-haspopup="true"><span class="lp-apps-ic" aria-hidden="true">${appsIcon}</span><span class="lp-apps-lb">${esc(t('nav.apps'))}</span></button>
       <div class="lp-apps-pop" id="lpAppsPop" role="menu" aria-label="${esc(t('nav.apps'))}" hidden></div>
     </div>`;
   const appsScript = `<script>(function(){
