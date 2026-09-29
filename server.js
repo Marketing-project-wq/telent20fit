@@ -895,16 +895,21 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
     // Re-extracting a proof a human already decided on keeps that decision;
     // a fresh upload (pending) lands on 'extracted'.
     const keep = (priorStatus === 'verified' || priorStatus === 'rejected') ? priorStatus : 'extracted';
-    // Recompute the report numbers WITHOUT clobbering any human-entered values:
-    // metrics_final = per-field COALESCE(manual, freshly-extracted).
-    const cur = await st.getProof(proofId).catch(() => null);
-    const { final, source } = computeFinalMetrics(extracted, cur && cur.metrics_manual);
+    // Core write uses only long-standing columns, so it succeeds whether or not
+    // the manual-metrics migration has been applied yet (safe to deploy first).
     await st.updateProof(proofId, {
-      status: keep, platform: final.platform || extracted.platform || null,
+      status: keep, platform: extracted.platform || null,
       extracted, ocr_text, extract_model: model, extract_error: null,
       processed_at: new Date().toISOString(),
-      metrics_final: final, metrics_source: source,
     });
+    // Recompute the report numbers WITHOUT clobbering any human-entered values:
+    // metrics_final = per-field COALESCE(manual, freshly-extracted). Best-effort:
+    // if the new columns don't exist yet, reports fall back to `extracted`.
+    try {
+      const cur = await st.getProof(proofId).catch(() => null);
+      const { final, source } = computeFinalMetrics(extracted, cur && cur.metrics_manual);
+      await st.updateProof(proofId, { metrics_final: final, metrics_source: source });
+    } catch (_) { /* metrics columns not migrated yet — ignore */ }
   } catch (e) {
     const noKey = e && e.code === 'NO_KEY';
     await st.updateProof(proofId, {
