@@ -1033,7 +1033,7 @@ a{text-decoration:none}
 .hero-in.d2{animation-delay:.32s}
 .hero-in.d3{animation-delay:.54s}
 .accent-shimmer{background:linear-gradient(100deg,#E4121F 0%,#ff7b82 22%,#E4121F 46%,#E4121F 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 6.5s linear infinite}
-/* Hero headline: "ONE PLATFORM." on line 1, red "ENDLESS EVENT OPPORTUNITIES." on line 2 (one line). */
+/* Hero headline: "YOUR SKILLS." on line 1, red "THE BIGGEST SPORTS STAGES." on line 2 (one line). */
 .hero-title{font-family:'Barlow Condensed',sans-serif;font-weight:800;line-height:.98;text-transform:uppercase;letter-spacing:-.01em;font-size:clamp(42px,calc(6vw - 8px),76px)}
 .hero-title .accent-shimmer{display:block}
 @media(max-width:860px){.hero-title{font-size:calc(8.2vw - 2px)}}
