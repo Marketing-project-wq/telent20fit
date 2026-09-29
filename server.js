@@ -85,8 +85,12 @@ app.use((req, res, next) => { req.lang = readLang(req, res); req.t = (k, v) => i
 // login-state-dependent content and issue role-based redirects (e.g. /eo/login
 // -> /login/eo -> dashboard-or-form), so a cached 3xx/page would pin a stale
 // destination — exactly the "/eo/login keeps going to /admin" class of bug.
+// The public landing (/) and /about also render session-aware content
+// (auth.anySession) and embed the 20FIT ecosystem nav bar, so they must stay
+// fresh too — otherwise a cached copy pins pre-deploy HTML (e.g. served from
+// before the nav bar existed) or shows one visitor's logged-in view to another.
 app.use((req, res, next) => {
-  if (/^\/(admin|eo|login|register|talent|events|event)(\/|$)/.test(req.path)) {
+  if (req.path === '/' || /^\/(about|admin|eo|login|register|talent|events|event)(\/|$)/.test(req.path)) {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
   }
