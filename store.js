@@ -688,6 +688,53 @@ function supabaseStore() {
       const { error } = await sb.from('talent_post_proofs').delete().eq('id', id);
       if (error) throw new Error(error.message);
     },
+    // Server-side filtered + paginated proof list. Returns { rows, count }.
+    // Filters (all optional): q (name/username ILIKE), event_id, platform,
+    // content_type, status, talent_id, unlinked (talent_id IS NULL),
+    // from / to (posted_at range), limit, offset. limit omitted = fetch all.
+    async listProofsPaged(f) {
+      f = f || {};
+      const scrub = (s) => String(s || '').replace(/[%,()\\]/g, ' ').trim();
+      let q = sb.from('talent_post_proofs').select('*', { count: 'exact' });
+      if (f.event_id) q = q.eq('event_id', f.event_id);
+      if (f.platform) q = q.eq('platform', f.platform);
+      if (f.content_type) q = q.eq('content_type', f.content_type);
+      if (f.status) q = q.eq('status', f.status);
+      if (f.talent_id) q = q.eq('talent_id', f.talent_id);
+      if (f.unlinked) q = q.is('talent_id', null);
+      if (f.from) q = q.gte('posted_at', f.from);
+      if (f.to) q = q.lte('posted_at', f.to);
+      const s = scrub(f.q);
+      if (s) q = q.or(`submitter_name.ilike.%${s}%,submitter_username.ilike.%${s}%`);
+      q = q.order('created_at', { ascending: false });
+      const limit = Number(f.limit) > 0 ? Number(f.limit) : null;
+      const offset = Number(f.offset) > 0 ? Number(f.offset) : 0;
+      if (limit) q = q.range(offset, offset + limit - 1);
+      else q = q.range(0, 99999);
+      const { data, error, count } = await q;
+      if (error) throw new Error(error.message);
+      return { rows: data || [], count: count == null ? (data || []).length : count };
+    },
+    // Set the same patch on many proofs at once (bulk assign event / KOL).
+    async bulkUpdateProofs(ids, patch) {
+      const list = (ids || []).filter(Boolean);
+      if (!list.length) return 0;
+      const { error } = await sb.from('talent_post_proofs').update(patch).in('id', list);
+      if (error) throw new Error(error.message);
+      return list.length;
+    },
+    // Talent account search for the KOL picker (name / instagram / login).
+    async searchTalents(query, limit) {
+      const s = String(query || '').replace(/[%,()\\]/g, ' ').trim();
+      if (!s) return [];
+      const like = `%${s}%`;
+      const { data, error } = await sb.from('talent_accounts')
+        .select('id,name,instagram,talent_type,login')
+        .or(`name.ilike.${like},instagram.ilike.${like},login.ilike.${like}`)
+        .order('name').limit(Number(limit) > 0 ? Number(limit) : 12);
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
     async deleteEvent(id) {
       await sb.from('talent_event_needs').delete().eq('event_id', id);
       await sb.from('talent_event_assignments').delete().eq('event_id', id);
@@ -1062,6 +1109,42 @@ function memoryStore() {
     async listProofs() { return proofs.slice().reverse(); },
     async listProofsForTalent(talentId) { return proofs.filter((p) => p.talent_id === talentId).slice().reverse(); },
     async getProof(id) { return proofs.find((p) => p.id === id) || null; },
+    async listProofsPaged(f) {
+      f = f || {};
+      const s = String(f.q || '').trim().toLowerCase();
+      let rows = proofs.slice().reverse().filter((p) => {
+        if (f.event_id && p.event_id !== f.event_id) return false;
+        if (f.platform && p.platform !== f.platform) return false;
+        if (f.content_type && p.content_type !== f.content_type) return false;
+        if (f.status && p.status !== f.status) return false;
+        if (f.talent_id && p.talent_id !== f.talent_id) return false;
+        if (f.unlinked && p.talent_id) return false;
+        if (f.from && !(p.posted_at && p.posted_at >= f.from)) return false;
+        if (f.to && !(p.posted_at && p.posted_at <= f.to)) return false;
+        if (s) {
+          const hay = ((p.submitter_name || '') + ' ' + (p.submitter_username || '')).toLowerCase();
+          if (hay.indexOf(s) < 0) return false;
+        }
+        return true;
+      });
+      const count = rows.length;
+      const limit = Number(f.limit) > 0 ? Number(f.limit) : null;
+      const offset = Number(f.offset) > 0 ? Number(f.offset) : 0;
+      if (limit) rows = rows.slice(offset, offset + limit);
+      return { rows, count };
+    },
+    async bulkUpdateProofs(ids, patch) {
+      const set = new Set((ids || []).filter(Boolean));
+      let n = 0; proofs.forEach((p) => { if (set.has(p.id)) { Object.assign(p, patch); n += 1; } });
+      return n;
+    },
+    async searchTalents(query, limit) {
+      const s = String(query || '').trim().toLowerCase();
+      if (!s) return [];
+      return accounts.filter((a) => ((a.name || '') + ' ' + (a.instagram || '') + ' ' + (a.login || '')).toLowerCase().indexOf(s) >= 0)
+        .slice(0, Number(limit) > 0 ? Number(limit) : 12)
+        .map((a) => ({ id: a.id, name: a.name, instagram: a.instagram, talent_type: a.talent_type, login: a.login }));
+    },
     async deleteProof(id) { const i = proofs.findIndex((p) => p.id === id); if (i >= 0) proofs.splice(i, 1); },
     async deleteEvent(id) {
       const i = events.findIndex((e) => e.id === id); if (i >= 0) events.splice(i, 1);
