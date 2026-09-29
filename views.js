@@ -508,7 +508,10 @@ const GA4_HEAD = GA_MEASUREMENT_ID
 // (sumber TUNGGAL). Classic <script defer> cross-origin: menyuntik bar-nya sendiri di atas
 // <body>, tidak mengubah markup/flow talent. Talent auth-nya sendiri (bukan Supabase) → bar
 // menampilkan tombol "Masuk", navigasi ke produk lain = redirect biasa (tanpa token).
-const UNIV_NAV = '<script src="https://my.20fit.id/universal-nav.js" defer></script>';
+// Sumbernya https://my.20fit.id/js/universal-nav.js (SUDAH live di produksi my.20fit —
+// tanpa nunggu deploy route alias /universal-nav.js), jadi bar langsung jalan begitu talent
+// rilis. URL bersih https://my.20fit.id/universal-nav.js juga tersedia (alias) setelahnya.
+const UNIV_NAV = '<script src="https://my.20fit.id/js/universal-nav.js" defer></script>';
 function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
