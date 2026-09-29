@@ -1350,5 +1350,8 @@
   "proofs.incomplete": "Perlu dilengkapi",
   "proofs.linkNow": "Tautkan",
   "proofs.filterEvent": "Filter event",
-  "proofs.byContentType": "Breakdown per tipe konten"
+  "proofs.byContentType": "Breakdown per tipe konten",
+  "proofs.allPlatforms": "Semua platform",
+  "proofs.allCtypes": "Semua tipe konten",
+  "proofs.allStatuses": "Semua status"
 }

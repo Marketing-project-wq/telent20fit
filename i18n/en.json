@@ -1350,5 +1350,8 @@
   "proofs.incomplete": "Needs completion",
   "proofs.linkNow": "Link",
   "proofs.filterEvent": "Filter event",
-  "proofs.byContentType": "Breakdown by content type"
+  "proofs.byContentType": "Breakdown by content type",
+  "proofs.allPlatforms": "All platforms",
+  "proofs.allCtypes": "All content types",
+  "proofs.allStatuses": "All statuses"
 }
