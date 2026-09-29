@@ -504,14 +504,16 @@ const GA4_HEAD = GA_MEASUREMENT_ID
     + `gtag('config','${GA_MEASUREMENT_ID}',cfg);})();</script>`
   : '';
 
-// Universal Nav 20FIT — bar app-switcher lintas subdomain, di-load dari my.20fit.id
-// (sumber TUNGGAL). Classic <script defer> cross-origin: menyuntik bar-nya sendiri di atas
-// <body>, tidak mengubah markup/flow talent. Talent auth-nya sendiri (bukan Supabase) → bar
-// menampilkan tombol "Masuk", navigasi ke produk lain = redirect biasa (tanpa token).
-// Sumbernya https://my.20fit.id/js/universal-nav.js (SUDAH live di produksi my.20fit —
-// tanpa nunggu deploy route alias /universal-nav.js), jadi bar langsung jalan begitu talent
-// rilis. URL bersih https://my.20fit.id/universal-nav.js juga tersedia (alias) setelahnya.
-const UNIV_NAV = '<script src="https://my.20fit.id/js/universal-nav.js" defer></script>';
+// Universal Nav 20FIT — app-switcher lintas subdomain, di-load dari my.20fit.id
+// (sumber TUNGGAL). Classic <script defer> cross-origin, dengan `data-no-bar` supaya
+// TIDAK menyuntik bar hitam sendiri di atas <body>. Sebagai gantinya, launcher-nya
+// ditempel di header landingNav (tombol grid → dropdown ikon produk) lewat
+// UniversalNav.renderAppsInto — jadi menu ekosistem menyatu di pojok kanan-atas, bukan
+// bar terpisah, dan tidak mengubah flow talent. Talent auth-nya sendiri (bukan Supabase),
+// jadi navigasi ke produk lain = redirect biasa (tanpa token). Profil tetap di pill akun
+// landingNav yang sudah ada. Sumbernya https://my.20fit.id/js/universal-nav.js (live di
+// produksi my.20fit); URL bersih https://my.20fit.id/universal-nav.js juga tersedia (alias).
+const UNIV_NAV = '<script src="https://my.20fit.id/js/universal-nav.js" data-no-bar defer></script>';
 function layout({ title, body, brand, home, lang, hideBrand }) {
   const label = brand || 'KOL';
   const homeHref = home || '/';
@@ -1379,16 +1381,61 @@ function landingNav(lang, active, account, opts = {}) {
   // talent dashboard header. Optional opts.home overrides the logo link (default: landing).
   const back = opts.back ? `<a href="${opts.back}" class="lp-nav-back" aria-label="${esc(t('sidebar.back'))}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>${esc(t('sidebar.back'))}</span></a>` : '';
   const logoHref = opts.home || `/${q}`;
-  return `<header class="lp-nav"><div class="lp-nav-in">
+  // 20FIT ecosystem app launcher — a grid button in the header that opens a
+  // dropdown "app switcher" (the 3D product icons), filled by the shared
+  // universal-nav.js embed API (UniversalNav.renderAppsInto). The self-mounting
+  // black bar is off (data-no-bar on the script), so this header launcher is the
+  // single ecosystem menu, tucked next to the ID/EN toggle. It starts hidden and
+  // reveals itself only once the shared script has loaded and the grid is
+  // populated, so a blocked/absent script never leaves a dead button. Profile
+  // stays on the account pill above (this menu is products-only). CSS travels
+  // inline because the .lp-* rules aren't shared across every shell that renders
+  // this header (landing inlines its own; appLayout uses NAV_CSS).
+  const appsIcon = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>';
+  const appsCss = `<style id="lp-apps-css">
+    .lp-apps{position:relative;flex:0 0 auto}
+    .lp-apps-btn{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;padding:0;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:10px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+    .lp-apps-btn:hover{background:var(--lp-chip);color:var(--lp-tx)}
+    .lp-apps-btn[aria-expanded="true"]{background:var(--lp-chip);color:var(--lp-tx);border-color:var(--lp-line2)}
+    .lp-apps-pop{position:absolute;top:calc(100% + 10px);right:0;width:322px;max-width:calc(100vw - 28px);max-height:min(72vh,560px);overflow:auto;padding:12px;background:var(--lp-card);color:var(--lp-tx);border:1px solid var(--lp-line);border-radius:16px;box-shadow:0 18px 48px -12px rgba(0,0,0,.28),0 4px 12px rgba(0,0,0,.08);z-index:200}
+    .lp-apps-pop[hidden]{display:none}
+    .lp-apps-pop .un-glabel{color:var(--lp-tx3)}
+    :root:not([data-theme="light"]) .lp-apps-pop{box-shadow:0 20px 52px -12px rgba(0,0,0,.62)}
+    @media(max-width:600px){.lp-apps-btn{width:38px;height:38px}.lp-apps-pop{width:294px;right:-4px}}
+  </style>`;
+  const appsLauncher = `<div class="lp-apps" id="lpApps" hidden>
+      <button type="button" class="lp-apps-btn" id="lpAppsBtn" aria-label="${esc(t('nav.apps'))}" aria-expanded="false" aria-haspopup="true">${appsIcon}</button>
+      <div class="lp-apps-pop" id="lpAppsPop" role="menu" aria-label="${esc(t('nav.apps'))}" hidden></div>
+    </div>`;
+  const appsScript = `<script>(function(){
+    var box=document.getElementById('lpApps');if(!box)return;
+    var btn=document.getElementById('lpAppsBtn'),pop=document.getElementById('lpAppsPop'),n=0;
+    var iv=setInterval(function(){
+      if(window.UniversalNav&&typeof UniversalNav.renderAppsInto==='function'){clearInterval(iv);start();}
+      else if(++n>60){clearInterval(iv);}
+    },25);
+    function start(){
+      try{UniversalNav.renderAppsInto(pop);}catch(e){return;}
+      box.hidden=false;
+      function close(){pop.hidden=true;btn.setAttribute('aria-expanded','false');}
+      function open(){pop.hidden=false;btn.setAttribute('aria-expanded','true');}
+      btn.addEventListener('click',function(e){e.stopPropagation();if(pop.hidden)open();else close();});
+      pop.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.un-app'))close();});
+      document.addEventListener('click',function(e){if(!box.contains(e.target))close();});
+      document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+    }
+  })();</script>`;
+  return `${appsCss}<header class="lp-nav"><div class="lp-nav-in">
     ${back}
     <a href="${logoHref}" class="lp-nav-logo" aria-label="20FIT">
       <img src="${LOGO_DARK}" alt="20FIT" class="lp-logo lp-logo-dark">
       <img src="${LOGO_LIGHT}" alt="20FIT" class="lp-logo lp-logo-light">
     </a>
     ${search}
+    ${appsLauncher}
     ${toggle}
     ${acct}
-  </div></header>`;
+  </div></header>${appsScript}`;
 }
 
 /** Public "About 20FIT" story page. Bilingual content lives inline (id/en). */
