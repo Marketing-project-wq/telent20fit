@@ -763,7 +763,128 @@ async function enrichProofs(st, proofs, ctx) {
     event_name: eventName.get(p.event_id) || null,
     talent_name: (ctx.talentNameById && ctx.talentNameById.get(p.talent_id)) || p.submitter_name || null,
     thumb: p.screenshot_path ? urlByPath.get(p.screenshot_path) : null,
+    metrics: finalMetricsOf(p),
   }));
+}
+
+// The numeric metrics a proof can carry. `platform` is handled as a column.
+const PROOF_METRIC_KEYS = ['views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'link_clicks'];
+
+// Parse a human-typed count ("3.874", "12k", "1,2rb"…) into a number or null.
+// Accepts plain integers; strips thousands separators. Blank -> null.
+function toMetricNumber(v) {
+  if (v === null || v === undefined) return null;
+  let s = String(v).trim();
+  if (s === '') return null;
+  s = s.replace(/[.,\s](?=\d{3}\b)/g, ''); // thousands separators
+  s = s.replace(/[^0-9.]/g, '');
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+// Merge AI-extracted numbers with human-entered ones. Manual wins PER FIELD.
+// Returns { final, source } where source is 'ai' | 'manual' | 'mixed'.
+function computeFinalMetrics(ai, manual) {
+  ai = ai || {}; manual = manual || {};
+  const final = {}; let hasManual = false; let hasAi = false;
+  for (const k of PROOF_METRIC_KEYS) {
+    const m = toMetricNumber(manual[k]);
+    if (m !== null) { final[k] = m; hasManual = true; } else {
+      const a = toMetricNumber(ai[k]);
+      final[k] = a; // may be null
+      if (a !== null) hasAi = true;
+    }
+  }
+  final.platform = (manual && manual.platform) || (ai && ai.platform) || null;
+  const source = hasManual ? (hasAi ? 'mixed' : 'manual') : 'ai';
+  return { final, source };
+}
+
+// Metrics a report should read for a proof: the stored metrics_final if present,
+// else computed on the fly from extracted + metrics_manual (back-compat before
+// the backfill migration runs).
+function finalMetricsOf(p) {
+  if (p && p.metrics_final && typeof p.metrics_final === 'object') return p.metrics_final;
+  return computeFinalMetrics(p && p.extracted, p && p.metrics_manual).final;
+}
+
+// Keep only the numeric metric fields (+ optional platform) from a manual input
+// object, dropping blanks — this becomes metrics_manual (a human's overrides).
+function pickManualMetrics(src) {
+  const out = {};
+  for (const k of PROOF_METRIC_KEYS) { const n = toMetricNumber(src[k]); if (n !== null) out[k] = n; }
+  return out;
+}
+
+// Parse a datetime-local string ("YYYY-MM-DDTHH:mm") in WIB into an ISO string.
+function parsePostedAtWIB(raw) {
+  const s = String(raw || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s)) return null;
+  const d = new Date((s.length === 16 ? s + ':00' : s) + '+07:00');
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const PROOF_PAGE_SIZE = 50;
+
+// Turn a WIB calendar date ("YYYY-MM-DD") into a UTC ISO day boundary.
+function wibDayBoundaryISO(dstr, endOfDay) {
+  const d = String(dstr || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const dt = new Date(d + (endOfDay ? 'T23:59:59.999+07:00' : 'T00:00:00.000+07:00'));
+  return isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+// Build the store filter object from the /admin/proofs query string.
+function proofFiltersFromQuery(q) {
+  const f = {};
+  const s = String(q.q || '').trim(); if (s) f.q = s;
+  if (q.event) f.event_id = String(q.event);
+  if (q.platform) f.platform = String(q.platform);
+  if (q.ctype) f.content_type = String(q.ctype);
+  if (q.status) f.status = String(q.status);
+  const from = wibDayBoundaryISO(q.from, false); if (from) f.from = from;
+  const to = wibDayBoundaryISO(q.to, true); if (to) f.to = to;
+  return f;
+}
+
+// True when a proof's final metrics are entirely empty.
+function metricsAllEmpty(m) {
+  return PROOF_METRIC_KEYS.every((k) => toMetricNumber(m && m[k]) === null);
+}
+
+// Aggregate a set of proofs into one row per KOL (grouped by talent_id, with an
+// "unlinked" bucket for proofs that have no talent_id yet). Reads metrics_final.
+function aggregateByKol(rows, talentNameById) {
+  const groups = new Map();
+  rows.forEach((p) => {
+    const key = p.talent_id || '__unlinked__';
+    let g = groups.get(key);
+    if (!g) {
+      g = { talent_id: p.talent_id || null, unlinked: !p.talent_id,
+        name: (talentNameById && talentNameById.get(p.talent_id)) || p.submitter_name || null,
+        username: p.submitter_username || null, posts: 0, incomplete: 0 };
+      PROOF_METRIC_KEYS.forEach((k) => { g[k] = 0; });
+      groups.set(key, g);
+    }
+    g.posts += 1;
+    const m = finalMetricsOf(p);
+    PROOF_METRIC_KEYS.forEach((k) => { g[k] += toMetricNumber(m[k]) || 0; });
+    if (!p.event_id || metricsAllEmpty(m)) g.incomplete += 1;
+    if (!g.name && p.submitter_name) g.name = p.submitter_name;
+    if (!g.username && p.submitter_username) g.username = p.submitter_username;
+  });
+  const list = [...groups.values()];
+  list.forEach((g) => { g.engagement = (g.likes || 0) + (g.comments || 0) + (g.shares || 0) + (g.saves || 0); });
+  list.sort((a, b) => (a.unlinked ? 1 : 0) - (b.unlinked ? 1 : 0) || (b.views || 0) - (a.views || 0));
+  return list;
+}
+
+// Redirect target after a proof mutation: back to the same filtered view the
+// form came from (carried in a hidden `back` field), else the plain list.
+function backToProofs(req) {
+  const b = String((req.body && req.body.back) || '').trim();
+  return /^\/admin\/proofs(\?|$)/.test(b) ? b : '/admin/proofs';
 }
 
 // Extract stats from a proof screenshot via the LLM, in the background.
@@ -774,11 +895,21 @@ async function runExtraction(st, proofId, buffer, mimeType, priorStatus) {
     // Re-extracting a proof a human already decided on keeps that decision;
     // a fresh upload (pending) lands on 'extracted'.
     const keep = (priorStatus === 'verified' || priorStatus === 'rejected') ? priorStatus : 'extracted';
+    // Core write uses only long-standing columns, so it succeeds whether or not
+    // the manual-metrics migration has been applied yet (safe to deploy first).
     await st.updateProof(proofId, {
       status: keep, platform: extracted.platform || null,
       extracted, ocr_text, extract_model: model, extract_error: null,
       processed_at: new Date().toISOString(),
     });
+    // Recompute the report numbers WITHOUT clobbering any human-entered values:
+    // metrics_final = per-field COALESCE(manual, freshly-extracted). Best-effort:
+    // if the new columns don't exist yet, reports fall back to `extracted`.
+    try {
+      const cur = await st.getProof(proofId).catch(() => null);
+      const { final, source } = computeFinalMetrics(extracted, cur && cur.metrics_manual);
+      await st.updateProof(proofId, { metrics_final: final, metrics_source: source });
+    } catch (_) { /* metrics columns not migrated yet — ignore */ }
   } catch (e) {
     const noKey = e && e.code === 'NO_KEY';
     await st.updateProof(proofId, {
@@ -3229,7 +3360,7 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
 });
 
 // Per-KOL eligibility detail (both staff roles).
-app.get('/admin/kol/:id', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/kol/:id', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3237,8 +3368,11 @@ app.get('/admin/kol/:id', auth.requireStaff(['super_admin']), async (req, res, n
       st.getAccountById(req.params.id), st.listProofsForTalent(req.params.id), st.listEvents(), st.getSettings(),
     ]);
     const eventNameById = new Map(events.map((e) => [e.id, e.name]));
-    const proofs = rawProofs.map((p) => ({ ...p, event_name: eventNameById.get(p.event_id) || null }));
-    res.send(V.adminKolDetail({ staff: staffCtx(req), talent, proofs, settings, lang: req.lang }));
+    const selEvent = String(req.query.event || '');
+    const proofs = rawProofs
+      .filter((p) => !selEvent || p.event_id === selEvent)
+      .map((p) => ({ ...p, event_name: eventNameById.get(p.event_id) || null }));
+    res.send(V.adminKolDetail({ staff: staffCtx(req), talent, proofs, events, selEvent, settings, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -3265,8 +3399,15 @@ app.get('/admin/stats', auth.requireStaff(['super_admin']), (req, res) => {
   res.redirect('/admin' + (ev ? '?event=' + encodeURIComponent(ev) : ''));
 });
 
-// Tab — Ringkasan Performa: per-event totals + per-KOL breakdown.
-app.get('/admin/overview', auth.requireStaff(['super_admin']), async (req, res, next) => {
+// Ringkasan Performa is now the "Per KOL" tab inside Post Proofs (merged so
+// there is a single place for per-KOL reporting). Keep the old URL working.
+app.get('/admin/overview', auth.requireStaff(['super_admin', 'eo']), (req, res) => {
+  res.redirect('/admin/proofs?tab=kol');
+});
+
+// Legacy full overview render kept behind an explicit flag (event x KOL matrix
+// + AI insight). Not linked in the nav any more; reachable at ?full=1.
+app.get('/admin/overview/full', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -3315,14 +3456,151 @@ app.get('/admin/overview/insight', auth.requireStaff(['super_admin']), async (re
 });
 
 // Tab 2 — Bukti Post: full proof list with thumbnails (+ actions for super admin).
-app.get('/admin/proofs', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll, settings] = await Promise.all([st.listProofs(), st.listEvents(), st.listTalents(), st.getSettings()]);
+    const tab = req.query.tab === 'kol' ? 'kol' : 'all';
+    const [events, talentsAll, settings] = await Promise.all([st.listEvents(), st.listTalents(), st.getSettings()]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
-    const proofs = await enrichProofs(st, rawProofs.slice(0, 200), { events, talentNameById });
-    res.send(V.adminProofs({ staff: staffCtx(req), proofs, lang: req.lang, settings }));
+    const filters = proofFiltersFromQuery(req.query);
+    if (tab === 'kol') {
+      const { rows } = await st.listProofsPaged(filters); // all matching rows for aggregation
+      const kols = aggregateByKol(rows, talentNameById);
+      return res.send(V.adminProofsPerKol({ staff: staffCtx(req), kols, events, query: req.query, total: rows.length, lang: req.lang }));
+    }
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const { rows, count } = await st.listProofsPaged({ ...filters, limit: PROOF_PAGE_SIZE, offset: (page - 1) * PROOF_PAGE_SIZE });
+    const proofs = await enrichProofs(st, rows, { events, talentNameById });
+    res.send(V.adminProofs({ staff: staffCtx(req), proofs, events, settings, query: req.query, page, pageSize: PROOF_PAGE_SIZE, count, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// CSV export of the per-KOL report (honours the same filters as the page).
+app.get('/admin/proofs/report.csv', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [talentsAll] = await Promise.all([st.listTalents()]);
+    const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
+    const { rows } = await st.listProofsPaged(proofFiltersFromQuery(req.query));
+    const kols = aggregateByKol(rows, talentNameById);
+    const header = ['KOL', 'Username', 'Linked', 'Posts', 'Incomplete', ...PROOF_METRIC_KEYS, 'engagement'];
+    const csvCell = (v) => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [header.join(',')];
+    kols.forEach((g) => {
+      lines.push([g.name || (g.unlinked ? 'Belum ditautkan' : '—'), g.username || '', g.unlinked ? 'no' : 'yes', g.posts, g.incomplete,
+        ...PROOF_METRIC_KEYS.map((k) => g[k] || 0), g.engagement || 0].map(csvCell).join(','));
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="kol-report.csv"');
+    res.send('﻿' + lines.join('\n'));
+  } catch (e) { next(e); }
+});
+
+// JSON talent search for the KOL picker in the edit / manual-add forms.
+// Under /admin/proofs/* so it never collides with /admin/kol/:id.
+app.get('/admin/proofs/kol-search', auth.requireStaff(['super_admin', 'eo']), async (req, res) => {
+  try {
+    const st = db();
+    if (!st) return res.json({ results: [] });
+    const results = await st.searchTalents(String(req.query.q || ''), 12);
+    res.json({ results: results.map((r) => ({ id: r.id, name: r.name, username: r.instagram || null, type: r.talent_type })) });
+  } catch (_) { res.json({ results: [] }); }
+});
+
+// Create a proof manually (EO/admin help-upload). Screenshot is optional; if one
+// is attached it is also sent through the AI extractor (which merges under the
+// manual numbers). Without a screenshot the manual numbers stand on their own.
+app.post('/admin/proofs/new', auth.requireStaff(['super_admin', 'eo']), upload.single('screenshot'), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const b = req.body || {};
+    const proofId = crypto.randomUUID();
+    const manual = pickManualMetrics(b);
+    const platform = b.platform ? String(b.platform).trim() : null;
+    let submitterName = b.submitter_name ? String(b.submitter_name).trim() : null;
+    let submitterUsername = b.submitter_username ? String(b.submitter_username).trim().replace(/^@/, '') : null;
+    const talentId = b.talent_id ? String(b.talent_id) : null;
+    if (talentId) {
+      const acc = await st.getAccountById(talentId).catch(() => null);
+      if (acc) { submitterName = acc.name || submitterName; submitterUsername = acc.instagram || submitterUsername; }
+    }
+    const file = req.file;
+    let screenshotPath = null;
+    if (file && file.buffer && file.buffer.length) {
+      const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
+      screenshotPath = `proofs/${proofId}${ext}`;
+      await st.uploadImage(screenshotPath, file.buffer, file.mimetype);
+    }
+    const { final, source } = computeFinalMetrics(null, manual);
+    await st.createProof({
+      id: proofId, talent_id: talentId, talent_type: 'kol',
+      event_id: b.event_id ? String(b.event_id) : null,
+      screenshot_path: screenshotPath, post_link: b.post_link ? String(b.post_link).trim() : null,
+      platform, posted_at: parsePostedAtWIB(b.posted_at), status: 'extracted',
+      submitter_name: submitterName, submitter_username: submitterUsername,
+      content_type: b.content_type ? String(b.content_type) : 'feed',
+      metrics_manual: manual, metrics_final: final, metrics_source: source,
+      is_manual_entry: true, edited_by: req.staff.id, edited_at: new Date().toISOString(),
+    });
+    if (screenshotPath) runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget; merges under manual
+    res.redirect(backToProofs(req));
+  } catch (e) { next(e); }
+});
+
+// Edit a proof: metadata columns + human metric overrides (metrics_manual).
+app.post('/admin/proofs/:id/edit', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const p = await st.getProof(req.params.id);
+    if (!p) return res.redirect(backToProofs(req));
+    const b = req.body || {};
+    const manual = pickManualMetrics(b);
+    const { final, source } = computeFinalMetrics(p.extracted, manual);
+    const patch = {
+      platform: b.platform ? String(b.platform).trim() : null,
+      content_type: b.content_type ? String(b.content_type) : null,
+      post_link: b.post_link ? String(b.post_link).trim() : null,
+      posted_at: parsePostedAtWIB(b.posted_at) || (b.posted_at ? p.posted_at : null),
+      event_id: b.event_id ? String(b.event_id) : null,
+      metrics_manual: manual, metrics_final: final, metrics_source: source,
+      edited_by: req.staff.id, edited_at: new Date().toISOString(),
+    };
+    // (Re)link to a KOL account and denormalise its name/username for search.
+    const talentId = b.talent_id ? String(b.talent_id) : null;
+    if (talentId && talentId !== p.talent_id) {
+      const acc = await st.getAccountById(talentId).catch(() => null);
+      patch.talent_id = talentId;
+      if (acc) { patch.submitter_name = acc.name || p.submitter_name; patch.submitter_username = acc.instagram || p.submitter_username; }
+    } else if ('talent_id' in b && !talentId) {
+      patch.talent_id = null; // explicit unlink
+    }
+    if (b.submitter_username !== undefined && !talentId) patch.submitter_username = String(b.submitter_username || '').trim().replace(/^@/, '') || null;
+    if (b.submitter_name !== undefined && !talentId) patch.submitter_name = String(b.submitter_name || '').trim() || null;
+    await st.updateProof(req.params.id, patch);
+    res.redirect(backToProofs(req));
+  } catch (e) { next(e); }
+});
+
+// Bulk-assign event and/or KOL to many selected proofs at once (tidy old rows).
+app.post('/admin/proofs/bulk', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const b = req.body || {};
+    const ids = [].concat(b.ids || []).filter(Boolean);
+    const patch = {};
+    if (b.event_id) patch.event_id = String(b.event_id);
+    if (b.talent_id) {
+      patch.talent_id = String(b.talent_id);
+      const acc = await st.getAccountById(String(b.talent_id)).catch(() => null);
+      if (acc) { patch.submitter_name = acc.name || null; patch.submitter_username = acc.instagram || null; }
+    }
+    if (ids.length && Object.keys(patch).length) await st.bulkUpdateProofs(ids, patch);
+    res.redirect(backToProofs(req));
   } catch (e) { next(e); }
 });
 
@@ -4658,15 +4936,15 @@ app.post('/admin/assignments', auth.requireStaff(['super_admin']), async (req, r
 async function setProofStatus(st, id, status, staffId) {
   await st.updateProof(id, { status, verified_by: staffId || null, verified_at: new Date().toISOString() });
 }
-app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+app.post('/admin/proofs/:id/verify', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'verified', req.staff.id); res.redirect(backToProofs(req)); } catch (e) { next(e); }
 });
-app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+app.post('/admin/proofs/:id/reject', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(req, res); await setProofStatus(st, req.params.id, 'rejected', req.staff.id); res.redirect(backToProofs(req)); } catch (e) { next(e); }
 });
-// Super admin: delete a proof (also removes its stored screenshot).
-app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
-  try { const st = db(); if (!st) return needConfig(req, res); await st.deleteProof(req.params.id); res.redirect('/admin/proofs'); } catch (e) { next(e); }
+// Delete a proof (also removes its stored screenshot).
+app.post('/admin/proofs/:id/delete', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
+  try { const st = db(); if (!st) return needConfig(req, res); await st.deleteProof(req.params.id); res.redirect(backToProofs(req)); } catch (e) { next(e); }
 });
 // Super admin: delete an event (with its needs & assignments) or an EO account.
 app.post('/admin/events/:id/delete', auth.requireStaff(['super_admin']), async (req, res, next) => {
@@ -4742,7 +5020,7 @@ app.post('/admin/settings', auth.requireStaff(['super_admin']), async (req, res,
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
 });
-app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), async (req, res, next) => {
+app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin', 'eo']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4753,7 +5031,7 @@ app.post('/admin/proofs/:id/reextract', auth.requireStaff(['super_admin']), asyn
       const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
       if (buf) runExtraction(st, p.id, buf, mime, p.status);
     }
-    res.redirect('/admin/proofs');
+    res.redirect(backToProofs(req));
   } catch (e) { next(e); }
 });
 

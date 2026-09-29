@@ -603,6 +603,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
     ? navLink('/eo', 'dashboard', active, 'dashboard', t('nav.dashboard'))
       + navLink('/eo/events', 'events', active, 'event', t('nav.events'))
       + navLink('/eo/talents', 'talents', active, 'applications', t('nav.talents'))
+      + navLink('/admin/proofs', 'proofs', active, 'proofs', t('nav.proofs'))
       + navLink('/eo/profile', 'profile', active, 'profile', t('nav.profile'))
     : isStaff
       ? navLink('/admin', 'dashboard', active, 'dashboard', t('nav.dashboard'))
@@ -1853,10 +1854,29 @@ function engagementOf(x) {
   return (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.shares) || 0) + (Number(x.saves) || 0);
 }
 
+const PROOF_METRIC_KEYS = ['views', 'reach', 'impressions', 'likes', 'comments', 'shares', 'saves', 'link_clicks'];
+// Numbers a report/table should show for a proof: the merged metrics_final if
+// present (manual overrides AI per field), else the raw AI extraction. Keeps
+// existing reports numerically identical while reflecting any manual edits.
+function metricsOf(p) {
+  if (!p) return {};
+  if (p.metrics && typeof p.metrics === 'object') return p.metrics;
+  if (p.metrics_final && typeof p.metrics_final === 'object') return p.metrics_final;
+  return p.extracted || {};
+}
+/** True when a metric field was supplied by a human (metrics_manual). */
+function isManualMetric(p, key) {
+  return !!(p && p.metrics_manual && p.metrics_manual[key] !== null && p.metrics_manual[key] !== undefined && p.metrics_manual[key] !== '');
+}
+function proofHasMetrics(p) {
+  const m = metricsOf(p);
+  return PROOF_METRIC_KEYS.some((k) => m[k] !== null && m[k] !== undefined && m[k] !== '');
+}
+
 /** Worst reasonableness class of a single proof (green/yellow/red) or null if unassessable. */
 function proofQualityClass(p, settings) {
   const days = daysLive(p.posted_at, p.created_at);
-  const x = p.extracted || {};
+  const x = metricsOf(p);
   let worst = null;
   for (const k of ['views', 'likes', 'comments', 'saves', 'shares']) {
     const cls = metricClass(k, x[k], days, settings);
@@ -1871,7 +1891,7 @@ function proofQualityClass(p, settings) {
  * colour), and consistency (number of campaigns). score=null when no usable data.
  */
 function kolScore(proofs, settings) {
-  proofs = (proofs || []).filter((p) => p && p.extracted && (p.status === 'extracted' || p.status === 'verified'));
+  proofs = (proofs || []).filter((p) => p && (p.status === 'extracted' || p.status === 'verified') && proofHasMetrics(p));
   const s = settings || {};
   const tViews = Number(s.score_target_views) > 0 ? Number(s.score_target_views) : 5000;
   const tEng = Number(s.score_target_eng) > 0 ? Number(s.score_target_eng) : 500;
@@ -1883,7 +1903,7 @@ function kolScore(proofs, settings) {
   let sumViews = 0; let sumEng = 0; let qSum = 0; let qN = 0;
   const events = new Set();
   proofs.forEach((p) => {
-    const x = p.extracted || {};
+    const x = metricsOf(p);
     sumViews += Number(x.views) || 0;
     sumEng += engagementOf(x);
     events.add(p.event_id || ('p' + p.id));
@@ -4235,9 +4255,9 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
       ${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0"></a>` : ''}
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(p.event_name || t('kol.noEvent'))}</b>${statusBadge(p.status, L)}</div>
-        <div style="font-size:14px;margin-top:6px">${statsLine(p.extracted, L, days, settings)}</div>
+        <div style="font-size:14px;margin-top:6px">${statsLine(metricsOf(p), L, days, settings)}</div>
         <div class="muted" style="font-size:12px;margin-top:6px">${fmtDate(p.created_at)}${p.post_link ? ` · <a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a>` : ''}</div>
-        <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div>
+        <div style="margin-top:6px">${plausibilityBadge(p.posted_at, p.created_at, metricsOf(p), settings, L)}</div>
       </div>
     </div>`;
   }).join('') : `<p class="muted" style="margin-top:12px">${t('kol.empty')}</p>`;
@@ -5232,11 +5252,17 @@ function mainPowerApplyDone({ event, lang }) {
 
 /** Small badge for a proof's content type (feed / reels / story). */
 function contentBadge(ctype) {
-  const label = ctype === 'reels' ? 'Reels' : ctype === 'story' ? 'Story' : ctype === 'feed' ? 'Feed' : null;
-  if (!label) return '';
-  const icon = ctype === 'reels' ? '🎬' : ctype === 'story' ? '📖' : '📷';
-  return `<span class="pill pill-off" style="font-size:11px">${icon} ${label}</span>`;
+  const MAP = {
+    feed: ['📷', 'Feed'], reels: ['🎬', 'Reels'], story: ['📖', 'Story'],
+    tiktok: ['🎵', 'TikTok'], lainnya: ['📄', 'Lainnya'],
+  };
+  const m = MAP[ctype];
+  if (!m) return '';
+  return `<span class="pill pill-off" style="font-size:11px">${m[0]} ${m[1]}</span>`;
 }
+// Content-type options for the manual/edit form dropdowns.
+const CONTENT_TYPES = ['feed', 'reels', 'story', 'tiktok', 'lainnya'];
+const PLATFORM_OPTIONS = ['instagram', 'tiktok', 'youtube', 'facebook', 'twitter', 'threads'];
 
 /**
  * PUBLIC (no login) submission page: name + social username + event, with
@@ -5436,28 +5462,83 @@ function staffHead(staff, title) {
   return `<h1>${esc(title)}</h1>`;
 }
 
-// Shared proof table. Super admin gets an actions column (verify/reject/re-extract).
-function proofTable(proofs, isSuper, lang, settings) {
+// Extraction cell for the proof table: shows the FINAL (merged) metrics, marks
+// any field that a human entered with a small ✎, and tags the row's source.
+function proofMetricsCell(p, L, days, settings) {
+  const m = metricsOf(p);
+  const metrics = [['views', '👁'], ['likes', '❤️'], ['comments', '💬'], ['saves', '🔖'], ['shares', '📤']];
+  const rows = metrics.filter(([k]) => m[k] !== null && m[k] !== undefined && m[k] !== '').map(([k, icon]) => {
+    const c = slaColor(metricClass(k, m[k], days, settings));
+    const man = isManualMetric(p, k) ? ` <span title="${esc(tr(L, 'proofs.manualHint'))}" style="color:var(--red)">✎</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;gap:18px;line-height:1.7"><span class="muted">${icon} ${tr(L, 'stats.' + k)}</span><b${c ? ` style="color:${c}"` : ''}>${fmtNum(m[k])}${man}</b></div>`;
+  });
+  const plat = m.platform ? `<div style="text-transform:capitalize;font-weight:700;margin-bottom:2px">${esc(m.platform)}</div>` : '';
+  const src = p.metrics_source === 'manual' ? `<span class="pill pill-off" style="font-size:10px">✎ ${tr(L, 'proofs.srcManual')}</span>`
+    : p.metrics_source === 'mixed' ? `<span class="pill pill-off" style="font-size:10px">✎ ${tr(L, 'proofs.srcMixed')}</span>` : '';
+  if (!rows.length) return `${plat}${src || '<span class="muted">—</span>'}`;
+  return `<div style="min-width:160px;max-width:230px">${plat}${rows.join('')}${src ? `<div style="margin-top:5px">${src}</div>` : ''}</div>`;
+}
+
+// Proof table body (no card/form wrapper — adminProofs wraps it in the bulk
+// form). Every row carries a select checkbox, an Edit button (opens the modal)
+// and the per-row status actions (submitted via formaction on the bulk form).
+function proofTable(proofs, lang, settings) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   proofs = proofs || [];
+  const delConfirm = String(t('confirm.deleteProof')).replace(/'/g, "\\'");
   const rows = proofs.length ? proofs.map((p) => { const days = daysLive(p.posted_at, p.created_at); return `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, p.extracted, settings, L)}</div></td>
-    <td data-label="${t('th.event')}">${esc(p.event_name || '—')}</td>
+    <td style="width:28px;text-align:center"><input type="checkbox" name="ids" value="${esc(p.id)}" class="proof-cb" aria-label="select"></td>
+    <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || p.submitter_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}${p.is_manual_entry ? ` <span class="pill pill-off" style="font-size:10px">✎ ${t('proofs.manualEntry')}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, metricsOf(p), settings, L)}</div></td>
+    <td data-label="${t('th.event')}">${p.event_name ? esc(p.event_name) : `<span class="pill" style="font-size:10px;background:var(--red-soft,#fde8ea);color:var(--red)">${t('proofs.noEvent')}</span>`}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
-    <td data-label="${t('th.extraction')}">${statsLine(p.extracted, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
+    <td data-label="${t('th.extraction')}">${proofMetricsCell(p, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
     <td data-label="${t('th.status')}">${statusBadge(p.status, L)}</td>
-    ${isSuper ? `<td style="text-align:right;white-space:nowrap">
-      ${p.status !== 'processing' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reextract"><button class="btn btn-ghost btn-sm" title="${t('title.reextract')}">↻</button></form> ` : ''}
-      ${p.status !== 'verified' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/verify"><button class="btn btn-ghost btn-sm" title="${t('title.verify')}">✓</button></form> ` : ''}
-      ${p.status !== 'rejected' ? `<form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/reject"><button class="btn btn-ghost btn-sm" title="${t('title.reject')}">✕</button></form> ` : ''}
-      <form class="inline-form" method="post" action="/admin/proofs/${esc(p.id)}/delete" ${jsConfirm(t('confirm.deleteProof'))}><button class="btn btn-ghost btn-sm" title="${t('title.delete')}">🗑</button></form>
-    </td>` : ''}
-  </tr>`; }).join('') : `<tr><td colspan="${isSuper ? 6 : 5}" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
-  return `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
-    <thead><tr><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.ss')}</th><th>${t('th.extraction')}</th><th>${t('th.status')}</th>${isSuper ? '<th></th>' : ''}</tr></thead>
+    <td style="text-align:right;white-space:nowrap">
+      <button type="button" class="btn btn-ghost btn-sm" title="${t('title.edit')}" onclick="proofEdit('${esc(p.id)}')">✎</button>
+      ${p.screenshot_path && p.status !== 'processing' ? `<button class="btn btn-ghost btn-sm" formaction="/admin/proofs/${esc(p.id)}/reextract" title="${t('title.reextract')}">↻</button>` : ''}
+      ${p.status !== 'verified' ? `<button class="btn btn-ghost btn-sm" formaction="/admin/proofs/${esc(p.id)}/verify" title="${t('title.verify')}">✓</button>` : ''}
+      ${p.status !== 'rejected' ? `<button class="btn btn-ghost btn-sm" formaction="/admin/proofs/${esc(p.id)}/reject" title="${t('title.reject')}">✕</button>` : ''}
+      <button class="btn btn-ghost btn-sm" formaction="/admin/proofs/${esc(p.id)}/delete" title="${t('title.delete')}" onclick="return confirm('${delConfirm}')">🗑</button>
+    </td>
+  </tr>`; }).join('') : `<tr><td colspan="7" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
+  return `<div class="table-wrap"><table>
+    <thead><tr><th style="width:28px;text-align:center"><input type="checkbox" id="proof-cb-all" aria-label="select all"></th><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.ss')}</th><th>${t('th.extraction')}</th><th>${t('th.status')}</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
-  </table></div></div>`;
+  </table></div>`;
+}
+
+// Shared building blocks for the proof filter bar + edit/add modals.
+function proofEventOptions(events, sel, emptyLabel) {
+  return `<option value="">${esc(emptyLabel)}</option>` + (events || []).map((e) => `<option value="${esc(e.id)}"${e.id === sel ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
+}
+function proofSelectOptions(list, sel, emptyLabel, capitalize) {
+  const cap = (s) => capitalize ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  return `<option value="">${esc(emptyLabel)}</option>` + list.map((v) => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(cap(v))}</option>`).join('');
+}
+// datetime-local value (WIB wall clock) from a stored ISO timestamp.
+function toWibLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + 7 * 3600000).toISOString().slice(0, 16);
+}
+// KOL search+link widget (unique element ids via `pfx`). talent_id is the value posted.
+function kolPickerHtml(pfx, lang, curId, curLabel) {
+  const L = normLang(lang);
+  const t = (k) => tr(L, k);
+  return `<div class="kol-picker" data-pfx="${pfx}">
+    <input type="hidden" name="talent_id" id="${pfx}-talent-id" value="${esc(curId || '')}">
+    <div id="${pfx}-talent-cur" style="font-size:13px;margin-bottom:6px">${curId ? `✅ <b>${esc(curLabel || curId)}</b> <button type="button" class="btn btn-ghost btn-sm" onclick="kolClear('${pfx}')">✕ ${t('proofs.unlink')}</button>` : `<span class="muted">${t('proofs.notLinked')}</span>`}</div>
+    <input type="text" id="${pfx}-talent-q" placeholder="${esc(t('proofs.searchKol'))}" autocomplete="off" style="width:100%;box-sizing:border-box">
+    <div id="${pfx}-talent-res" class="kol-res" style="margin-top:4px"></div>
+  </div>`;
+}
+function proofMetricInputs(lang, prefix) {
+  const L = normLang(lang);
+  return PROOF_METRIC_KEYS.map((k) => `<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${tr(L, 'stats.' + k)}
+      <input type="text" inputmode="numeric" name="${k}" id="${prefix}-m-${k}" style="box-sizing:border-box;width:100%">
+    </label>`).join('');
 }
 
 // Tab 1 — Dashboard: role-aware activity summary + engagement overview.
@@ -5513,7 +5594,7 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
     const e = per.get(key) || { id: p.talent_id, name: p.talent_name || '—', type: p.talent_type, proofs: 0, likes: 0, comments: 0, saves: 0, shares: 0, views: 0, list: [] };
     e.proofs += 1; e.list.push(p);
     if (p.status === 'verified') tot.verified += 1;
-    const x = p.extracted || {};
+    const x = metricsOf(p);
     ['likes', 'comments', 'saves', 'shares', 'views'].forEach((k) => { const v = Number(x[k]) || 0; e[k] += v; tot[k] += v; });
     per.set(key, e);
   });
@@ -5528,7 +5609,7 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
     const key = eventNameById.get(p.event_id) || t('kol.noEvent');
     const e = evAgg.get(key) || { name: key, posts: 0, kols: new Set(), views: 0, eng: 0 };
     e.posts += 1; e.kols.add(p.talent_id || p.talent_name || '—');
-    const x = p.extracted || {};
+    const x = metricsOf(p);
     e.views += Number(x.views) || 0;
     e.eng += (Number(x.likes) || 0) + (Number(x.comments) || 0) + (Number(x.shares) || 0) + (Number(x.saves) || 0);
     evAgg.set(key, e);
@@ -5621,11 +5702,39 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
 }
 
 // Per-KOL eligibility detail: overall score + factor breakdown + per-campaign history.
-function adminKolDetail({ staff, talent, proofs, settings, lang }) {
+function adminKolDetail({ staff, talent, proofs, events, selEvent, settings, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  proofs = proofs || [];
+  proofs = proofs || []; events = events || [];
   const overall = kolScore(proofs, settings);
+
+  // Optional per-event filter (drives this page). Only events the KOL has posts in.
+  const evFilter = `<form method="get" class="card" style="margin-top:14px;padding:10px 12px;max-width:360px">
+    <label style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)">${t('proofs.filterEvent')}
+      <select name="event" onchange="this.form.submit()">${proofEventOptions(events, selEvent || '', t('proofs.allEvents'))}</select>
+    </label>
+  </form>`;
+
+  // Breakdown per content type (feed / reels / story / tiktok / lainnya).
+  const ctMap = new Map();
+  proofs.forEach((p) => {
+    const ct = p.content_type || 'feed';
+    const e = ctMap.get(ct) || { ct, posts: 0, views: 0, eng: 0 };
+    e.posts += 1; e.views += Number(metricsOf(p).views) || 0; e.eng += engagementOf(metricsOf(p));
+    ctMap.set(ct, e);
+  });
+  const ctList = [...ctMap.values()].sort((a, b) => b.eng - a.eng);
+  const ctRows = ctList.length ? ctList.map((c) => `<tr>
+    <td data-label="${t('proofs.ctype')}">${contentBadge(c.ct, L) || esc(c.ct)}</td>
+    <td data-label="${t('th.proofs')}" style="text-align:right">${c.posts}</td>
+    <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(c.views)}</td>
+    <td data-label="${t('ov.engagement')}" style="text-align:right">${fmtNum(c.eng)}</td>
+  </tr>`).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:18px">${t('score.noHistory')}</td></tr>`;
+  const ctCard = `<div class="section-head" style="margin-top:22px"><h2 style="margin:0">${t('proofs.byContentType')}</h2></div>
+  <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('proofs.ctype')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('ov.engagement')}</th></tr></thead>
+    <tbody>${ctRows}</tbody>
+  </table></div></div>`;
 
   const evMap = new Map();
   proofs.forEach((p) => {
@@ -5637,8 +5746,8 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   });
   const history = [...evMap.values()].map((e) => Object.assign(e, {
     sc: kolScore(e.list, settings),
-    views: e.list.reduce((a, p) => a + (Number((p.extracted || {}).views) || 0), 0),
-    eng: e.list.reduce((a, p) => a + engagementOf(p.extracted), 0),
+    views: e.list.reduce((a, p) => a + (Number(metricsOf(p).views) || 0), 0),
+    eng: e.list.reduce((a, p) => a + engagementOf(metricsOf(p)), 0),
   })).sort((a, b) => new Date(b.when || 0) - new Date(a.when || 0));
 
   const factorBar = (label, val) => `<div style="margin-bottom:11px">
@@ -5655,9 +5764,10 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
   </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${t('score.noHistory')}</td></tr>`;
 
   const body = `<div class="wrap">
-  <a href="/admin?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  <a href="/admin/proofs?tab=kol&lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <h1 style="margin-bottom:2px">${esc(talent ? talent.name : '—')}</h1>
   <p class="sub">${esc(talentLabel(L, talent && talent.talent_type))}</p>
+  ${events.length ? evFilter : ''}
 
   <div class="card" style="margin-top:14px;display:flex;gap:28px;flex-wrap:wrap;align-items:center">
     <div style="text-align:center;min-width:130px">
@@ -5678,6 +5788,8 @@ function adminKolDetail({ staff, talent, proofs, settings, lang }) {
 
   <div class="section-head" style="margin-top:22px"><h2 style="margin:0">${t('prof.completeness')}</h2></div>
   ${strengthDetailCard(talent, L)}
+
+  ${ctCard}
 
   <div class="section-head"><h2 style="margin:0">${t('score.history')}</h2></div>
   <div class="card" style="margin-top:14px"><div class="table-wrap"><table>
@@ -5708,7 +5820,7 @@ function adminAnalysis({ staff, proofs, lang }) {
     map.set(key, e);
   };
   proofs.forEach((p) => {
-    const x = p.extracted || {};
+    const x = metricsOf(p);
     METRICS.forEach((k) => {
       const v = x[k];
       if (v !== null && v !== undefined && v !== '') {
@@ -5817,7 +5929,7 @@ function adminOverview({ staff, proofs, lang }) {
     if (!ev) { ev = { name: evName, kols: new Map(), totals: blank() }; evMap.set(evName, ev); }
     let k = ev.kols.get(kolName);
     if (!k) { k = Object.assign({ name: kolName }, blank()); ev.kols.set(kolName, k); }
-    const x = p.extracted || {};
+    const x = metricsOf(p);
     k.posts += 1; ev.totals.posts += 1;
     FIELDS.forEach((f) => { const v = Number(x[f]) || 0; k[f] += v; ev.totals[f] += v; });
   });
@@ -5930,13 +6042,228 @@ function adminOverview({ staff, proofs, lang }) {
 }
 
 // Tab 2 — Bukti Post: every proof + extraction (super admin can act on them).
-function adminProofs({ staff, proofs, lang, settings }) {
+// Build a /admin/proofs query string from the current query + overrides.
+// An override set to '' drops that key (used to clear tab/page).
+function proofQS(query, overrides) {
+  const q = Object.assign({}, query || {}, overrides || {});
+  const keep = ['tab', 'q', 'event', 'platform', 'ctype', 'status', 'from', 'to', 'page'];
+  const parts = keep.filter((k) => q[k] !== undefined && q[k] !== null && String(q[k]) !== '').map((k) => `${k}=${encodeURIComponent(q[k])}`);
+  return parts.length ? '?' + parts.join('&') : '';
+}
+function proofsTabBar(query, L) {
+  const t = (k) => tr(L, k);
+  const active = (query && query.tab === 'kol') ? 'kol' : 'all';
+  const link = (tab, label) => `<a href="/admin/proofs${proofQS(query, { tab: tab === 'all' ? '' : 'kol', page: '' })}" class="btn btn-sm${active === tab ? '' : ' btn-ghost'}">${label}</a>`;
+  return `<div style="display:flex;gap:8px;margin:14px 0;flex-wrap:wrap">${link('all', t('proofs.tabAll'))}${link('kol', t('proofs.tabKol'))}</div>`;
+}
+// Server-side search + filter bar (a plain GET form). Also shows the result count.
+function proofsFilterBar(query, events, L, count) {
+  const t = (k, v) => tr(L, k, v);
+  const q = query || {};
+  const kolTab = q.tab === 'kol';
+  const fl = 'display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)';
+  const statuses = ['pending', 'processing', 'extracted', 'verified', 'rejected', 'failed'];
+  return `<form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end">
+    ${kolTab ? '<input type="hidden" name="tab" value="kol">' : ''}
+    <label style="${fl};grid-column:1/-1;max-width:340px">${t('proofs.search')}<input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off" style="box-sizing:border-box;width:100%"></label>
+    <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
+    <label style="${fl}">${t('proofs.platform')}<select name="platform" onchange="this.form.submit()">${proofSelectOptions(PLATFORM_OPTIONS, q.platform || '', t('proofs.all'), true)}</select></label>
+    <label style="${fl}">${t('proofs.ctype')}<select name="ctype" onchange="this.form.submit()">${proofSelectOptions(CONTENT_TYPES, q.ctype || '', t('proofs.all'), true)}</select></label>
+    <label style="${fl}">${t('th.status')}<select name="status" onchange="this.form.submit()">${proofSelectOptions(statuses, q.status || '', t('proofs.all'), true)}</select></label>
+    <label style="${fl}">${t('proofs.from')}<input type="date" name="from" value="${esc(q.from || '')}" onchange="this.form.submit()"></label>
+    <label style="${fl}">${t('proofs.to')}<input type="date" name="to" value="${esc(q.to || '')}" onchange="this.form.submit()"></label>
+    <div style="display:flex;gap:8px;align-items:center"><button class="btn btn-sm" type="submit">${t('proofs.applyFilter')}</button><a class="btn btn-ghost btn-sm" href="/admin/proofs${kolTab ? '?tab=kol' : ''}">${t('proofs.reset')}</a></div>
+  </form>
+  <div class="muted" style="font-size:13px;margin-top:8px">${t('proofs.resultCount', { n: count })}</div>`;
+}
+// Edit + manual-add modals and their shared client script (KOL search,
+// select-all, debounced search, modal fill/open).
+function proofModals(events, L, backQS) {
+  const t = (k) => tr(L, k);
+  const styles = `<style>
+    .pm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:24px 12px}
+    .pm-overlay.open{display:flex}
+    .pm-box{background:var(--card,#fff);border-radius:14px;max-width:560px;width:100%;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+    .pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .pm-fl{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+    .pm-fl input,.pm-fl select{box-sizing:border-box;width:100%}
+    .kol-res{max-height:180px;overflow:auto}
+    .kol-res button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:transparent;cursor:pointer;font-size:13px;border-radius:6px}
+    .kol-res button:hover{background:var(--card2,#f2f2f5)}
+    @media(max-width:520px){.pm-grid{grid-template-columns:1fr}}
+  </style>`;
+  const metricBlock = (pfx) => `<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;margin-bottom:6px">${t('proofs.metrics')}</div><div class="pm-grid">${proofMetricInputs(L, pfx)}</div></div>`;
+  const commonFields = (pfx) => `
+    <label class="pm-fl" style="margin-top:10px">${t('proofs.linkKol')}</label>${kolPickerHtml(pfx, L, '', '')}
+    <div class="pm-grid" style="margin-top:10px">
+      <label class="pm-fl">${t('th.event')}<select name="event_id" id="${pfx}-event">${proofEventOptions(events, '', t('proofs.noEventOpt'))}</select></label>
+      <label class="pm-fl">${t('proofs.platform')}<select name="platform" id="${pfx}-platform">${proofSelectOptions(PLATFORM_OPTIONS, '', '—', true)}</select></label>
+      <label class="pm-fl">${t('proofs.ctype')}<select name="content_type" id="${pfx}-ctype">${proofSelectOptions(CONTENT_TYPES, '', '—', true)}</select></label>
+      <label class="pm-fl">${t('proofs.postedAt')}<input type="datetime-local" name="posted_at" id="${pfx}-posted"></label>
+      <label class="pm-fl" style="grid-column:1/-1">${t('kol.postLink')}<input type="url" name="post_link" id="${pfx}-link" placeholder="https://..."></label>
+    </div>`;
+  const editModal = `<div class="pm-overlay" id="proof-modal"><div class="pm-box">
+    <form method="post" id="proof-edit-form" action="">
+      <input type="hidden" name="back" value="${esc(backQS)}">
+      <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${t('proofs.editTitle')}</h3><button type="button" class="btn btn-ghost btn-sm" onclick="proofModalClose('proof-modal')">✕</button></div>
+      ${commonFields('pe')}
+      ${metricBlock('pe')}
+      <p class="muted" style="font-size:11px;margin:8px 0 0">${t('proofs.manualNote')}</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="proofModalClose('proof-modal')">${t('common.cancel')}</button><button class="btn btn-sm" type="submit">${t('common.save')}</button></div>
+    </form></div></div>`;
+  const addModal = `<div class="pm-overlay" id="proof-add-modal"><div class="pm-box">
+    <form method="post" id="proof-add-form" action="/admin/proofs/new" enctype="multipart/form-data">
+      <input type="hidden" name="back" value="${esc(backQS)}">
+      <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">${t('proofs.addTitle')}</h3><button type="button" class="btn btn-ghost btn-sm" onclick="proofModalClose('proof-add-modal')">✕</button></div>
+      <p class="muted" style="font-size:12px;margin:4px 0 0">${t('proofs.addHint')}</p>
+      ${commonFields('pa')}
+      <div class="pm-grid" style="margin-top:10px">
+        <label class="pm-fl">${t('proofs.nameOpt')}<input type="text" name="submitter_name" id="pa-name"></label>
+        <label class="pm-fl">${t('proofs.usernameOpt')}<input type="text" name="submitter_username" id="pa-username" placeholder="@..."></label>
+      </div>
+      <label class="pm-fl" style="margin-top:10px">${t('proofs.screenshotOpt')}<input type="file" name="screenshot" accept="image/*"></label>
+      ${metricBlock('pa')}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="proofModalClose('proof-add-modal')">${t('common.cancel')}</button><button class="btn btn-sm" type="submit">${t('proofs.addSubmit')}</button></div>
+    </form></div></div>`;
+  return styles + editModal + addModal;
+}
+function proofsClientScript(L) {
+  const t = (k) => tr(L, k);
+  return `<script>
+(function(){
+  var METRICS = ${JSON.stringify(PROOF_METRIC_KEYS)};
+  window.proofModalClose = function(id){ var el=document.getElementById(id); if(el) el.classList.remove('open'); };
+  window.proofModalOpen = function(id){ var el=document.getElementById(id); if(el) el.classList.add('open'); };
+  window.kolClear = function(pfx){ var h=document.getElementById(pfx+'-talent-id'); if(h) h.value=''; var c=document.getElementById(pfx+'-talent-cur'); if(c) c.innerHTML='<span class="muted">'+${JSON.stringify(t('proofs.notLinked'))}+'</span>'; };
+  function kolSet(pfx,id,label){ var h=document.getElementById(pfx+'-talent-id'); if(h) h.value=id; var c=document.getElementById(pfx+'-talent-cur'); if(c) c.innerHTML='✅ <b>'+label+'</b> <button type="button" class="btn btn-ghost btn-sm" onclick="kolClear(\\''+pfx+'\\')">✕</button>'; var res=document.getElementById(pfx+'-talent-res'); if(res) res.innerHTML=''; var q=document.getElementById(pfx+'-talent-q'); if(q) q.value=''; }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  document.querySelectorAll('.kol-picker').forEach(function(box){
+    var pfx=box.getAttribute('data-pfx');
+    var q=document.getElementById(pfx+'-talent-q'); var res=document.getElementById(pfx+'-talent-res');
+    if(!q) return; var tmr=null;
+    q.addEventListener('input', function(){
+      clearTimeout(tmr); var v=q.value.trim();
+      if(!v){ res.innerHTML=''; return; }
+      tmr=setTimeout(function(){
+        fetch('/admin/proofs/kol-search?q='+encodeURIComponent(v)).then(function(r){return r.json();}).then(function(d){
+          var list=(d&&d.results)||[]; if(!list.length){ res.innerHTML='<div class="muted" style="padding:6px 8px;font-size:12px">'+${JSON.stringify(t('proofs.noKol'))}+'</div>'; return; }
+          res.innerHTML=list.map(function(x){ var lab=esc(x.name||x.id)+(x.username?(' · @'+esc(x.username)):''); return '<button type="button" data-id="'+esc(x.id)+'" data-label="'+lab+'">'+lab+'</button>'; }).join('');
+          res.querySelectorAll('button').forEach(function(b){ b.addEventListener('click', function(){ kolSet(pfx, b.getAttribute('data-id'), b.getAttribute('data-label')); }); });
+        }).catch(function(){});
+      }, 300);
+    });
+  });
+  // Edit modal fill + open.
+  window.proofEdit = function(id){
+    var data=(window.__PROOFS||{})[id]; if(!data) return;
+    var f=document.getElementById('proof-edit-form'); f.setAttribute('action','/admin/proofs/'+id+'/edit');
+    document.getElementById('pe-event').value=data.event_id||'';
+    document.getElementById('pe-platform').value=data.platform||'';
+    document.getElementById('pe-ctype').value=data.content_type||'';
+    document.getElementById('pe-posted').value=data.posted_at||'';
+    document.getElementById('pe-link').value=data.post_link||'';
+    METRICS.forEach(function(k){ var el=document.getElementById('pe-m-'+k); if(el){ el.value=(data.manual[k]!=null&&data.manual[k]!=='')?data.manual[k]:''; var ai=data.ai[k]; el.placeholder=(ai!=null&&ai!=='')?(${JSON.stringify(t('proofs.aiPrefix'))}+' '+ai):''; } });
+    if(data.talent_id){ kolSet('pe', data.talent_id, esc(data.name||data.talent_id)+(data.username?(' · @'+esc(data.username)):'')); } else { window.kolClear('pe'); }
+    window.proofModalOpen('proof-modal');
+  };
+  // Debounced auto-submit of the search box (server-side search).
+  var sq=document.getElementById('proof-q');
+  if(sq){ var st=null; sq.addEventListener('input', function(){ clearTimeout(st); st=setTimeout(function(){ sq.form.submit(); }, 400); }); }
+  // Select-all + bulk bar count.
+  var all=document.getElementById('proof-cb-all');
+  function cbs(){ return Array.prototype.slice.call(document.querySelectorAll('.proof-cb')); }
+  function sync(){ var n=cbs().filter(function(c){return c.checked;}).length; var b=document.getElementById('bulk-count'); if(b) b.textContent=n; var bar=document.getElementById('bulk-bar'); if(bar) bar.style.display=n?'flex':'none'; }
+  if(all){ all.addEventListener('change', function(){ cbs().forEach(function(c){ c.checked=all.checked; }); sync(); }); }
+  cbs().forEach(function(c){ c.addEventListener('change', sync); });
+  sync();
+})();
+</script>`;
+}
+
+function adminProofs({ staff, proofs, events, settings, query, page, pageSize, count, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const isSuper = staff && staff.role === 'super_admin';
+  proofs = proofs || []; events = events || []; query = query || {};
+  page = page || 1; pageSize = pageSize || 50; count = count == null ? proofs.length : count;
+  const pages = Math.max(1, Math.ceil(count / pageSize));
+  const backQS = proofQS(query, {});
+  // JSON blob the edit modal reads to prefill each row.
+  const proofData = {};
+  proofs.forEach((p) => {
+    const mm = p.metrics_manual || {}; const ex = p.extracted || {};
+    const d = { event_id: p.event_id || '', talent_id: p.talent_id || '', platform: p.platform || '', content_type: p.content_type || '', post_link: p.post_link || '', posted_at: toWibLocal(p.posted_at), name: p.talent_name || p.submitter_name || '', username: p.submitter_username || '', manual: {}, ai: {} };
+    PROOF_METRIC_KEYS.forEach((k) => { d.manual[k] = (mm[k] == null ? '' : mm[k]); d.ai[k] = (ex[k] == null ? '' : ex[k]); });
+    proofData[p.id] = d;
+  });
+  const dataScript = `<script>window.__PROOFS=${JSON.stringify(proofData).replace(/</g, '\\u003c')};</script>`;
+  const pager = pages > 1 ? `<div style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px">
+    ${page > 1 ? `<a class="btn btn-ghost btn-sm" href="/admin/proofs${proofQS(query, { page: page - 1 })}">← ${t('proofs.prev')}</a>` : ''}
+    <span class="muted" style="font-size:13px">${t('proofs.pageOf', { page, pages })}</span>
+    ${page < pages ? `<a class="btn btn-ghost btn-sm" href="/admin/proofs${proofQS(query, { page: page + 1 })}">${t('proofs.next')} →</a>` : ''}
+  </div>` : '';
+  const bulkBar = `<div id="bulk-bar" style="display:none;gap:10px;align-items:end;flex-wrap:wrap;background:var(--card2,#f6f6f8);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:700">${t('proofs.bulkSel', { n: '<span id="bulk-count">0</span>' })}</div>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('proofs.bulkEvent')}<select name="event_id">${proofEventOptions(events, '', t('proofs.keep'))}</select></label>
+    <div style="min-width:220px">${t('proofs.bulkKol')}${kolPickerHtml('pb', L, '', '')}</div>
+    <button class="btn btn-sm" type="submit">${t('proofs.bulkApply')}</button>
+  </div>`;
   const body = `<div class="wrap">
-  ${staffHead(staff, t('proofs.pageTitle'))}
-  ${proofTable(proofs, isSuper, L, settings)}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    ${staffHead(staff, t('proofs.pageTitle'))}
+    <button type="button" class="btn btn-sm" onclick="proofModalOpen('proof-add-modal')">+ ${t('proofs.addBtn')}</button>
+  </div>
+  ${proofsTabBar(query, L)}
+  ${proofsFilterBar(query, events, L, count)}
+  <form method="post" action="/admin/proofs/bulk" id="proof-bulk">
+    <input type="hidden" name="back" value="${esc(backQS)}">
+    <div class="card" style="margin-top:12px">
+      ${bulkBar}
+      ${proofTable(proofs, L, settings)}
+    </div>
+  </form>
+  ${pager}
+  ${proofModals(events, L, backQS)}
+  ${dataScript}
+  ${proofsClientScript(L)}
+</div>`;
+  return appLayout({ title: t('proofs.pageTitle') + ' — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name, lang: L });
+}
+
+// "Per KOL" tab: one row per KOL (grouped by talent_id), with an "unlinked"
+// bucket for proofs not yet tied to an account. CSV export honours the filters.
+function adminProofsPerKol({ staff, kols, events, query, total, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  kols = kols || []; events = events || []; query = query || {};
+  const num = (v) => fmtNum(Number(v) || 0);
+  const rows = kols.length ? kols.map((g) => {
+    const label = g.unlinked
+      ? `<span class="pill" style="background:var(--red-soft,#fde8ea);color:var(--red)">${t('proofs.unlinkedBucket')}</span>`
+      : `<a href="/admin/kol/${esc(g.talent_id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(g.name || '—')}</a>${g.username ? ` <span class="muted" style="font-size:12px">@${esc(g.username)}</span>` : ''}`;
+    return `<tr>
+      <td data-label="${t('th.kol')}">${label}</td>
+      <td data-label="${t('th.proofs')}" style="text-align:right">${g.posts}</td>
+      <td data-label="${t('stats.views')}" style="text-align:right">${num(g.views)}</td>
+      <td data-label="${t('stats.reach')}" style="text-align:right">${num(g.reach)}</td>
+      <td data-label="${t('stats.likes')}" style="text-align:right">${num(g.likes)}</td>
+      <td data-label="${t('stats.comments')}" style="text-align:right">${num(g.comments)}</td>
+      <td data-label="${t('stats.shares')}" style="text-align:right">${num(g.shares)}</td>
+      <td data-label="${t('ov.engagement')}" style="text-align:right">${num(g.engagement)}</td>
+      <td data-label="${t('proofs.incomplete')}" style="text-align:right">${g.incomplete ? `<span style="color:var(--red);font-weight:700">${g.incomplete}</span>` : '0'}</td>
+      <td style="text-align:right">${g.unlinked ? `<a class="btn btn-ghost btn-sm" href="/admin/proofs${proofQS(query, { tab: '', page: '' })}">${t('proofs.linkNow')}</a>` : ''}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="10" class="muted" style="padding:22px;text-align:center">${t('proofs.empty')}</td></tr>`;
+  const body = `<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    ${staffHead(staff, t('proofs.pageTitle'))}
+    <a class="btn btn-sm" href="/admin/proofs/report.csv${proofQS(query, { tab: '', page: '' })}">⬇ ${t('proofs.exportCsv')}</a>
+  </div>
+  ${proofsTabBar(query, L)}
+  ${proofsFilterBar(query, events, L, total)}
+  <div class="card" style="margin-top:12px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('th.kol')}</th><th style="text-align:right">${t('th.proofs')}</th><th style="text-align:right">${t('stats.views')}</th><th style="text-align:right">${t('stats.reach')}</th><th style="text-align:right">${t('stats.likes')}</th><th style="text-align:right">${t('stats.comments')}</th><th style="text-align:right">${t('stats.shares')}</th><th style="text-align:right">${t('ov.engagement')}</th><th style="text-align:right">${t('proofs.incomplete')}</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div></div>
 </div>`;
   return appLayout({ title: t('proofs.pageTitle') + ' — 20FIT', body, role: staff && staff.role, active: 'proofs', user: staff && staff.name, lang: L });
 }
@@ -7424,7 +7751,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
