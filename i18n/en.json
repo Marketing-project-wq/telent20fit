@@ -928,6 +928,7 @@
   "land.eventsTitle": "Apply to These Events",
   "land.eventsSub": "These events are currently open for talent — pick one to see the roles and apply.",
   "land.openBadge": "Open",
+  "land.closedBadge": "Registration Closed",
   "land.allCities": "All Cities",
   "land.cityFilter": "Filter by city",
   "land.openCat.kol": "KOL",
