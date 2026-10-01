@@ -867,9 +867,22 @@ function landingPage(lang, opts = {}) {
   const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
   const cityOf = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
   const evCardHtml = evList.map((e) => {
+    const city = cityOf(e.location);
+    // Closed/past event: the poster stays but greyed out and NOT a link — can't
+    // click, can't register. (Registration is also blocked server-side by
+    // eventRegOpen, so a direct URL can't apply either.)
+    if (e.regOpen === false) {
+      return `<div class="lp-ev-card lp-ev-card--closed" data-city="${esc(city.toLowerCase())}" aria-disabled="true">
+      <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-closed">${esc(t('land.closedBadge'))}</span></div>
+      <div class="lp-ev-body">
+        <div class="lp-ev-name">${esc(e.name)}</div>
+        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
+      </div>
+    </div>`;
+    }
     const cats = Array.from(new Set((e.openPositions || []).map((p) => posCatKey(p.key))));
     const catBadges = cats.map((ck) => `<span class="lp-ev-pos">${esc(t('land.openCat.' + ck))}</span>`).join('');
-    const city = cityOf(e.location);
     return `<a href="/event/${esc(e.slug || e.id)}?lang=${L}" class="lp-ev-card" data-city="${esc(city.toLowerCase())}">
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-open">${esc(t('land.openBadge'))}</span></div>
       <div class="lp-ev-body">
@@ -1136,6 +1149,11 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-name{font:800 17px/1.15 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.01em;color:var(--lp-tx);word-break:break-word}
 .lp-ev-meta{font-size:12.5px;color:var(--lp-tx3);margin-top:5px}
 .lp-ev-open{color:#0f9d6a}
+.lp-ev-closed{color:#6b7280}
+.lp-ev-card--closed{cursor:default;pointer-events:none}
+.lp-ev-card--closed .lp-ev-cover{filter:grayscale(1);opacity:.5}
+.lp-ev-card--closed .lp-ev-name{color:var(--lp-tx3)}
+.lp-ev-card--closed .lp-ev-meta{color:var(--lp-tx4)}
 .lp-ev-pos-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
 .lp-ev-pos{font:700 10.5px/1 Barlow,sans-serif;text-transform:uppercase;letter-spacing:.04em;color:var(--red);background:rgba(228,18,31,.1);border:1px solid rgba(228,18,31,.22);padding:4px 8px;border-radius:999px}
 .lp-city-filter{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 0 26px}

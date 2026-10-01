@@ -415,7 +415,8 @@ app.get('/', async (req, res, next) => {
     // Best-effort — the landing must still render if this fails.
     let events = [];
     if (st) {
-      try { events = await openPositionEvents(st, null); }
+      // Landing shows open events (clickable) + closed/past ones (greyed, non-clickable).
+      try { events = await landingEventsCached(st); }
       catch (_) { /* keep the landing up regardless */ }
     }
     const account = auth.anySession(req, auth.TALENT_TYPES);
@@ -1475,6 +1476,15 @@ function eventRegOpen(ev) {
   return true;
 }
 
+// True when registration simply hasn't opened yet (reg_open is in the future).
+// Used to tell "coming soon" apart from "closed": a not-yet-open event is hidden
+// from the landing, while a closed/past one stays (greyed, non-clickable).
+function regNotYetOpen(ev) {
+  if (!ev || ev.status !== 'published') return false;
+  const nowStr = jakartaNowStr();
+  return !!(ev.reg_open && nowStr < String(ev.reg_open).slice(0, 10) + 'T' + (ev.reg_open_time || '00:00'));
+}
+
 // Build the apply context for one event + talent (positions, open slots, my application).
 async function positionApplyCtx(st, ev, talentId) {
   const [positions, apps, choices] = await Promise.all([st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices()]);
@@ -1514,6 +1524,52 @@ async function openPositionEvents(st, talentId) {
   open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));
   await attachMockups(st, open);
   return open;
+}
+
+// Events for the PUBLIC LANDING: every published event that has roles, flagged
+// with `regOpen`. Open events (reg window live + a free slot) link to their
+// detail/apply page; closed/past events stay as a greyed, non-clickable poster
+// (owner's choice — the archive never disappears). "Coming soon" events whose
+// registration hasn't opened yet are left out so they aren't mislabelled closed.
+async function landingEvents(st) {
+  const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
+  const eoName = new Map(staff.map((s) => [s.id, s.name]));
+  const pub = events.filter((ev) => ev.status === 'published' || ev.reg_closed_at);
+  const posList = await Promise.all(pub.map((ev) => st.listEventPositions(ev.id)));
+  const out = [];
+  pub.forEach((ev, i) => {
+    const positions = posList[i] || [];
+    if (!positions.length) return;                       // no roles → nothing to show
+    const view = eoEventView(ev, positions, apps, choices);
+    const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
+    const regOpen = eventRegOpen(ev) && openPos.length > 0;
+    if (!regOpen && regNotYetOpen(ev)) return;           // coming soon → hide until reg opens
+    out.push(Object.assign({}, ev, {
+      openPositions: openPos, eoName: eoName.get(ev.created_by) || '',
+      status: eventStatusOf(ev), regOpen,
+    }));
+  });
+  // Open events first (soonest deadline), then the greyed archive (newest first).
+  out.sort((a, b) => {
+    if (a.regOpen !== b.regOpen) return a.regOpen ? -1 : 1;
+    if (a.regOpen) return String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999'));
+    return String(b.starts_at || '').localeCompare(String(a.starts_at || ''));
+  });
+  await attachMockups(st, out);
+  return out;
+}
+
+// The landing is public and high-traffic, and the greyed archive only grows, so
+// cache the (visitor-agnostic) list briefly instead of re-scanning every event's
+// positions on each hit. 60s << the 1h signed-cover TTL, so posters never expire
+// mid-cache; a newly closed/opened event reflects within a minute.
+let _landingEvCache = { at: 0, list: null };
+async function landingEventsCached(st) {
+  const now = Date.now();
+  if (_landingEvCache.list && now - _landingEvCache.at < 60000) return _landingEvCache.list;
+  const list = await landingEvents(st);
+  _landingEvCache = { at: now, list };
+  return list;
 }
 
 // Lowercase haystack for one open event: name + location + EO name + each open
