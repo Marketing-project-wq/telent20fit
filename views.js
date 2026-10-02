@@ -6081,11 +6081,16 @@ function proofsFilterBar(query, events, L, count) {
   const kolTab = q.tab === 'kol';
   const fl = 'display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)';
   const statuses = ['pending', 'processing', 'extracted', 'verified', 'rejected', 'failed'];
-  const gridStyle = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end';
-  return `<form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:14px;display:flex;flex-direction:column;gap:12px">
+  return `<style>
+    .pf-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
+    .pf-grid select,.pf-grid input{box-sizing:border-box;width:100%;min-width:0}
+    @media (max-width:900px){.pf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media (max-width:560px){.pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+  <form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:14px;display:flex;flex-direction:column;gap:12px">
     ${kolTab ? '<input type="hidden" name="tab" value="kol">' : ''}
     <label style="${fl};max-width:360px">${t('proofs.search')}<input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off" style="box-sizing:border-box;width:100%"></label>
-    <div style="${gridStyle}">
+    <div class="pf-grid">
       <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
       <label style="${fl}">${t('proofs.platform')}<select name="platform" onchange="this.form.submit()">${proofSelectOptions(PLATFORM_OPTIONS, q.platform || '', t('proofs.allPlatforms'), true)}</select></label>
       <label style="${fl}">${t('proofs.ctype')}<select name="ctype" onchange="this.form.submit()">${proofSelectOptions(CONTENT_TYPES, q.ctype || '', t('proofs.allCtypes'), true)}</select></label>
