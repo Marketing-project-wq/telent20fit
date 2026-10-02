@@ -6085,12 +6085,21 @@ function proofsFilterBar(query, events, L, count) {
     .pf-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
     .pf-grid select,.pf-grid input{box-sizing:border-box;width:100%;min-width:0}
     .pf-grid input[type=date]{border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
+    .pf-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .pf-search{flex:1 1 280px;max-width:480px}
+    .pf-search-box{position:relative;display:block}
+    .pf-search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+    .pf-search-box input{box-sizing:border-box;width:100%;padding-left:40px}
     @media (max-width:900px){.pf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:560px){.pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   </style>
   <form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:14px;display:flex;flex-direction:column;gap:12px">
     ${kolTab ? '<input type="hidden" name="tab" value="kol">' : ''}
-    <label style="${fl};max-width:360px">${t('proofs.search')}<input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off" style="box-sizing:border-box;width:100%"></label>
+    <div class="pf-top">
+      <label class="pf-search" style="${fl}">${t('proofs.search')}<span class="pf-search-box"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off"></span></label>
+      <span class="muted" style="font-size:13px;white-space:nowrap;padding-bottom:14px">${t('proofs.resultCount', { n: count })}</span>
+      <button type="submit" hidden></button>
+    </div>
     <div class="pf-grid">
       <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
       <label style="${fl}">${t('proofs.platform')}<select name="platform" onchange="this.form.submit()">${proofSelectOptions(PLATFORM_OPTIONS, q.platform || '', t('proofs.allPlatforms'), true)}</select></label>
@@ -6098,10 +6107,6 @@ function proofsFilterBar(query, events, L, count) {
       <label style="${fl}">${t('th.status')}<select name="status" onchange="this.form.submit()">${proofSelectOptions(statuses, q.status || '', t('proofs.allStatuses'), true)}</select></label>
       <label style="${fl}">${t('proofs.from')}<input type="date" name="from" value="${esc(q.from || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
       <label style="${fl}">${t('proofs.to')}<input type="date" name="to" value="${esc(q.to || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
-    </div>
-    <div style="display:flex;align-items:center">
-      <button type="submit" hidden></button>
-      <span class="muted" style="font-size:13px;margin-left:auto">${t('proofs.resultCount', { n: count })}</span>
     </div>
   </form>`;
 }
