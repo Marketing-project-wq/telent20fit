@@ -6088,17 +6088,17 @@ function proofsFilterBar(query, events, L, count) {
     .pf-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
     .pf-search{flex:1 1 280px;max-width:480px}
     .pf-search-box{position:relative;display:block}
-    .pf-search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
-    .pf-search-box input{box-sizing:border-box;width:100%;padding-left:40px}
+    .pf-search-box button{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}
+    .pf-search-box button:hover{background:var(--card2,#f2f2f5);color:var(--ink)}
+    .pf-search-box input{box-sizing:border-box;width:100%;padding-right:46px}
     @media (max-width:900px){.pf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:560px){.pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   </style>
   <form method="get" action="/admin/proofs" class="card" style="margin-top:6px;padding:14px;display:flex;flex-direction:column;gap:12px">
     ${kolTab ? '<input type="hidden" name="tab" value="kol">' : ''}
     <div class="pf-top">
-      <label class="pf-search" style="${fl}">${t('proofs.search')}<span class="pf-search-box"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off"></span></label>
+      <label class="pf-search" style="${fl}">${t('proofs.search')}<span class="pf-search-box"><input type="text" name="q" id="proof-q" value="${esc(q.q || '')}" placeholder="${esc(t('proofs.searchPh'))}" autocomplete="off"><button type="submit" aria-label="${esc(t('proofs.search'))}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button></span></label>
       <span class="muted" style="font-size:13px;white-space:nowrap;padding-bottom:14px">${t('proofs.resultCount', { n: count })}</span>
-      <button type="submit" hidden></button>
     </div>
     <div class="pf-grid">
       <label style="${fl}">${t('th.event')}<select name="event" onchange="this.form.submit()">${proofEventOptions(events, q.event || '', t('proofs.allEvents'))}</select></label>
