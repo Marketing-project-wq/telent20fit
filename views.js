@@ -6099,9 +6099,8 @@ function proofsFilterBar(query, events, L, count) {
       <label style="${fl}">${t('proofs.from')}<input type="date" name="from" value="${esc(q.from || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
       <label style="${fl}">${t('proofs.to')}<input type="date" name="to" value="${esc(q.to || '')}" onchange="this.form.submit()" style="box-sizing:border-box;width:100%"></label>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-sm" type="submit">${t('proofs.applyFilter')}</button>
-      <a class="btn btn-ghost btn-sm" href="/admin/proofs${kolTab ? '?tab=kol' : ''}">${t('proofs.reset')}</a>
+    <div style="display:flex;align-items:center">
+      <button type="submit" hidden></button>
       <span class="muted" style="font-size:13px;margin-left:auto">${t('proofs.resultCount', { n: count })}</span>
     </div>
   </form>`;
