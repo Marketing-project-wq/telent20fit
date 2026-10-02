@@ -6084,6 +6084,7 @@ function proofsFilterBar(query, events, L, count) {
   return `<style>
     .pf-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
     .pf-grid select,.pf-grid input{box-sizing:border-box;width:100%;min-width:0}
+    .pf-grid input[type=date]{border:1px solid var(--line);border-radius:10px;padding:12px;font-size:15px;background:var(--card);font-family:inherit;color:var(--ink)}
     @media (max-width:900px){.pf-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
     @media (max-width:560px){.pf-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
   </style>
