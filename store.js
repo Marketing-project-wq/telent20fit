@@ -13,6 +13,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const MODE = process.env.KOL_STORE_MODE || 'supabase';
 const BUCKET = 'kol-uploads';
+const LANDING_BUCKET = 'landing-assets'; // public; landing hero photos
 
 // Optional per-position detail fields (all nullable text). General fields apply
 // to every category; the kol_* / photo_* fields only carry data for KOL /
@@ -99,17 +100,48 @@ function supabaseStore() {
       const { data } = await sb.storage.from(BUCKET).createSignedUrls(paths, 3600);
       return (data || []).map((d) => (d && d.signedUrl && !d.error) ? d.signedUrl : null);
     },
-    // Landing hero backgrounds: two fixed slots (1,2), upserted; served via signed URLs.
-    async putLandingBg(slot, buffer, contentType) {
-      const key = 'landing/bg-' + slot + '.jpg';
-      const { error } = await sb.storage.from(BUCKET).upload(key, buffer, { contentType: contentType || 'image/jpeg', upsert: true });
-      if (error) throw new Error(error.message);
-      return key;
-    },
+    // Legacy landing hero files (two fixed slots); still read as the fallback while
+    // talent_settings.hero_image_urls is empty. New uploads go to landing-assets.
     async landingBgUrls() {
       const { data, error } = await sb.storage.from(BUCKET).createSignedUrls(['landing/bg-1.jpg', 'landing/bg-2.jpg'], 7200);
       if (error) return null; // signing failed (transient) — signal caller so it doesn't cache the miss
       return (data || []).map((d) => (d && d.signedUrl && !d.error) ? d.signedUrl : null);
+    },
+    // Landing hero photos as an ordered list of image URLs (talent_settings.hero_image_urls).
+    // Returns null when the column isn't there yet / the read fails, so the caller
+    // can fall back to the legacy storage files instead of blanking the hero.
+    async getLandingImages() {
+      const { data, error } = await sb.from('talent_settings').select('hero_image_urls').eq('id', 1).maybeSingle();
+      if (error) return null;
+      return Array.isArray(data && data.hero_image_urls) ? data.hero_image_urls.filter(Boolean) : [];
+    },
+    async setLandingImages(urls) {
+      const { error } = await sb.from('talent_settings').update({ hero_image_urls: urls, updated_at: new Date().toISOString() }).eq('id', 1);
+      if (error) throw new Error(error.message);
+    },
+    // Upload a landing photo to the PUBLIC landing-assets bucket under a unique name
+    // (a stable, cacheable URL; replacing a photo yields a new URL) and return its public URL.
+    async uploadLandingAsset(buffer, contentType) {
+      const ext = /png/.test(contentType || '') ? '.png' : (/webp/.test(contentType || '') ? '.webp' : '.jpg');
+      const key = 'hero-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) + ext;
+      const { error } = await sb.storage.from(LANDING_BUCKET).upload(key, buffer, { contentType: contentType || 'image/jpeg', upsert: false });
+      if (error) throw new Error(error.message);
+      return sb.storage.from(LANDING_BUCKET).getPublicUrl(key).data.publicUrl;
+    },
+    // One-off: copy the two legacy hero files (private kol-uploads/landing/bg-N.jpg)
+    // into landing-assets and return their public URLs. The originals are kept.
+    async copyLegacyLandingBgs() {
+      const out = [];
+      for (const slot of [1, 2]) {
+        const { data, error } = await sb.storage.from(BUCKET).download('landing/bg-' + slot + '.jpg');
+        if (error || !data) continue;
+        const buf = Buffer.from(await data.arrayBuffer());
+        const key = 'bg-' + slot + '.jpg';
+        const up = await sb.storage.from(LANDING_BUCKET).upload(key, buf, { contentType: 'image/jpeg', upsert: true });
+        if (up.error) throw new Error(up.error.message);
+        out.push(sb.storage.from(LANDING_BUCKET).getPublicUrl(key).data.publicUrl);
+      }
+      return out;
     },
     async downloadImage(pathKey) {
       const { data, error } = await sb.storage.from(BUCKET).download(pathKey);
@@ -779,6 +811,7 @@ function memoryStore() {
   ];
   const submissions = [];
   const landingBgs = {};
+  let landingImages = [];
   const hashPassword = require('./auth').hashPassword;
   const accounts = [
     { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now(), phone: '081234567890', city: 'Jakarta', birthdate: '1996-05-20', gender: 'male', instagram: 'budi.santoso', instagram_followers: 3200, experience: 'Marshal Jakarta Marathon 2024, 2025.', profile_completed_at: now() },
@@ -876,8 +909,11 @@ function memoryStore() {
     async uploadImage(path, buffer, contentType) { images.set(path, { buffer, contentType }); },
     async removeImage(paths) { (Array.isArray(paths) ? paths : [paths]).filter(Boolean).forEach((p) => images.delete(p)); },
     async signImageUrls(paths) { return (paths || []).map((p) => '/__mockimg/' + encodeURIComponent(p)); },
-    async putLandingBg(slot, buffer, contentType) { landingBgs[slot] = 'data:' + (contentType || 'image/jpeg') + ';base64,' + buffer.toString('base64'); },
     async landingBgUrls() { return [landingBgs[1] || null, landingBgs[2] || null]; },
+    async getLandingImages() { return landingImages.slice(); },
+    async setLandingImages(urls) { landingImages = urls.slice(); },
+    async uploadLandingAsset(buffer, contentType) { const k = 'landing-assets/hero-' + (++seq); images.set(k, { buffer, contentType }); return '/__mockimg/' + encodeURIComponent(k); },
+    async copyLegacyLandingBgs() { return [1, 2].filter((n) => landingBgs[n]).map((n) => '/__mockimg/' + encodeURIComponent('landing-assets/bg-' + n)); },
     async signCovers(paths) { return (paths || []).map((p) => (p && images.has(p)) ? '/__mockimg/' + encodeURIComponent(p) : null); },
     async downloadImage(pathKey) { const r = images.get(pathKey); return r ? r.buffer : null; },
     async createSubmission(row) { submissions.push({ ...row, created_at: now() }); },
