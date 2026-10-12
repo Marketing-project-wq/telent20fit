@@ -744,11 +744,20 @@ function joinEventSection(lang, opts = {}) {
 function landingPage(lang, opts = {}) {
   const L = (lang === 'id') ? 'id' : 'en';
   const t = (k, v) => tr(L, k, v);
-  // Optional hero background photos (0-2). With 2 they crossfade; with 1 it's static.
+  // Optional hero background photos (any number). With 2+ they crossfade in turn,
+  // each shown for `hold` seconds (8s for two — the original timing — 6s for more);
+  // with 1 it's static. The keyframes scale with the count so every photo gets an
+  // equal slot and a ~0.6s fade.
   const bgPhotos = Array.isArray(opts.bg) ? opts.bg.filter(Boolean) : [];
   const hasPhotos = bgPhotos.length > 0;
+  const nPh = bgPhotos.length;
+  const hold = nPh === 2 ? 8 : 6;
+  const cycle = nPh * hold;
+  const pct = (x) => Math.round(x * 1000) / 10 + '%';
+  const fade = 0.64 / cycle;
+  const crossCss = nPh > 1 ? `<style>.hero-photos.cross .hp{animation:heroCrossN ${cycle}s ease-in-out infinite}@keyframes heroCrossN{0%{opacity:0}${pct(fade)}{opacity:1}${pct(1 / nPh - fade)}{opacity:1}${pct(1 / nPh)}{opacity:0}100%{opacity:0}}@media(prefers-reduced-motion:reduce){.hero-photos.cross .hp{animation:none}}</style>` : '';
   const heroPhotos = hasPhotos
-    ? `<div class="hero-photos${bgPhotos.length > 1 ? ' cross' : ''}" aria-hidden="true">${bgPhotos.map((u) => `<div class="hp" style="background-image:url('${esc(u)}')"></div>`).join('')}</div>`
+    ? `${crossCss}<div class="hero-photos${nPh > 1 ? ' cross' : ''}" aria-hidden="true">${bgPhotos.map((u, i) => `<div class="hp" style="background-image:url('${esc(u)}')${nPh > 1 && i ? `;animation-delay:${i * hold}s` : ''}"></div>`).join('')}</div>`
     : '';
   // Feature cards: [icon SVG, i18n key base] — title/description resolved from the dictionary.
   // Icons are stroke-based (Lucide), inheriting the red badge color via currentColor.
@@ -1023,7 +1032,6 @@ a{text-decoration:none}
 .hero-photos{position:absolute;inset:0;z-index:0;overflow:hidden}
 .hero-photos .hp{position:absolute;inset:0;background-size:cover;background-position:center}
 .hero-photos.cross .hp{opacity:0;animation:heroCross 16s ease-in-out infinite}
-.hero-photos.cross .hp:nth-child(2){animation-delay:8s}
 .hero-photos::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,rgba(9,9,12,.82) 0%,rgba(9,9,12,.72) 50%,rgba(9,9,12,.62) 100%)}
 @keyframes heroCross{0%{opacity:0}4%{opacity:1}46%{opacity:1}50%{opacity:0}100%{opacity:0}}
 .hero-stage.has-photos .hero-bg{display:none}
@@ -1574,49 +1582,74 @@ ${landingNav(lang, 'about')}
 </body></html>`;
 }
 
-/** Super-admin uploader for the landing hero background photos (1-2, alternating). */
-function adminLanding({ staff, lang, urls, saved }) {
+/** Super-admin manager for the landing hero background photos (a list of image URLs, crossfading). */
+function adminLanding({ staff, lang, urls, legacy, dbReady, max, saved, err }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const u = urls || [];
-  const slot = (url, label) => `<div class="lbg-card">
-        <div class="lbg-cap">${esc(label)}</div>
-        <div class="lbg-thumb">${url ? `<img src="${esc(url)}" alt="">` : `<span class="lbg-empty">${esc(t('landing.none'))}</span>`}</div>
-      </div>`;
+  const list = (urls || []).slice(0, max);
+  const old = legacy || [];
+  const T = {
+    url: t('landing.urlLabel'), urlHint: t('landing.urlHint'), upload: t('landing.upload'), uploading: t('landing.uploading'), remove: t('landing.remove'),
+    photo: t('landing.photoN'), none: t('landing.none'), loadErr: t('landing.loadErr'), proto: t('landing.proto'), big: t('landing.big'), bigDim: t('landing.bigDim'),
+    save: t('landing.save'), saving: t('landing.saving'), failed: t('landing.failed'), invalid: t('landing.invalid'), upFailed: t('landing.upFailed'), up: t('landing.moveUp'), down: t('landing.moveDown'),
+  };
   const body = `<div class="lbg-wrap">
     <h1 class="lbg-h1">${esc(t('landing.title'))}</h1>
-    <p class="lbg-intro">${esc(t('landing.intro'))}</p>
+    <p class="lbg-intro">${esc(t('landing.intro', { n: max }))}</p>
     ${saved ? `<div class="lbg-ok">✓ ${esc(t('landing.saved'))}</div>` : ''}
-    <div class="lbg-grid">${slot(u[0], t('landing.photo1'))}${slot(u[1], t('landing.photo2'))}</div>
-    <form id="lbgForm" class="lbg-form" method="post" action="/admin/landing" enctype="multipart/form-data">
-      <label class="lbg-file"><span>${esc(t('landing.photo1'))}</span><input id="lbg1" type="file" name="bg1" accept="image/*"></label>
-      <label class="lbg-file"><span>${esc(t('landing.photo2'))}</span><input id="lbg2" type="file" name="bg2" accept="image/*"></label>
-      <p class="lbg-hint">${esc(t('landing.hint'))}</p>
-      <button id="lbgBtn" type="submit" class="btn">${esc(t('landing.save'))}</button>
+    ${err === 'import' ? `<div class="lbg-err">${esc(t('landing.importFailed'))}</div>` : ''}
+    ${!dbReady ? `<div class="lbg-err">${esc(t('landing.dbNotReady'))}</div>` : ''}
+    ${(!list.length && old.length) ? `<div class="lbg-legacy">
+      <div><b>${esc(t('landing.legacyTitle'))}</b><p>${esc(t('landing.legacyHint'))}</p>
+      <div class="lbg-legacy-thumbs">${old.map((u) => `<img src="${esc(u)}" alt="">`).join('')}</div></div>
+      ${dbReady ? `<form method="post" action="/admin/landing/import-legacy?lang=${L}"><button class="btn btn-sm" type="submit">${esc(t('landing.importBtn'))}</button></form>` : ''}
+    </div>` : ''}
+    <form id="lbgForm" class="lbg-form" method="post" action="/admin/landing">
+      <div id="lbgList" class="lbg-grid"></div>
+      <button type="button" id="lbgAdd" class="btn btn-ghost btn-sm">＋ ${esc(t('landing.add'))}</button>
+      <p class="lbg-hint">${esc(t('landing.hint', { n: max }))}</p>
+      <button id="lbgBtn" type="submit" class="btn"${dbReady ? '' : ' disabled'}>${esc(t('landing.save'))}</button>
     </form>
   </div>
   <style>
-    .lbg-wrap{max-width:760px;margin:0 auto}
+    .lbg-wrap{max-width:980px;margin:0 auto}
     .lbg-h1{font-size:24px;font-weight:800;margin:0 0 6px}
     .lbg-intro{color:#5b6069;font-size:14px;line-height:1.55;margin:0 0 16px}
     .lbg-ok{background:#e7f6ee;border:1px solid #b6e2c9;color:#137a49;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:16px}
-    .lbg-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-    .lbg-card{border:1px solid #e3e7ed;border-radius:12px;overflow:hidden;background:#fff}
-    .lbg-cap{padding:9px 12px;font-weight:700;font-size:13px;border-bottom:1px solid #eef1f5}
-    .lbg-thumb{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#f1f3f6}
-    .lbg-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-    .lbg-empty{color:#9aa0a8;font-size:13px}
-    .lbg-form{border:1px solid #e3e7ed;border-radius:14px;background:#fff;padding:20px}
-    .lbg-file{display:block;margin-bottom:16px}
-    .lbg-file span{display:block;font-weight:700;font-size:13px;margin-bottom:6px}
-    .lbg-file input{width:100%;font-size:14px}
-    .lbg-hint{color:#8b8f97;font-size:12.5px;margin:0 0 16px}
-    @media(max-width:560px){.lbg-grid{grid-template-columns:1fr}}
+    .lbg-err{background:#fdecec;border:1px solid #f3c2c2;color:#a3151d;padding:11px 14px;border-radius:10px;font-size:14px;font-weight:600;margin-bottom:16px}
+    .lbg-legacy{display:flex;gap:14px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;background:#fff8e6;border:1px solid #f1dca4;border-radius:12px;padding:14px;margin-bottom:16px;font-size:13.5px}
+    .lbg-legacy p{margin:4px 0 8px;color:#6b5a2a}
+    .lbg-legacy-thumbs{display:flex;gap:8px}.lbg-legacy-thumbs img{width:120px;height:68px;object-fit:cover;border-radius:8px;border:1px solid #e3e7ed}
+    .lbg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+    .lbg-card{border:1px solid #e3e7ed;border-radius:12px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+    .lbg-cap{display:flex;align-items:center;gap:6px;padding:9px 12px;font-weight:700;font-size:13px;border-bottom:1px solid #eef1f5}
+    .lbg-cap span{flex:1}
+    .lbg-ib{border:0;background:none;cursor:pointer;font-size:13px;color:#5b6069;padding:2px 6px;border-radius:6px;font-family:inherit}
+    .lbg-ib:hover{background:#f1f3f6}.lbg-ib:disabled{opacity:.3;cursor:default}
+    .lbg-rm{color:#c0141e;font-weight:700}
+    .lbg-thumb{aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#f1f3f6;position:relative}
+    .lbg-thumb{overflow:hidden}.lbg-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+    .lbg-empty{color:#9aa0a8;font-size:13px;text-align:center;padding:0 12px}
+    .lbg-body{padding:12px}
+    .lbg-body label{display:block;font-weight:700;font-size:12px;margin-bottom:5px}
+    .lbg-body input[type=url]{width:100%;box-sizing:border-box;font-size:14px}
+    .lbg-help{color:#8b8f97;font-size:12px;margin:6px 0 0}
+    .lbg-msg{font-size:12px;margin:6px 0 0;display:none}
+    .lbg-msg.err{color:#c0141e}.lbg-msg.warn{color:#9a5b00}
+    .lbg-up{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12.5px;font-weight:700;color:#101013;cursor:pointer;border:1px dashed #cfd5dd;border-radius:8px;padding:7px 10px}
+    .lbg-up input{display:none}
+    .lbg-form{border:1px solid #e3e7ed;border-radius:14px;background:#fafbfc;padding:16px}
+    .lbg-hint{color:#8b8f97;font-size:12.5px;margin:12px 0 14px}
   </style>
   <script>
   (function(){
-    var form=document.getElementById('lbgForm'), btn=document.getElementById('lbgBtn');
-    var save=${JSON.stringify(t('landing.save'))}, up=${JSON.stringify(t('landing.uploading'))}, pickOne=${JSON.stringify(t('landing.pickOne'))}, failed=${JSON.stringify(t('landing.failed'))};
+    var T=${JSON.stringify(T).replace(/</g, '\\u003c')}, MAX=${Number(max) || 6};
+    var list=document.getElementById('lbgList'), add=document.getElementById('lbgAdd'), form=document.getElementById('lbgForm'), btn=document.getElementById('lbgBtn');
+    function el(tag, cls, html){ var e=document.createElement(tag); if(cls) e.className=cls; if(html!=null) e.innerHTML=html; return e; }
+    function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+    var BAD=/[\\s"'()\\\\<>]/;
+    function okUrl(v){ return /^https?:\\/\\//i.test(v) && !BAD.test(v); }
+    // Browser-side compression (same as before): max 1920px wide, JPEG q0.82.
     function compress(file){
       return createImageBitmap(file,{imageOrientation:'from-image'}).then(function(img){
         var maxW=1920, scale=Math.min(1, maxW/img.width);
@@ -1626,17 +1659,69 @@ function adminLanding({ staff, lang, urls, saved }) {
         return new Promise(function(res){ c.toBlob(function(b){res(b);}, 'image/jpeg', 0.82); });
       });
     }
-    form.addEventListener('submit', function(e){
+    function renumber(){
+      var cards=[].slice.call(list.children);
+      cards.forEach(function(c,i){ c.querySelector('.lbg-n').textContent=T.photo.replace('{n}', i+1); c.querySelector('.lbg-upb').disabled=i===0; c.querySelector('.lbg-dnb').disabled=i===cards.length-1; });
+      add.style.display=cards.length>=MAX?'none':'';
+    }
+    function card(url){
+      var c=el('div','lbg-card');
+      c.innerHTML='<div class="lbg-cap"><span class="lbg-n"></span>'
+        +'<button type="button" class="lbg-ib lbg-upb" title="'+esc(T.up)+'" aria-label="'+esc(T.up)+'">↑</button>'
+        +'<button type="button" class="lbg-ib lbg-dnb" title="'+esc(T.down)+'" aria-label="'+esc(T.down)+'">↓</button>'
+        +'<button type="button" class="lbg-ib lbg-rm">'+esc(T.remove)+'</button></div>'
+        +'<div class="lbg-thumb"><span class="lbg-empty">'+esc(T.none)+'</span><img alt="" hidden></div>'
+        +'<div class="lbg-body"><label>'+esc(T.url)+'</label><input type="url" name="urls[]" maxlength="1000" placeholder="https://media.20fit.id/..." autocomplete="off">'
+        +'<p class="lbg-help">'+esc(T.urlHint)+'</p><p class="lbg-msg lbg-m1"></p><p class="lbg-msg warn lbg-m2"></p>'
+        +'<label class="lbg-up">⬆ <span class="lbg-upt">'+esc(T.upload)+'</span><input type="file" accept="image/*"></label></div>';
+      var inp=c.querySelector('input[type=url]'), img=c.querySelector('img'), empty=c.querySelector('.lbg-empty'), m1=c.querySelector('.lbg-m1'), m2=c.querySelector('.lbg-m2'), file=c.querySelector('input[type=file]'), upt=c.querySelector('.lbg-upt');
+      var timer=null;
+      function msg(e,txt,cls){ e.textContent=txt||''; e.style.display=txt?'block':'none'; if(cls) e.className='lbg-msg '+cls+(e===m1?' lbg-m1':' lbg-m2'); }
+      img.onload=function(){ img.hidden=false; empty.style.display='none'; msg(m1,''); if(img.naturalWidth>2560) msg(m2,T.bigDim.replace('{w}',img.naturalWidth)); };
+      img.onerror=function(){ img.hidden=true; empty.style.display=''; msg(m1,T.loadErr,'err'); };
+      function check(v){
+        // Content-Length via the server (cross-origin sizes aren't readable here); a warning only.
+        fetch('/admin/landing/check?url='+encodeURIComponent(v)).then(function(r){ return r.json(); }).then(function(j){
+          if(inp.value.trim()!==v) return;
+          if(j && j.size && j.size>1048576) msg(m2,T.big.replace('{mb}',(j.size/1048576).toFixed(1)));
+        }).catch(function(){});
+      }
+      function upd(){
+        var v=inp.value.trim(); msg(m2,'');
+        if(!v){ img.hidden=true; img.removeAttribute('src'); empty.style.display=''; msg(m1,''); return; }
+        if(!okUrl(v)){ img.hidden=true; img.removeAttribute('src'); empty.style.display=''; msg(m1,T.proto,'err'); return; }
+        msg(m1,''); if(img.getAttribute('src')!==v) img.setAttribute('src',v);
+        clearTimeout(timer); timer=setTimeout(function(){ check(v); },500);
+      }
+      inp.addEventListener('input',upd);
+      file.addEventListener('change',function(){
+        var f=file.files[0]; if(!f) return;
+        upt.textContent=T.uploading; file.disabled=true;
+        compress(f).then(function(b){ var fd=new FormData(); fd.append('file',b,'hero.jpg'); return fetch('/admin/landing/upload',{method:'POST',body:fd}); })
+          .then(function(r){ return r.json(); })
+          .then(function(j){ if(!j||!j.ok||!j.url) throw new Error('bad'); inp.value=j.url; upd(); })
+          .catch(function(){ alert(T.upFailed); })
+          .then(function(){ upt.textContent=T.upload; file.disabled=false; file.value=''; });
+      });
+      c.querySelector('.lbg-rm').addEventListener('click',function(){ c.remove(); if(!list.children.length) list.appendChild(card('')); renumber(); });
+      c.querySelector('.lbg-upb').addEventListener('click',function(){ if(c.previousElementSibling) list.insertBefore(c,c.previousElementSibling); renumber(); });
+      c.querySelector('.lbg-dnb').addEventListener('click',function(){ if(c.nextElementSibling) list.insertBefore(c.nextElementSibling,c); renumber(); });
+      inp.value=url||''; upd();
+      return c;
+    }
+    var init=${JSON.stringify(list).replace(/</g, '\\u003c')};
+    (init.length?init:['']).forEach(function(u){ list.appendChild(card(u)); });
+    renumber();
+    add.addEventListener('click',function(){ if(list.children.length<MAX){ list.appendChild(card('')); renumber(); } });
+    form.addEventListener('submit',function(e){
       e.preventDefault();
-      var f1=document.getElementById('lbg1').files[0], f2=document.getElementById('lbg2').files[0];
-      if(!f1 && !f2){ alert(pickOne); return; }
-      btn.disabled=true; btn.textContent=up;
-      var fd=new FormData(), tasks=[];
-      if(f1) tasks.push(compress(f1).then(function(b){ fd.append('bg1', b, 'bg-1.jpg'); }));
-      if(f2) tasks.push(compress(f2).then(function(b){ fd.append('bg2', b, 'bg-2.jpg'); }));
-      Promise.all(tasks).then(function(){ return fetch('/admin/landing', { method:'POST', body:fd }); })
+      var vals=[].slice.call(list.querySelectorAll('input[type=url]')).map(function(i){ return i.value.trim(); }).filter(Boolean);
+      if(vals.some(function(v){ return !okUrl(v); })){ alert(T.invalid); return; }
+      var body=new URLSearchParams(); vals.forEach(function(v){ body.append('urls[]',v); });
+      btn.disabled=true; btn.textContent=T.saving;
+      fetch('/admin/landing',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()})
         .then(function(r){ if(r.ok){ window.location.href='/admin/landing?saved=1'; } else { throw new Error('bad'); } })
-        .catch(function(){ alert(failed); btn.disabled=false; btn.textContent=save; });
+        .catch(function(){ alert(T.failed); btn.disabled=false; btn.textContent=T.save; });
     });
   })();
   </script>`;

@@ -39,6 +39,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const dns = require('dns').promises;
+const net = require('net');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -114,8 +116,8 @@ const uploadDocs = multer({ storage: multer.memoryStorage(), limits: { fileSize:
   .fields([{ name: 'cv', maxCount: 1 }, { name: 'hyrox_cert', maxCount: 1 }]);
 // Landing background photos (super admin). Client compresses in-browser first,
 // so uploads land well under the image cap even for huge originals.
-const uploadLanding = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 2 } })
-  .fields([{ name: 'bg1', maxCount: 1 }, { name: 'bg2', maxCount: 1 }]);
+const uploadLanding = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 1 } }).single('file');
+const LANDING_MAX_PHOTOS = 6;
 
 const db = () => store();
 const needConfig = (req, res) => res.status(503).send(V.configError('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY', req && req.lang));
@@ -405,10 +407,27 @@ async function landingBgUrls(st) {
   return clean;
 }
 
+// Landing hero photos: the admin-managed URL list (talent_settings.hero_image_urls),
+// cached briefly. While that list is empty (or the column isn't there yet) the two
+// legacy storage files are used, so the hero never goes blank.
+let _heroCache = { at: 0, urls: null };
+function resetHeroCache() { _heroCache = { at: 0, urls: null }; resetLandingBgCache(); }
+async function heroImages(st) {
+  if (!st) return [];
+  if (!(_heroCache.at && Date.now() - _heroCache.at < 60 * 1000)) {
+    let list = null;
+    try { list = await st.getLandingImages(); } catch (_) { list = null; }
+    _heroCache = { at: Date.now(), urls: list };
+  }
+  const list = _heroCache.urls;
+  if (list && list.length) return list;
+  return landingBgUrls(st);
+}
+
 app.get('/', async (req, res, next) => {
   try {
     const st = db();
-    const bg = (await landingBgUrls(st)).filter(Boolean);
+    const bg = (await heroImages(st)).filter(Boolean);
     // Events currently open for registration (within the reg window + at least
     // one position whose quota isn't full), each with its still-open positions.
     // Same live EO data the talent /events list uses — no dummy/static data.
@@ -3693,32 +3712,88 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
   } catch (e) { next(e); }
 });
 
-// Super admin: manage the landing hero background photos (1-2, alternating).
+// Super admin: manage the landing hero background photos (a list of image URLs,
+// up to LANDING_MAX_PHOTOS, crossfading). Each photo is a URL; uploading a file is
+// a fallback that stores it in the public landing-assets bucket and returns its URL.
 app.get('/admin/landing', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const urls = (await st.landingBgUrls()) || [];
-    res.send(V.adminLanding({ staff: staffCtx(req), lang: req.lang, urls, saved: req.query.saved === '1' }));
+    const list = await st.getLandingImages();
+    // While nothing is saved yet the landing still shows the two legacy files —
+    // preview them and offer a one-click import into the URL list.
+    const legacy = (!list || !list.length) ? (((await st.landingBgUrls()) || []).filter(Boolean)) : [];
+    res.send(V.adminLanding({ staff: staffCtx(req), lang: req.lang, urls: list || [], legacy, dbReady: list !== null, max: LANDING_MAX_PHOTOS, saved: req.query.saved === '1', err: String(req.query.err || '') }));
   } catch (e) { next(e); }
 });
-app.post('/admin/landing', auth.requireStaff(['super_admin']), uploadLanding, async (req, res, next) => {
+app.post('/admin/landing', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return res.status(503).json({ ok: false, error: 'config' });
+    const urls = [].concat(req.body.urls || []).map((u) => String(u || '').trim()).filter(Boolean);
+    if (urls.length > LANDING_MAX_PHOTOS) return res.status(400).json({ ok: false, error: 'max' });
+    if (urls.some((u) => u.length > 1000 || !isPosterUrl(u))) return res.status(400).json({ ok: false, error: 'url' });
+    await st.setLandingImages(urls);
+    resetHeroCache();
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+// Fallback upload: one (browser-compressed) image → public URL. Doesn't save the
+// list by itself; the page drops the URL into the photo's URL field.
+app.post('/admin/landing/upload', auth.requireStaff(['super_admin']), uploadLanding, async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return res.status(503).json({ ok: false, error: 'config' });
+    const f = req.file;
+    if (!f || !f.buffer || !f.buffer.length || !/^image\/(jpeg|png|webp)$/.test(f.mimetype || '')) return res.status(400).json({ ok: false, error: 'no image' });
+    let url = await st.uploadLandingAsset(f.buffer, f.mimetype);
+    if (url && url.charAt(0) === '/') url = req.protocol + '://' + req.get('host') + url; // in-memory store
+    res.json({ ok: true, url });
+  } catch (e) { next(e); }
+});
+// One-off import of the two legacy storage files into the URL list (copies them to
+// landing-assets; the originals stay). Only while the list is still empty.
+app.post('/admin/landing/import-legacy', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const files = req.files || {};
-    const jobs = [];
-    [['bg1', 1], ['bg2', 2]].forEach(([field, slot]) => {
-      const f = files[field] && files[field][0];
-      if (f && f.buffer && f.buffer.length && /^image\//.test(f.mimetype || '')) {
-        jobs.push(st.putLandingBg(slot, f.buffer, f.mimetype));
-      }
-    });
-    if (!jobs.length) return res.status(400).json({ ok: false, error: 'no image' });
-    await Promise.all(jobs);
-    resetLandingBgCache();
-    res.json({ ok: true });
+    const cur = await st.getLandingImages();
+    if (cur && cur.length) return res.redirect('/admin/landing?lang=' + req.lang);
+    let urls = await st.copyLegacyLandingBgs();
+    urls = urls.map((u) => (u && u.charAt(0) === '/') ? req.protocol + '://' + req.get('host') + u : u);
+    if (!urls.length) return res.redirect('/admin/landing?lang=' + req.lang + '&err=import');
+    await st.setLandingImages(urls);
+    resetHeroCache();
+    res.redirect('/admin/landing?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
+});
+// Size check for a pasted image URL (the browser usually can't read a cross-origin
+// Content-Length). HEAD only, 5s timeout, and refuses hosts that resolve to private,
+// loopback or link-local addresses so it can't be used to probe the internal network.
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v = ip.toLowerCase();
+  if (v.startsWith('::ffff:')) return isPrivateIp(v.slice(7));
+  return v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80');
+}
+app.get('/admin/landing/check', auth.requireStaff(['super_admin']), async (req, res) => {
+  const raw = String(req.query.url || '');
+  if (!isPosterUrl(raw)) return res.json({ ok: false });
+  try {
+    let u = new URL(raw);
+    for (let hop = 0; hop < 3; hop++) {
+      const addrs = await dns.lookup(u.hostname, { all: true });
+      if (!addrs.length || addrs.some((x) => isPrivateIp(x.address))) return res.json({ ok: false });
+      const r = await fetch(u, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5000) });
+      if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { u = new URL(r.headers.get('location'), u); if (!/^https?:$/.test(u.protocol)) return res.json({ ok: false }); continue; }
+      const len = parseInt(r.headers.get('content-length') || '', 10);
+      return res.json({ ok: r.ok, size: Number.isFinite(len) ? len : null, type: r.headers.get('content-type') || null });
+    }
+    res.json({ ok: false });
+  } catch (_) { res.json({ ok: false }); }
 });
 
 // Aplikasi MP (super admin only): review Man Power event applications.
