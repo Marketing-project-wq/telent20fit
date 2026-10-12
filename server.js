@@ -963,8 +963,45 @@ const CONFIRM_TIMEOUT_NOTE = 'Otomatis: tidak konfirmasi kehadiran dalam batas w
 // window length itself lives in one place (views.CONFIRM_WINDOW_HOURS).
 const CONFIRM_ENFORCED_SINCE = process.env.CONFIRM_ENFORCED_SINCE || '2026-09-01T00:00:00Z';
 
+// Talent categories derived from what each talent applied for: talentId -> Set of
+// 'kol' | 'photographer' | 'manpower' (from every pick's position category). A talent
+// with no picks yet has no category. talent_type on the account is NOT used — it's
+// the sign-up default ('kol' for everyone on the unified form).
+function talentCategoryMap(apps, choices, positions) {
+  const posById = new Map((positions || []).map((p) => [String(p.id), p]));
+  const talentByApp = new Map((apps || []).map((a) => [a.id, a.talent_id]));
+  const out = new Map();
+  (choices || []).forEach((c) => {
+    const tid = talentByApp.get(c.application_id); const p = posById.get(String(c.position_id));
+    if (!tid || !p) return;
+    if (!out.has(tid)) out.set(tid, new Set());
+    out.get(tid).add(V.positionCategory(p));
+  });
+  return out;
+}
+function talentCategoryCounts(talents, catMap) {
+  const n = { kol: 0, photographer: 0, manpower: 0, multi: 0, none: 0 };
+  (talents || []).forEach((tt) => {
+    const cs = catMap.get(tt.id);
+    if (!cs || !cs.size) { n.none++; return; }
+    cs.forEach((c) => { n[c]++; });
+    if (cs.size > 1) n.multi++;
+  });
+  return n;
+}
+
+// Super Admin review tabs ('man_power' | 'kol' | 'creative') an application belongs
+// to: one per category among its picks (each pick carries .category from
+// V.positionCategory). Applications without picks (old category forms) fall back
+// to their talent_type, as before.
+function reviewCatsOf(choices, talentType) {
+  const out = new Set((choices || []).map((c) => V.REVIEW_CAT[c.category || V.positionCategory(c)]).filter(Boolean));
+  if (!out.size) out.add(talentType === 'kol' ? 'kol' : (talentType === 'fotografer' ? 'creative' : 'man_power'));
+  return out;
+}
+
 // Has this talent confirmed the KOL category yet? True once they have at least one
-// application to a KOL-category position (position.key === 'kol'). This gates the
+// application to a KOL-category position (talent_category 'kol'). This gates the
 // "Post Proofs" bottom-nav item + the /kirim-bukti page — Post Proofs is a KOL-only
 // feature, so a fresh account (or one that only applied to non-KOL roles like Judge)
 // shouldn't see it until a KOL application confirms the category. Attached to
@@ -973,7 +1010,7 @@ async function talentIsKol(st, talentId) {
   const [myApps, allPositions] = await Promise.all([st.listApplicationsForTalent(talentId), st.listPositions()]);
   if (!myApps || !myApps.length) return false;
   const appIds = new Set(myApps.map((a) => a.id));
-  const kolPosIds = new Set((allPositions || []).filter((p) => p.key === 'kol').map((p) => String(p.id)));
+  const kolPosIds = new Set((allPositions || []).filter((p) => V.positionCategory(p) === 'kol').map((p) => String(p.id)));
   if (!kolPosIds.size) return false;
   const choices = await st.listApplicationChoices();
   return choices.some((c) => appIds.has(c.application_id) && kolPosIds.has(String(c.position_id)));
@@ -1690,7 +1727,7 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
     if (pos.closed_at || pos.full) return fail('ta.err.notOpen');
     if ((ctx.myChoices || []).length >= 3) return fail('ta.err.max3'); // max 3 ranked picks per event
     // Creator positions (KOL / photographer / videographer) require CV + portfolio on file.
-    if (V.CREATOR_ROLES.includes(pos.key) && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
+    if (V.positionCategory(pos) !== 'manpower' && req.talent.type === 'kol' && !V.hasCreatorDocs(req.account)) return res.redirect('/dokumen?need=1&lang=' + req.lang);
     let appId = ctx.myApp ? ctx.myApp.id : null;
     if (!appId) {
       const app = await st.createApplication({ event_id: ev.id, talent_id: req.talent.id, talent_type: req.talent.type, role: null, answers: null });
@@ -3141,7 +3178,7 @@ async function buildEoApplicant(st, staffId, appId) {
   const choices = (choicesAll || []).filter((c) => c.application_id === app.id).slice().sort((x, y) => x.priority - y.priority).map((c) => {
     const mp = posMaster.get(c.position_id) || {}; const ep = evPosById.get(c.position_id) || {}; const quota = ep.quota || 0;
     const full = quota > 0 && !c.accepted && (acceptedByPos.get(c.position_id) || 0) >= quota;
-    return { priority: c.priority, position_id: c.position_id, key: mp.key, label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
+    return { priority: c.priority, position_id: c.position_id, key: mp.key, category: V.positionCategory(mp), label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
   });
   return {
     id: app.id, eventId: ev.id, eventName: ev.name || '—',
@@ -3416,8 +3453,9 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [rawProofs, events, talentsAll, assignments, settings, allApps] = await Promise.all([
+    const [rawProofs, events, talentsAll, assignments, settings, allApps, choicesAll, positionsAll] = await Promise.all([
       st.listProofs(), st.listEvents(), st.listTalents(), st.listAssignments(), st.getSettings(), st.listApplications(),
+      st.listApplicationChoices().catch(() => []), st.listPositions().catch(() => []),
     ]);
     const talentNameById = new Map(talentsAll.map((t) => [t.id, t.name]));
     const proofs = rawProofs.map((p) => ({ ...p, talent_name: talentNameById.get(p.talent_id) || p.submitter_name || null }));
@@ -3429,6 +3467,8 @@ app.get('/admin', auth.requireStaff(['super_admin']), async (req, res, next) => 
       applied: new Set(allApps.map((a) => a.talent_id)).size,
       assigned: new Set(allApps.filter((a) => a.status === 'assigned').map((a) => a.talent_id)).size,
       mainPower: talentsAll.filter((tt) => tt.talent_type === 'main_power').length,
+      // Per category, from the positions each talent applied for (see talentCategoryMap).
+      byCat: talentCategoryCounts(talentsAll, talentCategoryMap(allApps, choicesAll, positionsAll)),
     };
     // Event Statistics is embedded in the dashboard; a super admin sees every event.
     const evSorted = events.slice().sort((a, b) => String(b.starts_at || b.created_at || '').localeCompare(String(a.starts_at || a.created_at || '')));
@@ -3797,6 +3837,32 @@ app.get('/admin/landing/check', auth.requireStaff(['super_admin']), async (req, 
 });
 
 // Aplikasi MP (super admin only): review Man Power event applications.
+// Super Admin: talent directory split by category (derived from applied positions),
+// with server-side search + paging. Read-only — accounts aren't modified here.
+const TALENT_DIR_PAGE = 50;
+app.get('/admin/talents', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const [talents, apps, choices, positions] = await Promise.all([st.listTalents(), st.listApplications(), st.listApplicationChoices(), st.listPositions()]);
+    const catMap = talentCategoryMap(apps, choices, positions);
+    const appCount = new Map(); apps.forEach((a) => appCount.set(a.talent_id, (appCount.get(a.talent_id) || 0) + 1));
+    const counts = talentCategoryCounts(talents, catMap);
+    const cat = ['kol', 'photographer', 'manpower', 'multi', 'none'].includes(String(req.query.cat)) ? String(req.query.cat) : '';
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+    let rows = talents.map((tt) => ({ id: tt.id, name: tt.name || '', login: tt.login || '', phone: tt.phone || '', city: tt.city || '', created_at: tt.created_at || '', cats: [...(catMap.get(tt.id) || [])], apps: appCount.get(tt.id) || 0 }));
+    if (cat === 'multi') rows = rows.filter((r) => r.cats.length > 1);
+    else if (cat === 'none') rows = rows.filter((r) => !r.cats.length);
+    else if (cat) rows = rows.filter((r) => r.cats.includes(cat));
+    if (q) rows = rows.filter((r) => (r.name + ' ' + r.login + ' ' + r.phone).toLowerCase().indexOf(q) >= 0);
+    rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / TALENT_DIR_PAGE));
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    res.send(V.adminTalents({ staff: staffCtx(req), rows: rows.slice((page - 1) * TALENT_DIR_PAGE, page * TALENT_DIR_PAGE), total, page, pages, counts, all: talents.length, cat, q, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
 app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
@@ -3831,7 +3897,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
           const evPos = (evPositions.get(a.event_id) || []).find((ep) => ep.position_id === c.position_id);
           const quota = evPos ? evPos.quota : 0;
           const full = quota > 0 && !c.accepted && (acceptedCount.get(a.event_id + '|' + c.position_id) || 0) >= quota;
-          return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, accepted: !!c.accepted, full };
+          return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, category: V.positionCategory(p), accepted: !!c.accepted, full };
         });
       const proposals = (proposalsByApp.get(a.id) || []).map((p) => {
         const pp = posById.get(p.position_id) || {};
@@ -3854,16 +3920,14 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       path: '/absensi/' + encodeURIComponent(eid) + '?k=' + auth.attendanceToken(eid),
     })).sort((a, b) => a.name.localeCompare(b.name));
     // Separate the review by category so cert-required creators (KOL / photog /
-    // videog) don't get mixed with Man Power crew. Category = the primary (P1)
-    // position, falling back to talent_type for the older category-form apps.
+    // videog) don't get mixed with Man Power crew. An application belongs to every
+    // category it has a pick in (P1, P2 or P3 — talent_positions.talent_category),
+    // so a cross-category applicant shows in each relevant tab; older apps without
+    // picks fall back to talent_type. Optional server-side search on name/email/phone.
     const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
-    const catOf = (a) => {
-      const primary = (a.choices && a.choices[0] && a.choices[0].key) || a.talent_type;
-      if (primary === 'kol') return 'kol';
-      if (primary === 'fotografer' || primary === 'videografer') return 'creative';
-      return 'man_power';
-    };
-    const inCat = applications.filter((a) => catOf(a) === cat);
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
+    const inCat = applications.filter((a) => reviewCatsOf(a.choices, a.talent_type).has(cat)
+      && (!q || [a.talent_name, a.talent_login, a.profile && a.profile.phone].filter(Boolean).join(' ').toLowerCase().indexOf(q) >= 0));
     // One event at a time: no ?event → show the event picker; ?event=<id> → that
     // event's own dashboard (summary/filters/list all scoped to it), so events never mix.
     const selEv = String(req.query.event || '');
@@ -3873,11 +3937,11 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       const pickEvents = events.filter((e) => evCount.has(e.id))
         .map((e) => ({ id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, count: evCount.get(e.id) }))
         .sort((a, b) => String(b.starts_at || '').localeCompare(String(a.starts_at || '')) || String(a.name).localeCompare(String(b.name)));
-      return res.send(V.adminApplicationsEventPicker({ staff: staffCtx(req), cat, events: pickEvents, total: inCat.length, lang: req.lang }));
+      return res.send(V.adminApplicationsEventPicker({ staff: staffCtx(req), cat, q, events: pickEvents, total: inCat.length, lang: req.lang }));
     }
     const filtered = inCat.filter((a) => a.event_id === selEv);
     const selEvent = eventById.get(selEv) || null;
-    res.send(V.adminApplications({ staff: staffCtx(req), applications: filtered, attendanceLinks, cat, event: selEvent ? { id: selEvent.id, name: selEvent.name } : { id: selEv, name: '—' }, lang: req.lang, flash: String(req.query.mail || '') }));
+    res.send(V.adminApplications({ staff: staffCtx(req), q, applications: filtered, attendanceLinks, cat, event: selEvent ? { id: selEvent.id, name: selEvent.name } : { id: selEv, name: '—' }, lang: req.lang, flash: String(req.query.mail || '') }));
   } catch (e) { next(e); }
 });
 
@@ -4675,11 +4739,10 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
     (reviewMarksAll || []).forEach((r) => { const arr = reviewsByApp.get(r.application_id) || []; arr.push(r); reviewsByApp.set(r.application_id, arr); });
     const L = req.lang;
     const posText = (p) => ((L === 'id' ? (p.label_id || p.label_en) : (p.label_en || p.label_id)) || p.key || '');
-    const catKeyOf = (k) => (k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'creative' : 'man_power'));
     const rows = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
       const ch = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
-        .map((c) => { const p = posById.get(c.position_id) || {}; return { priority: c.priority, key: p.key || '', label: posText(p) }; });
+        .map((c) => { const p = posById.get(c.position_id) || {}; return { priority: c.priority, key: p.key || '', category: V.positionCategory(p), label: posText(p) }; });
       const p1key = (ch[0] && ch[0].key) || '';
       const fol = (tt.instagram_followers != null && tt.instagram_followers !== '') ? parseInt(tt.instagram_followers, 10) : null;
       const prStatus = (proposalsByApp.get(a.id) || []).length ? 'proposed' : ((reviewsByApp.get(a.id) || []).length ? 'reviewednp' : 'unreviewed');
@@ -4688,7 +4751,7 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
         ...(reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name),
       ].filter(Boolean))).join('; ');
       return {
-        cat: catKeyOf(p1key || a.talent_type), p1key,
+        cats: reviewCatsOf(ch, a.talent_type), p1key,
         name: tt.name || '', email: tt.login || '', phone: tt.phone || '',
         positions: ch.map((c) => 'P' + c.priority + ' ' + c.label).join(' | '),
         status: a.status || 'applied', prStatus, reviewer,
@@ -4699,7 +4762,7 @@ app.get('/admin/applications/export.csv', auth.requireStaff(['super_admin']), as
       };
     });
     const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
-    let out = rows.filter((r) => r.cat === cat);
+    let out = rows.filter((r) => r.cats.has(cat));
     const evf = String(req.query.event || ''); // scope the export to one event when the page is
     if (evf) out = out.filter((r) => r.eventId === evf); // opened per-event (matches what's on screen)
     const q = String(req.query.q || '').trim().toLowerCase();

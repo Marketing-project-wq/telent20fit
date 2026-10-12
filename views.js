@@ -613,6 +613,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
         + navLink('/admin/applications', 'applications', active, 'applications', t('nav.applications'))
         + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'proofs', t('nav.appKol'))
         + navLink('/admin/applications?cat=creative', 'applications-creative', active, 'proofs', t('nav.appCreative'))
+        + navLink('/admin/talents', 'talents', active, 'applications', t('nav.talentDir'))
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
@@ -1580,6 +1581,48 @@ ${landingNav(lang, 'about')}
 <section class="ab-cta"><a href="/register${q}">${esc(t('land.join'))}</a></section>
 <footer class="ab-foot">talent.20fit.id · © 2026 PT Kredo AUM · <a href="/${q}">${esc(t('nav.home'))}</a> · <a href="/login/eo">${esc(t('foot.eoLogin'))}</a></footer>
 </body></html>`;
+}
+
+/** Super Admin talent directory: accounts split by category (from the positions they applied for). */
+function adminTalents({ staff, rows, total, page, pages, counts, all, cat, q, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const c = counts || {};
+  const qs = (o) => { const p = Object.assign({ cat, q, page: '' }, o); return '?' + ['cat', 'q', 'page'].filter((k) => p[k]).map((k) => k + '=' + encodeURIComponent(p[k])).concat('lang=' + L).join('&'); };
+  const tab = (key, label, n) => `<a href="/admin/talents${qs({ cat: key, page: '' })}" class="btn btn-sm${cat === key ? '' : ' btn-ghost'}">${esc(label)} <span style="opacity:.75">${n}</span></a>`;
+  const chip = (k) => `<span class="tag">${esc(t('cat.' + k))}</span>`;
+  const trs = (rows || []).map((r) => `<tr>
+      <td data-label="${esc(t('td.name'))}"><b>${esc(r.name || '—')}</b><div class="muted" style="font-size:12px">${esc(r.login)}</div></td>
+      <td data-label="${esc(t('dd.phone'))}">${esc(r.phone || '—')}</td>
+      <td data-label="${esc(t('dd.city'))}">${esc(r.city || '—')}</td>
+      <td data-label="${esc(t('td.category'))}">${r.cats.length ? r.cats.map(chip).join(' ') : `<span class="muted">${esc(t('td.none'))}</span>`}</td>
+      <td data-label="${esc(t('td.apps'))}" style="text-align:right">${r.apps}</td>
+      <td data-label="${esc(t('td.joined'))}">${r.created_at ? esc(fmtDay(String(r.created_at).slice(0, 10))) : '—'}</td>
+    </tr>`).join('');
+  const pager = pages > 1 ? `<div style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px">
+    ${page > 1 ? `<a class="btn btn-ghost btn-sm" href="/admin/talents${qs({ page: page - 1 })}">← ${t('proofs.prev')}</a>` : ''}
+    <span class="muted" style="font-size:13px">${t('proofs.pageOf', { page, pages })}</span>
+    ${page < pages ? `<a class="btn btn-ghost btn-sm" href="/admin/talents${qs({ page: page + 1 })}">${t('proofs.next')} →</a>` : ''}
+  </div>` : '';
+  const body = `<div class="wrap">
+  ${staffHead(staff, t('td.title'), L)}
+  <p class="muted" style="font-size:13px;margin:6px 0 0">${t('td.intro')}</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+    ${tab('', t('td.all'), all)}${tab('manpower', t('cat.manpower'), c.manpower || 0)}${tab('kol', t('cat.kol'), c.kol || 0)}${tab('photographer', t('cat.photographer'), c.photographer || 0)}${tab('multi', t('td.multi'), c.multi || 0)}${tab('none', t('td.none'), c.none || 0)}
+  </div>
+  <form method="get" action="/admin/talents" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+    ${cat ? `<input type="hidden" name="cat" value="${esc(cat)}">` : ''}<input type="hidden" name="lang" value="${L}">
+    <input type="search" name="q" value="${esc(q || '')}" placeholder="${esc(t('mpr.searchPh'))}" aria-label="${esc(t('mpr.searchPh'))}" style="flex:1 1 260px;min-width:0;max-width:420px;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--card);color:var(--ink);font-family:inherit">
+    <button type="submit" class="btn btn-sm">${esc(t('mpr.searchBtn'))}</button>
+    ${q ? `<a class="btn btn-ghost btn-sm" href="/admin/talents${qs({ q: '', page: '' })}">${esc(t('mpr.searchClear'))}</a>` : ''}
+    <span class="muted" style="font-size:13px;margin-left:auto">${t('proofs.resultCount', { n: total })}</span>
+  </form>
+  ${total ? `<div class="card" style="margin-top:14px"><div class="table-wrap"><table>
+    <thead><tr><th>${t('td.name')}</th><th>${t('dd.phone')}</th><th>${t('dd.city')}</th><th>${t('td.category')}</th><th style="text-align:right">${t('td.apps')}</th><th>${t('td.joined')}</th></tr></thead>
+    <tbody>${trs}</tbody>
+  </table></div></div>${pager}` : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('td.empty')}</p></div>`}
+</div>`;
+  return appLayout({ title: t('td.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'talents', user: staff && staff.name, lang: L });
 }
 
 /** Super-admin manager for the landing hero background photos (a list of image URLs, crossfading). */
@@ -3133,7 +3176,6 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   const dval = (v) => esc(String(v || '').slice(0, 10));
   const field = (name, label, val, type, required, extra) => `<div class="field"><label for="${name}">${label}${required ? rq : ''}</label><input type="${type || 'text'}" id="${name}" name="${name}" ${required ? 'required' : ''} value="${esc(val || '')}" ${extra || ''}></div>`;
   const status = e.status || 'draft';
-  const KOL_KEYS = ['kol', 'fotografer', 'videografer'];
   const posRow = (p) => {
     const on = Object.prototype.hasOwnProperty.call(sel, p.id);
     const cur = on ? sel[p.id] : null;
@@ -3164,7 +3206,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
     // data-cat marks the group so the event-type filter only touches Manpower rows.
-    const rowCat = p.key === 'other' ? 'other' : (KOL_KEYS.includes(p.key) ? 'kol' : 'mp');
+    const rowCat = p.key === 'other' ? 'other' : (positionCategory(p) !== 'manpower' ? 'kol' : 'mp');
     const name = posLabel(p, L);
     // Compact row: [tick] name [modified badge] … [quota] [Edit detail]. The
     // Description/Jobdesk/Requirement fields live in a collapsed panel below.
@@ -3198,9 +3240,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     </div>`;
   };
   const gHead = (txt) => `<div class="pm-sec">${txt}</div>`;
-  const mpRows = (positionsMaster || []).filter((p) => p.key !== 'other' && !KOL_KEYS.includes(p.key));
+  const mpRows = (positionsMaster || []).filter((p) => p.key !== 'other' && positionCategory(p) === 'manpower');
   const otherRows = (positionsMaster || []).filter((p) => p.key === 'other');
-  const kolRows = (positionsMaster || []).filter((p) => KOL_KEYS.includes(p.key));
+  const kolRows = (positionsMaster || []).filter((p) => p.key !== 'other' && positionCategory(p) !== 'manpower');
   // Group Manpower roles by division (roles without one fall under "General",
   // together with the custom "Lainnya" slot).
   const mpByDiv = {};
@@ -5034,6 +5076,18 @@ function certVerifyPage({ cert, certNo, lang }) {
 const CAT_LABEL = { kol: 'KOL', fotografer: 'Photographer', main_power: 'Man Power' };
 // Content-creator roles that must have a CV + portfolio on file before applying.
 const CREATOR_ROLES = ['kol', 'fotografer', 'videografer'];
+// Talent category of a position: 'kol' | 'photographer' | 'manpower'. Read from
+// talent_positions.talent_category; positions without one fall back to the key
+// mapping the app has always used (kol / fotografer+videografer / everything else).
+const TALENT_CATEGORIES = ['manpower', 'kol', 'photographer'];
+function positionCategory(p) {
+  const c = p && p.talent_category;
+  if (c === 'kol' || c === 'photographer' || c === 'manpower') return c;
+  const k = p && p.key;
+  return k === 'kol' ? 'kol' : (k === 'fotografer' || k === 'videografer' ? 'photographer' : 'manpower');
+}
+// The admin review tabs name the categories man_power / kol / creative.
+const REVIEW_CAT = { manpower: 'man_power', kol: 'kol', photographer: 'creative' };
 const hasCreatorDocs = (acc) => !!(acc && acc.cv_path && acc.portfolio_url && String(acc.portfolio_url).trim());
 // Per-category application fields (beyond name + phone, which prefill from the
 // profile). label/ph/hint are i18n keys. type: text|number|url. req: required.
@@ -5896,6 +5950,9 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
     ${widget('📅', t('dash.wUpcoming'), upcoming.length, upcoming.length ? listNames(upcoming) : t('dash.none'))}
     ${financeWidgets}
   </div>
+  ${ts.byCat ? `<div class="section-head"><h2 style="margin:0">${t('dash.byCat')}</h2><a href="/admin/talents?lang=${L}" class="btn btn-ghost btn-sm">${t('dash.byCatOpen')} →</a></div>
+  <div class="stat-grid">${[['manpower', t('cat.manpower')], ['kol', t('cat.kol')], ['photographer', t('cat.photographer')], ['multi', t('td.multi')], ['none', t('td.none')]].map(([k, lab]) => `<a href="/admin/talents?cat=${k}&lang=${L}" class="stat" style="text-decoration:none;color:inherit"><div class="n">${fmtNum(ts.byCat[k] || 0)}</div><div class="l">${esc(lab)}</div></a>`).join('')}</div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">${t('dash.byCatHint')}</p>` : ''}
 
   <div class="section-head"><h2 style="margin:0">🔔 ${t('dash.wDeadline')}</h2></div>
   <div class="card" style="margin-top:14px">${deadlineBody}</div>
@@ -6812,7 +6869,7 @@ function adminApplicantCard(a, L, cat) {
   const posBlock = choices.length
     ? `<div style="margin-top:8px">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('mpr.positionsTitle')}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => `<span class="tag">P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}</span>`).join('')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${choices.map((c) => { const other = cat && c.category && REVIEW_CAT[c.category] !== cat; return `<span class="tag"${other ? ' style="opacity:.6" title="' + esc(t('mpr.otherCat')) + '"' : ''}>P${c.priority} · ${esc(posLabel(c, L))}${c.accepted ? ' ✓' : ''}${other ? ' · ' + esc(t('cat.' + c.category)) : ''}</span>`; }).join('')}</div>
         </div>`
     : '';
   const nextUrl = `/admin/applications?cat=${esc(cat)}#ap-${esc(a.id)}`;
@@ -6862,7 +6919,7 @@ function adminApplicantCard(a, L, cat) {
 // Event picker for a Super Admin applicant category (Man Power / KOL / Photographer).
 // Shown when no ?event is selected, so each event opens its OWN scoped dashboard and
 // applications never mix across events. Clicking a card → /admin/applications?cat&event.
-function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
+function adminApplicationsEventPicker({ staff, cat, q, events, total, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const evs = events || [];
@@ -6873,7 +6930,7 @@ function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
     const s = e.starts_at ? fmtDay(e.starts_at) : '';
     const en = e.ends_at && String(e.ends_at) !== String(e.starts_at) ? fmtDay(e.ends_at) : '';
     const date = s ? (en ? s + ' – ' + en : s) : '';
-    return `<a href="/admin/applications?cat=${esc(cat)}&event=${esc(e.id)}&lang=${L}" class="card" style="display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;padding:16px 18px;margin:0">
+    return `<a href="/admin/applications?cat=${esc(cat)}&event=${esc(e.id)}${q ? '&q=' + encodeURIComponent(q) : ''}&lang=${L}" class="card" style="display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;padding:16px 18px;margin:0">
       <div style="font-weight:800;font-size:16px">📁 ${esc(e.name)}</div>
       ${date ? `<div class="muted" style="font-size:12.5px">${esc(date)}</div>` : ''}
       <div style="font-size:13px"><b>${t('mpr.count', { n: e.count })}</b> →</div>
@@ -6884,12 +6941,24 @@ function adminApplicationsEventPicker({ staff, cat, events, total, lang }) {
     : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${catEmpty}</p></div>`;
   const body = `<div class="wrap">
   ${staffHead(staff, catTitle, L)}
-  <p class="muted" style="font-size:13px;margin:8px 0 0">${t('mpr.pickEvent')}</p>
+  ${apSearchForm(cat, q, '', L)}
+  <p class="muted" style="font-size:13px;margin:8px 0 0">${q ? t('mpr.searchResult', { q: esc(q), n: total }) : t('mpr.pickEvent')}</p>
   ${grid}
 </div>`;
   return appLayout({ title: catTitle + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: catActive, user: staff && staff.name, lang: L });
 }
-function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat, event }) {
+// Server-side search (name / email / phone) for the Super Admin review tabs; scoped
+// to the current category (and event, when one is open).
+function apSearchForm(cat, q, eventId, L) {
+  const t = (k, v) => tr(L, k, v);
+  return `<form method="get" action="/admin/applications" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+    <input type="hidden" name="cat" value="${esc(cat)}">${eventId ? `<input type="hidden" name="event" value="${esc(eventId)}">` : ''}<input type="hidden" name="lang" value="${L}">
+    <input type="search" name="q" value="${esc(q || '')}" placeholder="${esc(t('mpr.searchPh'))}" aria-label="${esc(t('mpr.searchPh'))}" style="flex:1 1 260px;min-width:0;max-width:420px;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--card);color:var(--ink);font-family:inherit">
+    <button type="submit" class="btn btn-sm">${esc(t('mpr.searchBtn'))}</button>
+    ${q ? `<a class="btn btn-ghost btn-sm" href="/admin/applications?cat=${esc(cat)}${eventId ? '&event=' + esc(eventId) : ''}&lang=${L}">${esc(t('mpr.searchClear'))}</a>` : ''}
+  </form>`;
+}
+function adminApplications({ staff, applications, attendanceLinks, lang, flash, cat, event, q }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   applications = applications || [];
@@ -6993,6 +7062,7 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   ${staffHead(staff, catTitle, L)}
   ${flashBanner}
   <a href="/admin/applications?cat=${esc(cat)}&lang=${L}" class="btn btn-ghost btn-sm" style="margin-top:8px">← ${t('mpr.backToEvents')}</a>
+  ${apSearchForm(cat, q, event && event.id, L)}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${event && event.name ? '<b>' + esc(event.name) + '</b> · ' : ''}${t('mpr.count', { n: applications.length })}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -7748,7 +7818,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const posIcon = (key) => POS_ICONS[key] || _svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.4h6V7H9z"/><path d="M8.5 11h7M8.5 15h4.5"/>');
   const card = (p) => {
     const isOpen = !p.closed_at && !p.full;
-    const lock = docsMissing && CREATOR_ROLES.includes(p.key);
+    const lock = docsMissing && positionCategory(p) !== 'manpower';
     // Fall back to the role's default template (in the current language) for
     // Description / Jobdesk / Requirement when the EO left them empty — so every
     // card is consistent, including positions created before the template feature.
@@ -7843,13 +7913,25 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   };
   // Group the position cards by division (full-width heading spans the grid).
   const divHeadL = (label) => `<div style="grid-column:1/-1;width:100%;flex-basis:100%;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#6b6b70);margin:8px 0 0">${esc(label)}</div>`;
-  const byDivL = new Map();
-  posSorted.forEach((p) => { const d = p.division || ''; const a = byDivL.get(d) || []; a.push(p); byDivL.set(d, a); });
-  const divKeysL = [...byDivL.keys()].sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
-  const showDivHeads = divKeysL.some((d) => d) && divKeysL.length > 1;
-  const cardsHtml = showDivHeads
-    ? divKeysL.map((d) => divHeadL(d || t('eo.ev.divGeneral')) + byDivL.get(d).map(card).join('')).join('')
-    : posSorted.map(card).join('');
+  // Division grouping within one list of positions (same as before).
+  const divGroups = (list) => {
+    const byDivL = new Map();
+    list.forEach((p) => { const d = p.division || ''; const a = byDivL.get(d) || []; a.push(p); byDivL.set(d, a); });
+    const divKeysL = [...byDivL.keys()].sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
+    const showDivHeads = divKeysL.some((d) => d) && divKeysL.length > 1;
+    return showDivHeads
+      ? divKeysL.map((d) => divHeadL(d || t('eo.ev.divGeneral')) + byDivL.get(d).map(card).join('')).join('')
+      : list.map(card).join('');
+  };
+  // When an event opens positions in more than one talent category, group them by
+  // category first (Man Power / KOL / Photographer-Videographer), then by division.
+  const byCatL = new Map(TALENT_CATEGORIES.map((c) => [c, []]));
+  posSorted.forEach((p) => byCatL.get(positionCategory(p)).push(p));
+  const catKeysL = TALENT_CATEGORIES.filter((c) => byCatL.get(c).length);
+  const catHeadL = (label) => `<div style="grid-column:1/-1;width:100%;flex-basis:100%;font-weight:800;font-size:15px;margin:14px 0 0;padding-top:10px;border-top:1px solid var(--line,#e3e7ed)">${esc(label)}</div>`;
+  const cardsHtml = catKeysL.length > 1
+    ? catKeysL.map((c) => catHeadL(t('cat.' + c)) + divGroups(byCatL.get(c))).join('')
+    : divGroups(posSorted);
 
   // Shared confirmation modal for every per-position "Lamar" button. Clicking a
   // Lamar button fills in the position + event name and asks to confirm; "Ya,
@@ -7886,7 +7968,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   const regClosedBanner = (!ctx.regOpen && !(ctx.myApps || []).length) ? `<div class="banner banner-warn" style="margin-top:14px">${t('ta.regClosed')}</div>` : '';
 
   // Creator accounts missing CV/portfolio can't apply to KOL/photog/videog positions.
-  const creatorOpen = (ctx.openPositions || []).some((p) => CREATOR_ROLES.includes(p.key));
+  const creatorOpen = (ctx.openPositions || []).some((p) => positionCategory(p) !== 'manpower');
   const docsWarn = (docsMissing && creatorOpen)
     ? `<div class="banner banner-warn" style="margin-top:14px">${t('doc.eventWarn')} <a href="/dokumen?need=1&lang=${L}" style="font-weight:700;white-space:nowrap">${t('doc.completeNow')}</a></div>`
     : '';
@@ -7937,10 +8019,10 @@ module.exports = {
   CONFIRM_WINDOW_HOURS,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
-  kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
+  kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, TALENT_CATEGORIES, positionCategory, REVIEW_CAT, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminTalents, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,

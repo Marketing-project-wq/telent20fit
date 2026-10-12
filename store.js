@@ -359,7 +359,7 @@ function supabaseStore() {
     // of the standard type filters / pickers.
     async createCustomPosition({ name, name_en, division }) {
       const key = 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      const row = { key, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true };
+      const row = { key, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true, talent_category: 'manpower' };
       const { data, error } = await sb.from('talent_positions').insert(row).select('id,key,label_id,label_en,division').maybeSingle();
       if (error) throw new Error(error.message);
       return data;
@@ -377,9 +377,9 @@ function supabaseStore() {
     },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
-        .select('id,quota,closed_at,division,sort_order,updated_at,is_optional,is_custom,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division)').eq('event_id', eventId);
+        .select('id,quota,closed_at,division,sort_order,updated_at,is_optional,is_custom,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division,talent_category)').eq('event_id', eventId);
       if (error) throw new Error(error.message);
-      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, is_optional: !!r.is_optional, is_custom: !!r.is_custom, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, is_optional: !!r.is_optional, is_custom: !!r.is_custom, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, talent_category: (r.talent_positions && r.talent_positions.talent_category) || null, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
         .sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     // Diff/upsert instead of delete+reinsert so row ids (and their quota logs)
@@ -860,7 +860,7 @@ function memoryStore() {
     ['run_crew_drop_bag', 'Crew Drop Bag', 'Drop Bag Crew', 340, 'Drop Bag'],
     ['run_information_crew', 'Information Crew', 'Information Crew', 350, 'Information'],
     ['other', 'Lainnya', 'Other', 200],
-  ].map(([key, label_id, label_en, sort, division]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, division: division || null, is_active: true, is_custom: false }));
+  ].map(([key, label_id, label_en, sort, division]) => ({ id: 'pos-' + key, key, label_id, label_en, sort, division: division || null, is_active: true, is_custom: false, talent_category: key === 'kol' ? 'kol' : (key === 'fotografer' || key === 'videografer' ? 'photographer' : 'manpower') }));
   // Managed event types (HYROX + Lari active); each auto-fills its default positions in the form.
   // 'other' (Lainnya) is the custom slot — never part of a type's default set.
   const ALL_POS_IDS = positions.filter((p) => p.key !== 'other').map((p) => p.id);
@@ -992,14 +992,14 @@ function memoryStore() {
     },
     async listPositions() { return positions.filter((p) => p.is_active).slice().sort((a, b) => a.sort - b.sort).map((p) => ({ ...p })); },
     async createCustomPosition({ name, name_en, division }) {
-      const rec = { id: 'pos-custom-' + (++seq), key: 'custom_' + seq, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true };
+      const rec = { id: 'pos-custom-' + (++seq), key: 'custom_' + seq, label_id: name, label_en: name_en || name, division: division || null, sort: 900, is_active: true, is_custom: true, talent_category: 'manpower' };
       positions.push(rec);
       return { id: rec.id, key: rec.key, label_id: rec.label_id, label_en: rec.label_en, division: rec.division };
     },
     async listEventTypes() { return eventTypes.filter((t) => t.is_active).slice().sort((a, b) => a.sort - b.sort).map((t) => ({ ...t, default_position_ids: (t.default_position_ids || []).slice() })); },
     async getEventType(idOrKey) { const t = eventTypes.find((x) => x.id === idOrKey || x.key === idOrKey); return t ? { ...t } : null; },
     async listEventPositions(eventId) {
-      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, talent_category: m.talent_category || null, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     async setEventPositions(eventId, poss) {
       const incoming = (poss || []).filter((p) => p && p.position_id && p.quota > 0);
