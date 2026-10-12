@@ -3122,7 +3122,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   ${staffHead(staff, editing ? t('eo.ev.editTitle') : t('eo.ev.createTitle'), L)}
   <p class="sub">${t('eo.ev.formSub')}</p>
   ${eb}
-  <form method="post" action="${action}" enctype="multipart/form-data" class="card" style="margin-top:14px;max-width:720px">
+  <form method="post" action="${action}" class="card" style="margin-top:14px;max-width:720px">
     <div style="font-weight:700;margin-bottom:6px">${t('eo.ev.sec.info')}</div>
     ${field('name', t('eo.ev.f.name'), e.name, 'text', true, 'maxlength="140"')}
     <div class="field"><label for="event_type_id">${t('eo.ev.f.eventType')}${rq}</label>
@@ -3165,11 +3165,34 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.statusHint')}</p>
     </div>
     <div class="field">
-      <label>${t('eo.ev.f.poster')}</label>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
-        <div style="flex:1;min-width:180px"><input type="file" name="poster" accept="image/*"><p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.f.posterHint')}</p></div>
+      <label for="mockup_path">${t('eo.ev.f.poster')} <span class="muted" style="font-weight:400;font-size:12px">(${t('common.optional')})</span></label>
+      <input type="url" id="mockup_path" name="mockup_path" maxlength="1000" placeholder="https://media.20fit.id/..." value="${esc(e.mockup_path || '')}" autocomplete="off">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.f.posterHint')}</p>
+      <p id="posterWarn" style="display:none;font-size:12px;margin:6px 0 0;color:#b26a00"></p>
+      <div id="posterPrev" style="display:none;margin-top:10px">
+        <img id="posterImg" alt="" style="max-width:240px;max-height:160px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block">
+        <p id="posterErr" style="display:none;font-size:12px;margin:6px 0 0;color:var(--red)">${t('eo.ev.f.posterLoadErr')}</p>
       </div>
+      <script>
+      (function(){
+        var inp=document.getElementById('mockup_path'), warn=document.getElementById('posterWarn'), box=document.getElementById('posterPrev'), img=document.getElementById('posterImg'), err=document.getElementById('posterErr');
+        // Legacy storage paths aren't URLs; preview them via the signed URL the server resolved.
+        var saved=${JSON.stringify(String(e.mockup_path || '')).replace(/</g, '\\u003c')}, savedUrl=${JSON.stringify(String(e.mockup_url || '')).replace(/</g, '\\u003c')};
+        var T={proto:${JSON.stringify(t('eo.ev.f.posterProto'))},ext:${JSON.stringify(t('eo.ev.f.posterExt'))}};
+        img.onload=function(){ img.style.display='block'; err.style.display='none'; };
+        img.onerror=function(){ img.style.display='none'; err.style.display='block'; };
+        function upd(){
+          var v=inp.value.trim(), isUrl=/^https?:\\/\\//i.test(v), src=(v && v===saved && !isUrl) ? savedUrl : (isUrl ? v : '');
+          warn.style.display='none';
+          if(v && !src){ warn.textContent=T.proto; warn.style.color='var(--red)'; warn.style.display='block'; }
+          else if(isUrl && !/\\.(jpe?g|png|webp)(\\?.*)?(#.*)?$/i.test(v)){ warn.textContent=T.ext; warn.style.color='#b26a00'; warn.style.display='block'; }
+          if(!src){ box.style.display='none'; img.removeAttribute('src'); return; }
+          box.style.display='block';
+          if(img.getAttribute('src')!==src){ err.style.display='none'; img.setAttribute('src', src); }
+        }
+        inp.addEventListener('input', upd); upd();
+      })();
+      </script>
     </div>
     <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
     <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
@@ -6463,68 +6486,6 @@ function adminEoDetail({ staff, eo, profile, events, lang }) {
 }
 
 /**
- * Super Admin: edit an existing event — schedule, which talent types it needs
- * (KOL / Man Power / Fotografer) with per-type quotas, and the Man Power SOW.
- */
-function adminEventEdit({ staff, event, lang }) {
-  const L = normLang(lang);
-  const t = (k, v) => tr(L, k, v);
-  const ev = event || {};
-  const needOf = (type) => (ev.needs || []).find((n) => n.talent_type === type);
-  const hc = (type) => { const n = needOf(type); return (n && n.headcount) || 1; };
-  const needRow = (type, quotaKey, quotaLabel) => `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:13px 0;border-bottom:1px solid var(--line)">
-      <label style="display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;min-width:150px;cursor:pointer">
-        <input type="checkbox" name="need_${type}" ${needOf(type) ? 'checked' : ''}> ${talentLabel(L, type)}</label>
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${quotaLabel}
-        <input type="number" name="${quotaKey}" min="1" value="${esc(hc(type))}" style="width:110px"></label>
-    </div>`;
-
-  const body = `<div class="wrap">
-  <a href="/admin/manage?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-    ${staffHead(staff, t('manage.editEvent'), L)}
-  </div>
-  <p class="sub">${t('manage.editSub')}</p>
-  <form method="post" action="/admin/events/${esc(ev.id)}/edit" enctype="multipart/form-data" class="card" style="margin-top:16px">
-    <div class="field">
-      <label for="name">${t('ph.eventName')}</label>
-      <input type="text" id="name" name="name" required maxlength="140" value="${esc(ev.name || '')}">
-    </div>
-    <div class="field">
-      <label>📷 ${t('manage.mockup')}</label>
-      <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-        ${ev.mockup_url ? `<img src="${esc(ev.mockup_url)}" alt="" style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid var(--line);flex-shrink:0" onerror="this.style.display='none'">` : ''}
-        <div style="flex:1;min-width:180px">
-          <input type="file" name="mockup" accept="image/*">
-          <p class="muted" style="font-size:12px;margin:6px 0 0">${t('manage.mockupHint')}</p>
-          ${ev.mockup_url ? `<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:8px;cursor:pointer"><input type="checkbox" name="remove_mockup" value="1"> ${t('manage.mockupRemove')}</label>` : ''}
-        </div>
-      </div>
-    </div>
-    <div class="field">
-      <label for="location">${t('manage.location')}</label>
-      <input type="text" id="location" name="location" maxlength="200" placeholder="${t('manage.locationPh')}" value="${esc(ev.location || '')}">
-    </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap">
-      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:150px">${t('manage.startDate')}<input type="date" name="starts_at" value="${esc(ev.starts_at || '')}"></label>
-      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:150px">${t('manage.endDate')}<input type="date" name="ends_at" value="${esc(ev.ends_at || '')}"></label>
-    </div>
-    <div class="field" style="margin-top:18px">
-      <label>${t('manage.needsLabel')}</label>
-      ${needRow('kol', 'kol_headcount', t('manage.kolQuota'))}
-      ${needRow('main_power', 'mp_headcount', t('manage.mpQuota'))}
-      ${needRow('fotografer', 'fg_headcount', t('manage.fgQuota'))}
-    </div>
-    <div style="display:flex;gap:10px;margin-top:8px">
-      <a href="/admin/manage?lang=${L}" class="btn btn-ghost">${t('common.cancel')}</a>
-      <button type="submit" class="btn" style="flex:1">${t('btn.save')}</button>
-    </div>
-  </form>
-</div>`;
-  return appLayout({ title: t('manage.editEvent') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
-}
-
-/**
  * Super Admin read-only event detail: header + per-position registration
  * statistics (total vs approved). The full applicant review lives on
  * /admin/applications; this page is the "event detail" home for the stats.
@@ -7785,7 +7746,7 @@ module.exports = {
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, hasCreatorDocs,
   publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventEdit, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
