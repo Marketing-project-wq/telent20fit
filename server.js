@@ -782,6 +782,9 @@ async function enrichProofs(st, proofs, ctx) {
     ...p,
     event_name: eventName.get(p.event_id) || null,
     talent_name: (ctx.talentNameById && ctx.talentNameById.get(p.talent_id)) || p.submitter_name || null,
+    // Admin warning: the proof's link is just the talent's portfolio URL.
+    link_is_portfolio: !!(ctx.portfolioById && p.post_link && ctx.portfolioById.get(p.talent_id)
+      && String(p.post_link).trim().replace(/\/+$/, '') === String(ctx.portfolioById.get(p.talent_id)).trim().replace(/\/+$/, '')),
     thumb: p.screenshot_path ? urlByPath.get(p.screenshot_path) : null,
     metrics: finalMetricsOf(p),
   }));
@@ -1792,6 +1795,21 @@ app.post('/event/:id/cancel', requireAnyTalentReady(), async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
+// Post proofs are only for events where the talent's application was accepted
+// (approved / assigned / completed). The DB trigger proofs_require_accepted_app
+// enforces the same rule for talent uploads.
+const PROOF_APP_STATUSES = ['approved', 'assigned', 'completed'];
+async function proofEventIds(st, talentId) {
+  const apps = await st.listApplicationsForTalent(talentId);
+  return new Set(apps.filter((a) => PROOF_APP_STATUSES.includes(a.status)).map((a) => a.event_id));
+}
+// Earliest acceptable posting time for an event's proof: the event's start day
+// at 00:00 WIB (a post can't be "for" an event before it starts).
+function proofMinPostedAt(ev) {
+  const d = String((ev && ev.starts_at) || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + 'T00:00:00+07:00') : null;
+}
+
 app.get('/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
   try {
     const st = db();
@@ -1799,9 +1817,10 @@ app.get('/kirim-bukti', requireTalentReady('kol'), async (req, res, next) => {
     // Post Proofs is KOL-only: block direct-URL access until the KOL category is
     // confirmed (a KOL-position application), matching the hidden bottom-nav item.
     if (!req.account.isKol) return res.redirect('/talent?lang=' + req.lang);
-    const [events, allEvents, myProofs, myAssignments, settings] = await Promise.all([
-      st.listActiveEvents(), st.listEvents(), st.listProofsForTalent(req.talent.id), st.listAssignmentsForTalent(req.talent.id), st.getSettings(),
+    const [activeEvents, allEvents, myProofs, myAssignments, settings, okIds] = await Promise.all([
+      st.listActiveEvents(), st.listEvents(), st.listProofsForTalent(req.talent.id), st.listAssignmentsForTalent(req.talent.id), st.getSettings(), proofEventIds(st, req.talent.id),
     ]);
+    const events = activeEvents.filter((e) => okIds.has(e.id)); // only events they were accepted for
     const eventById = new Map(allEvents.map((e) => [e.id, e]));
     const assignments = myAssignments.map((a) => {
       const ev = eventById.get(a.event_id);
@@ -1827,12 +1846,9 @@ app.post('/kirim-bukti', requireTalentReady('kol'), upload.single('screenshot'),
     if (!file) errors.push(req.t('err.ssRequired'));
     else if (!/^image\//i.test(file.mimetype || '')) errors.push(req.t('err.fileMustBeImage'));
     if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push(req.t('err.badLink'));
-
-    if (errors.length) {
-      const [events, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
-      const proofs = await enrichProofs(st, myProofs, { events });
-      return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors, lang: req.lang }));
-    }
+    const okIds = await proofEventIds(st, req.talent.id);
+    if (eventId && !okIds.has(eventId)) errors.push(req.t('err.proofNotAccepted'));
+    if (postLink && req.account.portfolio_url && postLink.replace(/\/+$/, '') === String(req.account.portfolio_url).trim().replace(/\/+$/, '')) errors.push(req.t('err.proofIsPortfolio'));
 
     // Posting time from the datetime-local input, interpreted as WIB (UTC+7).
     const postedRaw = String(req.body.posted_at || '').trim();
@@ -1840,6 +1856,18 @@ app.post('/kirim-bukti', requireTalentReady('kol'), upload.single('screenshot'),
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(postedRaw)) {
       const d = new Date((postedRaw.length === 16 ? postedRaw + ':00' : postedRaw) + '+07:00');
       if (!isNaN(d.getTime())) postedAt = d.toISOString();
+    }
+    if (postedAt && eventId && okIds.has(eventId)) {
+      const ev = (await st.listEvents()).find((e) => e.id === eventId);
+      const min = proofMinPostedAt(ev);
+      if (min && new Date(postedAt) < min) errors.push(req.t('err.proofBeforeEvent', { date: String(ev.starts_at).slice(0, 10) }));
+    }
+
+    if (errors.length) {
+      const [activeEvents, myProofs] = await Promise.all([st.listActiveEvents(), st.listProofsForTalent(req.talent.id)]);
+      const events = activeEvents.filter((e) => okIds.has(e.id));
+      const proofs = await enrichProofs(st, myProofs, { events: activeEvents });
+      return res.status(400).send(V.kolProofPage({ talent: req.talent, events, proofs, errors, lang: req.lang }));
     }
 
     const proofId = crypto.randomUUID();
@@ -3611,7 +3639,8 @@ app.get('/admin/proofs', auth.requireStaff(['super_admin', 'eo']), async (req, r
     }
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const { rows, count } = await st.listProofsPaged({ ...filters, limit: PROOF_PAGE_SIZE, offset: (page - 1) * PROOF_PAGE_SIZE });
-    const proofs = await enrichProofs(st, rows, { events, talentNameById });
+    const portfolioById = new Map(talentsAll.filter((t) => t.portfolio_url).map((t) => [t.id, t.portfolio_url]));
+    const proofs = await enrichProofs(st, rows, { events, talentNameById, portfolioById });
     res.send(V.adminProofs({ staff: staffCtx(req), proofs, events, settings, query: req.query, page, pageSize: PROOF_PAGE_SIZE, count, lang: req.lang }));
   } catch (e) { next(e); }
 });
