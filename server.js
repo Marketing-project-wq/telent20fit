@@ -4305,7 +4305,7 @@ function jakartaHour(d) { return parseInt((d || new Date()).toLocaleString('en-G
 // Current WIB wall-clock as "YYYY-MM-DDTHH:MM" for lexical comparison with reg open/close.
 function jakartaNowStr(d) { const n = d || new Date(); return jakartaDateStr(n) + 'T' + n.toLocaleString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }); }
 
-// Email an H-1 reminder to every approved talent whose event starts tomorrow
+// Email an H-1 reminder to every confirmed (assigned) talent whose event starts tomorrow
 // and who hasn't been reminded yet. Idempotent via reminder_sent_at, so it is
 // safe to call repeatedly. Returns the number of reminders sent.
 async function runDueReminders(st) {
@@ -4330,10 +4330,9 @@ async function runDueReminders(st) {
     const acceptedPos = new Map();
     const acceptedCat = new Map();
     choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) { acceptedPos.set(c.application_id, p.label_en || p.label_id || null); acceptedCat.set(c.application_id, V.positionCategory(p)); } } });
-    // Accepted talents, confirmed or not yet: 'approved' (awaiting Agree) and
-    // 'assigned' (agreed). Before, only 'approved' was reminded, so talents who had
-    // already confirmed never got the H-1 email.
-    const due = apps.filter((a) => ATTENDANCE_STATUSES.includes(a.status) && !a.reminder_sent_at && dueEvents.has(a.event_id));
+    // Only talents who were accepted AND confirmed their spot (Agree -> 'assigned').
+    // Unconfirmed acceptances ('approved') get no H-1 email.
+    const due = apps.filter((a) => a.status === 'assigned' && !a.reminder_sent_at && dueEvents.has(a.event_id));
     // Category line from the accepted position (account talent_type is the sign-up
     // default 'kol' for everyone, so it would mislabel crew as KOL).
     const CAT_OF = { manpower: 'main_power', kol: 'kol', photographer: 'fotografer' };
