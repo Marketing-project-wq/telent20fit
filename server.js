@@ -103,12 +103,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_IMAGE_BYTES, files: MAX_IMAGES },
 });
-// Public submission: multiple feed screenshots + separate Reels/Story uploads.
-const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_IMAGE_BYTES, files: 20 } }).fields([
-  { name: 'feed_images', maxCount: 10 },
-  { name: 'reels_images', maxCount: 5 },
-  { name: 'story_images', maxCount: 5 },
-]);
 // Talent documents (CV + HYROX certificate): PDF or image, a little larger than
 // a screenshot to fit multi-page CVs / cert scans.
 const MAX_DOC_BYTES = 8 * 1024 * 1024;
@@ -539,68 +533,10 @@ const talentLoginPost = async (req, res, next) => {
 app.post('/login/talent', talentLoginPost);
 app.post('/login', talentLoginPost); // alias so any stale form posting to /login still works
 
-// PUBLIC (no login) post-proof submission: name + social username + event, with
-// multiple feed screenshots and separate Reels / Story uploads. Every image is extracted.
-app.get('/submit', async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const events = await st.listActiveEvents();
-    res.send(V.publicSubmitPage({ events, lang: req.lang }));
-  } catch (e) { next(e); }
-});
-
-app.post('/submit', uploadPublic, async (req, res, next) => {
-  try {
-    const st = db();
-    if (!st) return needConfig(req, res);
-    const name = String(req.body.name || '').trim();
-    const username = String(req.body.username || '').trim().replace(/^@/, '');
-    const eventId = String(req.body.event_id || '').trim();
-    const postLink = String(req.body.post_link || '').trim();
-    const files = req.files || {};
-    const groups = [['feed', files.feed_images || []], ['reels', files.reels_images || []], ['story', files.story_images || []]];
-    const totalFiles = groups.reduce((a, [, arr]) => a + arr.length, 0);
-
-    const errors = [];
-    if (!name) errors.push(req.t('err.nameRequired'));
-    if (!username) errors.push(req.t('pub.errUsername'));
-    if (!eventId) errors.push(req.t('err.eventRequired'));
-    if (totalFiles === 0) errors.push(req.t('pub.errNoImage'));
-    for (const [, arr] of groups) for (const f of arr) if (!/^image\//i.test(f.mimetype || '')) { errors.push(req.t('err.fileMustBeImage')); break; }
-    if (postLink && !/^https?:\/\/.+/i.test(postLink)) errors.push(req.t('err.badLink'));
-
-    if (errors.length) {
-      const events = await st.listActiveEvents();
-      return res.status(400).send(V.publicSubmitPage({ events, errors: [...new Set(errors)], values: { name, username, event_id: eventId, post_link: postLink }, lang: req.lang }));
-    }
-
-    const postedRaw = String(req.body.posted_at || '').trim();
-    let postedAt = null;
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(postedRaw)) {
-      const d = new Date((postedRaw.length === 16 ? postedRaw + ':00' : postedRaw) + '+07:00');
-      if (!isNaN(d.getTime())) postedAt = d.toISOString();
-    }
-
-    let count = 0;
-    for (const [ctype, arr] of groups) {
-      for (const file of arr) {
-        const proofId = crypto.randomUUID();
-        const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
-        const key = `proofs/${proofId}${ext}`;
-        await st.uploadImage(key, file.buffer, file.mimetype);
-        await st.createProof({
-          id: proofId, talent_id: null, talent_type: 'kol', event_id: eventId, screenshot_path: key,
-          post_link: postLink || null, posted_at: postedAt, status: 'pending',
-          submitter_name: name, submitter_username: username, content_type: ctype,
-        });
-        runExtraction(st, proofId, file.buffer, file.mimetype); // fire-and-forget
-        count += 1;
-      }
-    }
-    res.send(V.publicSubmitSuccess({ name, count, lang: req.lang }));
-  } catch (e) { next(e); }
-});
+// The old public (no-login) post-proof form is closed: proofs now come only from
+// accepted KOL talents (/kirim-bukti) or staff manual entry (/admin/proofs). Old
+// links land on the talent proof page (login first).
+app.all('/submit', (req, res) => res.redirect(303, '/kirim-bukti?lang=' + req.lang));
 
 // Change language anytime (from any page's switcher); persists via cookie.
 app.get('/lang/:code', (req, res) => {

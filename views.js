@@ -1268,7 +1268,7 @@ ${CARD_CSS}
         <a href="https://www.instagram.com/20fit.id/" target="_blank" rel="noopener">Instagram @20fit.id</a>
       </nav>
     </div>
-    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/submit${q}">${esc(t('land.submit'))}</a> · <a href="/login/eo">${esc(t('foot.eoLogin'))}</a></div>
+    <div class="ft-bottom">talent.20fit.id · © 2026 PT Kredo AUM · ${esc(t('land.foot'))} · <a href="/login/eo">${esc(t('foot.eoLogin'))}</a></div>
   </footer>
 </div>
 <script>(function(){
@@ -5566,66 +5566,6 @@ function contentBadge(ctype) {
 const CONTENT_TYPES = ['feed', 'reels', 'story', 'tiktok', 'lainnya'];
 const PLATFORM_OPTIONS = ['instagram', 'tiktok', 'youtube', 'facebook', 'twitter', 'threads'];
 
-/**
- * PUBLIC (no login) submission page: name + social username + event, with
- * multiple feed screenshots plus separate Reels and Story uploads. Every image
- * is analysed by the LLM.
- */
-function publicSubmitPage(opts = {}) {
-  const L = normLang(opts.lang);
-  const t = (k, v) => tr(L, k, v);
-  const events = opts.events || [];
-  const v = opts.values || {};
-  const errors = opts.errors || [];
-  const noEvents = events.length === 0;
-  const eventOpts = events.map((e) => `<option value="${esc(e.id)}"${v.event_id === e.id ? ' selected' : ''}>${esc(e.name)}</option>`).join('');
-  const errorBanner = errors.length ? `<div class="banner banner-err"><b>${t('check.header')}</b><ul>${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
-  const fileField = (name, icon, label, hint) => `<div class="field">
-    <label>${icon} ${label} <span class="hint">${hint}</span></label>
-    <input type="file" name="${name}" accept="image/*" multiple>
-  </div>`;
-  const body = `<div class="wrap narrow">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
-    <a href="/?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
-    ${toggles(L)}
-  </div>
-  <h1>${t('pub.title')}</h1>
-  <p class="sub">${t('pub.sub')}</p>
-  ${errorBanner}
-  ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
-  <form class="card" method="post" action="/submit" enctype="multipart/form-data">
-    <div class="field"><label for="name">${t('pub.name')}</label><input type="text" id="name" name="name" required maxlength="120" value="${esc(v.name || '')}"></div>
-    <div class="field"><label for="username">${t('pub.username')} <span class="hint">${t('pub.usernameHint')}</span></label><input type="text" id="username" name="username" required maxlength="120" placeholder="@username" value="${esc(v.username || '')}"></div>
-    <div class="field">
-      <label for="event_id">${t('kol.eventLabel')}</label>
-      <select id="event_id" name="event_id" required ${noEvents ? 'disabled' : ''}><option value="" disabled ${v.event_id ? '' : 'selected'}>${t('kol.pickEvent')}</option>${eventOpts}</select>
-    </div>
-    ${fileField('feed_images', '📷', t('pub.feed'), t('pub.feedHint'))}
-    ${fileField('reels_images', '🎬', t('pub.reels'), t('pub.reelsHint'))}
-    ${fileField('story_images', '📖', t('pub.story'), t('pub.storyHint'))}
-    <div class="field"><label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label><input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…" value="${esc(v.post_link || '')}"></div>
-    <div class="field"><label for="posted_at">${t('kol.postedLabel')} <span class="hint">${t('kol.postedHint')}</span></label><input type="datetime-local" id="posted_at" name="posted_at"></div>
-    <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>${t('pub.submit')}</button>
-  </form>
-  <p class="muted" style="text-align:center;font-size:13px;margin-top:16px">${t('pub.foot')}</p>
-</div>`;
-  return layout({ title: t('pub.title') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
-}
-
-function publicSubmitSuccess(opts = {}) {
-  const L = normLang(opts.lang);
-  const t = (k, v) => tr(L, k, v);
-  const body = `<div class="wrap narrow"><div class="card success" style="text-align:center">
-    <div class="check">✓</div>
-    <h1>${t('pub.thanksTitle')}</h1>
-    <p class="sub" style="margin:10px 0 24px">${t('pub.thanksBody', { name: esc(opts.name || ''), count: opts.count || 0 })}</p>
-    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a href="/submit?lang=${L}" class="btn btn-ghost">${t('pub.again')}</a>
-      <a href="/?lang=${L}" class="btn btn-ghost">${t('common.back')}</a>
-    </div>
-  </div></div>`;
-  return layout({ title: t('pub.thanksTitle') + ' — 20FIT', body, home: '/?lang=' + L, lang: L });
-}
 
 /** Horizontal bar chart, single hue (length = magnitude, label = identity). items: [{name, value}]. */
 function hBar(title, items, lang) {
@@ -8033,7 +7973,6 @@ module.exports = {
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, TALENT_CATEGORIES, positionCategory, REVIEW_CAT, hasCreatorDocs,
-  publicSubmitPage, publicSubmitSuccess,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
   adminDashboard, adminTalents, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
