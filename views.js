@@ -5,10 +5,10 @@ const { t: tr, normLang } = require('./i18n');
 // ── Talent confirmation window ───────────────────────────────────────────────
 // How long a talent has to confirm (Agree) a spot they were accepted for before
 // it may be offered to someone else. This is the SINGLE source of truth for that
-// number — change it here (e.g. back to 48) and every place that shows it updates.
-// NOTE: this is the stated policy shown to talents/EO; it is not auto-enforced by
-// a background job (a slot is released when the talent Declines or an EO re-decides).
-const CONFIRM_WINDOW_HOURS = 10;
+// number — change it here and every place that shows it updates. It is enforced by
+// runConfirmTimeouts (server.js): an accepted talent who doesn't Agree within this
+// many hours of being accepted is auto-released so the slot reopens.
+const CONFIRM_WINDOW_HOURS = 48;
 
 /** HTML-escape a value for safe interpolation. */
 function esc(s) {
