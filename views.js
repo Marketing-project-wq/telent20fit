@@ -3242,6 +3242,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         ${fLabel('eo.ev.requirementLabel', '10px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
         ${enTa('requirement', 1000)}
+        ${fLabel('eo.pos.feeAmount', '10px')}
+        <input type="text" inputmode="numeric" name="fee_amount_${pid}" value="${esc(cur && cur.fee_amount != null ? String(cur.fee_amount) : '')}" placeholder="${esc(t('eo.pos.feeAmountPh'))}" maxlength="13" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
+        <p class="muted" style="font-size:11.5px;margin:4px 0 0">${t('eo.pos.feeAmountHint')}</p>
         ${kolFields}${photoFields}
         <!-- The optional "Position Details" inputs were removed from the form, but the columns
              are still shown to talents in "Lihat Detail". Carry any existing values as hidden
@@ -3711,7 +3714,7 @@ function eoEventDetail({ staff, event, view, applicants, positionsMaster, flash,
   ${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-detail-hero" onerror="this.style.display='none'">` : ''}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
-    <div style="display:flex;gap:8px;align-items:center">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/payments?lang=${L}" class="btn btn-ghost btn-sm">💰 ${t('pay.title')}</a><a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
   </div>
   ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
   ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
@@ -4843,7 +4846,7 @@ function assignedGroupBanner(events, lang) {
 // application tracker) + Certificates on the left, and Profile strength +
 // Personal details (collapsible) + My documents on the right. All values come
 // from the talent's real record — no fabricated ratings/skills.
-function kolProfilePage({ account, certs, events, stats, lang }) {
+function kolProfilePage({ account, certs, events, stats, bankMissing, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -4913,6 +4916,7 @@ function kolProfilePage({ account, certs, events, stats, lang }) {
   </div>
 
   ${confirmationBanner(events, L)}
+  ${bankMissing ? `<div class="card" style="margin-top:14px;border:1px solid #f1dca4;background:#fff8e6;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><b>💳 ${t('bank.bannerTitle')}</b><div class="muted" style="font-size:13px;margin-top:2px">${t('bank.bannerSub')}</div></div><a href="/talent/bank?lang=${L}" class="btn btn-sm">${t('bank.bannerBtn')}</a></div>` : ''}
   ${assignedGroupBanner(events, L)}
   ${rejectionPopup(events, L)}
 
@@ -6707,6 +6711,7 @@ function adminEventDetail({ staff, event, view, positionsMaster, flash, lang }) 
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">${t('adm.event.manageApps')} →</a>
       <a href="/admin/role-templates?lang=${L}" class="btn btn-ghost btn-sm">${t('tpl.manageLink')}</a>
+      <a href="/admin/events/${esc(e.id)}/payments?lang=${L}" class="btn btn-ghost btn-sm">💰 ${t('pay.title')}</a>
       <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
     </div>
   </div>
@@ -7514,6 +7519,7 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
     checkin: 'Check-in', present: '✓ Hadir', undo: 'Batalkan',
     empty: 'Belum ada Man Power yang disetujui untuk event ini.',
     noStation: 'Tanpa station',
+    noBank: 'Rekening belum diisi',
     hint: 'Pilih hari, lalu peserta sebutkan namanya → cari → tekan Check-in.',
     doneMsg: (n) => (n ? n + ' ' : '') + 'berhasil check-in ✓',
     dayN: (n) => 'Hari ' + n, todayLabel: 'Hadir hari ini', timesTitle: 'Total hari absen',
@@ -7525,6 +7531,7 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
     checkin: 'Check in', present: '✓ Present', undo: 'Undo',
     empty: 'No approved Man Power for this event yet.',
     noStation: 'No station',
+    noBank: 'Bank details missing',
     hint: 'Pick the day, then have the person say their name → search → tap Check in.',
     doneMsg: (n) => (n ? n + ' ' : '') + 'checked in ✓',
     dayN: (n) => 'Day ' + n, todayLabel: 'Present this day', timesTitle: 'Total days attended',
@@ -7551,7 +7558,7 @@ function attendancePage({ invalid, event, eventDate, rows, days, day, token, lan
       ? `<span class="pill pill-ok">${s.present}</span>${f('0', `<button class="btn btn-ghost btn-sm">${esc(s.undo)}</button>`)}`
       : f('1', `<button class="btn btn-sm">${esc(s.checkin)}</button>`);
     return `<div class="att-row" data-name="${esc(String(r.name).toLowerCase())}" style="display:flex;gap:12px;align-items:center;justify-content:space-between;padding:14px 2px;border-top:${i ? '1px solid var(--line)' : '0'}">
-      <div style="min-width:0"><b style="font-size:15px">${esc(r.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">📍 ${st}</div></div>
+      <div style="min-width:0"><b style="font-size:15px">${esc(r.name)}</b><div class="muted" style="font-size:12.5px;margin-top:2px">📍 ${st}</div>${r.bankMissing ? `<div style="font-size:11.5px;color:#9a5b00;font-weight:700;margin-top:2px">⚠️ ${esc(s.noBank)}</div>` : ''}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">${totalBadge}${toggle}</div>
     </div>`;
   }).join('') : `<p class="muted" style="margin:16px 0 0">${esc(s.empty)}</p>`;
@@ -7639,6 +7646,122 @@ function page500(msg, lang) {
 }
 
 // Badge for the prioritised-application status flow (applied → … → completed / rejected).
+/** Talent: bank details for event payments (asked after they confirm a spot). The
+ * full number is shown only to the talent themself on this page. */
+function talentBankPage({ account, bank, values, errors, saved, warn, after, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const acc = account || {};
+  const v = values || {};
+  const b = bank || {};
+  const has = !!(b.bank_name && b.bank_account_number && b.bank_account_holder);
+  const errBox = (errors && errors.length) ? `<div class="banner banner-err"><ul style="margin:0;padding-left:18px">${errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>` : '';
+  const body = `<div class="wrap narrow">
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+    <a href="/talent?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a>
+  </div>
+  <h1 style="margin:6px 0 4px">${t('bank.title')}</h1>
+  <p class="sub">${t('bank.sub')}</p>
+  ${after === 'agree' ? `<div class="banner banner-ok">✅ ${t('bank.afterAgree')}</div>` : ''}
+  ${saved ? `<div class="banner banner-ok">✓ ${t('bank.saved')}</div>` : ''}
+  ${saved && warn ? `<div class="banner banner-warn">⚠️ ${t('bank.nameWarn', { name: esc(acc.full_name || acc.name || '') })}</div>` : ''}
+  ${errBox}
+  <form class="card" method="post" action="/talent/bank?lang=${L}" autocomplete="off">
+    <input type="hidden" name="after" value="${esc(after || '')}">
+    <div class="field"><label for="bank_name">${t('bank.name')}</label>
+      <input type="text" id="bank_name" name="bank_name" maxlength="60" required value="${esc(v.bank_name || '')}" placeholder="${esc(t('bank.namePh'))}" list="bankList">
+      <datalist id="bankList">${['BCA', 'Mandiri', 'BRI', 'BNI', 'BSI', 'CIMB Niaga', 'Permata', 'Danamon', 'BTN', 'Jago', 'SeaBank', 'Blu by BCA Digital'].map((x) => `<option value="${x}">`).join('')}</datalist>
+    </div>
+    <div class="field"><label for="bank_account_number">${t('bank.number')}</label>
+      <input type="text" id="bank_account_number" name="bank_account_number" inputmode="numeric" pattern="[0-9 .-]{6,30}" maxlength="30" required value="${esc(v.bank_account_number || '')}" placeholder="${esc(t('bank.numberPh'))}">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('bank.numberHint')}</p>
+    </div>
+    <div class="field"><label for="bank_account_holder">${t('bank.holder')}</label>
+      <input type="text" id="bank_account_holder" name="bank_account_holder" maxlength="100" required value="${esc(v.bank_account_holder || '')}" placeholder="${esc(t('bank.holderPh'))}">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('bank.holderHint')}</p>
+    </div>
+    <button type="submit" class="btn btn-block">${has ? t('bank.update') : t('bank.save')}</button>
+    <p class="muted" style="font-size:12px;margin:12px 0 0">🔒 ${t('bank.privacy')}</p>
+  </form>
+</div>`;
+  return appLayout({ title: t('bank.title') + ' — 20FIT', body, role: acc.talent_type === 'main_power' ? 'main_power' : 'kol', active: 'profil', user: acc.name, lang: L, isKol: !!acc.isKol });
+}
+
+/** Staff: payment recap for one event (Super Admin: any event; EO: own events). */
+function paymentsPage({ staff, base, event, rows, all, totals, query, flash, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const q = query || {};
+  const rp = (n) => (n == null ? '—' : 'Rp ' + Math.round(Number(n)).toLocaleString('id-ID'));
+  const mask = (s) => (s ? '****' + String(s).slice(-4) : '');
+  const opt = (val, label, cur) => `<option value="${esc(val)}"${String(cur || '') === String(val) ? ' selected' : ''}>${esc(label)}</option>`;
+  const posOpts = [...new Map((all || []).map((r) => [r.positionKey, r.position])).entries()].filter(([k]) => k).map(([k, lab]) => opt(k, lab, q.pos)).join('');
+  const divOpts = [...new Set((all || []).map((r) => r.division).filter(Boolean))].map((d) => opt(d, d, q.div)).join('');
+  const qs = (() => { const keep = ['pos', 'div', 'pay', 'bank', 'q']; const p = keep.filter((k) => q[k]).map((k) => k + '=' + encodeURIComponent(q[k])); return p.length ? '&' + p.join('&') : ''; })();
+  const url = (suffix) => `${base}/${esc(e.id)}/payments${suffix || ''}`;
+  const flashMsg = { fee: t('pay.flash.fee'), paid: t('pay.flash.paid', { n: esc(q.n || '0') }), unpaid: t('pay.flash.unpaid', { n: esc(q.n || '0') }) }[flash];
+  const trs = (rows || []).map((r) => `<tr${r.bankOk ? '' : ' style="background:#fff8e6"'}>
+      <td><input type="checkbox" name="app_ids" value="${esc(r.appId)}" form="payBulk" class="pay-cb"${r.bankOk ? '' : ' data-nobank="1"'}></td>
+      <td data-label="${esc(t('pay.th.name'))}"><b>${esc(r.name)}</b>${r.bankOk ? '' : `<div style="font-size:11.5px;color:#9a5b00;font-weight:700">⚠️ ${t('pay.bankMissing')}</div>`}</td>
+      <td data-label="${esc(t('pay.th.position'))}">${esc(r.position || '—')}<div class="muted" style="font-size:12px">${esc(r.division || '')}</div></td>
+      <td data-label="${esc(t('pay.th.phone'))}">${esc(r.phone || '—')}</td>
+      <td data-label="${esc(t('pay.th.bank'))}">${r.bankOk ? `${esc(r.bankName)}<div class="muted" style="font-size:12px">${esc(mask(r.acct))} · ${esc(r.holder)}</div>` : '<span class="muted">—</span>'}</td>
+      <td data-label="${esc(t('pay.th.days'))}" style="text-align:center">${r.days}</td>
+      <td data-label="${esc(t('pay.th.fee'))}" style="text-align:right;white-space:nowrap">
+        <b>${rp(r.fee)}</b>${r.feeFinal != null ? `<div class="muted" style="font-size:11.5px">${t('pay.override')}${r.feeComputed != null ? ' · ' + t('pay.default') + ' ' + rp(r.feeComputed) : ''}</div>` : (r.feeDay != null ? `<div class="muted" style="font-size:11.5px">${rp(r.feeDay)} × ${r.days}</div>` : `<div style="font-size:11.5px;color:#9a5b00">${t('pay.noFee')}</div>`)}
+        <details style="margin-top:4px;text-align:left"><summary style="cursor:pointer;font-size:12px;color:var(--red)">${t('pay.editFee')}</summary>
+          <form method="post" action="${url('/fee')}?lang=${L}" style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            <input type="hidden" name="app_id" value="${esc(r.appId)}">
+            <input type="text" inputmode="numeric" name="fee_final" value="${r.feeFinal != null ? esc(String(r.feeFinal)) : ''}" placeholder="${esc(t('pay.feePh'))}" style="font-size:13px">
+            <input type="text" name="fee_note" maxlength="300" value="${esc(r.feeNote || '')}" placeholder="${esc(t('pay.notePh'))}" style="font-size:13px">
+            <button class="btn btn-sm" type="submit">${t('btn.save')}</button>
+          </form>
+        </details>
+        ${r.feeNote ? `<div class="muted" style="font-size:11.5px;text-align:left">📝 ${esc(r.feeNote)}</div>` : ''}
+      </td>
+      <td data-label="${esc(t('pay.th.status'))}">${r.paid ? `<span class="pill pill-ok">${t('pay.paid')}</span>` : `<span class="pill">${t('pay.unpaid')}</span>`}</td>
+    </tr>`).join('');
+  const body = `<div class="wrap">
+  <a href="${base}/${esc(e.id)}?lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
+  ${staffHead(staff, t('pay.title'), L)}
+  <p class="sub" style="margin-top:4px"><b>${esc(e.name || '')}</b> · ${t('pay.rule')}</p>
+  ${flashMsg ? `<div class="banner banner-ok">✓ ${flashMsg}</div>` : ''}
+  <div class="stat-grid">
+    <div class="stat"><div class="n">${totals.people}</div><div class="l">${t('pay.people')}</div></div>
+    <div class="stat"><div class="n">${rp(totals.total)}</div><div class="l">${t('pay.total')}</div></div>
+    <div class="stat"><div class="n">${totals.paid}</div><div class="l">${t('pay.paidCount')}</div></div>
+    <div class="stat"><div class="n" style="${totals.missingBank ? 'color:#9a5b00' : ''}">${totals.missingBank}</div><div class="l">${t('pay.missingCount')}</div></div>
+  </div>
+  ${totals.noFee ? `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('pay.noFeeWarn', { n: totals.noFee })}</div>` : ''}
+  <form method="get" action="${url()}" class="card" style="margin-top:14px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <input type="hidden" name="lang" value="${L}">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('pay.th.position')}<select name="pos" onchange="this.form.submit()"><option value="">${t('pay.all')}</option>${posOpts}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('pay.division')}<select name="div" onchange="this.form.submit()"><option value="">${t('pay.all')}</option>${divOpts}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('pay.th.status')}<select name="pay" onchange="this.form.submit()"><option value="">${t('pay.all')}</option>${opt('unpaid', t('pay.unpaid'), q.pay)}${opt('paid', t('pay.paid'), q.pay)}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('pay.th.bank')}<select name="bank" onchange="this.form.submit()"><option value="">${t('pay.all')}</option>${opt('ok', t('pay.bankOk'), q.bank)}${opt('missing', t('pay.bankMissing'), q.bank)}</select></label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1 1 200px">${t('pay.search')}<input type="search" name="q" value="${esc(q.q || '')}" placeholder="${esc(t('mpr.searchPh'))}" style="box-sizing:border-box;width:100%"></label>
+    <button class="btn btn-sm" type="submit">${t('mpr.searchBtn')}</button>
+  </form>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px">
+    <a class="btn btn-sm" href="${url('/report.pdf')}?lang=${L}${qs}">📄 ${t('pay.exportPdf')}</a>
+    <a class="btn btn-ghost btn-sm" href="${url('/export.csv')}?lang=${L}${qs}">⬇ ${t('pay.exportCsv')}</a>
+    <span class="muted" style="font-size:12px">${t('pay.exportNote')}</span>
+  </div>
+  <form id="payBulk" method="post" action="${url('/status')}?lang=${L}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px">
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="payAll"> ${t('pay.selectAll')}</label>
+    <button class="btn btn-sm" type="submit" name="paid" value="1" ${jsConfirm(t('pay.confirmPaid'))}>✓ ${t('pay.markPaid')}</button>
+    <button class="btn btn-ghost btn-sm" type="submit" name="paid" value="0" ${jsConfirm(t('pay.confirmUnpaid'))}>${t('pay.markUnpaid')}</button>
+    <span class="muted" style="font-size:12px">${t('pay.bulkNote')}</span>
+  </form>
+  ${(rows || []).length ? `<div class="card" style="margin-top:12px"><div class="table-wrap"><table>
+    <thead><tr><th></th><th>${t('pay.th.name')}</th><th>${t('pay.th.position')}</th><th>${t('pay.th.phone')}</th><th>${t('pay.th.bank')}</th><th style="text-align:center">${t('pay.th.days')}</th><th style="text-align:right">${t('pay.th.fee')}</th><th>${t('pay.th.status')}</th></tr></thead>
+    <tbody>${trs}</tbody></table></div></div>` : `<div class="card" style="margin-top:12px"><p class="muted" style="margin:0">${t('pay.empty')}</p></div>`}
+</div>
+<script>(function(){ var a=document.getElementById('payAll'); if(a) a.addEventListener('change',function(){ [].slice.call(document.querySelectorAll('.pay-cb')).forEach(function(c){ c.checked=a.checked; }); }); })();</script>`;
+  return appLayout({ title: t('pay.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: base === '/eo/events' ? 'events' : 'manage', user: staff && staff.name, lang: L });
+}
+
 function talentStatusBadge(status, lang) {
   const L = normLang(lang);
   const t = (k) => tr(L, k);
@@ -7974,7 +8097,7 @@ module.exports = {
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, TALENT_CATEGORIES, positionCategory, REVIEW_CAT, hasCreatorDocs,
   mainPowerDashboard, mainPowerApply, mainPowerApplyDone, MP_JOBDESKS,
-  adminDashboard, adminTalents, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
+  adminDashboard, adminTalents, talentBankPage, paymentsPage, adminKolDetail, adminAnalysis, adminOverview, adminProofs, adminProofsPerKol, adminManage, adminLanding, adminEoDetail, adminEventDetail, roleQuotaLogs, roleTemplatesPage, adminApplications, adminApplicationsEventPicker, adminApplicantCard, decisionMeeting, finalAcceptConfirm, adminHyroxCerts, attendancePage, performancePage,
   talentLogin, talentRegister, talentDataDiri, talentDocuments, forgotPassword, forgotPasswordSent, resetPassword, resetPasswordDone,
   PROVINCES,
   staffLogin, configError, adminNoService, page500,
