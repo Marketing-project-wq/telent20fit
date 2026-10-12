@@ -3064,6 +3064,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const fLabel = (labelKey, mt) => `<div class="pm-flabel" style="margin-top:${mt}">${t(labelKey)}</div>`;
     // Template text for a role field, or '' when the role has no template yet
     // (t() returns the bare key for a missing entry, which must never be prefilled).
+    // When a new standard position is added (talent_positions, via a migration), add
+    // pos.tpl.<key>.desc/.job/.req to both i18n/id.json and i18n/en.json in the same
+    // change so it prefills like the others. EO custom roles (custom_*) have none.
     const tplText = (f) => { const k = 'pos.tpl.' + p.key + '.' + f; const v = t(k); return v === k ? '' : v; };
     // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
     // The custom "Lainnya" slot has no template — the EO names & fills it manually.
