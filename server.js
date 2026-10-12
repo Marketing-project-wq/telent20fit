@@ -4328,8 +4328,15 @@ async function runDueReminders(st) {
     // Accepted position label per app, so position-based talents get an assignment line too.
     const posById = new Map(positions.map((p) => [p.id, p]));
     const acceptedPos = new Map();
-    choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_en || p.label_id || null); } });
-    const due = apps.filter((a) => a.status === 'approved' && !a.reminder_sent_at && dueEvents.has(a.event_id));
+    const acceptedCat = new Map();
+    choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) { acceptedPos.set(c.application_id, p.label_en || p.label_id || null); acceptedCat.set(c.application_id, V.positionCategory(p)); } } });
+    // Accepted talents, confirmed or not yet: 'approved' (awaiting Agree) and
+    // 'assigned' (agreed). Before, only 'approved' was reminded, so talents who had
+    // already confirmed never got the H-1 email.
+    const due = apps.filter((a) => ATTENDANCE_STATUSES.includes(a.status) && !a.reminder_sent_at && dueEvents.has(a.event_id));
+    // Category line from the accepted position (account talent_type is the sign-up
+    // default 'kol' for everyone, so it would mislabel crew as KOL).
+    const CAT_OF = { manpower: 'main_power', kol: 'kol', photographer: 'fotografer' };
     let sent = 0;
     for (const a of due) {
       try {
@@ -4340,7 +4347,7 @@ async function runDueReminders(st) {
         const r = await mailer.sendReminderEmail({
           to, name: account.name, lang: 'id',
           eventName: ev.name || 'Event 20FIT', eventDate: eventDateStr(ev),
-          location: ev.location || null, category: V.CAT_LABEL[a.talent_type] || a.talent_type,
+          location: ev.location || null, category: V.CAT_LABEL[CAT_OF[acceptedCat.get(a.id)] || a.talent_type] || a.talent_type,
           station: a.station || acceptedPos.get(a.id) || null, stationLoc: a.station_loc,
         });
         // Only mark as reminded once the email is genuinely delivered — so if the
