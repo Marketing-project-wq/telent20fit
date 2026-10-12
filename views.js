@@ -4555,7 +4555,7 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
   <p class="sub">${t('kol.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${errorBanner}
   ${assignmentCards(assignments, L)}
-  ${noEvents ? `<div class="banner banner-warn">${t('kol.noEvents')}</div>` : ''}
+  ${noEvents ? `<div class="banner banner-warn">${t('kol.noAcceptedEvents')}</div>` : ''}
   <form class="card" method="post" action="/kirim-bukti" enctype="multipart/form-data">
     <div class="field">
       <label for="event_id">${t('kol.eventLabel')}</label>
@@ -4568,12 +4568,14 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
       <input type="file" name="screenshot" accept="image/*" required>
     </div>
     <div class="field">
-      <label for="post_link">${t('kol.linkLabel')} <span class="hint">${t('kol.linkHint')}</span></label>
-      <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…">
+      <label for="post_link">${t('kol.proofLinkLabel')} <span class="hint">${t('kol.linkHint')}</span></label>
+      <input type="url" id="post_link" name="post_link" placeholder="https://instagram.com/p/…" autocomplete="off">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('kol.proofLinkHelp')}</p>
     </div>
     <div class="field">
       <label for="posted_at">${t('kol.postedLabel')} <span class="hint">${t('kol.postedHint')}</span></label>
-      <input type="datetime-local" id="posted_at" name="posted_at">
+      <input type="datetime-local" id="posted_at" name="posted_at" autocomplete="off">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('kol.postedHelp')}</p>
     </div>
     <button type="submit" class="btn btn-block" ${noEvents ? 'disabled' : ''}>${t('kol.uploadBtn')}</button>
   </form>
@@ -5792,7 +5794,7 @@ function proofTable(proofs, lang, settings) {
     <td data-label="${t('th.talent')}"><b>${esc(p.talent_name || p.submitter_name || '—')}</b>${p.submitter_username ? ` <span class="muted" style="font-size:12px">@${esc(p.submitter_username)}</span>` : ''}${p.is_manual_entry ? ` <span class="pill pill-off" style="font-size:10px">✎ ${t('proofs.manualEntry')}</span>` : ''}<div class="muted" style="font-size:12px">${esc(talentLabel(L, p.talent_type))} · ${fmtDate(p.created_at)}</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${contentBadge(p.content_type, L)}${plausibilityBadge(p.posted_at, p.created_at, metricsOf(p), settings, L)}</div></td>
     <td data-label="${t('th.event')}">${p.event_name ? esc(p.event_name) : `<span class="pill" style="font-size:10px;background:var(--red-soft,#fde8ea);color:var(--red)">${t('proofs.noEvent')}</span>`}</td>
     <td data-label="${t('th.ss')}">${p.thumb ? `<a href="${esc(p.thumb)}" target="_blank" rel="noopener"><img src="${esc(p.thumb)}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:7px;border:1px solid var(--line)"></a>` : '<span class="muted">—</span>'}</td>
-    <td data-label="${t('th.extraction')}">${proofMetricsCell(p, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}</td>
+    <td data-label="${t('th.extraction')}">${proofMetricsCell(p, L, days, settings)}${p.post_link ? `<div class="linklist"><a href="${esc(p.post_link)}" target="_blank" rel="noopener">${t('kol.postLink')}</a></div>` : ''}${p.link_is_portfolio ? `<div style="font-size:12px;font-weight:700;color:#9a5b00;margin-top:4px">⚠️ ${t('proofs.linkIsPortfolio')}</div>` : ''}</td>
     <td data-label="${t('th.status')}">${statusBadge(p.status, L)}</td>
     <td style="text-align:right;white-space:nowrap">
       <button type="button" class="btn btn-ghost btn-sm" title="${t('title.edit')}" onclick="proofEdit('${esc(p.id)}')">✎</button>

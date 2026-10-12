@@ -1439,5 +1439,13 @@
   "td.empty": "Tidak ada talent yang cocok.",
   "dash.byCat": "Talent per kategori",
   "dash.byCatOpen": "Buka direktori",
-  "dash.byCatHint": "Dihitung dari posisi yang dilamar. Talent yang melamar lebih dari satu kategori dihitung di setiap kategorinya."
+  "dash.byCatHint": "Dihitung dari posisi yang dilamar. Talent yang melamar lebih dari satu kategori dihitung di setiap kategorinya.",
+  "err.proofNotAccepted": "Bukti post hanya bisa dikirim untuk event yang lamaranmu sudah diterima.",
+  "err.proofIsPortfolio": "Link yang kamu isi sama dengan link portfolio di profilmu. Tempel link postingan untuk event ini.",
+  "err.proofBeforeEvent": "Tanggal posting lebih awal dari tanggal mulai event ({date}). Pastikan ini postingan untuk event tersebut.",
+  "kol.noAcceptedEvents": "Belum ada event yang lamaranmu sudah diterima. Bukti post bisa dikirim setelah lamaranmu diterima.",
+  "kol.proofLinkLabel": "Link postingan event ini (Instagram/TikTok)",
+  "kol.proofLinkHelp": "Bukan link portfolio. Tempel link postingan yang kamu buat untuk event ini.",
+  "kol.postedHelp": "Tidak boleh lebih awal dari tanggal mulai event.",
+  "proofs.linkIsPortfolio": "Link sama dengan portfolio talent"
 }

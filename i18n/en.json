@@ -1439,5 +1439,13 @@
   "td.empty": "No matching talents.",
   "dash.byCat": "Talents by category",
   "dash.byCatOpen": "Open directory",
-  "dash.byCatHint": "Counted from the positions applied for. A talent who applied in more than one category is counted in each."
+  "dash.byCatHint": "Counted from the positions applied for. A talent who applied in more than one category is counted in each.",
+  "err.proofNotAccepted": "Post proofs can only be sent for events where your application was accepted.",
+  "err.proofIsPortfolio": "This link is the same as the portfolio link on your profile. Paste the link to your post for this event.",
+  "err.proofBeforeEvent": "The posting date is earlier than the event start date ({date}). Make sure this post is for that event.",
+  "kol.noAcceptedEvents": "No events with an accepted application yet. You can send post proofs once your application is accepted.",
+  "kol.proofLinkLabel": "Link to your post for this event (Instagram/TikTok)",
+  "kol.proofLinkHelp": "Not your portfolio link. Paste the link to the post you made for this event.",
+  "kol.postedHelp": "Can't be earlier than the event start date.",
+  "proofs.linkIsPortfolio": "Link is the talent's portfolio"
 }
