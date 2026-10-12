@@ -3062,10 +3062,13 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const grp = (txt) => `<div class="pm-flabel" style="margin-top:12px">${txt}</div>`;
     const isOther = p.key === 'other';
     const fLabel = (labelKey, mt) => `<div class="pm-flabel" style="margin-top:${mt}">${t(labelKey)}</div>`;
+    // Template text for a role field, or '' when the role has no template yet
+    // (t() returns the bare key for a missing entry, which must never be prefilled).
+    const tplText = (f) => { const k = 'pos.tpl.' + p.key + '.' + f; const v = t(k); return v === k ? '' : v; };
     // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
     // The custom "Lainnya" slot has no template — the EO names & fills it manually.
     const tplAttrs = isOther ? ' data-other="1"'
-      : ` data-tpl-desc="${esc(t('pos.tpl.' + p.key + '.desc'))}" data-tpl-job="${esc(t('pos.tpl.' + p.key + '.job'))}" data-tpl-req="${esc(t('pos.tpl.' + p.key + '.req'))}"`;
+      : ` data-tpl-desc="${esc(tplText('desc'))}" data-tpl-job="${esc(tplText('job'))}" data-tpl-req="${esc(tplText('req'))}"`;
     // "Lainnya" needs a name to save, so its name input stays on the row (shown when ticked).
     const customName = isOther ? `<input type="text" name="custom_label_${pid}" class="pm-cname" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:8px${on ? '' : ';display:none'}">` : '';
     const customNameEn = isOther ? `<div class="pm-flabel">${esc(t('eo.ev.f.enSub'))}</div><input type="text" name="custom_label_en_${pid}" maxlength="80" value="${esc(cv('custom_label_en'))}" placeholder="${t('eo.pos.customNameEnPh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:2px">` : '';
