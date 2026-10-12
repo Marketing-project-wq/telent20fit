@@ -3057,44 +3057,47 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
     const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
     // Optional English version of a template field, shown right under its ID input.
-    const enSub = `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:6px">${esc(t('eo.ev.f.enSub'))}</div>`;
-    const enTa = (name, max) => `${enSub}<textarea name="${name}_en_${pid}" rows="2" maxlength="${max}" placeholder="${t('eo.ev.f.enPh')}" style="width:100%;box-sizing:border-box;margin-top:2px;font-size:13px">${esc(cv(name + '_en'))}</textarea>`;
-    const grp = (txt) => `<div class="muted" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:12px">${txt}</div>`;
+    const enSub = `<div class="pm-flabel" style="margin-top:6px">${esc(t('eo.ev.f.enSub'))}</div>`;
+    const enTa = (name, max) => `${enSub}<textarea name="${name}_en_${pid}" class="posm-en" rows="2" maxlength="${max}" placeholder="${t('eo.ev.f.enPh')}" style="width:100%;box-sizing:border-box;margin-top:2px;font-size:13px">${esc(cv(name + '_en'))}</textarea>`;
+    const grp = (txt) => `<div class="pm-flabel" style="margin-top:12px">${txt}</div>`;
     const isOther = p.key === 'other';
-    // Label row for a template field (Deskripsi/Jobdesk/Requirement) with a small
-    // "Reset to default" button that re-applies the role's template (data-tpl-*).
-    // The custom "Lainnya" slot has no template, so no reset button there.
-    const tplField = (labelKey, tf, mt) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:${mt}"><span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t(labelKey)}</span>${isOther ? '' : `<button type="button" class="tpl-reset" data-tf="${tf}" style="flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--red);background:none;border:0;cursor:pointer;padding:0">↺ ${esc(t('eo.pos.resetTpl'))}</button>`}</div>`;
+    const fLabel = (labelKey, mt) => `<div class="pm-flabel" style="margin-top:${mt}">${t(labelKey)}</div>`;
     // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
     // The custom "Lainnya" slot has no template — the EO names & fills it manually.
     const tplAttrs = isOther ? ' data-other="1"'
       : ` data-tpl-desc="${esc(t('pos.tpl.' + p.key + '.desc'))}" data-tpl-job="${esc(t('pos.tpl.' + p.key + '.job'))}" data-tpl-req="${esc(t('pos.tpl.' + p.key + '.req'))}"`;
-    const customName = isOther ? `<input type="text" name="custom_label_${pid}" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600">` : '';
-    const customNameEn = isOther ? `${enSub}<input type="text" name="custom_label_en_${pid}" maxlength="80" value="${esc(cv('custom_label_en'))}" placeholder="${t('eo.pos.customNameEnPh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600">` : '';
+    // "Lainnya" needs a name to save, so its name input stays on the row (shown when ticked).
+    const customName = isOther ? `<input type="text" name="custom_label_${pid}" class="pm-cname" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:8px${on ? '' : ';display:none'}">` : '';
+    const customNameEn = isOther ? `<div class="pm-flabel">${esc(t('eo.ev.f.enSub'))}</div><input type="text" name="custom_label_en_${pid}" maxlength="80" value="${esc(cv('custom_label_en'))}" placeholder="${t('eo.pos.customNameEnPh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:2px">` : '';
     // Category-specific fields only render (and only save) for the matching type.
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
     // data-cat marks the group so the event-type filter only touches Manpower rows.
     const rowCat = p.key === 'other' ? 'other' : (KOL_KEYS.includes(p.key) ? 'kol' : 'mp');
-    return `<div class="posm-row" data-key="${esc(p.key)}" data-cat="${rowCat}" data-pid="${pid}" data-div="${esc(p.division || '')}"${tplAttrs} style="padding:12px 0;border-top:1px solid var(--line)">
-      <label style="display:flex;gap:10px;align-items:center;cursor:pointer">
-        <input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb">
-        <span style="flex:1;font-size:14px">${esc(posLabel(p, L))}</span>
-      </label>
-      <div class="posm-extra" style="margin-top:8px${on ? '' : ';display:none'}">
-        ${customName}
+    const name = posLabel(p, L);
+    // Compact row: [tick] name [modified badge] … [quota] [Edit detail]. The
+    // Description/Jobdesk/Requirement fields live in a collapsed panel below.
+    return `<div class="posm-row${on ? ' is-on' : ''}" data-key="${esc(p.key)}" data-cat="${rowCat}" data-pid="${pid}" data-div="${esc(p.division || '')}" data-name="${esc(String(name).toLowerCase())}"${tplAttrs}>
+      <div class="pm-line">
+        <label class="pm-name"><input type="checkbox" name="pos" value="${pid}" ${on ? 'checked' : ''} class="posm-cb"><span>${esc(name)}</span><span class="pm-badge">${esc(t('eo.pos.modified'))}</span></label>
+        <div class="pm-ctrls">
+          <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${esc(t('eo.pos.quotaShort'))}" aria-label="${esc(t('eo.pos.quotaLabel') + ' — ' + name)}" title="${esc(t('eo.pos.quotaLabel'))}"${on ? ' required' : ' disabled'}>
+          <button type="button" class="pm-edit" aria-expanded="false" aria-controls="pmp-${pid}"${on ? '' : ' disabled'}>${esc(t('eo.pos.editDetail'))} <span aria-hidden="true">▾</span></button>
+        </div>
+      </div>
+      ${customName}
+      <div class="pm-panel posm-extra" id="pmp-${pid}" hidden>
+        ${isOther ? '' : `<div style="display:flex;justify-content:flex-end"><button type="button" class="tpl-reset">↺ ${esc(t('eo.pos.resetTpl'))}</button></div>`}
         ${customNameEn}
-        ${tplField('eo.ev.descLabel', 'desc', isOther ? '6px' : '0')}
+        ${fLabel('eo.ev.descLabel', isOther ? '10px' : '0')}
         <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('description'))}</textarea>
         ${enTa('description', 600)}
-        ${tplField('eo.ev.jobdeskLabel', 'job', '8px')}
+        ${fLabel('eo.ev.jobdeskLabel', '10px')}
         <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
         ${enTa('jobdesk', 1000)}
-        ${tplField('eo.ev.requirementLabel', 'req', '8px')}
+        ${fLabel('eo.ev.requirementLabel', '10px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
         ${enTa('requirement', 1000)}
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:8px">${t('eo.pos.quotaLabel')}${rq}</label>
-        <input type="number" name="quota_${pid}" class="posm-quota" min="1" max="99999" value="${esc((cur && cur.quota && cur.quota < 100000) ? cur.quota : '')}" placeholder="${t('eo.pos.quotaPh')}"${on ? ' required' : ''} style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
         ${kolFields}${photoFields}
         <!-- The optional "Position Details" inputs were removed from the form, but the columns
              are still shown to talents in "Lihat Detail". Carry any existing values as hidden
@@ -3103,17 +3106,27 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </div>
     </div>`;
   };
-  const gHead = (txt) => `<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#6b6b70);margin:16px 0 2px">${txt}</div>`;
+  const gHead = (txt) => `<div class="pm-sec">${txt}</div>`;
   const mpRows = (positionsMaster || []).filter((p) => p.key !== 'other' && !KOL_KEYS.includes(p.key));
   const otherRows = (positionsMaster || []).filter((p) => p.key === 'other');
   const kolRows = (positionsMaster || []).filter((p) => KOL_KEYS.includes(p.key));
-  // Group Manpower roles by division (roles without one fall under "General").
+  // Group Manpower roles by division (roles without one fall under "General",
+  // together with the custom "Lainnya" slot).
   const mpByDiv = {};
   mpRows.forEach((p) => { const d = p.division || ''; (mpByDiv[d] = mpByDiv[d] || []).push(p); });
+  if (otherRows.length) mpByDiv[''] = (mpByDiv[''] || []).concat(otherRows);
   const divKeys = Object.keys(mpByDiv).sort((a, b) => ((a === '' ? 1 : 0) - (b === '' ? 1 : 0)) || a.localeCompare(b));
-  const divHead = (label, dv) => `<div style="display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 2px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">${esc(label)}</div><div class="muted" style="font-size:12px">${t('eo.ev.divSubtotal')}: <b class="divsubtotal" data-div="${esc(dv)}">0</b></div></div>`;
-  const mpSection = divKeys.map((d) => `${divHead(d || t('eo.ev.divGeneral'), d)}${mpByDiv[d].map(posRow).join('')}`).join('');
-  const posRows = `${gHead(t('eo.ev.grp.manpower'))}${mpSection}${otherRows.map(posRow).join('')}${kolRows.length ? gHead(t('eo.ev.grp.kol')) + kolRows.map(posRow).join('') : ''}`;
+  // Collapsible group: header shows name, "ticked/total positions", people subtotal
+  // and a tick-all toggle. Groups with a ticked position start open.
+  const grpBox = (label, list) => {
+    const nOn = list.filter((p) => Object.prototype.hasOwnProperty.call(sel, p.id)).length;
+    return `<details class="pm-grp"${nOn ? ' open' : ''}>
+      <summary><span class="pm-caret" aria-hidden="true">▸</span><span class="pm-grp-name">${esc(label)}</span><span class="pm-grp-meta"><b class="pm-grp-on">${nOn}</b>/${list.length} ${esc(t('eo.ev.posWord'))} · ${t('eo.ev.divSubtotal')}: <b class="divsubtotal">0</b> ${t('eo.ev.people')}</span><button type="button" class="pm-grp-all">${esc(t('eo.ev.tickAll'))}</button></summary>
+      <div class="pm-grp-body">${list.map(posRow).join('')}</div>
+    </details>`;
+  };
+  const mpSection = divKeys.map((d) => grpBox(d || t('eo.ev.divGeneral'), mpByDiv[d])).join('');
+  const posRows = `${gHead(t('eo.ev.grp.manpower'))}${mpSection}${kolRows.length ? gHead(t('eo.ev.grp.kol')) + grpBox(t('eo.ev.grp.kol'), kolRows) : ''}`;
   // Template map for the client: event type id -> { pos:[position ids], quota:{id:default} }.
   const tplByType = {};
   (roleTemplates || []).forEach((rt) => { if (rt.is_active === false) return; const k = String(rt.event_type_id); (tplByType[k] = tplByType[k] || { pos: [], quota: {} }); tplByType[k].pos.push(String(rt.position_id)); tplByType[k].quota[String(rt.position_id)] = rt.default_quota; });
@@ -3196,8 +3209,44 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     </div>
     <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
     <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
-    <div id="posmList">${posRows}</div>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:10px;border-top:2px solid var(--line);font-weight:700">${t('eo.ev.totalNeed')}<span><b id="posmGrandTotal">0</b> ${t('eo.ev.people')}</span></div>
+    <style>
+      .pm-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}
+      .pm-tools input[type=search]{flex:1 1 220px;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--card);color:var(--ink);font-family:inherit}
+      .pm-sec{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:16px 0 0}
+      .pm-grp{border:1px solid var(--line);border-radius:12px;margin-top:8px;background:var(--card)}
+      .pm-grp>summary{list-style:none;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding:11px 14px;cursor:pointer;user-select:none}
+      .pm-grp>summary::-webkit-details-marker{display:none}
+      .pm-caret{font-size:11px;color:var(--muted);transition:transform .15s}
+      .pm-grp[open]>summary .pm-caret{transform:rotate(90deg)}
+      .pm-grp-name{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em;flex:1 1 140px;min-width:0}
+      .pm-grp-meta{font-size:12px;color:var(--muted);white-space:nowrap}
+      .pm-grp-all,.pm-link{font-size:12px;font-weight:700;color:var(--red);background:none;border:0;cursor:pointer;padding:4px 0;font-family:inherit}
+      .pm-grp-body{padding:0 14px 4px}
+      .posm-row{border-top:1px solid var(--line);padding:10px 0}
+      .pm-line{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+      .pm-name{flex:1 1 200px;min-width:0;display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px}
+      .pm-name .posm-cb{flex:0 0 auto}
+      .pm-badge{display:none;font-size:10.5px;font-weight:700;color:#9a5b00;background:#fff3dc;border-radius:999px;padding:2px 8px;white-space:nowrap}
+      .posm-row.is-on.is-mod .pm-badge{display:inline-block}
+      .pm-ctrls{display:flex;align-items:center;gap:10px;margin-left:auto}
+      .pm-ctrls .posm-quota{width:92px;box-sizing:border-box;padding:8px 10px;font-size:14px}
+      .pm-ctrls .posm-quota:disabled{opacity:.45;background:var(--card2,#f2f2f5)}
+      .pm-edit{font-size:12.5px;font-weight:700;color:var(--ink);background:none;border:0;cursor:pointer;padding:6px 0;white-space:nowrap;font-family:inherit}
+      .pm-edit:disabled{color:var(--muted);opacity:.5;cursor:default}
+      .pm-edit[aria-expanded=true] span{display:inline-block;transform:rotate(180deg)}
+      .pm-panel{margin-top:10px;padding:12px;border-radius:10px;background:var(--card2,#f6f6f8)}
+      .pm-flabel{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+      .tpl-reset{font-size:11.5px;font-weight:700;color:var(--red);background:none;border:0;cursor:pointer;padding:0 0 4px;font-family:inherit}
+      .pm-empty{display:none;font-size:13px;color:var(--muted);padding:12px 2px}
+      .pm-sum{position:sticky;bottom:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:14px -4px 0;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 -6px 18px rgba(0,0,0,.06);font-size:14px}
+      @media (max-width:560px){.pm-ctrls{width:100%;justify-content:space-between;margin-left:30px}.pm-grp-body{padding:0 10px 4px}.pm-grp>summary{padding:10px}}
+    </style>
+    <div class="pm-tools">
+      <input type="search" id="posmSearch" placeholder="${esc(t('eo.ev.searchPosPh'))}" aria-label="${esc(t('eo.ev.searchPosPh'))}" autocomplete="off">
+      <button type="button" id="posmAll" class="btn btn-ghost btn-sm">${esc(t('eo.ev.tickAllPos'))}</button>
+    </div>
+    <div id="posmList">${posRows}<div class="pm-empty" id="posmEmpty">${esc(t('eo.ev.noPosMatch'))}</div></div>
+    <div class="pm-sum" id="posmSum"><span><b id="posmActive">0</b> ${esc(t('eo.ev.posActive'))} · <b id="posmGrandTotal">0</b> ${esc(t('eo.ev.peopleNeeded'))}</span></div>
     <div style="font-weight:700;margin:22px 0 2px">${t('eo.ev.customSection')}</div>
     <p class="muted" style="font-size:12.5px;margin:2px 0 6px">${t('eo.ev.customHint')}</p>
     <div id="customList"></div>
@@ -3208,60 +3257,114 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 <script>
 (function(){
   var list=document.getElementById('posmList'); if(!list) return;
-  function sync(r){ var cb=r.querySelector('.posm-cb'), ex=r.querySelector('.posm-extra'), q=r.querySelector('.posm-quota'); var on=!!(cb&&cb.checked); if(ex) ex.style.display=on?'':'none'; if(q) q.required=on; /* only a visible (checked) position requires a quota — a hidden required field can't be validated */ }
+  var form=list.closest('form');
+  var L10N=${JSON.stringify({ tickAll: t('eo.ev.tickAll'), untickAll: t('eo.ev.untickAll'), tickAllPos: t('eo.ev.tickAllPos'), untickAllPos: t('eo.ev.untickAllPos') })};
+  var rows=[].slice.call(list.querySelectorAll('.posm-row'));
+  var groups=[].slice.call(list.querySelectorAll('.pm-grp'));
+  function q$(r,s){ return r.querySelector(s); }
+  // Ticked = quota enabled + required, detail panel available. An unticked row keeps
+  // its (disabled) quota visible; the server ignores fields of unticked positions.
+  function sync(r){
+    var cb=q$(r,'.posm-cb'), q=q$(r,'.posm-quota'), ed=q$(r,'.pm-edit'), cn=q$(r,'.pm-cname'); var on=!!(cb&&cb.checked);
+    r.classList.toggle('is-on',on);
+    if(q){ q.disabled=!on; q.required=on; }
+    if(ed){ ed.disabled=!on; if(!on) setPanel(r,false); }
+    if(cn) cn.style.display=on?'':'none';
+  }
+  function setPanel(r,open){ var p=q$(r,'.pm-panel'), ed=q$(r,'.pm-edit'); if(p) p.hidden=!open; if(ed) ed.setAttribute('aria-expanded',open?'true':'false'); }
+  var FIELDS=[['.posm-desc','data-tpl-desc'],['.posm-job','data-tpl-job'],['.posm-req','data-tpl-req']];
   // On tick, fill empty Deskripsi/Jobdesk/Requirement from the role's default template.
   function fillTpl(r){
-    var cb=r.querySelector('.posm-cb'); if(!cb||!cb.checked) return;
-    var map=[['.posm-desc','data-tpl-desc'],['.posm-job','data-tpl-job'],['.posm-req','data-tpl-req']];
-    map.forEach(function(m){ var el=r.querySelector(m[0]), val=r.getAttribute(m[1]); if(el && val && !el.value.trim()) el.value=val; });
+    var cb=q$(r,'.posm-cb'); if(!cb||!cb.checked) return;
+    FIELDS.forEach(function(m){ var el=q$(r,m[0]), val=r.getAttribute(m[1]); if(el && val && !el.value.trim()) el.value=val; });
   }
-  var rows=[].slice.call(list.querySelectorAll('.posm-row'));
-  rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); fillTpl(r); }); });
+  // "diubah" badge: any ID field differs from its template, or any EN field is filled.
+  function markMod(r){
+    if(r.getAttribute('data-other')){ r.classList.remove('is-mod'); return; }
+    var mod=FIELDS.some(function(m){ var el=q$(r,m[0]); return el && el.value.trim()!==(r.getAttribute(m[1])||'').trim(); })
+      || [].slice.call(r.querySelectorAll('.posm-en')).some(function(el){ return !!el.value.trim(); });
+    r.classList.toggle('is-mod',mod);
+  }
+  function setTick(r,on){ var cb=q$(r,'.posm-cb'); if(!cb||cb.checked===on) return; cb.checked=on; sync(r); fillTpl(r); markMod(r); }
+  rows.forEach(function(r){ var cb=q$(r,'.posm-cb'); if(cb) cb.addEventListener('change',function(){ sync(r); fillTpl(r); markMod(r); }); });
   // Safety net: on load, fill templates for any already-checked position whose
   // Description/Jobdesk/Requirement are still empty (e.g. after a validation re-render).
-  rows.forEach(function(r){ sync(r); fillTpl(r); });
-  // "Reset to default": re-apply the role template to one field, overwriting any EO edits.
-  var TPL={desc:['.posm-desc','data-tpl-desc'],job:['.posm-job','data-tpl-job'],req:['.posm-req','data-tpl-req']};
+  rows.forEach(function(r){ sync(r); fillTpl(r); markMod(r); });
+  var visible=function(r){ return r.style.display!=='none'; };
   list.addEventListener('click',function(e){
-    var b=e.target&&e.target.closest?e.target.closest('.tpl-reset'):null; if(!b)return;
-    e.preventDefault();
-    var r=b.closest('.posm-row'); if(!r)return;
-    var m=TPL[b.getAttribute('data-tf')]; if(!m)return;
-    var el=r.querySelector(m[0]), val=r.getAttribute(m[1]);
-    if(el&&val!=null){ el.value=val; el.focus(); }
+    var t=e.target&&e.target.closest?e.target:null; if(!t) return;
+    var ed=t.closest('.pm-edit');
+    if(ed){ e.preventDefault(); var r=ed.closest('.posm-row'); setPanel(r, ed.getAttribute('aria-expanded')!=='true'); return; }
+    // One "Reset to default" per position: ID fields back to the template, EN fields cleared.
+    var rs=t.closest('.tpl-reset');
+    if(rs){ e.preventDefault(); var r2=rs.closest('.posm-row'); FIELDS.forEach(function(m){ var el=q$(r2,m[0]); if(el) el.value=r2.getAttribute(m[1])||''; }); [].slice.call(r2.querySelectorAll('.posm-en')).forEach(function(el){ el.value=''; }); markMod(r2); return; }
+    // Tick-all per group (only the rows the search currently shows).
+    var ga=t.closest('.pm-grp-all');
+    if(ga){ e.preventDefault(); e.stopPropagation(); var g=ga.closest('.pm-grp'); var rs2=[].slice.call(g.querySelectorAll('.posm-row')).filter(visible); var all=rs2.length && rs2.every(function(r){ return q$(r,'.posm-cb').checked; }); rs2.forEach(function(r){ setTick(r,!all); }); if(!all) g.open=true; _dirty=true; recalcTotals(); }
   });
+  list.addEventListener('input',function(e){ var r=e.target&&e.target.closest?e.target.closest('.posm-row'):null; if(r && e.target.tagName==='TEXTAREA') markMod(r); });
+  var allBtn=document.getElementById('posmAll');
+  if(allBtn) allBtn.addEventListener('click',function(){ var rs=rows.filter(visible); var all=rs.length && rs.every(function(r){ return q$(r,'.posm-cb').checked; }); rs.forEach(function(r){ setTick(r,!all); }); if(!all) groups.forEach(function(g){ if(g.querySelector('.posm-cb:checked')) g.open=true; }); _dirty=true; recalcTotals(); });
+  // Client-side search on position names; groups with a match open automatically.
+  var search=document.getElementById('posmSearch'), empty=document.getElementById('posmEmpty'), _openBefore=null;
+  function applySearch(){
+    var v=(search&&search.value||'').trim().toLowerCase();
+    if(v && !_openBefore) _openBefore=groups.map(function(g){ return g.open; });
+    var any=false;
+    groups.forEach(function(g,i){
+      var hit=0;
+      [].slice.call(g.querySelectorAll('.posm-row')).forEach(function(r){ var ok=!v || (r.getAttribute('data-name')||'').indexOf(v)>=0; r.style.display=ok?'':'none'; if(ok) hit++; });
+      g.style.display=(!v||hit)?'':'none';
+      if(v){ g.open=hit>0; } else if(_openBefore){ g.open=_openBefore[i]; }
+      if(hit) any=true;
+    });
+    if(!v) _openBefore=null;
+    if(empty) empty.style.display=(v&&!any)?'block':'none';
+    recalcTotals();
+  }
+  if(search){ search.addEventListener('input',applySearch); search.addEventListener('keydown',function(e){ if(e.key==='Enter') e.preventDefault(); }); }
+  // A required quota inside a closed group/panel or filtered out can't be focused by
+  // the browser's validation — clear the search and open its group first.
+  if(form) form.addEventListener('invalid',function(e){ var el=e.target; if(!el||!el.closest||!list.contains(el)) return; if(search&&search.value){ search.value=''; applySearch(); } var g=el.closest('.pm-grp'); if(g) g.open=true; var p=el.closest('.pm-panel'); if(p){ setPanel(p.closest('.posm-row'),true); } },true);
   // Pick an event type -> apply its role template: tick template roles + prefill
-  // their default quota; hide/untick non-template Manpower roles (unless already
-  // picked). Unknown/custom types apply no filter. An empty template (e.g. HYROX)
-  // pre-ticks nothing — the EO adds roles manually.
+  // their default quota; untick non-template Manpower roles (unless already picked
+  // on load). Every role stays listed so the EO sees all options. Unknown/custom
+  // types apply no filter. An empty template (e.g. HYROX) pre-ticks nothing.
   var TPL=${JSON.stringify(tplByType)};
   var cat=document.getElementById('event_type_id');
   var emptyInfo=document.getElementById('tplEmptyInfo');
   function recalcTotals(){
-    var grand=0, byDiv={};
-    rows.forEach(function(r){ var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-quota'); if(!cb||!cb.checked) return; var n=parseInt(q&&q.value,10)||0; grand+=n; var dv=r.getAttribute('data-div')||''; byDiv[dv]=(byDiv[dv]||0)+n; });
-    var g=document.getElementById('posmGrandTotal'); if(g) g.textContent=grand;
-    [].slice.call(document.querySelectorAll('.divsubtotal')).forEach(function(el){ el.textContent=byDiv[el.getAttribute('data-div')||'']||0; });
+    var grand=0, active=0;
+    groups.forEach(function(g){
+      var sub=0, on=0;
+      [].slice.call(g.querySelectorAll('.posm-row')).forEach(function(r){ var cb=q$(r,'.posm-cb'), q=q$(r,'.posm-quota'); if(!cb||!cb.checked) return; on++; sub+=parseInt(q&&q.value,10)||0; });
+      var s=g.querySelector('.divsubtotal'); if(s) s.textContent=sub;
+      var o=g.querySelector('.pm-grp-on'); if(o) o.textContent=on;
+      var vis=[].slice.call(g.querySelectorAll('.posm-row')).filter(visible);
+      var b=g.querySelector('.pm-grp-all'); if(b) b.textContent=(vis.length && vis.every(function(r){ return q$(r,'.posm-cb').checked; }))?L10N.untickAll:L10N.tickAll;
+      grand+=sub; active+=on;
+    });
+    var gEl=document.getElementById('posmGrandTotal'); if(gEl) gEl.textContent=grand;
+    var aEl=document.getElementById('posmActive'); if(aEl) aEl.textContent=active;
+    if(allBtn){ var rs=rows.filter(visible); allBtn.textContent=(rs.length && rs.every(function(r){ return q$(r,'.posm-cb').checked; }))?L10N.untickAllPos:L10N.tickAllPos; }
   }
   function applyType(initial){
     if(!cat) return;
     var tpl=TPL[cat.value||'']||null;
     var posList=tpl?tpl.pos:null, qmap=tpl?tpl.quota:{};
     if(emptyInfo) emptyInfo.style.display=(tpl&&posList&&posList.length===0)?'':'none';
-    rows.forEach(function(r){
-      if(r.getAttribute('data-cat')!=='mp') return; // only Manpower rows are template-driven
-      var cb=r.querySelector('.posm-cb'), q=r.querySelector('.posm-quota'), pid=r.getAttribute('data-pid');
-      if(!tpl){ r.style.display=''; return; } // unknown/custom type: show all
-      if(posList.indexOf(pid)>=0){
-        r.style.display='';
-        if(!initial && cb && !cb.checked){ cb.checked=true; sync(r); fillTpl(r); }
-        if(!initial && q && !q.value && qmap[pid]!=null){ q.value=qmap[pid]; }
-      } else {
-        if(initial && cb && cb.checked){ r.style.display=''; return; } // keep an existing pick
-        r.style.display='none';
-        if(cb&&cb.checked){ cb.checked=false; sync(r); }
-      }
-    });
+    if(tpl && !initial){
+      rows.forEach(function(r){
+        if(r.getAttribute('data-cat')!=='mp') return; // only Manpower rows are template-driven
+        var cb=q$(r,'.posm-cb'), q=q$(r,'.posm-quota'), pid=r.getAttribute('data-pid');
+        if(posList.indexOf(pid)>=0){
+          if(cb && !cb.checked){ setTick(r,true); }
+          if(q && !q.value && qmap[pid]!=null){ q.value=qmap[pid]; }
+        } else if(cb && cb.checked){ setTick(r,false); }
+      });
+      // Open the groups that now hold ticked roles, fold the rest.
+      groups.forEach(function(g){ g.open=!!g.querySelector('.posm-cb:checked'); });
+    }
     recalcTotals();
   }
   var _dirty=false;
