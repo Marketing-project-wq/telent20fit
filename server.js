@@ -1251,12 +1251,34 @@ async function loadCertCtx(st) {
   ]);
   const posById = new Map(positions.map((p) => [p.id, p]));
   const acceptedByApp = new Map();
-  choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedByApp.set(c.application_id, p.label_en || p.label_id || null); } });
-  return { eventById: new Map(events.map((e) => [e.id, e])), acceptedByApp, accountById: new Map(talents.map((t) => [t.id, t])), cfg };
+  const acceptedCatByApp = new Map();
+  const appsWithPicks = new Set();
+  choices.forEach((c) => {
+    appsWithPicks.add(c.application_id);
+    if (c.accepted) { const p = posById.get(c.position_id); if (p) { acceptedByApp.set(c.application_id, p.label_en || p.label_id || null); acceptedCatByApp.set(c.application_id, V.positionCategory(p)); } }
+  });
+  return { eventById: new Map(events.map((e) => [e.id, e])), acceptedByApp, acceptedCatByApp, appsWithPicks, accountById: new Map(talents.map((t) => [t.id, t])), cfg };
+}
+// Position-based (new flow) certificates only go to events ending on/after this
+// date (WIB), so events that were already over when the rule changed don't get a
+// retroactive batch. Override with CERT_FROM_DATE (YYYY-MM-DD).
+const CERT_FROM_DATE = /^\d{4}-\d{2}-\d{2}$/.test(String(process.env.CERT_FROM_DATE || '')) ? process.env.CERT_FROM_DATE : '2026-10-12';
+// Who earns the event certificate: attended, and Man Power — i.e. the ACCEPTED
+// position's talent_category is 'manpower' (position-based apps, events ending on
+// or after CERT_FROM_DATE), or, for old category-form apps without picks, the
+// application's talent_type is 'main_power' (unchanged legacy rule).
+function certEligible(a, ctx) {
+  if (!a || !a.attended) return false;
+  if (ctx.appsWithPicks.has(a.id)) {
+    if (ctx.acceptedCatByApp.get(a.id) !== 'manpower') return false;
+    const ev = ctx.eventById.get(a.event_id);
+    const end = String((ev && (ev.ends_at || ev.starts_at)) || '').slice(0, 10);
+    return !!end && end >= CERT_FROM_DATE;
+  }
+  return a.talent_type === 'main_power';
 }
 // Issue the 20FIT Talent certificate for the given applications. Rules:
-//   - talent category is Man Power (talent_type === 'main_power'),
-//   - the talent is marked ATTENDED (not just applied / not yet marked),
+//   - certEligible(): attended + Man Power (see above),
 //   - the event is over and cert_auto isn't turned off.
 // role is the ASSIGNED position (the accepted application choice), not an
 // applied one. talent_name is the full legal name; when it's still missing the
@@ -1265,7 +1287,7 @@ async function loadCertCtx(st) {
 // a cert_no clash simply defers that one to the next run (random 32^6 space).
 async function issueCertsForApps(st, apps, ctx) {
   for (const a of apps || []) {
-    if (!a.attended || a.talent_type !== 'main_power') continue;
+    if (!certEligible(a, ctx)) continue;
     const ev = ctx.eventById.get(a.event_id);
     if (!ev || ev.cert_auto === false || !eventFinished(ev)) continue;
     const acc = ctx.accountById.get(a.talent_id) || {};
@@ -1284,10 +1306,10 @@ async function issueCertsForApps(st, apps, ctx) {
 // Convenience wrapper: only touches the DB when at least one application is
 // actually eligible, so it's cheap to call on every profile view.
 async function maybeIssueCerts(st, apps) {
-  const elig = (apps || []).filter((a) => a.attended && a.talent_type === 'main_power');
-  if (!elig.length) return;
+  const attended = (apps || []).filter((a) => a.attended);
+  if (!attended.length) return;
   const ctx = await loadCertCtx(st);
-  await issueCertsForApps(st, elig, ctx);
+  await issueCertsForApps(st, attended, ctx);
 }
 // Daily auto-issue: for events that ended 1–10 days ago (WIB), issue any
 // certificates now earned. Runs from the hourly scheduler, so a leader who fills
@@ -1305,7 +1327,7 @@ async function runDueCertificates(st) {
     });
     if (!dueIds.size) return { due: 0 };
     const apps = (await st.listApplications().catch(() => []))
-      .filter((a) => dueIds.has(a.event_id) && a.attended && a.talent_type === 'main_power');
+      .filter((a) => dueIds.has(a.event_id) && certEligible(a, ctx));
     await issueCertsForApps(st, apps, ctx);
     return { due: dueIds.size, apps: apps.length };
   } catch (err) { console.warn('[certs] auto-issue skipped:', err && err.message); return { issued: 0 }; }
@@ -3913,7 +3935,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     // Attendance links: one per event that has any approved talent, for on-site PICs.
     const mpCount = new Map();
     for (const a of applications) {
-      if (a.status === 'approved') mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
+      if (ATTENDANCE_STATUSES.includes(a.status)) mpCount.set(a.event_id, (mpCount.get(a.event_id) || 0) + 1);
     }
     const attendanceLinks = [...mpCount.entries()].map(([eid, n]) => ({
       eventId: eid, name: eventName.get(eid) || '—', count: n,
@@ -4596,6 +4618,9 @@ function eventDays(ev) {
 }
 
 // Approved Man Power for an event, sorted by name, with per-day + total attendance.
+// Accepted talents can be checked in whether or not they've confirmed yet:
+// 'approved' (accepted) and 'assigned' (talent agreed to the spot).
+const ATTENDANCE_STATUSES = ['approved', 'assigned'];
 async function attendanceRows(st, eventId, day) {
   const [apps, talents, choices, positions] = await Promise.all([st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions()]);
   const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
@@ -4604,7 +4629,7 @@ async function attendanceRows(st, eventId, day) {
   const acceptedPos = new Map();
   choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_id || p.label_en || null); } });
   return apps
-    .filter((a) => a.event_id === eventId && a.status === 'approved')
+    .filter((a) => a.event_id === eventId && ATTENDANCE_STATUSES.includes(a.status))
     .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: acceptedPos.get(a.id) || a.station || null, station_loc: a.station_loc || null, count: dates.length, checked: day ? dates.includes(day) : false }; })
     .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
 }
@@ -4641,7 +4666,7 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
     const app0 = await st.getApplication(appId);
     // Guard: token is event-scoped and the day must be one of the event's days.
     let doneName = '';
-    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && app0.status === 'approved') {
+    if (ev && eventDays(ev).includes(day) && app0 && app0.event_id === eventId && ATTENDANCE_STATUSES.includes(app0.status)) {
       const set = new Set(attDates(app0));
       if (attended) set.add(day); else set.delete(day);
       const arr = [...set].sort();
@@ -4660,12 +4685,15 @@ app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), as
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [apps, events, talents] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents()]);
+    const [apps, events, talents, ctx] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), loadCertCtx(st)]);
     const evById = new Map(events.map((e) => [e.id, e]));
     const tById = new Map(talents.map((tt) => [tt.id, tt]));
     const evf = String(req.query.event || ''); // scope the attendance report to one event when opened per-event
+    // Man Power = accepted position in the 'manpower' category (old apps without
+    // picks: talent_type 'main_power'); accepted = approved or assigned.
+    const isMp = (a) => (ctx.appsWithPicks.has(a.id) ? ctx.acceptedCatByApp.get(a.id) === 'manpower' : a.talent_type === 'main_power');
     const rows = apps
-      .filter((a) => a.status === 'approved' && a.talent_type === 'main_power' && attDates(a).length > 0 && (!evf || a.event_id === evf))
+      .filter((a) => ATTENDANCE_STATUSES.includes(a.status) && isMp(a) && attDates(a).length > 0 && (!evf || a.event_id === evf))
       .map((a) => {
         const tt = tById.get(a.talent_id) || {}; const ans = a.answers || {};
         return {
