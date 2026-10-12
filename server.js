@@ -4602,9 +4602,10 @@ function eventDays(ev) {
 }
 
 // Approved Man Power for an event, sorted by name, with per-day + total attendance.
-// Accepted talents can be checked in whether or not they've confirmed yet:
-// 'approved' (accepted) and 'assigned' (talent agreed to the spot).
-const ATTENDANCE_STATUSES = ['approved', 'assigned'];
+// Only talents who were accepted AND confirmed they're coming (Agree -> 'assigned')
+// appear on the attendance list and can be checked in. Accepted-but-unconfirmed
+// ('approved') talents stay off it until they click Agree.
+const ATTENDANCE_STATUSES = ['assigned'];
 async function attendanceRows(st, eventId, day) {
   const [apps, talents, choices, positions] = await Promise.all([st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions()]);
   const evApps = apps.filter((a) => a.event_id === eventId && ATTENDANCE_STATUSES.includes(a.status));
