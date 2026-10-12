@@ -377,9 +377,9 @@ function supabaseStore() {
     },
     async listEventPositions(eventId) {
       const { data, error } = await sb.from('talent_event_positions')
-        .select('id,quota,closed_at,division,sort_order,updated_at,is_optional,is_custom,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,talent_positions(key,label_id,label_en,sort,division,talent_category)').eq('event_id', eventId);
+        .select('id,quota,closed_at,division,sort_order,updated_at,is_optional,is_custom,jobdesk,requirement,fee,' + POS_DETAIL_COLS.join(',') + ',position_id,fee_amount,talent_positions(key,label_id,label_en,sort,division,talent_category)').eq('event_id', eventId);
       if (error) throw new Error(error.message);
-      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, is_optional: !!r.is_optional, is_custom: !!r.is_custom, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, talent_category: (r.talent_positions && r.talent_positions.talent_category) || null, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
+      return (data || []).map((r) => ({ id: r.id, position_id: r.position_id, quota: r.quota, closed_at: r.closed_at, division: r.division || (r.talent_positions && r.talent_positions.division) || null, sort_order: (r.sort_order != null ? r.sort_order : ((r.talent_positions && r.talent_positions.sort) || 0)), updated_at: r.updated_at || null, is_optional: !!r.is_optional, is_custom: !!r.is_custom, jobdesk: r.jobdesk || null, requirement: r.requirement || null, fee: r.fee || null, fee_amount: r.fee_amount != null ? Number(r.fee_amount) : null, ...pickPosDetails(r), key: r.talent_positions && r.talent_positions.key, label_id: r.talent_positions && r.talent_positions.label_id, label_en: r.talent_positions && r.talent_positions.label_en, talent_category: (r.talent_positions && r.talent_positions.talent_category) || null, sort: (r.talent_positions && r.talent_positions.sort) || 0 }))
         .sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     // Diff/upsert instead of delete+reinsert so row ids (and their quota logs)
@@ -393,7 +393,7 @@ function supabaseStore() {
       const exByPos = new Map((ex.data || []).map((r) => [String(r.position_id), r]));
       const keep = new Set();
       for (const p of incoming) {
-        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: new Date().toISOString(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) };
+        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: new Date().toISOString(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, fee_amount: Number.isFinite(p.fee_amount) ? p.fee_amount : null, ...pickPosDetails(p) };
         const found = exByPos.get(String(p.position_id));
         if (found) {
           keep.add(String(p.position_id));
@@ -542,6 +542,50 @@ function supabaseStore() {
       const { data, error } = await sb.from('talent_applications').select('*').eq('talent_id', talentId).order('created_at', { ascending: false });
       if (error) throw new Error(error.message);
       return data || [];
+    },
+    // ---- Payments (bank details are fetched ONLY through these helpers, never via
+    // listTalents/getAccountById, so they can't leak into the many generic views) ----
+    async getBankInfo(talentIds) {
+      const ids = [...new Set((talentIds || []).filter(Boolean))];
+      if (!ids.length) return new Map();
+      const out = new Map();
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await sb.from('talent_accounts').select('id,bank_name,bank_account_number,bank_account_holder,bank_updated_at').in('id', ids.slice(i, i + 200));
+        if (error) throw new Error(error.message);
+        (data || []).forEach((r) => out.set(r.id, r));
+      }
+      return out;
+    },
+    // Update a talent's bank details and log old -> new (only when something changed).
+    async setBankInfo(talentId, next, by, byRole) {
+      const { data: cur, error: e1 } = await sb.from('talent_accounts').select('bank_name,bank_account_number,bank_account_holder').eq('id', talentId).maybeSingle();
+      if (e1) throw new Error(e1.message);
+      const old = cur || {};
+      const same = (old.bank_name || null) === (next.bank_name || null) && (old.bank_account_number || null) === (next.bank_account_number || null) && (old.bank_account_holder || null) === (next.bank_account_holder || null);
+      if (same) return false;
+      const { error: e2 } = await sb.from('talent_accounts').update({ bank_name: next.bank_name, bank_account_number: next.bank_account_number, bank_account_holder: next.bank_account_holder, bank_updated_at: new Date().toISOString() }).eq('id', talentId);
+      if (e2) throw new Error(e2.message);
+      const { error: e3 } = await sb.from('talent_bank_change_logs').insert({
+        talent_id: talentId, old_bank_name: old.bank_name || null, old_account_number: old.bank_account_number || null, old_account_holder: old.bank_account_holder || null,
+        new_bank_name: next.bank_name, new_account_number: next.bank_account_number, new_account_holder: next.bank_account_holder,
+        changed_by: by || null, changed_by_role: byRole || null,
+      });
+      if (e3) throw new Error(e3.message);
+      return true;
+    },
+    async listPaymentsForEvent(eventId) {
+      const { data, error } = await sb.from('talent_payments').select('*').eq('event_id', eventId);
+      if (error) throw new Error(error.message);
+      return data || [];
+    },
+    // Upsert the payment row of one application (keyed by application_id).
+    async savePayment(row) {
+      const { error } = await sb.from('talent_payments').upsert(Object.assign({}, row, { updated_at: new Date().toISOString() }), { onConflict: 'application_id' });
+      if (error) throw new Error(error.message);
+    },
+    async addExportLog(row) {
+      const { error } = await sb.from('talent_export_logs').insert(row);
+      if (error) throw new Error(error.message);
     },
     async getApplication(id) {
       const { data } = await sb.from('talent_applications').select('*').eq('id', id).maybeSingle();
@@ -811,6 +855,7 @@ function memoryStore() {
   ];
   const submissions = [];
   const landingBgs = {};
+  const bankLogs = []; const payments = []; const exportLogs = [];
   let landingImages = [];
   const hashPassword = require('./auth').hashPassword;
   const accounts = [
@@ -999,7 +1044,7 @@ function memoryStore() {
     async listEventTypes() { return eventTypes.filter((t) => t.is_active).slice().sort((a, b) => a.sort - b.sort).map((t) => ({ ...t, default_position_ids: (t.default_position_ids || []).slice() })); },
     async getEventType(idOrKey) { const t = eventTypes.find((x) => x.id === idOrKey || x.key === idOrKey); return t ? { ...t } : null; },
     async listEventPositions(eventId) {
-      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, ...pickPosDetails(ep), key: m.key, talent_category: m.talent_category || null, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
+      return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, fee_amount: ep.fee_amount != null ? ep.fee_amount : null, ...pickPosDetails(ep), key: m.key, talent_category: m.talent_category || null, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
     async setEventPositions(eventId, poss) {
       const incoming = (poss || []).filter((p) => p && p.position_id && p.quota > 0);
@@ -1007,7 +1052,7 @@ function memoryStore() {
       incoming.forEach((p) => {
         keep.add(String(p.position_id));
         const found = eventPositions.find((ep) => ep.event_id === eventId && ep.position_id === p.position_id);
-        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: now(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, ...pickPosDetails(p) };
+        const cols = { quota: p.quota, division: p.division || null, sort_order: p.sort_order || 0, closed_at: null, updated_at: now(), jobdesk: p.jobdesk || null, requirement: p.requirement || null, fee: p.fee || null, fee_amount: Number.isFinite(p.fee_amount) ? p.fee_amount : null, ...pickPosDetails(p) };
         if (found) Object.assign(found, cols);
         else eventPositions.push(Object.assign({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id }, cols));
       });
@@ -1114,6 +1159,19 @@ function memoryStore() {
     },
     async listApplications() { return applications.slice().reverse(); },
     async listApplicationsForTalent(talentId) { return applications.filter((a) => a.talent_id === talentId).slice().reverse(); },
+    async getBankInfo(talentIds) { const out = new Map(); (talentIds || []).forEach((id) => { const a = accounts.find((x) => x.id === id); if (a) out.set(id, { id, bank_name: a.bank_name || null, bank_account_number: a.bank_account_number || null, bank_account_holder: a.bank_account_holder || null, bank_updated_at: a.bank_updated_at || null }); }); return out; },
+    async setBankInfo(talentId, next, by, byRole) {
+      const a = accounts.find((x) => x.id === talentId); if (!a) return false;
+      if ((a.bank_name || null) === (next.bank_name || null) && (a.bank_account_number || null) === (next.bank_account_number || null) && (a.bank_account_holder || null) === (next.bank_account_holder || null)) return false;
+      bankLogs.push({ id: 'bl-' + (++seq), talent_id: talentId, old_bank_name: a.bank_name || null, old_account_number: a.bank_account_number || null, old_account_holder: a.bank_account_holder || null, new_bank_name: next.bank_name, new_account_number: next.bank_account_number, new_account_holder: next.bank_account_holder, changed_at: now(), changed_by: by || null, changed_by_role: byRole || null });
+      Object.assign(a, { bank_name: next.bank_name, bank_account_number: next.bank_account_number, bank_account_holder: next.bank_account_holder, bank_updated_at: now() });
+      return true;
+    },
+    async listBankLogs() { return bankLogs.slice(); },
+    async listPaymentsForEvent(eventId) { return payments.filter((p) => p.event_id === eventId).map((p) => ({ ...p })); },
+    async savePayment(row) { const p = payments.find((x) => x.application_id === row.application_id); if (p) Object.assign(p, row, { updated_at: now() }); else payments.push(Object.assign({ id: 'pay-' + (++seq), payment_status: 'unpaid' }, row, { updated_at: now() })); },
+    async addExportLog(row) { exportLogs.push(Object.assign({ id: 'xl-' + (++seq), created_at: now() }, row)); },
+    async listExportLogs() { return exportLogs.slice(); },
     async getApplication(id) { return applications.find((a) => a.id === id) || null; },
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
     async getApplicationForEvent(talentId, eventId) { return applications.find((a) => a.talent_id === talentId && a.event_id === eventId) || null; },

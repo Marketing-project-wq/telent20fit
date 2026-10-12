@@ -49,6 +49,7 @@ const V = require('./views');
 const { store, MODE } = require('./store');
 const auth = require('./auth');
 const authApi = require('./authApi');
+const payPdf = require('./payments-pdf');
 const llm = require('./llm');
 const mailer = require('./mailer');
 const cert = require('./cert');
@@ -1010,7 +1011,12 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
       proofs: proofs.length,
       certs: certs.length,
     };
-    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, lang: req.lang }));
+    // Banner: has a confirmed (assigned) spot but no complete bank details yet.
+    let bankMissing = false;
+    if (myApps.some((a) => a.status === 'assigned')) {
+      try { bankMissing = !bankComplete((await st.getBankInfo([req.talent.id])).get(req.talent.id)); } catch (_) { /* best-effort */ }
+    }
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, bankMissing, lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1037,7 +1043,8 @@ app.post('/talent/applications/:appId/agree', requireAnyTalentBrowse(), async (r
     const st = db();
     if (!st) return needConfig(req, res);
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
-    if (app && app.status === 'approved') {
+    const agreed = !!(app && app.status === 'approved');
+    if (agreed) {
       await st.updateApplication(app.id, { status: 'assigned' });
       // Point 4: if the EO has already set the group link, email this newly-assigned
       // talent right away (the shared helper only touches unnotified assigned rows).
@@ -1046,7 +1053,10 @@ app.post('/talent/applications/:appId/agree', requireAnyTalentBrowse(), async (r
         if (ev && ev.group_url) await notifyGroupForAssigned(st, ev);
       } catch (err) { console.warn('[mail] group-invite on agree failed: ' + (err && err.message)); }
     }
-    res.redirect('/talent?lang=' + req.lang + '&confirmed=1');
+    // Confirmed talents are asked for their bank details (needed for the payment recap).
+    let needBank = false;
+    try { needBank = agreed && !bankComplete((await st.getBankInfo([req.talent.id])).get(req.talent.id)); } catch (_) { /* best-effort */ }
+    res.redirect(needBank ? '/talent/bank?lang=' + req.lang + '&after=agree' : '/talent?lang=' + req.lang + '&confirmed=1');
   } catch (e) { next(e); }
 });
 
@@ -2540,6 +2550,7 @@ function eoSelMap(positions) {
   (positions || []).forEach((p) => {
     const o = { quota: p.quota, description: p.description || '', description_en: p.description_en || '', custom_label: p.custom_label || '', custom_label_en: p.custom_label_en || '', jobdesk: p.jobdesk || '', jobdesk_en: p.jobdesk_en || '', requirement: p.requirement || '', requirement_en: p.requirement_en || '', fee: p.fee || '' };
     POS_DETAIL_KEYS.forEach((k) => { o[k] = p[k] || ''; });
+    o.fee_amount = p.fee_amount != null ? p.fee_amount : null;
     m[p.position_id] = o;
   });
   return m;
@@ -2623,6 +2634,8 @@ function parseEventForm(req, positionsMaster, eventTypes) {
       custom_label_en: key === 'other' ? g('custom_label_en', 80) : null,
       jobdesk: g('jobdesk', 1000), jobdesk_en: g('jobdesk_en', 1000),
       requirement: g('requirement', 1000), requirement_en: g('requirement_en', 1000), fee: g('fee', 200),
+      // Daily fee in rupiah for the payment recap (digits only; empty = not set).
+      fee_amount: (() => { const v = String(req.body['fee_amount_' + id] || '').replace(/[^0-9]/g, ''); return v ? Math.min(parseInt(v, 10), 1e12) : null; })(),
       // General extra fields (all categories).
       work_hours: g('work_hours', 120), venue_detail: g('venue_detail', 200),
       dresscode: g('dresscode', 400), meeting_point: g('meeting_point', 400),
@@ -4594,6 +4607,9 @@ function eventDays(ev) {
 const ATTENDANCE_STATUSES = ['approved', 'assigned'];
 async function attendanceRows(st, eventId, day) {
   const [apps, talents, choices, positions] = await Promise.all([st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions()]);
+  const evApps = apps.filter((a) => a.event_id === eventId && ATTENDANCE_STATUSES.includes(a.status));
+  let banks = new Map();
+  try { banks = await st.getBankInfo(evApps.map((a) => a.talent_id)); } catch (_) { /* flag is best-effort */ }
   const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
   const posById = new Map(positions.map((p) => [p.id, p]));
   // For position-based apps the "station" is the accepted position (Man Power apps keep a.station).
@@ -4601,7 +4617,7 @@ async function attendanceRows(st, eventId, day) {
   choices.forEach((c) => { if (c.accepted) { const p = posById.get(c.position_id); if (p) acceptedPos.set(c.application_id, p.label_id || p.label_en || null); } });
   return apps
     .filter((a) => a.event_id === eventId && ATTENDANCE_STATUSES.includes(a.status))
-    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: acceptedPos.get(a.id) || a.station || null, station_loc: a.station_loc || null, count: dates.length, checked: day ? dates.includes(day) : false }; })
+    .map((a) => { const dates = attDates(a); return { id: a.id, name: nameById.get(a.talent_id) || '—', station: acceptedPos.get(a.id) || a.station || null, station_loc: a.station_loc || null, count: dates.length, checked: day ? dates.includes(day) : false, bankMissing: !bankComplete(banks.get(a.talent_id)) }; })
     .sort((x, y) => x.name.localeCompare(y.name, 'id', { sensitivity: 'base' }));
 }
 
@@ -4650,35 +4666,200 @@ app.post('/absensi/:eventId/checkin', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Super admin: download a PDF report of Man Power who have checked in — bank
-// details, phone, and how many days each attended. Payment/reconciliation aid.
-app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
+// ------------------------------------------------------------ Payments ----
+// Payment recap per event: accepted talents who confirmed ('assigned') AND were
+// checked in at least one day, all categories. Fee = position daily fee x days
+// attended, overridable per person (talent_payments.fee_final). Bank details come
+// only from st.getBankInfo (never the generic talent queries). Account numbers are
+// masked on screen and written in full only in the PDF/CSV exports, which are
+// streamed (never stored) and logged in talent_export_logs.
+const BANK_NAME_MAX = 60, BANK_HOLDER_MAX = 100;
+function cleanAcct(v) { return String(v || '').replace(/[\s.-]/g, ''); }
+function maskAcct(v) { const s = String(v || ''); return s ? '****' + s.slice(-4) : ''; }
+function bankComplete(b) { return !!(b && b.bank_name && b.bank_account_number && b.bank_account_holder); }
+// Rough name match between the account holder and the talent's name: share at
+// least one meaningful word. Only used to warn, never to block.
+function namesLookAlike(a, b) {
+  const words = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !['bin', 'binti', 'dan'].includes(w));
+  const A = new Set(words(a)); if (!A.size) return true;
+  return words(b).some((w) => A.has(w));
+}
+function validateBank(body) {
+  const v = {
+    bank_name: String(body.bank_name || '').trim().slice(0, BANK_NAME_MAX),
+    bank_account_number: cleanAcct(body.bank_account_number).slice(0, 30),
+    bank_account_holder: String(body.bank_account_holder || '').trim().replace(/\s+/g, ' ').slice(0, BANK_HOLDER_MAX),
+  };
+  const errors = [];
+  if (!v.bank_name) errors.push('bank.err.name');
+  if (!/^[0-9]{6,20}$/.test(v.bank_account_number)) errors.push('bank.err.number');
+  if (!v.bank_account_holder) errors.push('bank.err.holder');
+  return { values: v, errors };
+}
+
+// Talent: bank details on their profile (asked for after they confirm a spot).
+app.get('/talent/bank', requireAnyTalentBrowse(), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [apps, events, talents, ctx] = await Promise.all([st.listApplications(), st.listEvents(), st.listTalents(), loadCertCtx(st)]);
-    const evById = new Map(events.map((e) => [e.id, e]));
-    const tById = new Map(talents.map((tt) => [tt.id, tt]));
-    const evf = String(req.query.event || ''); // scope the attendance report to one event when opened per-event
-    // Man Power = accepted position in the 'manpower' category (old apps without
-    // picks: talent_type 'main_power'); accepted = approved or assigned.
-    const isMp = (a) => (ctx.appsWithPicks.has(a.id) ? ctx.acceptedCatByApp.get(a.id) === 'manpower' : a.talent_type === 'main_power');
-    const rows = apps
-      .filter((a) => ATTENDANCE_STATUSES.includes(a.status) && isMp(a) && attDates(a).length > 0 && (!evf || a.event_id === evf))
-      .map((a) => {
-        const tt = tById.get(a.talent_id) || {}; const ans = a.answers || {};
-        return {
-          name: tt.name || '—', event: (evById.get(a.event_id) || {}).name || '—',
-          phone: tt.phone || '—', bank: ans.bank_name || '—', acct: ans.bank_account || '—',
-          holder: ans.bank_holder || '—', count: attDates(a).length,
-        };
-      })
-      .sort((x, y) => x.event.localeCompare(y.event) || x.name.localeCompare(y.name, 'id'));
-    const buf = await cert.renderAttendanceReportPDF(rows, {});
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="Report-Absensi-Man-Power.pdf"');
-    res.send(buf);
+    const bank = (await st.getBankInfo([req.talent.id])).get(req.talent.id) || {};
+    res.send(V.talentBankPage({ account: req.account, bank, values: bank, saved: req.query.saved === '1', warn: req.query.warn === '1', after: String(req.query.after || ''), lang: req.lang }));
   } catch (e) { next(e); }
+});
+app.post('/talent/bank', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const { values, errors } = validateBank(req.body || {});
+    if (errors.length) {
+      const bank = (await st.getBankInfo([req.talent.id])).get(req.talent.id) || {};
+      return res.status(400).send(V.talentBankPage({ account: req.account, bank, values, errors: errors.map((k) => req.t(k)), after: String(req.body.after || ''), lang: req.lang }));
+    }
+    await st.setBankInfo(req.talent.id, values, req.talent.id, 'talent');
+    const acc = req.account || {};
+    const warn = !namesLookAlike(values.bank_account_holder, acc.full_name || acc.name);
+    res.redirect('/talent/bank?lang=' + req.lang + '&saved=1' + (warn ? '&warn=1' : ''));
+  } catch (e) { next(e); }
+});
+
+// Build the recap rows for one event (see the header comment for the rules).
+async function paymentRecap(st, ev) {
+  const [apps, choices, evPos, talents, payments] = await Promise.all([
+    st.listApplications(), st.listApplicationChoices(), st.listEventPositions(ev.id), st.listTalents(), st.listPaymentsForEvent(ev.id),
+  ]);
+  const elig = apps.filter((a) => a.event_id === ev.id && a.status === 'assigned' && attDates(a).length > 0);
+  const posByPid = new Map(evPos.map((p) => [p.position_id, p]));
+  const acceptedPid = new Map();
+  choices.forEach((c) => { if (c.accepted) acceptedPid.set(c.application_id, c.position_id); });
+  const tById = new Map(talents.map((tt) => [tt.id, tt]));
+  const payByApp = new Map(payments.map((p) => [p.application_id, p]));
+  const banks = await st.getBankInfo(elig.map((a) => a.talent_id));
+  return elig.map((a) => {
+    const tt = tById.get(a.talent_id) || {};
+    const p = posByPid.get(acceptedPid.get(a.id)) || {};
+    const b = banks.get(a.talent_id) || {};
+    const pay = payByApp.get(a.id) || {};
+    const days = attDates(a).length;
+    const feeDay = p.fee_amount != null ? Number(p.fee_amount) : null;
+    const feeComputed = feeDay != null ? feeDay * days : null;
+    const feeFinal = pay.fee_final != null ? Number(pay.fee_final) : null;
+    return {
+      appId: a.id, talentId: a.talent_id, name: titleCaseName(tt.full_name || tt.name || '') || '—', phone: tt.phone || '',
+      position: posLabelPlain(p, 'id'), positionKey: p.key || '', division: p.division || '',
+      bankName: b.bank_name || '', acct: b.bank_account_number || '', holder: b.bank_account_holder || '', bankOk: bankComplete(b),
+      days, feeDay, feeComputed, feeFinal, fee: feeFinal != null ? feeFinal : feeComputed, feeNote: pay.fee_note || '',
+      paid: pay.payment_status === 'paid', paidAt: pay.paid_at || null,
+    };
+  }).sort((x, y) => String(x.division).localeCompare(String(y.division)) || x.position.localeCompare(y.position) || x.name.localeCompare(y.name));
+}
+function posLabelPlain(p, L) {
+  if (!p) return '';
+  if (p.custom_label) return p.custom_label;
+  return (L === 'en' ? (p.label_en || p.label_id) : (p.label_id || p.label_en)) || p.key || '';
+}
+function filterRecap(rows, q) {
+  const pos = String(q.pos || ''), div = String(q.div || ''), pay = String(q.pay || ''), bank = String(q.bank || ''), s = String(q.q || '').trim().toLowerCase();
+  return rows.filter((r) => (!pos || r.positionKey === pos) && (!div || r.division === div)
+    && (!pay || (pay === 'paid' ? r.paid : !r.paid)) && (!bank || (bank === 'ok' ? r.bankOk : !r.bankOk))
+    && (!s || (r.name + ' ' + r.phone).toLowerCase().indexOf(s) >= 0));
+}
+function recapTotals(rows) {
+  const ok = rows.filter((r) => r.bankOk);
+  return { people: ok.length, total: ok.reduce((n, r) => n + (r.fee || 0), 0), missingBank: rows.length - ok.length, noFee: ok.filter((r) => r.fee == null).length, paid: ok.filter((r) => r.paid).length };
+}
+
+// Mount the recap for a staff area. Super Admin: any event; EO: only events they created.
+function mountPayments(base, guard, findEvent, ctxOf) {
+  const loadEv = async (req, st) => findEvent(req, st);
+  const back = (req, ev) => base + '/' + ev.id + '/payments?lang=' + req.lang;
+  app.get(base + '/:id/payments', guard, async (req, res, next) => {
+    try {
+      const st = db(); if (!st) return needConfig(req, res);
+      const ev = await loadEv(req, st); if (!ev) return res.redirect(base === '/eo/events' ? '/eo/events' : '/admin/manage');
+      const all = await paymentRecap(st, ev);
+      const rows = filterRecap(all, req.query);
+      res.send(V.paymentsPage({ staff: ctxOf(req), base, event: ev, rows, all, totals: recapTotals(rows), query: req.query, flash: String(req.query.ok || ''), lang: req.lang }));
+    } catch (e) { next(e); }
+  });
+  // Per-person fee override (empty = back to position fee x days) + note.
+  app.post(base + '/:id/payments/fee', guard, async (req, res, next) => {
+    try {
+      const st = db(); if (!st) return needConfig(req, res);
+      const ev = await loadEv(req, st); if (!ev) return res.redirect(base);
+      const row = (await paymentRecap(st, ev)).find((r) => r.appId === String(req.body.app_id || ''));
+      if (row) {
+        const raw = String(req.body.fee_final || '').replace(/[^0-9]/g, '');
+        await st.savePayment({ application_id: row.appId, event_id: ev.id, talent_id: row.talentId, fee_final: raw ? Math.min(parseInt(raw, 10), 1e12) : null, fee_note: String(req.body.fee_note || '').trim().slice(0, 300) || null });
+      }
+      res.redirect(back(req, ev) + '&ok=fee');
+    } catch (e) { next(e); }
+  });
+  // Mark paid / unpaid (one or many). Paid needs complete bank details and snapshots
+  // the account it was paid to, plus who marked it and when.
+  app.post(base + '/:id/payments/status', guard, async (req, res, next) => {
+    try {
+      const st = db(); if (!st) return needConfig(req, res);
+      const ev = await loadEv(req, st); if (!ev) return res.redirect(base);
+      const ids = new Set([].concat(req.body.app_ids || []).map(String));
+      const paid = req.body.paid === '1';
+      const rows = (await paymentRecap(st, ev)).filter((r) => ids.has(r.appId));
+      let n = 0;
+      for (const r of rows) {
+        if (paid && (!r.bankOk || r.paid)) continue;
+        if (!paid && !r.paid) continue;
+        await st.savePayment(paid
+          ? { application_id: r.appId, event_id: ev.id, talent_id: r.talentId, payment_status: 'paid', paid_at: new Date().toISOString(), paid_by: req.staff.id || null, paid_bank_name: r.bankName, paid_account_number: r.acct, paid_account_holder: r.holder }
+          : { application_id: r.appId, event_id: ev.id, talent_id: r.talentId, payment_status: 'unpaid', paid_at: null, paid_by: null, paid_bank_name: null, paid_account_number: null, paid_account_holder: null });
+        n++;
+      }
+      res.redirect(back(req, ev) + '&ok=' + (paid ? 'paid' : 'unpaid') + '&n=' + n);
+    } catch (e) { next(e); }
+  });
+  const exportRows = async (req, st, ev) => filterRecap(await paymentRecap(st, ev), req.query).filter((r) => r.bankOk);
+  const logExport = (st, req, ev, kind, n) => st.addExportLog({ staff_id: req.staff.id || null, staff_name: req.staff.name || null, staff_role: req.staff.type || req.staff.role || null, event_id: ev.id, kind, row_count: n })
+    .catch((e) => console.error('[payments] export log failed:', e && e.message));
+  app.get(base + '/:id/payments/export.csv', guard, async (req, res, next) => {
+    try {
+      const st = db(); if (!st) return needConfig(req, res);
+      const ev = await loadEv(req, st); if (!ev) return res.redirect(base);
+      const rows = await exportRows(req, st, ev);
+      await logExport(st, req, ev, 'payments_csv', rows.length);
+      // Excel-safe CSV: a leading "=" "+" "-" "@" in a text cell is neutralised
+      // (formula injection); account numbers are written as ="0123" so Excel keeps
+      // leading zeros and shows the full number as text.
+      const cell = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+      const acctCell = (v) => '"=""' + String(v || '').replace(/[^0-9]/g, '') + '"""';
+      const head = ['No', 'Nama Lengkap', 'Posisi', 'Divisi', 'No HP', 'Bank', 'No Rekening', 'Atas Nama', 'Hari Hadir', 'Fee per Hari', 'Total Fee', 'Catatan', 'Status Bayar'];
+      const lines = [head.map(cell).join(',')].concat(rows.map((r, i) => [
+        cell(i + 1), cell(r.name), cell(r.position), cell(r.division), cell(r.phone), cell(r.bankName), acctCell(r.acct), cell(r.holder),
+        cell(r.days), cell(r.feeDay != null ? r.feeDay : ''), cell(r.fee != null ? r.fee : ''), cell(r.feeNote), cell(r.paid ? 'Lunas' : 'Belum'),
+      ].join(',')));
+      const fname = 'rekap-pembayaran-' + String(ev.name || 'event').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) + '.csv';
+      res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="' + fname + '"', 'Cache-Control': 'no-store, private' });
+      res.send('﻿' + lines.join('\r\n') + '\r\n');
+    } catch (e) { next(e); }
+  });
+  app.get(base + '/:id/payments/report.pdf', guard, async (req, res, next) => {
+    try {
+      const st = db(); if (!st) return needConfig(req, res);
+      const ev = await loadEv(req, st); if (!ev) return res.redirect(base);
+      const all = filterRecap(await paymentRecap(st, ev), req.query);
+      const rows = all.filter((r) => r.bankOk);
+      await logExport(st, req, ev, 'payments_pdf', rows.length);
+      const staffName = (req.staff && req.staff.name) || 'Staff';
+      const fname = 'rekap-pembayaran-' + String(ev.name || 'event').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) + '.pdf';
+      res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + fname + '"', 'Cache-Control': 'no-store, private' });
+      payPdf.renderPaymentsPdf(res, { event: { name: ev.name, date: eventDateStr(ev), location: ev.location || '' }, rows, missing: all.filter((r) => !r.bankOk).map((r) => r.name), totals: recapTotals(all), printedBy: staffName, printedAt: new Date() });
+    } catch (e) { next(e); }
+  });
+}
+mountPayments('/admin/events', auth.requireStaff(['super_admin']), async (req, st) => (await st.listEvents()).find((e) => e.id === req.params.id) || null, (req) => staffCtx(req));
+mountPayments('/eo/events', requireEo, async (req, st) => eoOwnedEvent(st, req.staff.id, req.params.id), (req) => eoCtx(req));
+
+// The old Man Power attendance/bank PDF is replaced by the per-event payment recap.
+app.get('/admin/applications/report.pdf', auth.requireStaff(['super_admin']), (req, res) => {
+  const ev = String(req.query.event || '');
+  res.redirect(ev ? '/admin/events/' + encodeURIComponent(ev) + '/payments?lang=' + req.lang : '/admin/manage?lang=' + req.lang);
 });
 
 // Build a CSV document from a header row + array-of-array data rows. Values are
