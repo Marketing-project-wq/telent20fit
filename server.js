@@ -1272,9 +1272,11 @@ function certRenderPayload(c, base, printName) {
   };
 }
 
-// Enrich event objects in place with a signed `mockup_url` for any that have a
-// stored mockup_path, so covers can render the uploaded image. Accepts one event
-// or an array; returns the same reference.
+// Shared poster resolver: enrich event objects in place with `mockup_url` from
+// their stored mockup_path, for every page that shows a poster. Posters are now
+// entered as a URL, but older events still hold a Supabase Storage path from the
+// old upload flow, so both forms are supported. Accepts one event or an array;
+// returns the same reference.
 async function attachMockups(st, events) {
   const list = Array.isArray(events) ? events : [events];
   // A full http(s) mockup_path is an external image URL — use it as-is; only
@@ -1286,17 +1288,6 @@ async function attachMockups(st, events) {
     withPath.forEach((x, k) => { list[x.i].mockup_url = urls[k] || null; });
   }
   return events;
-}
-
-// Upload an event mockup image to storage and return its path. Only accepts
-// images; returns null when there's no usable file.
-async function saveMockup(st, eventId, file) {
-  if (!file || !file.buffer || !file.buffer.length) return null;
-  if (!/^image\//.test(file.mimetype || '')) return null;
-  const ext = (path.extname(file.originalname || '').toLowerCase().match(/^\.[a-z0-9]{1,5}$/) || ['.jpg'])[0];
-  const key = 'events/' + eventId + '/mockup-' + Date.now() + ext;
-  await st.uploadImage(key, file.buffer, file.mimetype);
-  return key;
 }
 
 // Talent Home: active events (ongoing + upcoming) with their category needs.
@@ -2554,6 +2545,8 @@ function parseEventForm(req, positionsMaster, eventTypes) {
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
     reg_open_time: s('reg_open_time', 5) || null, reg_deadline_time: s('reg_deadline_time', 5) || null,
     status: EO_STATUSES.includes(st) ? st : 'draft',
+    // Poster image URL (optional). Empty clears the poster.
+    mockup_path: s('mockup_path', 1000) || null,
   };
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
   const keyById = new Map((positionsMaster || []).map((p) => [String(p.id), p.key]));
@@ -2601,8 +2594,19 @@ function parseEventForm(req, positionsMaster, eventTypes) {
   });
   return { data, positions, echo: Object.assign({}, data, { positions }) };
 }
-function validateEventForm(f, req) {
+// A poster URL must be absolute http(s) and free of characters that could break
+// out of the HTML/CSS contexts it's rendered into (img src, background-image url('')).
+function isPosterUrl(v) {
+  if (!/^https?:\/\//i.test(v) || /[\s"'()\\<>]/.test(v)) return false;
+  try { new URL(v); return true; } catch (_) { return false; }
+}
+
+// existingPoster: the event's saved mockup_path, so an untouched legacy storage
+// path (from the old upload flow) still passes on edit.
+function validateEventForm(f, req, existingPoster) {
   const e = [];
+  const poster = f.data.mockup_path;
+  if (poster && poster !== existingPoster && !isPosterUrl(poster)) e.push(req.t('eo.ev.err.posterUrl'));
   if (!f.data.name) e.push(req.t('eo.ev.err.name'));
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
@@ -2679,7 +2683,7 @@ app.get('/eo/events/new', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next) => {
+app.post('/eo/events', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -2692,7 +2696,7 @@ app.post('/eo/events', requireEo, upload.single('poster'), async (req, res, next
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
       await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
-      const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
+      if (f.data.mockup_path) await st.updateEvent(ev.id, { mockup_path: f.data.mockup_path });
     }
     res.redirect('/eo/events');
   } catch (e) { next(e); }
@@ -2711,7 +2715,7 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, res, next) => {
+app.post('/eo/events/:id/edit', requireEo, async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -2719,7 +2723,7 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     if (!ev) return res.redirect('/eo/events');
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
-    const errors = validateEventForm(f, req);
+    const errors = validateEventForm(f, req, ev.mockup_path);
     // Once an event has applicants its type is locked — ignore any change to it.
     const applicantsExist = apps.some((a) => a.event_id === ev.id);
     if (applicantsExist) { f.data.event_type_id = ev.event_type_id || null; f.data.category = ev.category || f.data.category; }
@@ -2733,7 +2737,6 @@ app.post('/eo/events/:id/edit', requireEo, upload.single('poster'), async (req, 
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang }));
     const patch = Object.assign({}, f.data);
-    const poster = await saveMockup(st, ev.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(ev.id, patch);
     // Changing the type on an event with no applicants replaces the whole role set
     // (incl. custom roles) with the new template — clear first, then write the form.
@@ -4743,7 +4746,7 @@ app.get('/admin/events/new', auth.requireStaff(['super_admin']), async (req, res
   } catch (e) { next(e); }
 });
 
-app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('poster'), async (req, res, next) => {
+app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4755,7 +4758,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), upload.single('pos
     if (ev && ev.id) {
       await st.setEventPositions(ev.id, f.positions);
       await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
-      const poster = await saveMockup(st, ev.id, req.file); if (poster) await st.updateEvent(ev.id, { mockup_path: poster });
+      if (f.data.mockup_path) await st.updateEvent(ev.id, { mockup_path: f.data.mockup_path });
     }
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
@@ -4790,7 +4793,7 @@ app.get('/admin/events/:id', auth.requireStaff(['super_admin']), async (req, res
   } catch (e) { next(e); }
 });
 
-app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.single('poster'), async (req, res, next) => {
+app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req, res, next) => {
   try {
     const st = db();
     if (!st) return needConfig(req, res);
@@ -4798,7 +4801,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     if (!event) return res.redirect('/admin/manage');
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
-    const errors = validateEventForm(f, req);
+    const errors = validateEventForm(f, req, event.mockup_path);
     const applicantsExist = apps.some((a) => a.event_id === event.id);
     if (applicantsExist) { f.data.event_type_id = event.event_type_id || null; f.data.category = event.category || f.data.category; }
     const typeChanged = !applicantsExist && String(f.data.event_type_id || '') !== String(event.event_type_id || '');
@@ -4811,7 +4814,6 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), upload.si
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang, admin: true }));
     const patch = Object.assign({}, f.data);
-    const poster = await saveMockup(st, event.id, req.file); if (poster) patch.mockup_path = poster;
     await st.updateEvent(event.id, patch);
     if (typeChanged) { for (const p of evPos) { try { await st.deleteEventRole(p.id); } catch (_) { /* keep going */ } } }
     await st.setEventPositions(event.id, f.positions);
