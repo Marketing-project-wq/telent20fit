@@ -1932,6 +1932,17 @@ function citySelect(value, lang) {
   return `<input type="text" id="city" name="city" required maxlength="80" placeholder="${esc(tr(L, 'dd.cityPh'))}" value="${esc(value || '')}">`;
 }
 function talentLabel(lang, type) { return tr(lang, 'talent.' + type, {}) !== 'talent.' + type ? tr(lang, 'talent.' + type) : (TALENT_LABEL[type] || type || ''); }
+// Shared rendering of an account's talent type (talent_accounts.talent_type) on
+// admin pages. variant 'compact' = small grey text to sit in a meta line, 'text' =
+// plain label (e.g. inside <option>), 'none' = nothing (pages that only list one
+// type). Label follows the active language via talentLabel().
+function talentTypeTag(L, type, opts) {
+  const variant = (opts && opts.variant) || 'compact';
+  const label = type ? talentLabel(L, type) : '';
+  if (!label || variant === 'none') return '';
+  if (variant === 'text') return label;
+  return `<span class="muted" style="font-size:12px">${esc(label)}</span>`;
+}
 function talentPath(type) { return type.replace(/_/g, '-'); }
 
 /** EN/ID language switch — links hit /lang/:code (sets cookie, redirects back). */
@@ -3978,7 +3989,7 @@ function eoApplicantsSection(e, view, aps, L) {
     const rows = aps.map((a) => { const c = a.choices.find((x) => x.position_id === p.position_id); return c ? { a, c } : null; })
       .filter(Boolean).sort((x, y) => x.c.priority - y.c.priority);
     const list = rows.length ? rows.map(({ a, c }) => { const ci = catInfo(a); return `<div class="dl-item ap-item" data-status="${esc(a.status)}" data-p1pos="${esc(ci.k)}" data-category="${ci.cat}" data-search="${esc((a.name || '').toLowerCase())}" style="align-items:center">
-      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">· ${esc(talentLabel(L, a.type))}</span>` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
+      <div style="min-width:0"><span class="tag" style="margin-right:8px">P${c.priority}</span><b>${esc(a.name)}</b>${a.type ? ` <span class="muted" style="font-size:12px">·</span> ${talentTypeTag(L, a.type)}` : ''}${c.accepted ? ` <span class="pill pill-ok">${t('eo.ap.acceptedHere')}</span>` : ''}</div>
       ${talentStatusBadge(a.status, L)}
     </div>`; }).join('') : `<p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('eo.ap.noApplicantsPos')}</p>`;
     return `<div class="card" style="margin-top:12px;padding:14px 16px">
@@ -5914,7 +5925,7 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
 
   const boardRows = board.length ? board.map((e, i) => `<tr>
     <td data-label="${t('th.rank')}">${i + 1}</td>
-    <td data-label="${t('th.kol')}">${e.id ? `<a href="/admin/kol/${esc(e.id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(e.name)}</a>` : `<b>${esc(e.name)}</b>`}<div class="muted" style="font-size:12px">${esc(talentLabel(L, e.type))}</div></td>
+    <td data-label="${t('th.kol')}">${e.id ? `<a href="/admin/kol/${esc(e.id)}?lang=${L}" style="color:var(--ink);font-weight:700;text-decoration:underline">${esc(e.name)}</a>` : `<b>${esc(e.name)}</b>`}${talentTypeTag(L, e.type, { variant: 'none' })}</td>
     <td data-label="${t('score.col')}">${scoreBadge(e.sc, L)}</td>
     <td data-label="${t('th.proofs')}" style="text-align:right">${e.proofs}</td>
     <td data-label="${t('stats.views')}" style="text-align:right">${fmtNum(e.views)}</td>
@@ -5937,7 +5948,7 @@ function adminDashboard({ staff, proofs, events, talents, talentStats, assignmen
 
   const deadlineBody = deadlines.length
     ? `<div class="dl-list">${deadlines.map((d) => `<div class="dl-item">
-        <div><b>${esc(d.talent)}</b> <span class="muted" style="font-size:12px">(${talentLabel(L, d.type)})</span><div class="muted" style="font-size:12px">${esc(d.event)}</div></div>
+        <div><b>${esc(d.talent)}</b>${talentTypeTag(L, d.type, { variant: 'none' })}<div class="muted" style="font-size:12px">${esc(d.event)}</div></div>
         <span class="dl-when ${d.diff < 0 ? 'dl-late' : 'dl-near'}">${dlText(d.diff)}</span>
       </div>`).join('')}</div>`
     : `<p class="muted" style="margin:2px 0">${t('dash.noDeadlines')}</p>`;
@@ -6058,7 +6069,7 @@ function adminKolDetail({ staff, talent, proofs, events, selEvent, settings, lan
   const body = `<div class="wrap">
   <a href="/admin/proofs?tab=kol&lang=${L}" class="btn btn-ghost btn-sm" style="margin-bottom:14px">${t('common.back')}</a>
   <h1 style="margin-bottom:2px">${esc(talent ? talent.name : '—')}</h1>
-  <p class="sub">${esc(talentLabel(L, talent && talent.talent_type))}</p>
+  ${talentTypeTag(L, talent && talent.talent_type, { variant: 'none' })}
   ${events.length ? evFilter : ''}
 
   <div class="card" style="margin-top:14px;display:flex;gap:28px;flex-wrap:wrap;align-items:center">
@@ -6600,9 +6611,9 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
   const talentOpts = talents.slice()
     .sort((a, b) => { const sa = scoreByTalent.get(a.id).score; const sb = scoreByTalent.get(b.id).score; return (sb == null ? -1 : sb) - (sa == null ? -1 : sa); })
-    .map((tt) => { const sc = scoreByTalent.get(tt.id); const tag = sc.score == null ? '' : ` · ${sc.score} ${tr(L, sc.label)}`; return `<option value="${esc(tt.id)}">${esc(tt.name)} (${talentLabel(L, tt.talent_type)})${tag}</option>`; }).join('');
+    .map((tt) => { const sc = scoreByTalent.get(tt.id); const tag = sc.score == null ? '' : ` · ${sc.score} ${tr(L, sc.label)}`; return `<option value="${esc(tt.id)}">${esc(tt.name)}${tt.talent_type ? ' · ' + esc(talentTypeTag(L, tt.talent_type, { variant: 'text' })) : ''}${tag}</option>`; }).join('');
   const assignRows = assignments.map((a) => `<tr>
-    <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b> <span class="muted">(${talentLabel(L, a.talent_type)})</span></td>
+    <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b>${a.talent_type ? `<div>${talentTypeTag(L, a.talent_type)}</div>` : ''}</td>
     <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
     <td data-label="${t('th.time')}" class="muted">${fmtDate(a.assigned_at)}</td>
   </tr>`).join('');
@@ -7520,13 +7531,13 @@ function adminHyroxCerts({ staff, certs, lang }) {
     rejected: `<span class="pill" style="background:var(--err-soft);color:var(--err)">✕ ${t('doc.hx.rejected')}</span>`,
   }[s] || '');
   const cards = certs.map((c) => {
-    const meta = [c.login, c.city, c.instagram ? '@' + c.instagram : ''].filter(Boolean).map(esc).join(' · ');
+    const meta = [c.login, c.city, c.instagram ? '@' + c.instagram : '', talentTypeTag(L, c.talent_type, { variant: 'text' })].filter(Boolean).map(esc).join(' · ');
     const note = (c.hyrox_cert_status === 'rejected' && c.hyrox_cert_note)
       ? `<div class="muted" style="font-size:12.5px;margin-top:6px">📝 ${esc(c.hyrox_cert_note)}</div>` : '';
     return `<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
-          <b style="font-size:16px">${esc(c.name || '—')}</b> <span class="tag">${esc(talentLabel(L, c.talent_type))}</span>
+          <b style="font-size:16px">${esc(c.name || '—')}</b>
           ${meta ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${meta}</div>` : ''}
         </div>
         ${badge(c.hyrox_cert_status)}
