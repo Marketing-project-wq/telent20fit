@@ -2,7 +2,7 @@
 
 /**
  * Payment recap PDF (A4 landscape) for one event: header with event name/date,
- * head count and total; a table per division with subtotals; a sign-off block
+ * head count and total; one table of all rows; a sign-off block
  * (prepared by / approved by), print date and the printing staff name; and a
  * diagonal watermark with the downloader + download time on every page, so a
  * leaked copy can be traced. Streams straight to the HTTP response (never stored).
@@ -77,20 +77,18 @@ function renderPaymentsPdf(out, data) {
   if (!data.rows.length) {
     doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(11).text('Belum ada talent yang memenuhi syarat dengan data rekening lengkap.', left, y + 10);
   }
-  // Group by division (rows arrive sorted by division, then position, then name).
+  // One table for everyone (division is no longer shown); rows arrive sorted by position, then name.
   const groups = new Map();
-  data.rows.forEach((r) => { const k = r.division || 'Umum'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+  if (data.rows.length) groups.set('', data.rows);
   let n = 0;
-  groups.forEach((list, div) => {
+  groups.forEach((list) => {
     ensure(64);
-    doc.fillColor(RED).font('Helvetica-Bold').fontSize(10).text(div.toUpperCase(), left, y + 4, { characterSpacing: 0.5 });
-    y += 20;
+    y += 6;
     tableHead();
-    let sub = 0;
     list.forEach((r, i) => {
       ensure(19);
       if (i % 2) doc.rect(left, y, tableW, 19).fill('#f7f8fa');
-      n++; sub += r.fee || 0;
+      n++;
       const vals = { no: String(n), name: r.name, position: r.position, phone: r.phone, bankName: r.bankName, acct: r.acct, holder: r.holder, days: String(r.days), fee: rp(r.fee), paid: r.paid ? 'Lunas' : 'Belum' };
       let x = left;
       cols.forEach((c) => {
@@ -101,9 +99,7 @@ function renderPaymentsPdf(out, data) {
       doc.moveTo(left, y + 19).lineTo(left + tableW, y + 19).lineWidth(0.5).strokeColor(LINE).stroke();
       y += 19;
     });
-    ensure(22);
-    doc.fillColor(INK).font('Helvetica-Bold').fontSize(9).text('Subtotal ' + div + ' (' + list.length + ' orang): ' + rp(sub), left, y + 6, { width: tableW, align: 'right' });
-    y += 26;
+    y += 8;
   });
 
   if (data.missing && data.missing.length) {
