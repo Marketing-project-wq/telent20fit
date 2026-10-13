@@ -617,6 +617,7 @@ function appLayout({ title, body, role, active, user, lang, search, cities, sear
         + navLink('/admin/applications?cat=kol', 'applications-kol', active, 'proofs', t('nav.appKol'))
         + navLink('/admin/applications?cat=creative', 'applications-creative', active, 'proofs', t('nav.appCreative'))
         + navLink('/admin/talents', 'talents', active, 'applications', t('nav.talentDir'))
+        + navLink('/admin/talent-categories', 'talent-categories', active, 'applications', t('nav.talentCats'))
         + navLink('/admin/hyrox', 'hyrox', active, 'hyrox', t('nav.hyrox'))
         + navLink('/admin/manage', 'manage', active, 'manage', t('nav.manage'))
         + navLink('/admin/landing', 'landing', active, 'proofs', t('nav.landing'))
@@ -6634,7 +6635,7 @@ function adminProofsPerKol({ staff, kols, events, query, total, lang }) {
 }
 
 // Tab 3 — Kelola (super admin only): events, assignments, EO accounts.
-function adminManage({ staff, events, assignments, talents, eos, proofs, lang, settings, applicantStats }) {
+function adminManage({ staff, events, assignments, talents, talentCats, eos, proofs, lang, settings, applicantStats }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   events = events || []; assignments = assignments || []; talents = talents || []; eos = eos || []; proofs = proofs || [];
@@ -6655,9 +6656,11 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   </tr>`).join('');
 
   const eventOpts = events.map((e) => `<option value="${esc(e.id)}">${esc(e.name)}</option>`).join('');
-  const talentOpts = talents.slice()
+  // Searchable talent picker data: categories come from the account category, or
+  // the positions applied for (talentCats); talent_type (login area) is not used.
+  const pickList = talents.slice()
     .sort((a, b) => { const sa = scoreByTalent.get(a.id).score; const sb = scoreByTalent.get(b.id).score; return (sb == null ? -1 : sb) - (sa == null ? -1 : sa); })
-    .map((tt) => { const sc = scoreByTalent.get(tt.id); const tag = sc.score == null ? '' : ` · ${sc.score} ${tr(L, sc.label)}`; return `<option value="${esc(tt.id)}">${esc(tt.name)}${tt.talent_type ? ' · ' + esc(talentTypeTag(L, tt.talent_type, { variant: 'text' })) : ''}${tag}</option>`; }).join('');
+    .map((tt) => ({ id: tt.id, label: (tt.name || '—') + (tt.login ? ' (' + tt.login + ')' : ''), cats: (talentCats && talentCats.get(tt.id)) || [] }));
   const assignRows = assignments.map((a) => `<tr>
     <td data-label="${t('th.talent')}"><b>${esc(talentNameById.get(a.talent_id) || '—')}</b>${a.talent_type ? `<div>${talentTypeTag(L, a.talent_type)}</div>` : ''}</td>
     <td data-label="${t('th.event')}">${esc(eventNameById.get(a.event_id) || '—')}</td>
@@ -6682,10 +6685,29 @@ function adminManage({ staff, events, assignments, talents, eos, proofs, lang, s
   <div class="section-head"><h2 style="margin:0">${t('manage.assignments')}</h2></div>
   <div class="card" style="margin-top:14px">
     <form method="post" action="/admin/assignments" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-      <select name="talent_id" required style="flex:1;min-width:180px"><option value="" disabled selected>${t('pick.talent')}</option>${talentOpts}</select>
+      <div style="flex:1 1 100%;display:flex;gap:6px;flex-wrap:wrap" id="asgCats">${['all', 'manpower', 'kol', 'photographer', 'none'].map((c, i) => `<button type="button" class="tc-chip${i === 0 ? ' on' : ''}" data-cat="${c}">${esc(c === 'all' ? t('tcat.all') : c === 'none' ? t('tcat.none') : t('cat.' + c))}</button>`).join('')}</div>
+      <div style="flex:1;min-width:220px;position:relative">
+        <input type="search" id="asgSearch" list="asgList" autocomplete="off" placeholder="${esc(t('asg.searchPh'))}" style="width:100%;box-sizing:border-box" required>
+        <datalist id="asgList"></datalist>
+        <input type="hidden" name="talent_id" id="asgId">
+      </div>
       <select name="event_id" required style="flex:1;min-width:180px"><option value="" disabled selected>${t('pick.event')}</option>${eventOpts}</select>
       <button class="btn btn-sm">${t('btn.assign')}</button>
     </form>
+    <style>.tc-chip{display:inline-flex;gap:6px;align-items:center;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit}.tc-chip.on{background:var(--red);border-color:var(--red);color:#fff}</style>
+    <script>(function(){
+      var DATA=${JSON.stringify(pickList).replace(/</g, '\\u003c')}, CAT=${JSON.stringify({ manpower: t('cat.manpower'), kol: t('cat.kol'), photographer: t('cat.photographer') })};
+      var inp=document.getElementById('asgSearch'), dl=document.getElementById('asgList'), hid=document.getElementById('asgId'), cur='all';
+      function esc(x){return String(x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+      function fill(){var rows=DATA.filter(function(d){return cur==='all'||(cur==='none'?!d.cats.length:d.cats.indexOf(cur)>=0);});
+        // Mixed list: category as the option's secondary (grey) label; filtered list: name only.
+        dl.innerHTML=rows.map(function(d){return '<option value="'+esc(d.label)+'"'+(cur==='all'&&d.cats.length?' label="'+esc(d.cats.map(function(c){return CAT[c]||c;}).join(', '))+'"':'')+'></option>';}).join('');
+        sync();}
+      function sync(){var v=inp.value, hit=DATA.find(function(d){return d.label===v;}); hid.value=hit?hit.id:''; inp.setCustomValidity(v&&!hit?${JSON.stringify(t('asg.pickFromList'))}:'');}
+      inp.addEventListener('input',sync);
+      [].slice.call(document.querySelectorAll('#asgCats .tc-chip')).forEach(function(b){b.addEventListener('click',function(){cur=b.getAttribute('data-cat');[].slice.call(document.querySelectorAll('#asgCats .tc-chip')).forEach(function(x){x.classList.toggle('on',x===b);});fill();});});
+      fill();
+    })();</script>
     <div class="table-wrap"><table>
       <thead><tr><th>${t('th.talent')}</th><th>${t('th.event')}</th><th>${t('th.time')}</th></tr></thead>
       <tbody>${assignRows || `<tr><td colspan="3" class="muted">${t('manage.emptyAssign')}</td></tr>`}</tbody>
@@ -8186,7 +8208,79 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
   return browseLayout({ title: e.name + ' — 20FIT', body, lang: L, account, active: 'event', cities: cities || [], search: true, searchValue: e.name || '' });
 }
 
+// Super Admin: bulk talent-category cleanup. Category lives in
+// talent_accounts.talent_category (not talent_type, which is the login area).
+function adminTalentCategories({ staff, lang, ready, counts, cat, q, page, pages, total, rows, logs, flash }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const catName = (c) => (c ? t('cat.' + c) : t('tcat.none'));
+  const f = flash || {};
+  const banner = !ready ? `<div class="banner banner-warn">${t('tcat.needMigration')}</div>`
+    : f.err === 'migration' ? `<div class="banner banner-err">${t('tcat.needMigration')}</div>`
+    : f.err === 'pick' ? `<div class="banner banner-err">${t('tcat.errPick')}</div>`
+    : f.err === 'cat' ? `<div class="banner banner-err">${t('tcat.errCat')}</div>`
+    : f.ok ? `<div class="banner banner-ok">${t('tcat.ok', { n: f.ok })}</div>` : '';
+  const qs = (o) => '?' + new URLSearchParams(Object.assign({ lang: L, cat, q, page: 1 }, o)).toString();
+  const chip = (k) => `<a href="/admin/talent-categories${qs({ cat: k, page: 1 })}" class="tc-chip${cat === k ? ' on' : ''}">${esc(k === 'all' ? t('tcat.all') : catName(k === 'none' ? null : k))} <b>${counts[k] || 0}</b></a>`;
+  const opt = (v, label) => `<option value="${v}">${esc(label)}</option>`;
+  const tr_ = rows.map((r) => `<tr>
+      <td style="width:34px"><input type="checkbox" name="ids" value="${esc(r.id)}" form="tcForm" class="tc-cb" aria-label="${esc(r.name || '')}"></td>
+      <td><b>${esc(r.name || '—')}</b><div class="muted" style="font-size:12px">${esc(r.login || '')}${r.instagram ? ' · @' + esc(String(r.instagram).replace(/^@/, '')) : ''}</div></td>
+      <td>${r.category ? `<span class="tc-cat">${esc(catName(r.category))}</span>` : `<span class="muted">${esc(t('tcat.none'))}</span>`}</td>
+      <td class="muted" style="font-size:12.5px">${r.derived.length ? esc(r.derived.map((c) => catName(c)).join(', ')) : '—'}</td>
+    </tr>`).join('') || `<tr><td colspan="4" class="muted">${t('tcat.empty')}</td></tr>`;
+  const pager = pages > 1 ? `<div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:12px;font-size:13px">
+      ${page > 1 ? `<a class="btn btn-ghost btn-sm" href="/admin/talent-categories${qs({ page: page - 1 })}">‹</a>` : ''}
+      <span class="muted">${t('tcat.page', { p: page, n: pages, total })}</span>
+      ${page < pages ? `<a class="btn btn-ghost btn-sm" href="/admin/talent-categories${qs({ page: page + 1 })}">›</a>` : ''}</div>` : `<div class="muted" style="text-align:right;margin-top:12px;font-size:13px">${t('tcat.total', { total })}</div>`;
+  const logRows = (logs || []).map((l) => `<tr>
+      <td class="muted" style="white-space:nowrap">${esc(fmtDate(l.changed_at))}</td>
+      <td>${esc(l.talentName)}</td>
+      <td>${esc(catName(l.old_category))} → <b>${esc(catName(l.new_category))}</b></td>
+      <td class="muted">${esc(l.source === 'apply' ? t('tcat.srcApply') : (l.staffName || t('tcat.srcAdmin')))}</td>
+    </tr>`).join('') || `<tr><td colspan="4" class="muted">${t('tcat.noLogs')}</td></tr>`;
+  const body = `<div class="wrap">
+    <h1 style="margin:0">${t('tcat.title')}</h1>
+    <p class="sub" style="margin:4px 0 0">${t('tcat.sub')}</p>
+    ${banner}
+    <style>.tc-chip{display:inline-flex;gap:6px;align-items:center;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;text-decoration:none}.tc-chip b{font-weight:800}.tc-chip.on{background:var(--red);border-color:var(--red);color:#fff}.tc-cat{font-size:12.5px;font-weight:700;color:var(--ink)}</style>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">${['all', 'none', 'manpower', 'kol', 'photographer'].map(chip).join('')}</div>
+    <div class="card" style="margin-top:14px">
+      <form method="get" action="/admin/talent-categories" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <input type="hidden" name="lang" value="${L}"><input type="hidden" name="cat" value="${esc(cat)}">
+        <input type="search" name="q" value="${esc(q)}" placeholder="${esc(t('tcat.searchPh'))}" style="flex:1;min-width:200px">
+        <button class="btn btn-sm">${t('search.btn')}</button>
+      </form>
+      <form method="post" action="/admin/talent-categories" id="tcForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding:10px 12px;background:var(--card2);border-radius:10px">
+        <input type="hidden" name="cat" value="${esc(cat)}"><input type="hidden" name="q" value="${esc(q)}"><input type="hidden" name="page" value="${page}">
+        <label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="tcAll"> ${t('tcat.selectPage')}</label>
+        <span class="muted" style="font-size:13px" id="tcCount">0 ${t('tcat.selected')}</span>
+        <span style="flex:1"></span>
+        <label style="font-size:13px">${t('tcat.setTo')}</label>
+        <select name="category" required style="min-width:170px">${opt('', '—')}${opt('manpower', t('cat.manpower'))}${opt('kol', t('cat.kol'))}${opt('photographer', t('cat.photographer'))}${opt('none', t('tcat.none'))}</select>
+        <button class="btn btn-sm" type="submit"${ready ? '' : ' disabled'}>${t('btn.save')}</button>
+      </form>
+      <div class="table-wrap"><table>
+        <thead><tr><th></th><th>${t('th.talent')}</th><th>${t('tcat.thCat')}</th><th>${t('tcat.thHint')}</th></tr></thead>
+        <tbody>${tr_}</tbody>
+      </table></div>
+      ${pager}
+      <p class="muted" style="font-size:12px;margin-top:8px">${t('tcat.hintNote')}</p>
+    </div>
+    <div class="section-head" style="margin-top:22px"><h2 style="margin:0;font-size:17px">${t('tcat.logTitle')}</h2></div>
+    <div class="card" style="margin-top:10px"><div class="table-wrap"><table>
+      <thead><tr><th>${t('th.time')}</th><th>${t('th.talent')}</th><th>${t('tcat.thChange')}</th><th>${t('tcat.thBy')}</th></tr></thead>
+      <tbody>${logRows}</tbody></table></div></div>
+  </div>
+  <script>(function(){var all=document.getElementById('tcAll'),cbs=[].slice.call(document.querySelectorAll('.tc-cb')),n=document.getElementById('tcCount');
+    function upd(){var k=cbs.filter(function(c){return c.checked;}).length;n.textContent=k+' '+${JSON.stringify(t('tcat.selected'))};if(all)all.checked=k&&k===cbs.length;}
+    if(all)all.addEventListener('change',function(){cbs.forEach(function(c){c.checked=all.checked;});upd();});
+    cbs.forEach(function(c){c.addEventListener('change',upd);});})();</script>`;
+  return appLayout({ title: t('tcat.title') + ' — 20FIT', body, role: 'super_admin', active: 'talent-categories', user: staff && staff.name, lang: L });
+}
+
 module.exports = {
+  adminTalentCategories,
   CONFIRM_WINDOW_HOURS,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,

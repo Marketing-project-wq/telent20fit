@@ -24,6 +24,10 @@ const pickPosDetails = (src) => { const o = {}; for (const c of POS_DETAIL_COLS)
 const RT_COLS = 'id,event_type_id,position_id,division,default_quota,sort_order,description,is_active';
 const RT_TEXT_COLS = 'jobdesk,requirement,description_en,jobdesk_en,requirement_en';
 const RT_JOIN = 'talent_positions(key,label_id,label_en,division,sort)';
+// Missing table (e.g. talent_category_logs before its migration runs).
+const isMissingRelation = (error) => /relation .* does not exist|could not find the table|42P01|PGRST205/i.test(String((error && (error.message + ' ' + (error.code || ''))) || ''));
+const TALENT_CATEGORIES = ['kol', 'photographer', 'manpower'];
+const noMigration = () => { const e = new Error('NO_MIGRATION'); e.code = 'NO_MIGRATION'; return e; };
 const isMissingColumn = (error) => /column .* does not exist|could not find the .* column|42703|PGRST204/i.test(String((error && (error.message + ' ' + (error.code || ''))) || ''));
 
 // Flatten a role_templates row (with its joined talent_positions) to the shape
@@ -297,6 +301,44 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     // ---- events / assignments / proofs ----
+    // --- Talent category (talent_accounts.talent_category, separate from the
+    // login type talent_type). Needs migration 20261014_talent_accounts_category.sql;
+    // until it runs, reads return null and writes throw NO_MIGRATION.
+    async listTalentCategories() {
+      const { data, error } = await sb.from('talent_accounts').select('id,talent_category');
+      if (error) { if (isMissingColumn(error)) return null; throw new Error(error.message); }
+      const m = new Map(); (data || []).forEach((r) => m.set(r.id, r.talent_category || null)); return m;
+    },
+    async setTalentCategory(ids, category, { changedBy, source } = {}) {
+      if (category !== null && !TALENT_CATEGORIES.includes(category)) throw new Error('BAD_CATEGORY');
+      ids = Array.from(new Set((ids || []).map(String))).filter(Boolean);
+      if (!ids.length) return 0;
+      const cur = await sb.from('talent_accounts').select('id,talent_category').in('id', ids);
+      if (cur.error) { if (isMissingColumn(cur.error)) throw noMigration(); throw new Error(cur.error.message); }
+      const changed = (cur.data || []).filter((r) => (r.talent_category || null) !== category);
+      if (!changed.length) return 0;
+      const up = await sb.from('talent_accounts').update({ talent_category: category }).in('id', changed.map((r) => r.id));
+      if (up.error) throw new Error(up.error.message);
+      const logs = changed.map((r) => ({ talent_id: r.id, old_category: r.talent_category || null, new_category: category, source: source || 'admin_bulk', changed_by: changedBy || null }));
+      const lg = await sb.from('talent_category_logs').insert(logs);
+      if (lg.error && !isMissingRelation(lg.error)) throw new Error(lg.error.message);
+      return changed.length;
+    },
+    // Set only when still empty (first application); never overwrites an admin choice.
+    async setTalentCategoryIfEmpty(id, category) {
+      if (!TALENT_CATEGORIES.includes(category)) return false;
+      const { data, error } = await sb.from('talent_accounts').update({ talent_category: category }).eq('id', id).is('talent_category', null).select('id');
+      if (error) { if (isMissingColumn(error)) return false; throw new Error(error.message); }
+      if (!data || !data.length) return false;
+      const lg = await sb.from('talent_category_logs').insert({ talent_id: id, old_category: null, new_category: category, source: 'apply', changed_by: null });
+      if (lg.error && !isMissingRelation(lg.error)) throw new Error(lg.error.message);
+      return true;
+    },
+    async listTalentCategoryLogs(limit) {
+      const { data, error } = await sb.from('talent_category_logs').select('*').order('changed_at', { ascending: false }).limit(limit || 50);
+      if (error) { if (isMissingRelation(error)) return []; throw new Error(error.message); }
+      return data || [];
+    },
     async listTalents(talentType) {
       let q = sb.from('talent_accounts')
         .select('id,talent_type,name,full_name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status,cv_path,portfolio_url,hyrox_cert_path')
@@ -875,6 +917,7 @@ function memoryStore() {
   const bankLogs = []; const payments = []; const exportLogs = [];
   let landingImages = [];
   const hashPassword = require('./auth').hashPassword;
+  const categoryLogs = []; // talent_category_logs mirror
   const accounts = [
     { id: 'mp-budi', talent_type: 'main_power', name: 'Budi Santoso', login: 'budi@example.com', password_hash: hashPassword('Main_12345'), created_at: now(), phone: '081234567890', city: 'Jakarta', birthdate: '1996-05-20', gender: 'male', instagram: 'budi.santoso', instagram_followers: 3200, experience: 'Marshal Jakarta Marathon 2024, 2025.', profile_completed_at: now() },
   ];
@@ -1017,6 +1060,24 @@ function memoryStore() {
     async getStaffPasswordReset(tokenHash) { const r = staffResets.find((r) => r.token_hash === tokenHash); return r ? { id: r.id, staff_id: r.staff_id, expires_at: r.expires_at, used_at: r.used_at } : null; },
     async markStaffPasswordResetUsed(id) { const r = staffResets.find((r) => r.id === id); if (r) r.used_at = now(); },
     async listTalents(talentType) { return accounts.filter((a) => !talentType || a.talent_type === talentType).map(accountProfile); },
+    async listTalentCategories() { return new Map(accounts.map((a) => [a.id, a.talent_category || null])); },
+    async setTalentCategory(ids, category, { changedBy, source } = {}) {
+      if (category !== null && !TALENT_CATEGORIES.includes(category)) throw new Error('BAD_CATEGORY');
+      let n = 0;
+      Array.from(new Set((ids || []).map(String))).forEach((id) => {
+        const a = accounts.find((x) => x.id === id); if (!a || (a.talent_category || null) === category) return;
+        categoryLogs.unshift({ id: 'tcl-' + (++seq), talent_id: id, old_category: a.talent_category || null, new_category: category, source: source || 'admin_bulk', changed_by: changedBy || null, changed_at: now() });
+        a.talent_category = category; n++;
+      });
+      return n;
+    },
+    async setTalentCategoryIfEmpty(id, category) {
+      const a = accounts.find((x) => x.id === id); if (!a || a.talent_category || !TALENT_CATEGORIES.includes(category)) return false;
+      a.talent_category = category;
+      categoryLogs.unshift({ id: 'tcl-' + (++seq), talent_id: id, old_category: null, new_category: category, source: 'apply', changed_by: null, changed_at: now() });
+      return true;
+    },
+    async listTalentCategoryLogs(limit) { return categoryLogs.slice(0, limit || 50); },
     async listHyroxCerts() { return accounts.filter((a) => a.hyrox_cert_path).map(accountProfile); },
     async createEvent({ name, description, description_en, location, city, starts_at, ends_at, created_by, needs, mp_sow, category, event_type_id, start_time, end_time, reg_deadline, reg_open, reg_open_time, reg_deadline_time, status }) {
       const ev = { id: 'ev-' + (++seq), name, description: description || null, description_en: description_en || null, location: location || null, city: city || null, starts_at: starts_at || null, ends_at: ends_at || null, is_active: true, created_by: created_by || null, created_at: now(), mp_sow: mp_sow || null, category: category || null, event_type_id: event_type_id || null, start_time: start_time || null, end_time: end_time || null, reg_deadline: reg_deadline || null, reg_open: reg_open || null, reg_open_time: reg_open_time || null, reg_deadline_time: reg_deadline_time || null, status: status || 'published', reg_closed_at: null, group_url: null };
