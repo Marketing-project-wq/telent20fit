@@ -884,8 +884,6 @@ function landingPage(lang, opts = {}) {
     // Coming soon: listed with a live countdown; not clickable until registration
     // opens, then the script below unlocks the card (no reload needed).
     if (e.soon) {
-      const cats = Array.from(new Set((e.openPositions || []).map((p) => posCatKey(p.key))));
-      const catBadges = cats.map((ck) => `<span class="lp-ev-pos">${esc(t('land.openCat.' + ck))}</span>`).join('');
       const opensTxt = t('land.soonAt', { date: fmtDay(e.reg_open), time: e.reg_open_time || '00:00' });
       return `<a href="/event/${esc(e.slug || e.id)}?lang=${L}" class="lp-ev-card lp-ev-card--soon" data-city="${esc(city.toLowerCase())}" data-opens="${esc(String(e.opensAt || ''))}" aria-disabled="true">
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-soon">${esc(t('land.soonIn'))} <b class="lp-ev-cd">--:--:--</b></span></div>
@@ -894,7 +892,6 @@ function landingPage(lang, opts = {}) {
         ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
         ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
         <div class="lp-ev-meta lp-ev-soon-at">⏰ ${esc(opensTxt)}</div>
-        ${catBadges ? `<div class="lp-ev-pos-row">${catBadges}</div>` : ''}
       </div>
     </a>`;
     }
