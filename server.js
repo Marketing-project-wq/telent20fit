@@ -1608,7 +1608,8 @@ function eventSearchText(e) {
 }
 // City filter: keep events whose location belongs to the chosen Indonesian city
 // (venue/district names count, e.g. "Menteng" -> Jakarta). Empty city = all.
-const eventInCity = (e, city) => idCities.locationInCity(e.location, city);
+// The event's own city wins; older events without one fall back to their location text.
+const eventInCity = (e, city) => !city || (e.city ? String(e.city).toLowerCase() === String(city).trim().toLowerCase() : idCities.locationInCity(e.location, city));
 // The Location dropdown lists Indonesian cities (fixed list), not raw event
 // locations; `events` is kept in the signature so existing callers don't change.
 const eventCityList = () => idCities.CITY_NAMES.slice();
@@ -1640,7 +1641,7 @@ app.get('/api/events/search', async (req, res) => {
       .slice(0, 8)
       .map((e) => ({
         name: e.name,
-        city: idCities.cityOfLocation(e.location) || String(e.location || '').split(',').pop().trim(),
+        city: e.city || idCities.cityOfLocation(e.location) || String(e.location || '').split(',').pop().trim(),
         url: '/event/' + (e.slug || e.id) + '?lang=' + L,
         thumb: e.mockup_url || null,
       }));
@@ -2643,7 +2644,10 @@ function parseEventForm(req, positionsMaster, eventTypes, roleTemplates) {
     name: s('name', 140), description: null, description_en: null,
     category: ty ? (ty.label_id || ty.label_en || null) : (s('category', 80) || null),
     event_type_id: eventTypeId,
-    location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
+    location: s('location', 200) || null,
+    // City from the fixed Indonesian list (anything else is dropped).
+    city: idCities.CITY_NAMES.includes(s('city', 60)) ? s('city', 60) : null,
+    starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
     start_time: s('start_time', 5) || null, end_time: s('end_time', 5) || null,
     reg_open: s('reg_open', 10) || null, reg_deadline: s('reg_deadline', 10) || null,
     reg_open_time: s('reg_open_time', 5) || null, reg_deadline_time: s('reg_deadline_time', 5) || null,
@@ -2734,6 +2738,7 @@ function validateEventForm(f, req, existingPoster) {
   if (!f.data.name) e.push(req.t('eo.ev.err.name'));
   if (!f.data.category) e.push(req.t('eo.ev.err.category'));
   if (!f.data.location) e.push(req.t('eo.ev.err.location'));
+  if (!f.data.city) e.push(req.t('eo.ev.err.city'));
   if (!f.data.starts_at) e.push(req.t('eo.ev.err.date'));
   // Search period (WIB): close must not be before open, nor after the event starts.
   const d = f.data;
