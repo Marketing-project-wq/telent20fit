@@ -2672,7 +2672,7 @@ function validateEventForm(f, req, existingPoster) {
   const closeDT = d.reg_deadline ? d.reg_deadline + 'T' + (d.reg_deadline_time || '23:59') : null;
   if (openDT && closeDT && closeDT < openDT) e.push(req.t('eo.ev.err.regCloseBeforeOpen'));
   if (d.reg_deadline && d.starts_at && d.reg_deadline > d.starts_at) e.push(req.t('eo.ev.err.regCloseAfterStart'));
-  if (!f.positions.length) e.push(req.t('eo.ev.err.positions'));
+  if (!f.positions.length && !parseCustomRoles(req).length) e.push(req.t('eo.ev.err.positions'));
   // The "Lainnya" (custom) role needs a name to identify it.
   if (f.positions.some((p) => p.key === 'other' && !p.custom_label)) e.push(req.t('eo.ev.err.customNameRequired'));
   // Every selected position needs a real headcount so its card can show how many
@@ -2687,6 +2687,13 @@ function validateEventForm(f, req, existingPoster) {
 async function eventHasApplicants(st, eventId) {
   return (await st.listApplications()).some((a) => a.event_id === eventId);
 }
+// Role templates for the event form. A load failure must not take the whole form
+// down: return an empty list flagged .failed so the form says "failed to load".
+async function formRoleTemplates(st) {
+  try { return await st.listAllRoleTemplates(); }
+  catch (e) { console.error('[role_templates] load failed:', e && e.message); const out = []; out.failed = true; return out; }
+}
+
 // Custom ("Tambahan") roles typed straight into the create form (parallel arrays).
 function parseCustomRoles(req) {
   const names = [].concat(req.body.custom_name || []);
@@ -2694,12 +2701,13 @@ function parseCustomRoles(req) {
   const quotas = [].concat(req.body.custom_quota || []);
   const descs = [].concat(req.body.custom_desc || []);
   const tpls = [].concat(req.body.custom_tpl || []); // '1' => also save to this type's template
+  const pids = [].concat(req.body.custom_pid || []); // already saved to the template via "Save to template"
   const out = [];
   names.forEach((nm, i) => {
     const name = String(nm || '').trim().slice(0, 80);
     if (!name) return;
     const q = parseInt(quotas[i], 10);
-    out.push({ name, division: String(divs[i] || '').trim().slice(0, 60) || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, description: String(descs[i] || '').trim().slice(0, 600) || null, saveTpl: String(tpls[i] || '') === '1' });
+    out.push({ name, division: String(divs[i] || '').trim().slice(0, 60) || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, description: String(descs[i] || '').trim().slice(0, 600) || null, saveTpl: String(tpls[i] || '') === '1', pid: String(pids[i] || '').trim().slice(0, 80) || null });
   });
   return out;
 }
@@ -2707,13 +2715,50 @@ function parseCustomRoles(req) {
 // an is_optional event role; optionally also add it to the type's template.
 async function applyCustomRoles(st, evId, eventTypeId, customRoles, sortBase) {
   let i = 0;
+  // Rows saved earlier with "Save to template" carry their position id: reuse that
+  // (custom) position instead of creating a duplicate; the template row exists.
+  const customIds = customRoles.some((c) => c.pid) ? new Set((await st.listPositions()).filter((p) => p.is_custom).map((p) => String(p.id))) : new Set();
   for (const c of customRoles) {
+    if (c.pid && customIds.has(c.pid)) {
+      await st.addEventRole(evId, { position_id: c.pid, division: null, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description });
+      i++;
+      continue;
+    }
     const pos = await st.createCustomPosition({ name: c.name, division: c.division });
     await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description });
     if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description }); } catch (_) { /* ignore dup */ } }
     i++;
   }
 }
+
+// "Save to template" from the event form's Extra positions: creates a custom
+// position and adds it to the chosen event type's template right away, before
+// the event itself is saved. Responds JSON. Same write path the form's save
+// already uses (service role on the server, staff session checked here).
+async function saveTemplatePosition(req, res) {
+  const st = db(); if (!st) return res.status(503).json({ error: 'config' });
+  const eventTypeId = String(req.body.event_type_id || '');
+  const name = String(req.body.name || '').trim().slice(0, 80);
+  const q = parseInt(req.body.quota, 10);
+  const quota = Number.isFinite(q) && q >= 0 ? Math.min(q, 99999) : 0;
+  const description = String(req.body.description || '').trim().slice(0, 600) || null;
+  if (!name) return res.status(400).json({ error: 'name' });
+  const type = (await st.listEventTypes()).find((ty) => String(ty.id) === eventTypeId);
+  if (!type) return res.status(400).json({ error: 'type' });
+  const existing = await st.listRoleTemplates(type.id);
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  if (existing.some((rt) => norm(rt.label_id) === norm(name) || norm(rt.label_en) === norm(name))) return res.status(409).json({ error: 'dup' });
+  const pos = await st.createCustomPosition({ name, division: null });
+  const sortOrder = existing.reduce((m, rt) => Math.max(m, rt.sort_order || 0), 0) + 10;
+  await st.createRoleTemplate({ event_type_id: type.id, position_id: pos.id, division: null, default_quota: quota, sort_order: sortOrder, description });
+  res.json({ ok: true, id: pos.id, name });
+}
+app.post('/eo/template-position', requireEo, async (req, res) => {
+  try { await saveTemplatePosition(req, res); } catch (e) { console.error('[template-position]', e && e.message); res.status(500).json({ error: 'fail' }); }
+});
+app.post('/admin/template-position', auth.requireStaff(['super_admin']), async (req, res) => {
+  try { await saveTemplatePosition(req, res); } catch (e) { console.error('[template-position]', e && e.message); res.status(500).json({ error: 'fail' }); }
+});
 
 app.get('/eo/events', requireEo, async (req, res, next) => {
   try {
@@ -2733,7 +2778,7 @@ app.get('/eo/events/new', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
     res.send(V.eoEventForm({ staff: eoCtx(req), event: null, positionsMaster, eventTypes, roleTemplates, selected: {}, lang: req.lang }));
   } catch (e) { next(e); }
 });
@@ -2743,7 +2788,7 @@ app.post('/eo/events', requireEo, async (req, res, next) => {
     const st = db();
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
-    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang }));
@@ -2763,7 +2808,7 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), st.listAllRoleTemplates(), st.listApplications()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), formRoleTemplates(st), st.listApplications()]);
     await attachMockups(st, ev);
     const hasApplicants = apps.some((a) => a.event_id === ev.id);
     res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang }));
@@ -2776,7 +2821,7 @@ app.post('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
-    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), formRoleTemplates(st)]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req, ev.mockup_path);
     // Once an event has applicants its type is locked — ignore any change to it.
@@ -4751,7 +4796,7 @@ async function paymentRecap(st, ev) {
       days, feeDay, feeComputed, feeFinal, fee: feeFinal != null ? feeFinal : feeComputed, feeNote: pay.fee_note || '',
       paid: pay.payment_status === 'paid', paidAt: pay.paid_at || null,
     };
-  }).sort((x, y) => String(x.division).localeCompare(String(y.division)) || x.position.localeCompare(y.position) || x.name.localeCompare(y.name));
+  }).sort((x, y) => x.position.localeCompare(y.position) || x.name.localeCompare(y.name));
 }
 function posLabelPlain(p, L) {
   if (!p) return '';
@@ -4830,9 +4875,9 @@ function mountPayments(base, guard, findEvent, ctxOf) {
       // leading zeros and shows the full number as text.
       const cell = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
       const acctCell = (v) => '"=""' + String(v || '').replace(/[^0-9]/g, '') + '"""';
-      const head = ['No', 'Nama Lengkap', 'Posisi', 'Divisi', 'No HP', 'Bank', 'No Rekening', 'Atas Nama', 'Hari Hadir', 'Fee per Hari', 'Total Fee', 'Catatan', 'Status Bayar'];
+      const head = ['No', 'Nama Lengkap', 'Posisi', 'No HP', 'Bank', 'No Rekening', 'Atas Nama', 'Hari Hadir', 'Fee per Hari', 'Total Fee', 'Catatan', 'Status Bayar'];
       const lines = [head.map(cell).join(',')].concat(rows.map((r, i) => [
-        cell(i + 1), cell(r.name), cell(r.position), cell(r.division), cell(r.phone), cell(r.bankName), acctCell(r.acct), cell(r.holder),
+        cell(i + 1), cell(r.name), cell(r.position), cell(r.phone), cell(r.bankName), acctCell(r.acct), cell(r.holder),
         cell(r.days), cell(r.feeDay != null ? r.feeDay : ''), cell(r.fee != null ? r.fee : ''), cell(r.feeNote), cell(r.paid ? 'Lunas' : 'Belum'),
       ].join(',')));
       const fname = 'rekap-pembayaran-' + String(ev.name || 'event').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 60) + '.csv';
@@ -5060,7 +5105,7 @@ app.get('/admin/events/new', auth.requireStaff(['super_admin']), async (req, res
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
     res.send(V.eoEventForm({ staff: staffCtx(req), event: null, positionsMaster, eventTypes, roleTemplates, selected: {}, lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
@@ -5069,7 +5114,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
   try {
     const st = db();
     if (!st) return needConfig(req, res);
-    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req);
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
@@ -5090,7 +5135,7 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), st.listAllRoleTemplates(), st.listApplications()]);
+    const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), formRoleTemplates(st), st.listApplications()]);
     await attachMockups(st, event);
     const hasApplicants = apps.some((a) => a.event_id === event.id);
     res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
@@ -5118,7 +5163,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     if (!st) return needConfig(req, res);
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
-    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), st.listAllRoleTemplates()]);
+    const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), formRoleTemplates(st)]);
     const f = parseEventForm(req, positionsMaster, eventTypes);
     const errors = validateEventForm(f, req, event.mockup_path);
     const applicantsExist = apps.some((a) => a.event_id === event.id);
