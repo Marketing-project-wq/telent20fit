@@ -2558,6 +2558,11 @@ const POS_DETAIL_KEYS = ['work_hours', 'venue_detail', 'dresscode', 'meeting_poi
 // Sentinel quota for form-created positions now that the quota field is gone:
 // high enough that a position never reads as "full" (registration is unlimited).
 const UNLIMITED_QUOTA = 100000;
+// Positions unticked in the edit form that already have applicants: closed
+// instead of deleted (see setEventPositions closeInstead).
+function positionsWithApplicants(view, newByPos) {
+  return new Set((view.positions || []).filter((p) => p.applicants > 0 && !(p.position_id in newByPos)).map((p) => String(p.position_id)));
+}
 function eoSelMap(positions) {
   const m = {};
   (positions || []).forEach((p) => {
@@ -2900,7 +2905,7 @@ app.get('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listEventTypes(), formRoleTemplates(st), st.listApplications()]);
     await attachMockups(st, ev);
     const hasApplicants = apps.some((a) => a.event_id === ev.id);
-    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang }));
+    res.send(V.eoEventForm({ staff: eoCtx(req), event: ev, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos.filter((p) => !p.closed_at)), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -2921,7 +2926,6 @@ app.post('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     const view = eoEventView(ev, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
     view.positions.forEach((p) => {
-      if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: Object.assign({}, ev, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang }));
@@ -2930,7 +2934,9 @@ app.post('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     // Changing the type on an event with no applicants replaces the whole role set
     // (incl. custom roles) with the new template — clear first, then write the form.
     if (typeChanged) { for (const p of evPos) { try { await st.deleteEventRole(p.id); } catch (_) { /* keep going */ } } }
-    await st.setEventPositions(ev.id, f.positions);
+    // Unticking a position that already has applicants closes it (hidden from
+    // talents) instead of deleting it, so their applications are kept.
+    await st.setEventPositions(ev.id, f.positions, { closeInstead: positionsWithApplicants(view, newByPos) });
     await applyCustomRoles(st, ev.id, f.data.event_type_id, parseCustomRoles(req), 900);
     res.redirect('/eo/events');
   } catch (e) { next(e); }
@@ -5233,7 +5239,7 @@ app.get('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (req
     const [positionsMaster, evPos, eventTypes, roleTemplates, apps] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listEventTypes(), formRoleTemplates(st), st.listApplications()]);
     await attachMockups(st, event);
     const hasApplicants = apps.some((a) => a.event_id === event.id);
-    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos), lang: req.lang, admin: true }));
+    res.send(V.eoEventForm({ staff: staffCtx(req), event, positionsMaster, eventTypes, roleTemplates, hasApplicants, selected: eoSelMap(evPos.filter((p) => !p.closed_at)), lang: req.lang, admin: true }));
   } catch (e) { next(e); }
 });
 
@@ -5268,14 +5274,13 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     const view = eoEventView(event, evPos, apps, choices);
     const newByPos = eoSelMap(f.positions);
     view.positions.forEach((p) => {
-      if (p.applicants > 0 && !p.closed_at && !(p.position_id in newByPos)) errors.push(req.t('eo.ev.err.cantRemovePos'));
       if (p.position_id in newByPos && newByPos[p.position_id].quota < p.filled) errors.push(req.t('eo.ev.err.quotaBelowAccepted'));
     });
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: Object.assign({}, event, f.echo), positionsMaster, eventTypes, roleTemplates, hasApplicants: applicantsExist, selected: newByPos, errors, lang: req.lang, admin: true }));
     const patch = Object.assign({}, f.data);
     await st.updateEvent(event.id, patch);
     if (typeChanged) { for (const p of evPos) { try { await st.deleteEventRole(p.id); } catch (_) { /* keep going */ } } }
-    await st.setEventPositions(event.id, f.positions);
+    await st.setEventPositions(event.id, f.positions, { closeInstead: positionsWithApplicants(view, newByPos) });
     await applyCustomRoles(st, event.id, f.data.event_type_id, parseCustomRoles(req), 900);
     res.redirect('/admin/manage');
   } catch (e) { next(e); }
