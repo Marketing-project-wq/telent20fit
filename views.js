@@ -443,6 +443,21 @@ const NAV_CSS = `
   .lp-search.lp-search--open .lp-loc-menu{position:static;box-shadow:none;border:1px solid var(--lp-line);margin-top:8px;max-height:40vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
+/* Mobile header (iOS/Android): logo left, one even row of 36px controls right, nothing clipped. */
+@media(max-width:600px){
+  .lp-nav .lp-nav-in{padding:10px 14px;gap:6px}
+  .lp-nav .lp-nav-logo{margin-right:auto;min-width:0;flex:0 1 auto}
+  .lp-nav .lp-nav-logo .lp-logo{height:22px;max-width:118px}
+  .lp-nav .lp-tog{margin-left:0;padding:3px;gap:2px;border-radius:10px}
+  .lp-nav .lp-tog-b{padding:7px 8px;font-size:12.5px;border-radius:7px}
+  .lp-nav .lp-search-toggle{width:36px;height:36px}
+  .lp-nav .lp-apps-btn{width:36px;height:36px;border-radius:999px}
+  .lp-nav .lp-acct>summary{width:36px;height:36px;padding:0;gap:0;justify-content:center;border-radius:999px;box-shadow:0 4px 12px rgba(228,18,31,.25)}
+  .lp-nav .lp-acct>summary .lp-caret{display:none}
+  .lp-nav .lp-acct-menu{right:0;max-width:calc(100vw - 28px)}
+  .lp-nav .lp-nav-back{height:36px;padding:0 10px;box-sizing:border-box;border-radius:999px}}
+.lp-nav .lp-tog-b{text-decoration:none}
+@media(max-width:360px){.lp-nav .lp-nav-in{padding:9px 10px;gap:5px}.lp-nav .lp-nav-logo .lp-logo{height:20px;max-width:96px}.lp-nav .lp-tog-b{padding:6px 6px;font-size:12px}}
 /* Account dropdown — logged-in state: initial avatar + name, plus the menu's logout button.
    (These mirror the landing page's inline copy so publicLayout + the talent dashboard header
    render the signed-in account control identically.) */
@@ -1065,6 +1080,21 @@ a{text-decoration:none}
   .lp-search.lp-search--open .lp-loc-menu{position:static;box-shadow:none;border:1px solid var(--lp-line);margin-top:8px;max-height:40vh}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
+/* Mobile header (iOS/Android): logo left, one even row of 36px controls right, nothing clipped. */
+@media(max-width:600px){
+  .lp-nav .lp-nav-in{padding:10px 14px;gap:6px}
+  .lp-nav .lp-nav-logo{margin-right:auto;min-width:0;flex:0 1 auto}
+  .lp-nav .lp-nav-logo .lp-logo{height:22px;max-width:118px}
+  .lp-nav .lp-tog{margin-left:0;padding:3px;gap:2px;border-radius:10px}
+  .lp-nav .lp-tog-b{padding:7px 8px;font-size:12.5px;border-radius:7px}
+  .lp-nav .lp-search-toggle{width:36px;height:36px}
+  .lp-nav .lp-apps-btn{width:36px;height:36px;border-radius:999px}
+  .lp-nav .lp-acct>summary{width:36px;height:36px;padding:0;gap:0;justify-content:center;border-radius:999px;box-shadow:0 4px 12px rgba(228,18,31,.25)}
+  .lp-nav .lp-acct>summary .lp-caret{display:none}
+  .lp-nav .lp-acct-menu{right:0;max-width:calc(100vw - 28px)}
+  .lp-nav .lp-nav-back{height:36px;padding:0 10px;box-sizing:border-box;border-radius:999px}}
+.lp-nav .lp-tog-b{text-decoration:none}
+@media(max-width:360px){.lp-nav .lp-nav-in{padding:9px 10px;gap:5px}.lp-nav .lp-nav-logo .lp-logo{height:20px;max-width:96px}.lp-nav .lp-tog-b{padding:6px 6px;font-size:12px}}
 .hero-stage{position:relative;overflow:hidden;background:var(--lp-bg);min-height:clamp(560px,86vh,900px);display:flex;flex-direction:column;justify-content:center}
 .hero-stage>header,.hero-stage>section{position:relative;z-index:2}
 /* Optional hero background photos + readability scrim; text goes light over them */
@@ -1128,7 +1158,7 @@ a{text-decoration:none}
    size and stay whole (never cropped or stretched) whatever their aspect ratio.
    Selecting on both classes (.eco-card.eco-card-logo) outranks any single-class
    .eco-card padding rule, incl. the responsive ones, so the padding stays even. */
-.eco-card.eco-card-logo{--eco-w:140px;--eco-h:40px;padding:18px 14px}
+.eco-card.eco-card-logo{--eco-w:140px;--eco-h:40px;padding:18px 14px;overflow:hidden} /* scaled logos (e.g. Arena x2.5) stay inside the card, no sideways page scroll on phones */
 /* Per-brand container overrides (data-eco slug). Higher specificity than the
    shared default above, so a single brand's box can be tuned in isolation
    without affecting the others. 20FIT Shop, 20FIT Cafe and 20FIT Arena are each
@@ -1592,6 +1622,21 @@ a{text-decoration:none}
 @media(max-width:600px){.lp-nav-logo .lp-logo{height:46px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:480px){.lp-nav-in{padding:10px 16px;gap:8px}}
 @media(max-width:380px){.lp-tog-b{padding:6px 9px}}
+/* Mobile header (iOS/Android): logo left, one even row of 36px controls right, nothing clipped. */
+@media(max-width:600px){
+  .lp-nav .lp-nav-in{padding:10px 14px;gap:6px}
+  .lp-nav .lp-nav-logo{margin-right:auto;min-width:0;flex:0 1 auto}
+  .lp-nav .lp-nav-logo .lp-logo{height:22px;max-width:118px}
+  .lp-nav .lp-tog{margin-left:0;padding:3px;gap:2px;border-radius:10px}
+  .lp-nav .lp-tog-b{padding:7px 8px;font-size:12.5px;border-radius:7px}
+  .lp-nav .lp-search-toggle{width:36px;height:36px}
+  .lp-nav .lp-apps-btn{width:36px;height:36px;border-radius:999px}
+  .lp-nav .lp-acct>summary{width:36px;height:36px;padding:0;gap:0;justify-content:center;border-radius:999px;box-shadow:0 4px 12px rgba(228,18,31,.25)}
+  .lp-nav .lp-acct>summary .lp-caret{display:none}
+  .lp-nav .lp-acct-menu{right:0;max-width:calc(100vw - 28px)}
+  .lp-nav .lp-nav-back{height:36px;padding:0 10px;box-sizing:border-box;border-radius:999px}}
+.lp-nav .lp-tog-b{text-decoration:none}
+@media(max-width:360px){.lp-nav .lp-nav-in{padding:9px 10px;gap:5px}.lp-nav .lp-nav-logo .lp-logo{height:20px;max-width:96px}.lp-nav .lp-tog-b{padding:6px 6px;font-size:12px}}
 .ab-hero{background:var(--ink);color:#fff;padding:66px 28px 58px}
 .ab-hero-in{max-width:820px;margin:0 auto}
 .ab-kick{color:#ff6b74;font:700 13px/1 Barlow,sans-serif;letter-spacing:.22em;text-transform:uppercase;margin-bottom:14px}
