@@ -3180,7 +3180,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   // Texts saved with a template row (e.g. via "Save to template") prefill
   // positions that have no built-in i18n template (custom positions).
   const rtText = {};
-  (roleTemplates || []).forEach((rt) => { const k = String(rt.position_id); if (!rtText[k] && (rt.description || rt.jobdesk || rt.requirement)) rtText[k] = { desc: rt.description || '', job: rt.jobdesk || '', req: rt.requirement || '' }; });
+  (roleTemplates || []).forEach((rt) => { const k = String(rt.position_id); if (!rtText[k] && (rt.description || rt.jobdesk || rt.requirement)) rtText[k] = L === 'en' ? { desc: rt.description_en || rt.description || '', job: rt.jobdesk_en || rt.jobdesk || '', req: rt.requirement_en || rt.requirement || '' } : { desc: rt.description || rt.description_en || '', job: rt.jobdesk || rt.jobdesk_en || '', req: rt.requirement || rt.requirement_en || '' }; });
   // Shared component for Super Admin (Manage) and EO — only the route base + nav differ.
   const isAdmin = !!admin;
   const listHref = isAdmin ? '/admin/manage' : '/eo/events';
@@ -3200,8 +3200,11 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     const cv = (k) => (cur && typeof cur === 'object' ? (cur[k] || '') : '');
     const inp = (name, phKey, max) => `<input type="text" name="${name}_${pid}" maxlength="${max}" value="${esc(cv(name))}" placeholder="${t(phKey)}" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px">`;
     // Optional English version of a template field, shown right under its ID input.
-    const enSub = `<div class="pm-flabel" style="margin-top:6px">${esc(t('eo.ev.f.enSub'))}</div>`;
-    const enTa = (name, max) => `${enSub}<textarea name="${name}_en_${pid}" class="posm-en" rows="2" maxlength="${max}" placeholder="${t('eo.ev.f.enPh')}" style="width:100%;box-sizing:border-box;margin-top:2px;font-size:13px">${esc(cv(name + '_en'))}</textarea>`;
+    // One box per text, typed in either language. Shows the stored text in the
+    // form's language (falling back to the other); hidden fields carry the
+    // stored ID/EN pair so the server keeps it when the text is unchanged.
+    const biShown = (name) => (L === 'en' ? (cv(name + '_en') || cv(name)) : (cv(name) || cv(name + '_en')));
+    const biHidden = (name) => `<input type="hidden" name="${name}_${pid}__orig" value="${esc(biShown(name))}"><input type="hidden" name="${name}_${pid}__id" value="${esc(cv(name))}"><input type="hidden" name="${name}_${pid}__en" value="${esc(cv(name + '_en'))}">`;
     const grp = (txt) => `<div class="pm-flabel" style="margin-top:12px">${txt}</div>`;
     const isOther = p.key === 'other';
     const fLabel = (labelKey, mt) => `<div class="pm-flabel" style="margin-top:${mt}">${t(labelKey)}</div>`;
@@ -3217,7 +3220,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       : ` data-tpl-desc="${esc(tplText('desc'))}" data-tpl-job="${esc(tplText('job'))}" data-tpl-req="${esc(tplText('req'))}"`;
     // "Lainnya" needs a name to save, so its name input stays on the row (shown when ticked).
     const customName = isOther ? `<input type="text" name="custom_label_${pid}" class="pm-cname" maxlength="80" value="${esc(cv('custom_label'))}" placeholder="${t('eo.pos.customNamePh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:8px${on ? '' : ';display:none'}">` : '';
-    const customNameEn = isOther ? `<div class="pm-flabel">${esc(t('eo.ev.f.enSub'))}</div><input type="text" name="custom_label_en_${pid}" maxlength="80" value="${esc(cv('custom_label_en'))}" placeholder="${t('eo.pos.customNameEnPh')}" style="width:100%;box-sizing:border-box;font-size:13px;font-weight:600;margin-top:2px">` : '';
+    const customNameEn = isOther ? `<input type="hidden" name="custom_label_en_${pid}" value="${esc(cv('custom_label_en'))}">` : '';
     // Category-specific fields only render (and only save) for the matching type.
     const kolFields = p.key === 'kol' ? `${grp(t('eo.pos.kolGroup'))}${inp('kol_content', 'eo.pos.kolContentPh', 200)}${inp('kol_deadline', 'eo.pos.kolDeadlinePh', 120)}${inp('kol_min_followers', 'eo.pos.kolFollowersPh', 120)}${inp('kol_hashtags', 'eo.pos.kolHashtagsPh', 400)}` : '';
     const photoFields = p.key === 'fotografer' ? `${grp(t('eo.pos.photoGroup'))}${inp('photo_output', 'eo.pos.photoOutputPh', 300)}${inp('photo_deadline', 'eo.pos.photoDeadlinePh', 120)}${inp('photo_equipment', 'eo.pos.photoEquipPh', 400)}` : '';
@@ -3239,14 +3242,14 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         ${isOther ? '' : `<div style="display:flex;justify-content:flex-end"><button type="button" class="tpl-reset">↺ ${esc(t('eo.pos.resetTpl'))}</button></div>`}
         ${customNameEn}
         ${fLabel('eo.ev.descLabel', isOther ? '10px' : '0')}
-        <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('description'))}</textarea>
-        ${enTa('description', 600)}
+        <textarea name="description_${pid}" class="posm-desc" rows="2" maxlength="600" placeholder="${t('eo.ev.f.posDescPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(biShown('description'))}</textarea>
+        ${biHidden('description')}
         ${fLabel('eo.ev.jobdeskLabel', '10px')}
-        <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('jobdesk'))}</textarea>
-        ${enTa('jobdesk', 1000)}
+        <textarea name="jobdesk_${pid}" class="posm-job" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(biShown('jobdesk'))}</textarea>
+        ${biHidden('jobdesk')}
         ${fLabel('eo.ev.requirementLabel', '10px')}
-        <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
-        ${enTa('requirement', 1000)}
+        <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(biShown('requirement'))}</textarea>
+        ${biHidden('requirement')}
         <!-- Fee is no longer shown on the form; carry any saved value so editing keeps it. -->
         <input type="hidden" name="fee_amount_${pid}" value="${esc(cur && cur.fee_amount != null ? String(cur.fee_amount) : '')}">
         ${kolFields}${photoFields}
@@ -3297,8 +3300,9 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.eventTypeHint')}</p>
       <div id="tplEmptyInfo" class="banner banner-warn" style="display:none;margin-top:8px;padding:9px 12px;font-size:12.5px">${t('eo.ev.tplEmpty')}</div>
     </div>
-    <div class="field"><label for="description">${t('eo.ev.f.descId')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(e.description || '')}</textarea></div>
-    <div class="field"><label for="description_en">${t('eo.ev.f.descEn')} <span class="muted" style="font-weight:400;font-size:12px">(${t('common.optional')})</span></label><textarea id="description_en" name="description_en" rows="4" maxlength="4000" placeholder="${t('eo.ev.f.descEnPh')}">${esc(e.description_en || '')}</textarea></div>
+    ${(() => { const shown = L === 'en' ? (e.description_en || e.description || '') : (e.description || e.description_en || ''); return `<div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(shown)}</textarea>
+      <input type="hidden" name="description__orig" value="${esc(shown)}"><input type="hidden" name="description__id" value="${esc(e.description || '')}"><input type="hidden" name="description__en" value="${esc(e.description_en || '')}">
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.biHint')}</p></div>`; })()}
     ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
@@ -3357,7 +3361,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       </script>
     </div>
     <div style="font-weight:700;margin:20px 0 2px">${t('eo.ev.sec.positions')}${rq}</div>
-    <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')}</p>
+    <p class="muted" style="font-size:12.5px;margin:2px 0 4px">${t('eo.ev.positionsHint')} ${t('eo.ev.biHint')}</p>
     ${tplError ? `<div class="banner banner-err" id="tplLoadErr" style="margin-top:8px">${t('eo.ev.tplLoadErr')}</div>` : ''}
     <div id="posmPick" class="pm-pick" style="display:none">${t('eo.ev.pickTypeFirst')}</div>
     <div id="posmWrap">
@@ -3437,8 +3441,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   // "diubah" badge: any ID field differs from its template, or any EN field is filled.
   function markMod(r){
     if(r.getAttribute('data-other')){ r.classList.remove('is-mod'); return; }
-    var mod=FIELDS.some(function(m){ var el=q$(r,m[0]); return el && el.value.trim()!==(r.getAttribute(m[1])||'').trim(); })
-      || [].slice.call(r.querySelectorAll('.posm-en')).some(function(el){ return !!el.value.trim(); });
+    var mod=FIELDS.some(function(m){ var el=q$(r,m[0]); return el && el.value.trim()!==(r.getAttribute(m[1])||'').trim(); });
     r.classList.toggle('is-mod',mod);
   }
   function setTick(r,on){ var cb=q$(r,'.posm-cb'); if(!cb||cb.checked===on) return; cb.checked=on; sync(r); fillTpl(r); markMod(r); }
@@ -3453,7 +3456,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     if(ed){ e.preventDefault(); var r=ed.closest('.posm-row'); setPanel(r, ed.getAttribute('aria-expanded')!=='true'); return; }
     // One "Reset to default" per position: ID fields back to the template, EN fields cleared.
     var rs=t.closest('.tpl-reset');
-    if(rs){ e.preventDefault(); var r2=rs.closest('.posm-row'); FIELDS.forEach(function(m){ var el=q$(r2,m[0]); if(el) el.value=r2.getAttribute(m[1])||''; }); [].slice.call(r2.querySelectorAll('.posm-en')).forEach(function(el){ el.value=''; }); markMod(r2); return; }
+    if(rs){ e.preventDefault(); var r2=rs.closest('.posm-row'); FIELDS.forEach(function(m){ var el=q$(r2,m[0]); if(el) el.value=r2.getAttribute(m[1])||''; }); markMod(r2); return; }
     // Tick-all per group (only the rows the search currently shows).
     var ga=t.closest('.pm-grp-all');
     if(ga){ e.preventDefault(); e.stopPropagation(); var g=ga.closest('.pm-grp'); var rs2=[].slice.call(g.querySelectorAll('.posm-row')).filter(visible); var all=rs2.length && rs2.every(function(r){ return q$(r,'.posm-cb').checked; }); rs2.forEach(function(r){ setTick(r,!all); }); if(!all) g.open=true; _dirty=true; recalcTotals(); }

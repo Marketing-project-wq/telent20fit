@@ -2581,7 +2581,48 @@ function eoEventView(ev, positions, apps, choices) {
 }
 
 // Parse the create/edit event form. positionsMaster gives the valid position ids.
-function parseEventForm(req, positionsMaster, eventTypes) {
+// --- Bilingual texts ---------------------------------------------------------
+// Event/position texts are typed once, in Indonesian or English. The form sends
+// the shown text plus hidden __orig/__id/__en values: unchanged text keeps the
+// stored pair; text equal to a built-in role template stores nothing (the page
+// then shows that template in the reader's language); anything else is queued
+// and translated in one batch (translateQueue) into an { id, en } pair.
+const BI_TPL_FIELD = { description: 'desc', jobdesk: 'job', requirement: 'req' };
+function biField(body, name, max, tplPair) {
+  const clip = (v) => String(v == null ? '' : v).trim().slice(0, max);
+  const text = clip(body[name]);
+  const orig = clip(body[name + '__orig']);
+  if (text === orig && body[name + '__orig'] !== undefined) return { id: clip(body[name + '__id']) || null, en: clip(body[name + '__en']) || null };
+  if (!text) return { id: null, en: null };
+  if (tplPair && tplPair.builtin && (text === tplPair.id || text === tplPair.en)) return { id: null, en: null };
+  if (tplPair && tplPair.id && tplPair.en && (text === tplPair.id || text === tplPair.en)) return { id: tplPair.id, en: tplPair.en };
+  return { id: text, en: null, pending: text, max };
+}
+// Built-in (i18n) or saved (role template) texts for one position field.
+function tplPairFor(key, positionId, field, roleTemplates) {
+  const f = BI_TPL_FIELD[field];
+  const k = 'pos.tpl.' + key + '.' + f;
+  const id = i18n.t('id', k), en = i18n.t('en', k);
+  if (key && id !== k && en !== k) return { builtin: true, id, en };
+  const rt = (roleTemplates || []).find((r) => String(r.position_id) === String(positionId) && (r[field] || r[field + '_en']));
+  return rt ? { id: rt[field] || '', en: rt[field + '_en'] || '' } : null;
+}
+// Translate every queued text in one LLM call. items: [{ text, max, set(id, en) }].
+// On any failure the original text is used for both languages.
+async function translateQueue(items) {
+  const list = (items || []).filter((x) => x && x.text);
+  if (!list.length) return;
+  let out = null;
+  try { out = await llm.translateBoth(list.map((x) => x.text)); } catch (e) { console.error('[translate]', e && e.message); }
+  list.forEach((x, i) => {
+    const r = out && out[i];
+    const idv = (r && r.id ? r.id : x.text).slice(0, x.max || 4000);
+    const env = (r && r.en ? r.en : x.text).slice(0, x.max || 4000);
+    x.set(idv, env);
+  });
+}
+
+function parseEventForm(req, positionsMaster, eventTypes, roleTemplates) {
   const s = (k, max) => String(req.body[k] || '').trim().slice(0, max);
   const st = s('status', 12);
   // Event type is now persisted (event_type_id). category (a text label) is
@@ -2590,7 +2631,7 @@ function parseEventForm(req, positionsMaster, eventTypes) {
   const eventTypeId = s('event_type_id', 40) || null;
   const ty = (eventTypes || []).find((t) => String(t.id) === eventTypeId) || null;
   const data = {
-    name: s('name', 140), description: s('description', 4000) || null, description_en: s('description_en', 4000) || null,
+    name: s('name', 140), description: null, description_en: null,
     category: ty ? (ty.label_id || ty.label_en || null) : (s('category', 80) || null),
     event_type_id: eventTypeId,
     location: s('location', 200) || null, starts_at: s('starts_at', 10) || null, ends_at: s('ends_at', 10) || null,
@@ -2601,6 +2642,11 @@ function parseEventForm(req, positionsMaster, eventTypes) {
     // Poster image URL (optional). Empty clears the poster.
     mockup_path: s('mockup_path', 1000) || null,
   };
+  const pending = [];
+  // Event description: one box, either language (see biField).
+  const evDesc = biField(req.body, 'description', 4000, null);
+  data.description = evDesc.id; data.description_en = evDesc.en;
+  if (evDesc.pending) pending.push({ text: evDesc.pending, max: 4000, set: (a, b) => { data.description = a; data.description_en = b; } });
   const validIds = new Set((positionsMaster || []).map((p) => p.id));
   const keyById = new Map((positionsMaster || []).map((p) => [String(p.id), p.key]));
   const posById = new Map((positionsMaster || []).map((p) => [String(p.id), p]));
@@ -2628,12 +2674,12 @@ function parseEventForm(req, positionsMaster, eventTypes) {
       // Short role description shown on the talent card face; auto-filled from a
       // per-role template but freely editable by the EO. _en holds the optional
       // English version the EO can type; display falls back across languages.
-      description: g('description', 600), description_en: g('description_en', 600),
+      description: null, description_en: null,
       // Custom name for the "Lainnya" (other) slot only; ignored for fixed roles.
       custom_label: key === 'other' ? g('custom_label', 80) : null,
       custom_label_en: key === 'other' ? g('custom_label_en', 80) : null,
-      jobdesk: g('jobdesk', 1000), jobdesk_en: g('jobdesk_en', 1000),
-      requirement: g('requirement', 1000), requirement_en: g('requirement_en', 1000), fee: g('fee', 200),
+      jobdesk: null, jobdesk_en: null,
+      requirement: null, requirement_en: null, fee: g('fee', 200),
       // Daily fee in rupiah for the payment recap (digits only; empty = not set).
       fee_amount: (() => { const v = String(req.body['fee_amount_' + id] || '').replace(/[^0-9]/g, ''); return v ? Math.min(parseInt(v, 10), 1e12) : null; })(),
       // General extra fields (all categories).
@@ -2645,9 +2691,23 @@ function parseEventForm(req, positionsMaster, eventTypes) {
     };
     if (key === 'kol') { pos.kol_content = g('kol_content', 200); pos.kol_deadline = g('kol_deadline', 120); pos.kol_min_followers = g('kol_min_followers', 120); pos.kol_hashtags = g('kol_hashtags', 400); }
     if (key === 'fotografer') { pos.photo_output = g('photo_output', 300); pos.photo_deadline = g('photo_deadline', 120); pos.photo_equipment = g('photo_equipment', 400); }
+    // Description / Jobdesk / Requirement: one box each, either language.
+    [['description', 600], ['jobdesk', 1000], ['requirement', 1000]].forEach(([fld, max]) => {
+      const r = biField(req.body, fld + '_' + id, max, tplPairFor(key, id, fld, roleTemplates));
+      pos[fld] = r.id; pos[fld + '_en'] = r.en;
+      if (r.pending) pending.push({ text: r.pending, max, set: (a, b) => { pos[fld] = a; pos[fld + '_en'] = b; } });
+    });
     seen.add(id); positions.push(pos);
   });
-  return { data, positions, echo: Object.assign({}, data, { positions }) };
+  return { data, positions, pending, echo: Object.assign({}, data, { positions }) };
+}
+// parseEventForm + translate the queued texts before validation/save, so a
+// re-rendered form (validation error) already carries both languages.
+async function parseEventFormTranslated(req, positionsMaster, eventTypes, roleTemplates) {
+  const f = parseEventForm(req, positionsMaster, eventTypes, roleTemplates);
+  await translateQueue(f.pending);
+  f.echo = Object.assign({}, f.data, { positions: f.positions });
+  return f;
 }
 // A poster URL must be absolute http(s) and free of characters that could break
 // out of the HTML/CSS contexts it's rendered into (img src, background-image url('')).
@@ -2717,18 +2777,24 @@ function parseCustomRoles(req) {
 // an is_optional event role; optionally also add it to the type's template.
 async function applyCustomRoles(st, evId, eventTypeId, customRoles, sortBase) {
   let i = 0;
+  // Texts typed in either language -> { id, en } pairs (one LLM call).
+  const q = [];
+  customRoles.forEach((c) => [['description', 600], ['jobdesk', 1000], ['requirement', 1000]].forEach(([fld, max]) => {
+    if (c[fld]) q.push({ text: c[fld], max, set: (a, b) => { c[fld] = a; c[fld + '_en'] = b; } });
+  }));
+  await translateQueue(q);
   // Rows saved earlier with "Save to template" carry their position id: reuse that
   // (custom) position instead of creating a duplicate; the template row exists.
   const customIds = customRoles.some((c) => c.pid) ? new Set((await st.listPositions()).filter((p) => p.is_custom).map((p) => String(p.id))) : new Set();
   for (const c of customRoles) {
     if (c.pid && customIds.has(c.pid)) {
-      await st.addEventRole(evId, { position_id: c.pid, division: null, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement });
+      await st.addEventRole(evId, { position_id: c.pid, division: null, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement, description_en: c.description_en, jobdesk_en: c.jobdesk_en, requirement_en: c.requirement_en });
       i++;
       continue;
     }
     const pos = await st.createCustomPosition({ name: c.name, division: c.division });
-    await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement });
-    if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement }); } catch (_) { /* ignore dup */ } }
+    await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement, description_en: c.description_en, jobdesk_en: c.jobdesk_en, requirement_en: c.requirement_en });
+    if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement, description_en: c.description_en, jobdesk_en: c.jobdesk_en, requirement_en: c.requirement_en }); } catch (_) { /* ignore dup */ } }
     i++;
   }
 }
@@ -2752,9 +2818,11 @@ async function saveTemplatePosition(req, res) {
   const existing = await st.listRoleTemplates(type.id);
   const norm = (v) => String(v || '').trim().toLowerCase();
   if (existing.some((rt) => norm(rt.label_id) === norm(name) || norm(rt.label_en) === norm(name))) return res.status(409).json({ error: 'dup' });
+  const tx = { description, jobdesk, requirement };
+  await translateQueue([['description', 600], ['jobdesk', 1000], ['requirement', 1000]].filter(([fld]) => tx[fld]).map(([fld, max]) => ({ text: tx[fld], max, set: (a, b) => { tx[fld] = a; tx[fld + '_en'] = b; } })));
   const pos = await st.createCustomPosition({ name, division: null });
   const sortOrder = existing.reduce((m, rt) => Math.max(m, rt.sort_order || 0), 0) + 10;
-  await st.createRoleTemplate({ event_type_id: type.id, position_id: pos.id, division: null, default_quota: quota, sort_order: sortOrder, description, jobdesk, requirement });
+  await st.createRoleTemplate({ event_type_id: type.id, position_id: pos.id, division: null, default_quota: quota, sort_order: sortOrder, description: tx.description, jobdesk: tx.jobdesk, requirement: tx.requirement, description_en: tx.description_en, jobdesk_en: tx.jobdesk_en, requirement_en: tx.requirement_en });
   res.json({ ok: true, id: pos.id, name });
 }
 app.post('/eo/template-position', requireEo, async (req, res) => {
@@ -2793,7 +2861,7 @@ app.post('/eo/events', requireEo, async (req, res, next) => {
     if (!st) return needConfig(req, res);
     if (!eoProfileComplete(await st.getEoProfile(req.staff.id))) return res.redirect('/eo/profile');
     const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
-    const f = parseEventForm(req, positionsMaster, eventTypes);
+    const f = await parseEventFormTranslated(req, positionsMaster, eventTypes, roleTemplates);
     const errors = validateEventForm(f, req);
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: eoCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
@@ -2826,7 +2894,7 @@ app.post('/eo/events/:id/edit', requireEo, async (req, res, next) => {
     const ev = await eoOwnedEvent(st, req.staff.id, req.params.id);
     if (!ev) return res.redirect('/eo/events');
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(ev.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), formRoleTemplates(st)]);
-    const f = parseEventForm(req, positionsMaster, eventTypes);
+    const f = await parseEventFormTranslated(req, positionsMaster, eventTypes, roleTemplates);
     const errors = validateEventForm(f, req, ev.mockup_path);
     // Once an event has applicants its type is locked — ignore any change to it.
     const applicantsExist = apps.some((a) => a.event_id === ev.id);
@@ -5121,7 +5189,7 @@ app.post('/admin/events', auth.requireStaff(['super_admin']), async (req, res, n
     const st = db();
     if (!st) return needConfig(req, res);
     const [positionsMaster, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventTypes(), formRoleTemplates(st)]);
-    const f = parseEventForm(req, positionsMaster, eventTypes);
+    const f = await parseEventFormTranslated(req, positionsMaster, eventTypes, roleTemplates);
     const errors = validateEventForm(f, req);
     if (errors.length) return res.status(400).send(V.eoEventForm({ staff: staffCtx(req), event: f.echo, positionsMaster, eventTypes, roleTemplates, selected: eoSelMap(f.positions), errors, lang: req.lang, admin: true }));
     const ev = await st.createEvent(Object.assign({}, f.data, { created_by: req.staff.id }));
@@ -5170,7 +5238,7 @@ app.post('/admin/events/:id/edit', auth.requireStaff(['super_admin']), async (re
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
     const [positionsMaster, evPos, apps, choices, eventTypes, roleTemplates] = await Promise.all([st.listPositions(), st.listEventPositions(event.id), st.listApplications(), st.listApplicationChoices(), st.listEventTypes(), formRoleTemplates(st)]);
-    const f = parseEventForm(req, positionsMaster, eventTypes);
+    const f = await parseEventFormTranslated(req, positionsMaster, eventTypes, roleTemplates);
     const errors = validateEventForm(f, req, event.mockup_path);
     const applicantsExist = apps.some((a) => a.event_id === event.id);
     if (applicantsExist) { f.data.event_type_id = event.event_type_id || null; f.data.category = event.category || f.data.category; }
