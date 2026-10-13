@@ -47,8 +47,10 @@
   .unit{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.75;margin-top:2px}
   .badge{display:none;margin-top:18px;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:999px;background:var(--ok-soft);color:var(--ok);font-weight:900;font-size:16px}
   .badge .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(23,138,84,.18)}
-  .is-open .count{display:none}
+  .is-open .count,.is-closed .count{display:none}
   .is-open .badge{display:flex}
+  .badge-closed{display:none;margin-top:18px;align-items:center;justify-content:center;padding:12px 14px;border-radius:999px;background:var(--card2);color:var(--muted);font-weight:900;font-size:16px}
+  .is-closed .badge-closed{display:flex}
 
   /* Buttons (min 44px touch target) */
   .actions{display:flex;flex-direction:column;gap:10px;margin-top:18px}
@@ -88,6 +90,7 @@
   .pos{list-style:none;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
   .pos li{font-size:14px;font-weight:700;padding:8px 12px;border-radius:999px;background:var(--red-soft);color:#a50d16}
   .muted{color:var(--muted);font-size:13px;margin-top:10px}
+  .pos-cat{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:14px}
   .steps{list-style:none;margin-top:10px;counter-reset:s}
   .steps li{counter-increment:s;position:relative;padding:6px 0 6px 36px;font-size:14.5px}
   .steps li::before{content:counter(s);position:absolute;left:0;top:5px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
@@ -116,7 +119,7 @@
 
       <div class="when">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E4121F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <div><strong>Selasa, 13 Oktober 2026</strong>Mulai pukul 19:00 WIB (UTC+7)</div>
+        <div><strong>Dibuka: Selasa, 13 Okt 2026, 19:00 WIB</strong>Ditutup: Senin, 19 Okt 2026, 23:59 WIB</div>
       </div>
 
       <!-- Before opening: countdown. After opening: badge. Switched by the script below. -->
@@ -130,6 +133,7 @@
         </div>
       </div>
       <div class="badge" id="badge" role="status"><span class="dot" aria-hidden="true"></span>Pendaftaran Dibuka</div>
+      <div class="badge-closed" role="status">Pendaftaran Ditutup</div>
 
       <div class="step">
         <div class="step-h"><span class="step-n">1</span>Download aplikasi 20FIT</div>
@@ -152,7 +156,7 @@
         <p class="step-p">Masuk ke talent.20fit.id dengan email &amp; password akun aplikasi 20FIT kamu.</p>
         <div class="actions">
           <a class="btn btn-primary" id="cta" aria-disabled="true" role="link">Dibuka 13 Okt, 19:00 WIB</a>
-          <noscript><a class="btn btn-primary" href="https://talent.20fit.id" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
+          <noscript><a class="btn btn-primary" href="https://talent.20fit.id/event/ce923a16-2f43-41f1-8eab-1809848fb63d" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
         </div>
       </div>
 
@@ -175,17 +179,23 @@
 
       <section class="sec">
         <h2>Posisi yang dibuka</h2>
+        <p class="pos-cat">Man Power</p>
         <ul class="pos">
           <li>Judges Hybrid Race</li>
           <li>Judges Running</li>
-          <li>Marshal</li>
+          <li>Runner</li>
+          <li>Registration Staff</li>
           <li>Water Station</li>
-          <li>Drop Bag</li>
-          <li>Information</li>
-          <li>Registration</li>
           <li>Time Chip Management</li>
+          <li>Marshal</li>
+          <li>Drop Bag</li>
+          <li>Checker</li>
         </ul>
-        <p class="muted">Daftar posisi dan kuota lengkap ada di halaman event saat pendaftaran dibuka.</p>
+        <p class="pos-cat">KOL</p>
+        <ul class="pos"><li>KOL</li></ul>
+        <p class="pos-cat">Fotografer &amp; Videografer</p>
+        <ul class="pos"><li>Fotografer</li><li>Videografer</li></ul>
+        <p class="muted">Kuota terbatas. Jobdesk, requirement, dan kuota tiap posisi bisa dilihat di halaman event.</p>
       </section>
 
       <section class="sec">
@@ -193,7 +203,7 @@
         <ol class="steps">
           <li>Download aplikasi <b>20FIT</b> dan buat akun.</li>
           <li>Buka <b>talent.20fit.id</b>, masuk pakai akun 20FIT yang sama.</li>
-          <li>Pilih event Jakarta Hybrid Race, pilih posisi, lalu klik <b>Lamar</b>.</li>
+          <li>Klik <b>Daftar Sekarang</b> di halaman ini (aktif mulai 13 Okt, 19:00 WIB), pilih posisi, lalu klik <b>Lamar</b>. Kamu bisa memilih sampai 3 posisi.</li>
         </ol>
       </section>
     </div>
@@ -208,7 +218,10 @@
   // Date.UTC + Date.now() are both UTC epoch milliseconds, so the device's
   // time-zone setting never affects the countdown.
   var OPEN_AT = Date.UTC(2026, 9, 13, 12, 0, 0);
-  var URL_REG = 'https://talent.20fit.id';
+  // Closes 19 Oct 2026 23:59 WIB -> after 19 Oct 16:59:59 UTC.
+  var CLOSE_AT = Date.UTC(2026, 9, 19, 17, 0, 0);
+  // Direct link to this event's page on talent.20fit.id.
+  var URL_REG = 'https://talent.20fit.id/event/ce923a16-2f43-41f1-8eab-1809848fb63d';
   var page = document.getElementById('page');
   var cta = document.getElementById('cta');
   var el = { d: document.getElementById('d'), h: document.getElementById('h'), m: document.getElementById('m'), s: document.getElementById('s') };
@@ -223,12 +236,20 @@
     cta.setAttribute('target', '_blank');
     cta.setAttribute('rel', 'noopener');
     cta.textContent = 'Daftar Sekarang';
+  }
+
+  function closed() {
+    page.className = page.className.replace(/\bis-open\b/, '') + ' is-closed';
+    cta.setAttribute('aria-disabled', 'true');
+    cta.removeAttribute('href');
+    cta.textContent = 'Pendaftaran Ditutup';
     if (timer) { clearInterval(timer); timer = null; }
   }
 
   function tick() {
+    if (Date.now() >= CLOSE_AT) { closed(); return; }
     var left = OPEN_AT - Date.now();
-    if (left <= 0) { open(); return; }
+    if (left <= 0) { if (page.className.indexOf('is-open') < 0) open(); return; }
     var sec = Math.floor(left / 1000);
     el.d.textContent = Math.floor(sec / 86400);
     el.h.textContent = pad(Math.floor(sec % 86400 / 3600));
@@ -237,7 +258,8 @@
   }
 
   tick();
-  if (Date.now() < OPEN_AT) timer = setInterval(tick, 1000);
+  // Keep ticking while open too, so the page also closes itself at the deadline.
+  if (Date.now() < CLOSE_AT) timer = setInterval(tick, 1000);
   // A WebView paused in the background can skip timer ticks: re-check on return.
   document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
 })();
