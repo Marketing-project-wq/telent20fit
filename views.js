@@ -3177,6 +3177,10 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
   const sel = selected || {};
   const editing = !!e.id;
   tplError = !!(tplError || (roleTemplates && roleTemplates.failed));
+  // Texts saved with a template row (e.g. via "Save to template") prefill
+  // positions that have no built-in i18n template (custom positions).
+  const rtText = {};
+  (roleTemplates || []).forEach((rt) => { const k = String(rt.position_id); if (!rtText[k] && (rt.description || rt.jobdesk || rt.requirement)) rtText[k] = { desc: rt.description || '', job: rt.jobdesk || '', req: rt.requirement || '' }; });
   // Shared component for Super Admin (Manage) and EO — only the route base + nav differ.
   const isAdmin = !!admin;
   const listHref = isAdmin ? '/admin/manage' : '/eo/events';
@@ -3206,7 +3210,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     // When a new standard position is added (talent_positions, via a migration), add
     // pos.tpl.<key>.desc/.job/.req to both i18n/id.json and i18n/en.json in the same
     // change so it prefills like the others. EO custom roles (custom_*) have none.
-    const tplText = (f) => { const k = 'pos.tpl.' + p.key + '.' + f; const v = t(k); return v === k ? '' : v; };
+    const tplText = (f) => { const k = 'pos.tpl.' + p.key + '.' + f; const v = t(k); if (v !== k) return v; const rt = rtText[String(p.id)]; return (rt && rt[f]) || ''; };
     // Per-role default template (auto-fills empty Deskripsi/Jobdesk/Requirement on tick).
     // The custom "Lainnya" slot has no template — the EO names & fills it manually.
     const tplAttrs = isOther ? ' data-other="1"'
@@ -3243,9 +3247,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
         ${fLabel('eo.ev.requirementLabel', '10px')}
         <textarea name="requirement_${pid}" class="posm-req" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">${esc(cv('requirement'))}</textarea>
         ${enTa('requirement', 1000)}
-        ${fLabel('eo.pos.feeAmount', '10px')}
-        <input type="text" inputmode="numeric" name="fee_amount_${pid}" value="${esc(cur && cur.fee_amount != null ? String(cur.fee_amount) : '')}" placeholder="${esc(t('eo.pos.feeAmountPh'))}" maxlength="13" autocomplete="off" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px">
-        <p class="muted" style="font-size:11.5px;margin:4px 0 0">${t('eo.pos.feeAmountHint')}</p>
+        <!-- Fee is no longer shown on the form; carry any saved value so editing keeps it. -->
+        <input type="hidden" name="fee_amount_${pid}" value="${esc(cur && cur.fee_amount != null ? String(cur.fee_amount) : '')}">
         ${kolFields}${photoFields}
         <!-- The optional "Position Details" inputs were removed from the form, but the columns
              are still shown to talents in "Lihat Detail". Carry any existing values as hidden
@@ -3554,7 +3557,7 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
 })();
 (function(){
   var list=document.getElementById('customList'), btn=document.getElementById('addCustomBtn'); if(!list||!btn) return;
-  var LB=${JSON.stringify({ name: t('eo.role.customName'), quota: t('eo.role.colQuota'), desc: t('eo.role.customDesc'), save: t('eo.ev.saveTplNow'), saving: t('eo.ev.saveTplSaving'), saved: t('eo.ev.saveTplDone'), needType: t('eo.ev.saveTplNeedType'), needName: t('eo.ev.saveTplNeedName'), dup: t('eo.ev.saveTplDup'), fail: t('eo.ev.saveTplFail'), hint: t('eo.ev.saveTplHint') })};
+  var LB=${JSON.stringify({ name: t('eo.role.customName'), quota: t('eo.role.colQuota'), desc: t('eo.role.customDesc'), descL: t('eo.ev.descLabel'), jobL: t('eo.ev.jobdeskLabel'), jobPh: t('eo.ev.jobdeskPh'), reqL: t('eo.ev.requirementLabel'), reqPh: t('eo.ev.requirementPh'), save: t('eo.ev.saveTplNow'), saving: t('eo.ev.saveTplSaving'), saved: t('eo.ev.saveTplDone'), needType: t('eo.ev.saveTplNeedType'), needName: t('eo.ev.saveTplNeedName'), dup: t('eo.ev.saveTplDup'), fail: t('eo.ev.saveTplFail'), hint: t('eo.ev.saveTplHint') })};
   var URL_TPL=${JSON.stringify(isAdmin ? '/admin/template-position' : '/eo/template-position')};
   var cat=document.getElementById('event_type_id');
   function ce(s){ return String(s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); }
@@ -3565,18 +3568,20 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
       +'<div style="flex:2;min-width:150px"><label style="font-size:11px;color:var(--muted)">'+ce(LB.name)+'</label><input name="custom_name[]" class="cname" maxlength="80" style="width:100%;box-sizing:border-box"></div>'
       +'<div style="width:80px"><label style="font-size:11px;color:var(--muted)">'+ce(LB.quota)+'</label><input type="number" name="custom_quota[]" class="cquota" min="0" value="0" style="width:100%;box-sizing:border-box"></div>'
       +'<button type="button" class="btn btn-ghost btn-sm rm" style="color:var(--red)">✕</button></div>'
-      +'<textarea name="custom_desc[]" class="cdesc" rows="2" maxlength="600" placeholder="'+ce(LB.desc)+'" style="width:100%;box-sizing:border-box;margin-top:6px;font-size:13px"></textarea>'
+      +'<div class="pm-flabel" style="margin-top:10px">'+ce(LB.descL)+'</div><textarea name="custom_desc[]" class="cdesc" rows="2" maxlength="600" placeholder="'+ce(LB.desc)+'" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px"></textarea>'
+      +'<div class="pm-flabel" style="margin-top:10px">'+ce(LB.jobL)+'</div><textarea name="custom_job[]" class="cjob" rows="2" maxlength="1000" placeholder="'+ce(LB.jobPh)+'" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px"></textarea>'
+      +'<div class="pm-flabel" style="margin-top:10px">'+ce(LB.reqL)+'</div><textarea name="custom_req[]" class="creq" rows="2" maxlength="1000" placeholder="'+ce(LB.reqPh)+'" style="width:100%;box-sizing:border-box;margin-top:3px;font-size:13px"></textarea>'
       +'<input type="hidden" name="custom_pid[]" value="" class="cpid">'
       +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px"><button type="button" class="btn btn-ghost btn-sm csave">'+ce(LB.save)+'</button><span class="cmsg muted" style="font-size:12.5px">'+ce(LB.hint)+'</span></div>';
     list.appendChild(d);
   }
   function save(r){
-    var b=r.querySelector('.csave'), m=r.querySelector('.cmsg'), nm=r.querySelector('.cname'), qt=r.querySelector('.cquota'), ds=r.querySelector('.cdesc');
+    var b=r.querySelector('.csave'), m=r.querySelector('.cmsg'), nm=r.querySelector('.cname'), qt=r.querySelector('.cquota'), ds=r.querySelector('.cdesc'), jb=r.querySelector('.cjob'), rq=r.querySelector('.creq');
     function msg(txt,err){ m.textContent=txt; m.style.color=err?'var(--red)':''; }
     if(!cat||!cat.value){ msg(LB.needType,true); return; }
     if(!nm.value.trim()){ msg(LB.needName,true); nm.focus(); return; }
     b.disabled=true; msg(LB.saving);
-    var body=new URLSearchParams(); body.set('event_type_id',cat.value); body.set('name',nm.value.trim()); body.set('quota',qt.value||'0'); body.set('description',ds.value||'');
+    var body=new URLSearchParams(); body.set('event_type_id',cat.value); body.set('name',nm.value.trim()); body.set('quota',qt.value||'0'); body.set('description',ds.value||''); body.set('jobdesk',jb.value||''); body.set('requirement',rq.value||'');
     fetch(URL_TPL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},body:body.toString(),credentials:'same-origin'})
       .then(function(res){ return res.json().catch(function(){ return {}; }).then(function(j){ return {ok:res.ok,j:j}; }); })
       .then(function(x){
@@ -3680,7 +3685,9 @@ function eventRolesManager(e, view, positionsMaster, flash, base, L) {
     <form method="post" action="${base}/${esc(e.id)}/roles/custom" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
       <div style="flex:2;min-width:150px"><label class="muted" style="font-size:11px;display:block">${t('eo.role.customName')}</label><input name="name" maxlength="80" required style="width:100%;box-sizing:border-box;padding:4px 8px"></div>
       <div><label class="muted" style="font-size:11px;display:block">${t('eo.role.colQuota')}</label><input type="number" name="quota" min="0" value="0" style="width:70px;padding:4px 6px"></div>
-      <div style="flex:1 1 100%"><textarea name="description" rows="2" maxlength="600" placeholder="${t('eo.role.customDesc')}" style="width:100%;box-sizing:border-box;font-size:13px"></textarea></div>
+      <div style="flex:1 1 100%"><label class="muted" style="font-size:11px;display:block">${t('eo.ev.descLabel')}</label><textarea name="description" rows="2" maxlength="600" placeholder="${t('eo.role.customDesc')}" style="width:100%;box-sizing:border-box;font-size:13px"></textarea></div>
+      <div style="flex:1 1 100%"><label class="muted" style="font-size:11px;display:block">${t('eo.ev.jobdeskLabel')}</label><textarea name="jobdesk" rows="2" maxlength="1000" placeholder="${t('eo.ev.jobdeskPh')}" style="width:100%;box-sizing:border-box;font-size:13px"></textarea></div>
+      <div style="flex:1 1 100%"><label class="muted" style="font-size:11px;display:block">${t('eo.ev.requirementLabel')}</label><textarea name="requirement" rows="2" maxlength="1000" placeholder="${t('eo.ev.requirementPh')}" style="width:100%;box-sizing:border-box;font-size:13px"></textarea></div>
       ${e.event_type_id ? `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;flex:1 1 100%"><input type="checkbox" name="save_to_template" value="1"> ${t('eo.role.saveToTemplate')}</label>` : ''}
       <button class="btn btn-sm" type="submit">${t('eo.role.addCustom')}</button>
     </form></details>`;
@@ -8013,7 +8020,6 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
       ['📋', t('ta.jobdesk'), jobdeskText, 'pos-sec-fixed'],
       ['✅', t('ta.requirement'), reqText, 'pos-sec-fixed'],
       ['🕒', t('ta.d.workHours'), p.work_hours], ['📍', t('ta.d.venue'), p.venue_detail],
-      ['💰', t('ta.fee'), p.fee],
       ['👕', t('ta.d.dresscode'), p.dresscode], ['📌', t('ta.d.meeting'), p.meeting_point],
     ];
     if (p.key === 'kol') detailRows.push(['🎬', t('ta.d.kolContent'), p.kol_content], ['⏰', t('ta.d.kolDeadline'), p.kol_deadline], ['📈', t('ta.d.kolFollowers'), p.kol_min_followers], ['#️⃣', t('ta.d.kolHashtags'), p.kol_hashtags]);

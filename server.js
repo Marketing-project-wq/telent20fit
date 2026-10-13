@@ -2700,6 +2700,8 @@ function parseCustomRoles(req) {
   const divs = [].concat(req.body.custom_division || []);
   const quotas = [].concat(req.body.custom_quota || []);
   const descs = [].concat(req.body.custom_desc || []);
+  const jobs = [].concat(req.body.custom_job || []);
+  const reqs = [].concat(req.body.custom_req || []);
   const tpls = [].concat(req.body.custom_tpl || []); // '1' => also save to this type's template
   const pids = [].concat(req.body.custom_pid || []); // already saved to the template via "Save to template"
   const out = [];
@@ -2707,7 +2709,7 @@ function parseCustomRoles(req) {
     const name = String(nm || '').trim().slice(0, 80);
     if (!name) return;
     const q = parseInt(quotas[i], 10);
-    out.push({ name, division: String(divs[i] || '').trim().slice(0, 60) || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, description: String(descs[i] || '').trim().slice(0, 600) || null, saveTpl: String(tpls[i] || '') === '1', pid: String(pids[i] || '').trim().slice(0, 80) || null });
+    out.push({ name, division: String(divs[i] || '').trim().slice(0, 60) || null, quota: Number.isFinite(q) && q >= 0 ? q : 0, description: String(descs[i] || '').trim().slice(0, 600) || null, jobdesk: String(jobs[i] || '').trim().slice(0, 1000) || null, requirement: String(reqs[i] || '').trim().slice(0, 1000) || null, saveTpl: String(tpls[i] || '') === '1', pid: String(pids[i] || '').trim().slice(0, 80) || null });
   });
   return out;
 }
@@ -2720,13 +2722,13 @@ async function applyCustomRoles(st, evId, eventTypeId, customRoles, sortBase) {
   const customIds = customRoles.some((c) => c.pid) ? new Set((await st.listPositions()).filter((p) => p.is_custom).map((p) => String(p.id))) : new Set();
   for (const c of customRoles) {
     if (c.pid && customIds.has(c.pid)) {
-      await st.addEventRole(evId, { position_id: c.pid, division: null, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description });
+      await st.addEventRole(evId, { position_id: c.pid, division: null, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement });
       i++;
       continue;
     }
     const pos = await st.createCustomPosition({ name: c.name, division: c.division });
-    await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description });
-    if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description }); } catch (_) { /* ignore dup */ } }
+    await st.addEventRole(evId, { position_id: pos.id, division: c.division, quota: c.quota, sort_order: (sortBase || 900) + i, is_optional: true, is_custom: true, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement });
+    if (c.saveTpl && eventTypeId) { try { await st.createRoleTemplate({ event_type_id: eventTypeId, position_id: pos.id, division: c.division, default_quota: c.quota, sort_order: (sortBase || 900) + i, description: c.description, jobdesk: c.jobdesk, requirement: c.requirement }); } catch (_) { /* ignore dup */ } }
     i++;
   }
 }
@@ -2742,6 +2744,8 @@ async function saveTemplatePosition(req, res) {
   const q = parseInt(req.body.quota, 10);
   const quota = Number.isFinite(q) && q >= 0 ? Math.min(q, 99999) : 0;
   const description = String(req.body.description || '').trim().slice(0, 600) || null;
+  const jobdesk = String(req.body.jobdesk || '').trim().slice(0, 1000) || null;
+  const requirement = String(req.body.requirement || '').trim().slice(0, 1000) || null;
   if (!name) return res.status(400).json({ error: 'name' });
   const type = (await st.listEventTypes()).find((ty) => String(ty.id) === eventTypeId);
   if (!type) return res.status(400).json({ error: 'type' });
@@ -2750,7 +2754,7 @@ async function saveTemplatePosition(req, res) {
   if (existing.some((rt) => norm(rt.label_id) === norm(name) || norm(rt.label_en) === norm(name))) return res.status(409).json({ error: 'dup' });
   const pos = await st.createCustomPosition({ name, division: null });
   const sortOrder = existing.reduce((m, rt) => Math.max(m, rt.sort_order || 0), 0) + 10;
-  await st.createRoleTemplate({ event_type_id: type.id, position_id: pos.id, division: null, default_quota: quota, sort_order: sortOrder, description });
+  await st.createRoleTemplate({ event_type_id: type.id, position_id: pos.id, division: null, default_quota: quota, sort_order: sortOrder, description, jobdesk, requirement });
   res.json({ ok: true, id: pos.id, name });
 }
 app.post('/eo/template-position', requireEo, async (req, res) => {
@@ -2986,8 +2990,10 @@ app.post('/eo/events/:id/roles/custom', requireEo, async (req, res, next) => {
     const division = String(req.body.division || '').trim().slice(0, 60) || null;
     const q = parseInt(req.body.quota, 10);
     const description = String(req.body.description || '').trim().slice(0, 600) || null;
+    const jobdesk = String(req.body.jobdesk || '').trim().slice(0, 1000) || null;
+    const requirement = String(req.body.requirement || '').trim().slice(0, 1000) || null;
     const saveTpl = String(req.body.save_to_template || '') === '1';
-    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, saveTpl }], 900);
+    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, jobdesk, requirement, saveTpl }], 900);
     res.redirect(backTo + '&ok=added');
   } catch (e) { next(e); }
 });
@@ -5278,8 +5284,10 @@ app.post('/admin/events/:id/roles/custom', auth.requireStaff(['super_admin']), a
     const division = String(req.body.division || '').trim().slice(0, 60) || null;
     const q = parseInt(req.body.quota, 10);
     const description = String(req.body.description || '').trim().slice(0, 600) || null;
+    const jobdesk = String(req.body.jobdesk || '').trim().slice(0, 1000) || null;
+    const requirement = String(req.body.requirement || '').trim().slice(0, 1000) || null;
     const saveTpl = String(req.body.save_to_template || '') === '1';
-    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, saveTpl }], 900);
+    await applyCustomRoles(st, ev.id, ev.event_type_id, [{ name, division, quota: Number.isFinite(q) && q >= 0 ? q : 0, description, jobdesk, requirement, saveTpl }], 900);
     res.redirect(backTo + '&ok=added');
   } catch (e) { next(e); }
 });
