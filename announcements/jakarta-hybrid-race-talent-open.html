@@ -62,6 +62,13 @@
   .stores .btn{min-height:48px;font-size:14px;padding:10px 12px}
   .app-note{font-size:13px;color:var(--muted);text-align:center;margin-top:2px}
 
+  /* Two-step flow: 1) download app, 2) register on talent.20fit.id */
+  .step{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:14px}
+  .step-h{display:flex;align-items:center;gap:10px;font-weight:900;font-size:15.5px}
+  .step-n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center}
+  .step-p{font-size:13.5px;color:var(--muted);margin:6px 0 12px}
+  .step .actions{margin-top:0}
+
   /* Positions */
   .sec{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
   h2{font-size:17px;font-weight:900}
@@ -111,10 +118,9 @@
       </div>
       <div class="badge" id="badge" role="status"><span class="dot" aria-hidden="true"></span>Pendaftaran Dibuka</div>
 
-      <div class="actions">
-        <a class="btn btn-primary" id="cta" aria-disabled="true" role="link">Dibuka 13 Okt, 19:00 WIB</a>
-        <noscript><a class="btn btn-primary" href="https://talent.20fit.id" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
-
+      <div class="step">
+        <div class="step-h"><span class="step-n">1</span>Download aplikasi 20FIT</div>
+        <p class="step-p">Wajib. Buat akun 20FIT di aplikasi. Akun ini yang dipakai untuk masuk ke website talent.</p>
         <div class="stores">
           <!-- TODO: isi link Play Store resmi aplikasi 20FIT (belum ada di repo) -->
           <a class="btn btn-secondary" href="https://play.google.com/store/apps/details?id=GANTI_DENGAN_PACKAGE_ID_20FIT" target="_blank" rel="noopener" aria-label="Download aplikasi 20FIT di Google Play">
@@ -126,7 +132,15 @@
             App Store
           </a>
         </div>
-        <p class="app-note">Download aplikasi 20FIT untuk pantau event &amp; status lamaranmu.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-h"><span class="step-n">2</span>Daftar sebagai talent</div>
+        <p class="step-p">Masuk ke talent.20fit.id dengan email &amp; password akun aplikasi 20FIT kamu.</p>
+        <div class="actions">
+          <a class="btn btn-primary" id="cta" aria-disabled="true" role="link">Dibuka 13 Okt, 19:00 WIB</a>
+          <noscript><a class="btn btn-primary" href="https://talent.20fit.id" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
+        </div>
       </div>
 
       <section class="sec">
@@ -147,9 +161,9 @@
       <section class="sec">
         <h2>Cara daftar</h2>
         <ol class="steps">
-          <li>Buka <b>talent.20fit.id</b> lalu masuk atau buat akun.</li>
-          <li>Pilih event Jakarta Hybrid Race.</li>
-          <li>Pilih posisi yang kamu mau, lalu klik <b>Lamar</b>.</li>
+          <li>Download aplikasi <b>20FIT</b> dan buat akun.</li>
+          <li>Buka <b>talent.20fit.id</b>, masuk pakai akun 20FIT yang sama.</li>
+          <li>Pilih event Jakarta Hybrid Race, pilih posisi, lalu klik <b>Lamar</b>.</li>
         </ol>
       </section>
     </div>
