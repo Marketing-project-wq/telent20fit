@@ -22,7 +22,7 @@ const POS_DETAIL_COLS = ['description', 'description_en', 'custom_label', 'custo
 const pickPosDetails = (src) => { const o = {}; for (const c of POS_DETAIL_COLS) o[c] = (src && src[c]) || null; return o; };
 
 const RT_COLS = 'id,event_type_id,position_id,division,default_quota,sort_order,description,is_active';
-const RT_TEXT_COLS = 'jobdesk,requirement';
+const RT_TEXT_COLS = 'jobdesk,requirement,description_en,jobdesk_en,requirement_en';
 const RT_JOIN = 'talent_positions(key,label_id,label_en,division,sort)';
 const isMissingColumn = (error) => /column .* does not exist|could not find the .* column|42703|PGRST204/i.test(String((error && (error.message + ' ' + (error.code || ''))) || ''));
 
@@ -34,13 +34,14 @@ const mapRoleTemplate = (r) => ({
   default_quota: r.default_quota, sort_order: r.sort_order,
   description: r.description || null, is_active: r.is_active,
   jobdesk: r.jobdesk || null, requirement: r.requirement || null,
+  description_en: r.description_en || null, jobdesk_en: r.jobdesk_en || null, requirement_en: r.requirement_en || null,
   key: r.talent_positions && r.talent_positions.key,
   label_id: r.talent_positions && r.talent_positions.label_id,
   label_en: r.talent_positions && r.talent_positions.label_en,
 });
 
 // Memory-store mirrors of the two helpers above.
-const memRoleTpl = (t, positions) => { const m = (positions || []).find((p) => p.id === t.position_id) || {}; return { id: t.id, event_type_id: t.event_type_id, position_id: t.position_id, division: t.division || m.division || null, default_quota: t.default_quota, sort_order: t.sort_order, description: t.description || null, is_active: t.is_active, jobdesk: t.jobdesk || null, requirement: t.requirement || null, key: m.key, label_id: m.label_id, label_en: m.label_en }; };
+const memRoleTpl = (t, positions) => { const m = (positions || []).find((p) => p.id === t.position_id) || {}; return { id: t.id, event_type_id: t.event_type_id, position_id: t.position_id, division: t.division || m.division || null, default_quota: t.default_quota, sort_order: t.sort_order, description: t.description || null, is_active: t.is_active, jobdesk: t.jobdesk || null, requirement: t.requirement || null, description_en: t.description_en || null, jobdesk_en: t.jobdesk_en || null, requirement_en: t.requirement_en || null, key: m.key, label_id: m.label_id, label_en: m.label_en }; };
 const memApprovedCount = (applications, choices, eventId, positionId) => (choices || []).filter((c) => c.position_id === positionId && c.accepted && ((applications || []).find((a) => a.id === c.application_id) || {}).event_id === eventId).length;
 
 // Per-metric "reasonable per day" thresholds (green ceiling, yellow ceiling).
@@ -433,10 +434,11 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return (data || []).map(mapRoleTemplate);
     },
-    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description, jobdesk, requirement }) {
+    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description, jobdesk, requirement, description_en, jobdesk_en, requirement_en }) {
       const row = { event_type_id, position_id, division: division || null, default_quota: default_quota != null ? default_quota : 1, sort_order: sort_order || 0, description: description || null };
       const ins = (r) => sb.from('role_templates').insert(r).select('id').maybeSingle();
-      let { data, error } = (jobdesk || requirement) ? await ins(Object.assign({}, row, { jobdesk: jobdesk || null, requirement: requirement || null })) : await ins(row);
+      const texts = { jobdesk: jobdesk || null, requirement: requirement || null, description_en: description_en || null, jobdesk_en: jobdesk_en || null, requirement_en: requirement_en || null };
+      let { data, error } = Object.values(texts).some(Boolean) ? await ins(Object.assign({}, row, texts)) : await ins(row);
       if (error && isMissingColumn(error)) ({ data, error } = await ins(row));
       if (error) { if (/duplicate|unique/i.test(error.message)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; } throw new Error(error.message); }
       return data;
@@ -480,10 +482,13 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
       return data || [];
     },
-    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description, jobdesk, requirement }) {
+    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description, jobdesk, requirement, description_en, jobdesk_en, requirement_en }) {
       const row = { event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, is_optional: !!is_optional, is_custom: !!is_custom, description: description || null, closed_at: null, updated_at: new Date().toISOString() };
       if (jobdesk) row.jobdesk = jobdesk;
       if (requirement) row.requirement = requirement;
+      if (description_en) row.description_en = description_en;
+      if (jobdesk_en) row.jobdesk_en = jobdesk_en;
+      if (requirement_en) row.requirement_en = requirement_en;
       const { data, error } = await sb.from('talent_event_positions').upsert(row, { onConflict: 'event_id,position_id' }).select('id').maybeSingle();
       if (error) throw new Error(error.message);
       return data;
@@ -1076,9 +1081,9 @@ function memoryStore() {
     async listAllRoleTemplates() {
       return roleTemplates.map((t) => memRoleTpl(t, positions)).sort((a, b) => (a.event_type_id < b.event_type_id ? -1 : a.event_type_id > b.event_type_id ? 1 : a.sort_order - b.sort_order));
     },
-    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description, jobdesk, requirement }) {
+    async createRoleTemplate({ event_type_id, position_id, division, default_quota, sort_order, description, jobdesk, requirement, description_en, jobdesk_en, requirement_en }) {
       if (roleTemplates.find((t) => t.event_type_id === event_type_id && t.position_id === position_id)) { const e = new Error('DUP'); e.code = 'DUP'; throw e; }
-      const rec = { id: 'rt-' + (++seq), event_type_id, position_id, division: division || null, default_quota: default_quota != null ? default_quota : 1, sort_order: sort_order || 0, description: description || null, jobdesk: jobdesk || null, requirement: requirement || null, is_active: true };
+      const rec = { id: 'rt-' + (++seq), event_type_id, position_id, division: division || null, default_quota: default_quota != null ? default_quota : 1, sort_order: sort_order || 0, description: description || null, jobdesk: jobdesk || null, requirement: requirement || null, description_en: description_en || null, jobdesk_en: jobdesk_en || null, requirement_en: requirement_en || null, is_active: true };
       roleTemplates.push(rec); return { id: rec.id };
     },
     async updateRoleTemplate(id, patch) {
@@ -1121,10 +1126,10 @@ function memoryStore() {
       return 'ok';
     },
     async listEventRoleQuotaLogs(eventRoleId) { return quotaLogs.filter((l) => l.event_role_id === eventRoleId).slice().reverse(); },
-    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description, jobdesk, requirement }) {
+    async addEventRole(eventId, { position_id, division, quota, sort_order, is_optional, is_custom, description, jobdesk, requirement, description_en, jobdesk_en, requirement_en }) {
       let ep = eventPositions.find((x) => x.event_id === eventId && x.position_id === position_id);
       if (ep) { ep.closed_at = null; ep.updated_at = now(); return { id: ep.id }; }
-      ep = { id: 'ep-' + (++seq), event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, is_optional: !!is_optional, is_custom: !!is_custom, description: description || null, jobdesk: jobdesk || null, requirement: requirement || null, closed_at: null, updated_at: now() };
+      ep = { id: 'ep-' + (++seq), event_id: eventId, position_id, division: division || null, quota: Number.isFinite(quota) ? quota : 0, sort_order: sort_order || 0, is_optional: !!is_optional, is_custom: !!is_custom, description: description || null, jobdesk: jobdesk || null, requirement: requirement || null, description_en: description_en || null, jobdesk_en: jobdesk_en || null, requirement_en: requirement_en || null, closed_at: null, updated_at: now() };
       eventPositions.push(ep); return { id: ep.id };
     },
     async closeEventRole(eventRoleId, closed) { const ep = eventPositions.find((x) => x.id === eventRoleId); if (ep) { ep.closed_at = closed ? now() : null; ep.updated_at = now(); } },

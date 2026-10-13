@@ -199,4 +199,47 @@ ${JSON.stringify(summary).slice(0, 4000)}`;
   throw authErr || new Error('OpenRouter: semua API key ditolak');
 }
 
-module.exports = { configured, extractFromImage, generateInsight, normalizeCount, normalizeExtracted, MODEL };
+/**
+ * Bilingual helper for free-typed event/position texts: each input may be
+ * Indonesian or English. Returns one { id, en } per input — the original kept
+ * verbatim on its own side, the other side a natural translation. Throws on
+ * any failure (callers fall back to the original text on both sides).
+ */
+async function translateBoth(texts) {
+  const list = (texts || []).map((x) => String(x || ''));
+  if (!list.length) return [];
+  if (process.env.LLM_MOCK === '1') return list.map((x) => ({ id: x, en: 'EN: ' + x }));
+  if (!API_KEYS.length) { const e = new Error('OPENROUTER_API_KEY belum di-set'); e.code = 'NO_KEY'; throw e; }
+  const prompt = `You translate short job-posting texts for a sports-event staffing site (Indonesia).
+Each input is written in either Indonesian or English. For EVERY input return an object {"id": <Indonesian>, "en": <English>}:
+- keep the original text EXACTLY as written on its own language side;
+- translate it naturally into the other language (same meaning, same line breaks, no additions);
+- keep names, brands and event terms as they are (e.g. HYROX, KOL, 20FIT, sled push, wall ball).
+Reply with ONLY a JSON array of ${list.length} objects, in the same order. Inputs (JSON array):
+${JSON.stringify(list)}`;
+  const body = JSON.stringify({ model: MODEL, temperature: 0.1, messages: [{ role: 'user', content: prompt }] });
+  let authErr = null;
+  for (const key of API_KEYS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    let res;
+    try {
+      res = await fetch(BASE + '/chat/completions', {
+        method: 'POST', signal: ctrl.signal,
+        headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://telent.20fit.id', 'X-Title': '20FIT Talent' },
+        body,
+      });
+    } finally { clearTimeout(timer); }
+    if (res.status === 401 || res.status === 403) { authErr = new Error('OpenRouter ' + res.status); continue; }
+    if (!res.ok) throw new Error('OpenRouter ' + res.status);
+    const json = await res.json();
+    const content = String((json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '');
+    const m = content.match(/\[[\s\S]*\]/);
+    const arr = m ? JSON.parse(m[0]) : null;
+    if (!Array.isArray(arr) || arr.length !== list.length) throw new Error('translate: bad response');
+    return arr.map((o, i) => ({ id: String((o && o.id) || list[i]).trim(), en: String((o && o.en) || list[i]).trim() }));
+  }
+  throw authErr || new Error('OpenRouter: semua API key ditolak');
+}
+
+module.exports = { configured, extractFromImage, generateInsight, translateBoth, normalizeCount, normalizeExtracted, MODEL };

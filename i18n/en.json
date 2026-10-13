@@ -435,6 +435,7 @@
   "eo.ev.f.categoryPh": "e.g. Marathon, Fun Run, Tournament",
   "eo.ev.f.desc": "Description",
   "eo.ev.f.descId": "Description (Indonesian)",
+  "eo.ev.biHint": "Write in Indonesian or English. The other language is created automatically on save, and talents see the language they picked.",
   "eo.ev.f.descEn": "Description (English)",
   "eo.ev.f.descEnPh": "Optional — shown when a visitor switches the site to English",
   "eo.ev.f.enSub": "English (optional)",

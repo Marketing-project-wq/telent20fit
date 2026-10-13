@@ -435,6 +435,7 @@
   "eo.ev.f.categoryPh": "mis. Marathon, Fun Run, Turnamen",
   "eo.ev.f.desc": "Deskripsi",
   "eo.ev.f.descId": "Deskripsi (Indonesia)",
+  "eo.ev.biHint": "Boleh ditulis dalam bahasa Indonesia atau Inggris. Versi bahasa satunya dibuat otomatis saat disimpan, dan talent melihatnya sesuai bahasa yang mereka pilih.",
   "eo.ev.f.descEn": "Deskripsi (Inggris)",
   "eo.ev.f.descEnPh": "Opsional — tampil saat pengunjung mengganti bahasa situs ke Inggris",
   "eo.ev.f.enSub": "Bahasa Inggris (opsional)",
