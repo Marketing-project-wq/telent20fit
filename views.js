@@ -39,12 +39,12 @@ function fmtDay(d) {
   return `${+p[2]} ${bulan[+p[1] - 1] || ''} ${p[0]}`;
 }
 
-// Official 20FIT logos (served from the 20FIT CDN; loaded by the browser, no CSP restriction).
-// One variant per theme so the mark is always readable with its red ring intact:
-//   dark theme  -> light wordmark made for dark backgrounds
-//   light theme -> standard wordmark made for light backgrounds
-const LOGO_DARK = 'https://media.20fit.id/wp-content/uploads/2026/04/new-logo-20fit.png';
-const LOGO_LIGHT = 'https://media.20fit.id/wp-content/uploads/2026/05/Logo-20fit.png';
+// Official 20FIT TALENT logo (served from the 20FIT CDN; loaded by the browser).
+// Every page renders in the light theme, so both slots use the primary logo
+// (made for light backgrounds); LOGO_DARK is kept so existing markup still works.
+const LOGO_TALENT = 'https://media.20fit.id/wp-content/uploads/2026/10/20FIT-TALENT-PRIMARY-1-scaled.png';
+const LOGO_DARK = LOGO_TALENT;
+const LOGO_LIGHT = LOGO_TALENT;
 
 /** 20FIT brand logo image (the wordmark already reads "20FIT"; no extra label).
  *  Both variants are emitted; CSS shows the one matching the active theme. */
@@ -120,7 +120,7 @@ a{color:var(--red)}
 /* App shell: sticky top bar + a bottom nav bar, the same on every screen size */
 /* 20FIT ring wordmark (brand logo): white "2", red-ring "0", white "FIT" */
 .brand{display:inline-flex;align-items:center;gap:.5em;text-decoration:none;line-height:1;white-space:nowrap}
-.brand .brand-img{height:4.2em;width:auto;max-width:100%;display:block;flex:0 0 auto}
+.brand .brand-img{height:4.2em;width:auto;max-width:min(100%,260px);object-fit:contain;object-position:left center;display:block;flex:0 0 auto}
 .brand .brand-dark{height:2.6em}
 .brand .brand-light{display:none}
 .brand .b-tag{font-weight:800;font-size:.4em;letter-spacing:.22em;color:var(--red);text-transform:uppercase}
@@ -368,7 +368,7 @@ const NAV_CSS = `
 :root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:68px;width:auto;display:block}
+.lp-nav-logo .lp-logo{height:68px;width:auto;max-width:260px;object-fit:contain;object-position:left center;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -423,7 +423,7 @@ const NAV_CSS = `
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
-@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px;max-width:170px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
   /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}
@@ -987,7 +987,7 @@ a{text-decoration:none}
 :root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:68px;width:auto;display:block}
+.lp-nav-logo .lp-logo{height:68px;width:auto;max-width:260px;object-fit:contain;object-position:left center;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -1042,7 +1042,7 @@ a{text-decoration:none}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
-@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:56px;max-width:170px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
   /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}
@@ -1154,7 +1154,7 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .ft-top{max-width:1180px;margin:0 auto;padding:56px 28px 46px;display:grid;grid-template-columns:2fr 1fr 1fr 1.15fr;gap:30px 26px;align-items:start}
 .ft-brand{max-width:430px}
 .ft-logo{display:block;margin-top:-14px;margin-bottom:2px}
-.ft-logo img{height:54px;width:auto;display:block}
+.ft-logo img{height:54px;width:auto;max-width:240px;object-fit:contain;object-position:left center;display:block}
 .ft-tag{color:var(--lp-tx3);font-size:14px;line-height:1.6;margin:0 0 20px;text-align:left}
 .ft-social{display:flex;gap:18px}
 .ft-social a{color:var(--lp-tx3);display:inline-flex}
