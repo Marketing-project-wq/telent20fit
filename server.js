@@ -1725,6 +1725,9 @@ app.post('/event/:id/apply', requireAnyTalentReady(), async (req, res, next) => 
       if (err && err.code === 'DUP') return res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang);
       throw err;
     }
+    // First application sets the account's talent category (from the position's
+    // category) when it is still empty; it never overwrites an admin's choice.
+    try { await st.setTalentCategoryIfEmpty(req.talent.id, V.positionCategory(pos)); } catch (e) { console.error('[talent_category]', e && e.message); }
     res.redirect('/event/' + eventRef(ev) + '?lang=' + req.lang + '&saved=1');
   } catch (e) { next(e); }
 });
@@ -3881,7 +3884,11 @@ app.get('/admin/manage', auth.requireStaff(['super_admin']), async (req, res, ne
     const agg = { manpower: { total: 0, approved: 0 }, kol: { total: 0, approved: 0 }, creative: { total: 0, approved: 0 } };
     apps.forEach((a) => { const c = catOfApp(a); agg[c].total++; if (a.status === 'approved') agg[c].approved++; });
     const applicantStats = ['manpower', 'kol', 'creative'].map((k) => ({ key: k, total: agg[k].total, approved: agg[k].approved }));
-    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, eos, proofs, lang: req.lang, settings, applicantStats }));
+    // Assignment picker: account category, else the categories of the positions applied for.
+    const cats = await st.listTalentCategories().catch(() => null);
+    const derived = talentCategoryMap(apps, choicesAll, positions);
+    const talentCats = new Map(talents.map((tt) => [tt.id, (cats && cats.get(tt.id)) ? [cats.get(tt.id)] : Array.from(derived.get(tt.id) || [])]));
+    res.send(V.adminManage({ staff: staffCtx(req), events, assignments, talents, talentCats, eos, proofs, lang: req.lang, settings, applicantStats }));
   } catch (e) { next(e); }
 });
 
@@ -5427,6 +5434,52 @@ app.post('/admin/role-templates/:id', auth.requireStaff(['super_admin']), async 
     await st.updateRoleTemplate(req.params.id, patch);
     res.redirect('/admin/role-templates?lang=' + req.lang + '&ok=saved');
   } catch (e) { next(e); }
+});
+
+// --- Super Admin: talent category cleanup (bulk) ----------------------------
+// Lists accounts with their category (talent_accounts.talent_category) and, as
+// a hint only, the categories of the positions they applied for. Admins pick
+// accounts and set the category; nothing is guessed automatically.
+const TCAT_FILTERS = ['all', 'none', 'kol', 'photographer', 'manpower'];
+app.get('/admin/talent-categories', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const [talents, cats, apps, choices, positions, logs] = await Promise.all([
+      st.listTalents(), st.listTalentCategories(), st.listApplications(), st.listApplicationChoices(), st.listPositions(), st.listTalentCategoryLogs(30),
+    ]);
+    const derived = talentCategoryMap(apps, choices, positions);
+    const catOf = (tt) => (cats ? cats.get(tt.id) || null : null);
+    const counts = { all: talents.length, none: 0, kol: 0, photographer: 0, manpower: 0 };
+    talents.forEach((tt) => { const c = catOf(tt); counts[c || 'none']++; });
+    const cat = TCAT_FILTERS.includes(String(req.query.cat || '')) ? String(req.query.cat) : 'all';
+    const q = String(req.query.q || '').trim().toLowerCase();
+    let rows = talents.filter((tt) => cat === 'all' || (cat === 'none' ? !catOf(tt) : catOf(tt) === cat));
+    if (q) rows = rows.filter((tt) => [tt.name, tt.full_name, tt.login, tt.instagram, tt.phone].filter(Boolean).join(' ').toLowerCase().includes(q));
+    rows.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'id'));
+    const PER = 50, total = rows.length, pages = Math.max(1, Math.ceil(total / PER));
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const nameById = new Map(talents.map((tt) => [tt.id, tt.name]));
+    const staffName = new Map((await st.listStaff()).map((x) => [x.id, x.name]));
+    res.send(V.adminTalentCategories({
+      staff: staffCtx(req), lang: req.lang, ready: !!cats, counts, cat, q, page, pages, total,
+      rows: rows.slice((page - 1) * PER, page * PER).map((tt) => ({ id: tt.id, name: tt.name, login: tt.login, instagram: tt.instagram, category: catOf(tt), derived: Array.from(derived.get(tt.id) || []) })),
+      logs: logs.map((l) => ({ ...l, talentName: nameById.get(l.talent_id) || '—', staffName: l.changed_by ? (staffName.get(l.changed_by) || '—') : '' })),
+      flash: { ok: parseInt(req.query.ok, 10) || 0, err: String(req.query.err || '') },
+    }));
+  } catch (e) { next(e); }
+});
+app.post('/admin/talent-categories', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  const back = (extra) => res.redirect('/admin/talent-categories?lang=' + req.lang + '&cat=' + encodeURIComponent(String(req.body.cat || 'all')) + '&q=' + encodeURIComponent(String(req.body.q || '')) + '&page=' + (parseInt(req.body.page, 10) || 1) + extra);
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const ids = [].concat(req.body.ids || []).map(String).slice(0, 200);
+    const raw = String(req.body.category || '');
+    const category = raw === 'none' ? null : raw;
+    if (!ids.length) return back('&err=pick');
+    if (category !== null && !['kol', 'photographer', 'manpower'].includes(category)) return back('&err=cat');
+    const n = await st.setTalentCategory(ids, category, { changedBy: req.staff.id, source: 'admin_bulk' });
+    back('&ok=' + n);
+  } catch (e) { if (e && e.code === 'NO_MIGRATION') return back('&err=migration'); next(e); }
 });
 
 // Super admin: assign a talent to an event.
