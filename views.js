@@ -881,6 +881,23 @@ function landingPage(lang, opts = {}) {
     // Closed/past event: the poster stays but greyed out and NOT a link — can't
     // click, can't register. (Registration is also blocked server-side by
     // eventRegOpen, so a direct URL can't apply either.)
+    // Coming soon: listed with a live countdown; not clickable until registration
+    // opens, then the script below unlocks the card (no reload needed).
+    if (e.soon) {
+      const cats = Array.from(new Set((e.openPositions || []).map((p) => posCatKey(p.key))));
+      const catBadges = cats.map((ck) => `<span class="lp-ev-pos">${esc(t('land.openCat.' + ck))}</span>`).join('');
+      const opensTxt = t('land.soonAt', { date: fmtDay(e.reg_open), time: e.reg_open_time || '00:00' });
+      return `<a href="/event/${esc(e.slug || e.id)}?lang=${L}" class="lp-ev-card lp-ev-card--soon" data-city="${esc(city.toLowerCase())}" data-opens="${esc(String(e.opensAt || ''))}" aria-disabled="true">
+      <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-soon">${esc(t('land.soonIn'))} <b class="lp-ev-cd">--:--:--</b></span></div>
+      <div class="lp-ev-body">
+        <div class="lp-ev-name">${esc(e.name)}</div>
+        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
+        <div class="lp-ev-meta lp-ev-soon-at">⏰ ${esc(opensTxt)}</div>
+        ${catBadges ? `<div class="lp-ev-pos-row">${catBadges}</div>` : ''}
+      </div>
+    </a>`;
+    }
     if (e.regOpen === false) {
       return `<div class="lp-ev-card lp-ev-card--closed" data-city="${esc(city.toLowerCase())}" aria-disabled="true">
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-closed">${esc(t('land.closedBadge'))}</span></div>
@@ -915,6 +932,24 @@ function landingPage(lang, opts = {}) {
     <p style="color:var(--lp-tx3);font-size:16px;margin:0 auto 24px;max-width:620px;text-align:center">${esc(t('land.eventsSub'))}</p>
     ${cityFilter}
     <div class="lp-ev-grid">${evCardHtml}</div>
+    <script>(function(){
+      // Countdown on "coming soon" cards. Uses the server clock (offset taken at page
+      // load), so a phone with a wrong clock or time zone still flips at the real time.
+      var cards=[].slice.call(document.querySelectorAll('.lp-ev-card--soon[data-opens]'));if(!cards.length)return;
+      var off=${Date.now()}-Date.now(), DAY=${JSON.stringify(t('land.soonDay'))}, OPEN=${JSON.stringify(t('land.openBadge'))}, timer;
+      function p(n){return (n<10?'0':'')+n;}
+      function tick(){var now=Date.now()+off, left=0;
+        cards.forEach(function(c){var at=+c.getAttribute('data-opens'), ms=at-now, b=c.querySelector('.lp-ev-badge');
+          if(!at||!b)return;
+          if(ms<=0){ if(c.classList.contains('lp-ev-card--soon')){ c.classList.remove('lp-ev-card--soon'); c.removeAttribute('aria-disabled'); b.className='lp-ev-badge lp-ev-open'; b.textContent=OPEN; var sa=c.querySelector('.lp-ev-soon-at'); if(sa) sa.style.display='none'; } return; }
+          left++; var s=Math.floor(ms/1000), d=Math.floor(s/86400), cd=c.querySelector('.lp-ev-cd');
+          if(cd) cd.textContent=(d>0?d+' '+DAY+' ':'')+p(Math.floor(s%86400/3600))+':'+p(Math.floor(s%3600/60))+':'+p(s%60);
+        });
+        if(!left&&timer){clearInterval(timer);timer=null;}
+      }
+      tick(); timer=setInterval(tick,1000);
+      document.addEventListener('visibilitychange',function(){if(!document.hidden)tick();});
+    })();</script>
     <script>(function(){var chips=[].slice.call(document.querySelectorAll('.lp-city-chip')),cards=[].slice.call(document.querySelectorAll('.lp-ev-grid .lp-ev-card'));if(!chips.length)return;chips.forEach(function(ch){ch.addEventListener('click',function(){var city=ch.getAttribute('data-city');chips.forEach(function(c){c.classList.toggle('on',c===ch);});cards.forEach(function(cd){cd.style.display=(!city||cd.getAttribute('data-city')===city)?'':'none';});});});})();</script>
   </section>` : '';
 
@@ -1160,6 +1195,10 @@ a.eco-card-logo:hover .eco-logo{opacity:.88}
 .lp-ev-open{color:#0f9d6a}
 .lp-ev-closed{color:#6b7280}
 .lp-ev-card--closed{cursor:default;pointer-events:none}
+.lp-ev-soon{color:#b45309}
+.lp-ev-soon b{font-variant-numeric:tabular-nums}
+.lp-ev-card--soon{cursor:default;pointer-events:none}
+.lp-ev-soon-at{font-weight:700;color:#b45309}
 .lp-ev-card--closed .lp-ev-cover{filter:grayscale(1);opacity:.5}
 .lp-ev-card--closed .lp-ev-name{color:var(--lp-tx3)}
 .lp-ev-card--closed .lp-ev-meta{color:var(--lp-tx4)}
