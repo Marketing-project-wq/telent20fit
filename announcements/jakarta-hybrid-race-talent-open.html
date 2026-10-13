@@ -69,6 +69,20 @@
   .step-p{font-size:13.5px;color:var(--muted);margin:6px 0 12px}
   .step .actions{margin-top:0}
 
+  /* Event logo (hidden automatically if it can't load) */
+  .ev-logo{display:block;max-width:100%;max-height:96px;width:auto;margin:0 auto 14px;position:relative;z-index:1}
+  .hero.has-logo{text-align:center}
+
+  /* About the event */
+  .about p{font-size:14.5px;margin-top:10px}
+  .facts{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .facts li{display:flex;gap:10px;align-items:flex-start;font-size:14px;padding:10px 12px;background:var(--card2);border-radius:12px}
+  .facts .ic{flex:0 0 auto;font-size:16px;line-height:1.35}
+  .facts b{display:block;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .stations{list-style:none;margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;counter-reset:st}
+  .stations li{counter-increment:st;font-size:14px;font-weight:700;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+  .stations li::before{content:counter(st) ". ";color:var(--red);font-weight:900}
+
   /* Positions */
   .sec{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
   h2{font-size:17px;font-weight:900}
@@ -93,7 +107,10 @@
   </div>
 
   <article class="card">
-    <header class="hero">
+    <header class="hero has-logo">
+      <!-- Event logo. Linked (not embedded) because the file couldn't be fetched for
+           embedding; if it can't load (offline / blocked WebView) it hides itself. -->
+      <img class="ev-logo" src="https://media.20fit.id/wp-content/uploads/2026/07/Untitled-design-6.png" alt="Livin' by Mandiri | VISA × Jakarta Hybrid Race" onerror="this.style.display='none'">
       <div class="kicker">Open Recruitment Talent</div>
       <h1>Livin' by Mandiri | VISA × Jakarta Hybrid Race</h1>
     </header>
@@ -142,6 +159,23 @@
           <noscript><a class="btn btn-primary" href="https://talent.20fit.id" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
         </div>
       </div>
+
+      <section class="sec about">
+        <h2>Tentang event</h2>
+        <p><b>Livin' by Mandiri | VISA × Jakarta Hybrid Race</b> adalah kompetisi hybrid race dengan pengalaman simulasi HYROX penuh: lari dan stasiun functional workout digabung dalam satu race kompetitif berintensitas tinggi untuk pelari, pegiat gym, dan everyday athletes.</p>
+        <p>Menggunakan peralatan resmi <b>CENTR | HYROX</b> dan digelar di <b>20FIT Arena</b> (Official HYROX Training Club), ini adalah hybrid fitness race utama di Jakarta.</p>
+        <ul class="facts">
+          <li><span class="ic" aria-hidden="true">📅</span><span><b>Tanggal</b>Sabtu–Minggu, 7–8 November 2026</span></li>
+          <li><span class="ic" aria-hidden="true">📍</span><span><b>Lokasi</b>20FIT Arena, Menteng Prada, Jakarta Pusat</span></li>
+          <li><span class="ic" aria-hidden="true">⚙️</span><span><b>Peralatan</b>CENTR | HYROX</span></li>
+          <li><span class="ic" aria-hidden="true">🏃</span><span><b>Format</b>8 Stasiun × 4 Line: lari 500 m, lalu selesaikan 1 stasiun functional workout. Diulang 8 kali.</span></li>
+        </ul>
+        <h2 style="margin-top:16px;font-size:15px">8 Stasiun Workout</h2>
+        <ol class="stations">
+          <li>SkiErg</li><li>Sled Push</li><li>Sled Pull</li><li>Burpee Broad Jump</li>
+          <li>Rowing</li><li>Farmers Carry</li><li>Sandbag Lunges</li><li>Wall Balls</li>
+        </ol>
+      </section>
 
       <section class="sec">
         <h2>Posisi yang dibuka</h2>
