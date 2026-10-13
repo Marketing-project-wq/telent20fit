@@ -2,6 +2,8 @@
 
 const { t: tr, normLang } = require('./i18n');
 const idCities = require('./cities');
+// "Venue, City" for display; the city is skipped when the venue text already names it.
+const locCity = (e) => { const loc = String((e && e.location) || '').trim(), c = String((e && e.city) || '').trim(); return c && !loc.toLowerCase().includes(c.toLowerCase()) ? (loc ? loc + ', ' + c : c) : loc; };
 
 // ── Talent confirmation window ───────────────────────────────────────────────
 // How long a talent has to confirm (Agree) a spot they were accepted for before
@@ -878,8 +880,9 @@ function landingPage(lang, opts = {}) {
   const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
   // Same Indonesian-city mapping as the Location filter (venue/district -> city).
   const cityOf = (loc) => idCities.cityOfLocation(loc) || (String(loc || '').split(',').pop() || '').trim();
+  const evCity = (e) => e.city || cityOf(e.location);
   const evCardHtml = evList.map((e) => {
-    const city = cityOf(e.location);
+    const city = evCity(e);
     // Closed/past event: the poster stays but greyed out and NOT a link — can't
     // click, can't register. (Registration is also blocked server-side by
     // eventRegOpen, so a direct URL can't apply either.)
@@ -891,7 +894,7 @@ function landingPage(lang, opts = {}) {
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-soon">${esc(t('land.soonIn'))} <b class="lp-ev-cd">--:--:--</b></span></div>
       <div class="lp-ev-body">
         <div class="lp-ev-name">${esc(e.name)}</div>
-        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${(e.location || e.city) ? `<div class="lp-ev-meta">📍 ${esc(locCity(e))}</div>` : ''}
         ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
         <div class="lp-ev-meta lp-ev-soon-at">⏰ ${esc(opensTxt)}</div>
       </div>
@@ -902,7 +905,7 @@ function landingPage(lang, opts = {}) {
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-closed">${esc(t('land.closedBadge'))}</span></div>
       <div class="lp-ev-body">
         <div class="lp-ev-name">${esc(e.name)}</div>
-        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${(e.location || e.city) ? `<div class="lp-ev-meta">📍 ${esc(locCity(e))}</div>` : ''}
         ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
       </div>
     </div>`;
@@ -913,14 +916,14 @@ function landingPage(lang, opts = {}) {
       <div class="lp-ev-cw">${e.mockup_url ? `<div class="lp-ev-cover" style="background-image:url('${esc(e.mockup_url)}')"></div>` : gradCover(e.id || e.name, e.name, false)}<span class="lp-ev-badge lp-ev-open">${esc(t('land.openBadge'))}</span></div>
       <div class="lp-ev-body">
         <div class="lp-ev-name">${esc(e.name)}</div>
-        ${e.location ? `<div class="lp-ev-meta">📍 ${esc(e.location)}</div>` : ''}
+        ${(e.location || e.city) ? `<div class="lp-ev-meta">📍 ${esc(locCity(e))}</div>` : ''}
         ${evDate2(e) ? `<div class="lp-ev-meta">📅 ${esc(evDate2(e))}</div>` : ''}
         ${catBadges ? `<div class="lp-ev-pos-row">${catBadges}</div>` : ''}
       </div>
     </a>`;
   }).join('');
   // Client-side city filter over the distinct event cities.
-  const cities = Array.from(new Set(evList.map((e) => cityOf(e.location)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
+  const cities = Array.from(new Set(evList.map((e) => evCity(e)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
   const cityFilter = cities.length > 1 ? `<div class="lp-city-filter" role="group" aria-label="${esc(t('land.cityFilter'))}">
     <button type="button" class="lp-city-chip on" data-city="">${esc(t('land.allCities'))}</button>
     ${cities.map((c) => `<button type="button" class="lp-city-chip" data-city="${esc(c.toLowerCase())}">${esc(c)}</button>`).join('')}
@@ -3158,7 +3161,7 @@ function eoEvents({ staff, events, profileComplete, lang }) {
     return `<tr>
       <td data-label="${t('eo.ev.th.name')}"><div style="display:flex;align-items:center;gap:10px">${e.mockup_url ? `<img src="${esc(e.mockup_url)}" alt="" class="ev-mockup-thumb" onerror="this.style.display='none'">` : ''}<div style="min-width:0"><b>${esc(e.name)}</b>${e.category ? `<div class="muted" style="font-size:12px">${esc(e.category)}</div>` : ''}</div></div></td>
       <td data-label="${t('eo.ev.th.date')}" class="muted" style="font-size:13px;white-space:nowrap">${date}${e.start_time ? `<div style="font-size:12px">${esc(e.start_time)}${e.end_time ? '–' + esc(e.end_time) : ''}</div>` : ''}</td>
-      <td data-label="${t('eo.ev.th.loc')}">${e.location ? esc(e.location) : '<span class="muted">—</span>'}</td>
+      <td data-label="${t('eo.ev.th.loc')}">${(e.location || e.city) ? esc(locCity(e)) : '<span class="muted">—</span>'}</td>
       <td data-label="${t('eo.ev.th.status')}">${eoRegBadge(v.status, L)}</td>
       <td data-label="${t('eo.ev.th.applies')}"><b style="font-size:15px">${v.applyCount}</b></td>
       <td style="text-align:right;white-space:nowrap">
@@ -3341,7 +3344,8 @@ function eoEventForm({ staff, event, positionsMaster, selected, errors, lang, ad
     ${(() => { const shown = L === 'en' ? (e.description_en || e.description || '') : (e.description || e.description_en || ''); return `<div class="field"><label for="description">${t('eo.ev.f.desc')}</label><textarea id="description" name="description" rows="4" maxlength="4000">${esc(shown)}</textarea>
       <input type="hidden" name="description__orig" value="${esc(shown)}"><input type="hidden" name="description__id" value="${esc(e.description || '')}"><input type="hidden" name="description__en" value="${esc(e.description_en || '')}">
       <p class="muted" style="font-size:12px;margin:6px 0 0">${t('eo.ev.biHint')}</p></div>`; })()}
-    ${field('location', t('eo.ev.f.location'), e.location, 'text', true, 'maxlength="200"')}
+    ${(() => { const cur = e.city || idCities.cityOfLocation(e.location); return `<div class="field"><label for="city">${t('eo.ev.f.city')}${rq}</label><select id="city" name="city" required><option value="">${t('eo.ev.f.cityPick')}</option>${idCities.CITY_NAMES.map((c) => `<option value="${esc(c)}"${c === cur ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div>`; })()}
+    ${field('location', t('eo.ev.f.venue'), e.location, 'text', true, `maxlength="200" placeholder="${esc(t('eo.ev.f.venuePh'))}"`)}
     <div style="display:flex;gap:14px;flex-wrap:wrap">
       <div style="flex:1;min-width:150px">${field('starts_at', t('eo.ev.f.startDate'), dval(e.starts_at), 'date', true, '')}</div>
       <div style="flex:1;min-width:150px">${field('ends_at', t('eo.ev.f.endDate'), dval(e.ends_at), 'date', false, '')}</div>
@@ -3812,7 +3816,7 @@ function eoEventDetail({ staff, event, view, applicants, positionsMaster, flash,
     <div><h1 style="margin:0">${esc(e.name)}</h1><p class="sub" style="margin:4px 0 0">${e.category ? esc(e.category) + ' · ' : ''}${date}${timeLine}</p></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${eoRegBadge(view.status, L)}<a href="/eo/events/${esc(e.id)}/payments?lang=${L}" class="btn btn-ghost btn-sm">💰 ${t('pay.title')}</a><a href="/eo/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>${closeBtn}</div>
   </div>
-  ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+  ${(e.location || e.city) ? `<div class="muted" style="margin-top:8px">📍 ${esc(locCity(e))}</div>` : ''}
   ${e.reg_deadline ? `<div class="muted" style="margin-top:4px">⏳ ${t('eo.ev.deadlineLabel')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
   ${(() => { const d = langText(e.description, e.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   ${eventRolesManager(e, view, positionsMaster, f, '/eo/events', L)}
@@ -4805,7 +4809,7 @@ function applicationCard(e, isCreator, L) {
   const t = (k, v) => tr(L, k, v);
   const evDate = (x) => { const s = x.starts_at ? fmtDay(x.starts_at) : ''; const en = x.ends_at && String(x.ends_at) !== String(x.starts_at) ? fmtDay(x.ends_at) : ''; return en ? s + ' – ' + en : s; };
   const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
-  const kicker = e.location ? esc(String(e.location).split(',').pop().trim()) : '';
+  const kicker = e.city ? esc(e.city) : (e.location ? esc(idCities.cityOfLocation(e.location) || String(e.location).split(',').pop().trim()) : '');
   // Upload proof is a KOL-only feature (social-media post proof via OCR+LLM), so
   // only for applications whose position category is KOL — not Man Power / Photographer.
   const catIsKol = e.position ? (e.position.key === 'kol') : (String(e.role || '').trim().toLowerCase() === 'kol');
@@ -5234,7 +5238,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
   const eoCards = eoEvs.map((e) => talentPositionCard(e, L, true)).join('');
   const cards = evs.map((e) => {
     const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
-    const locLine = e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : '';
+    const locLine = (e.location || e.city) ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(locCity(e))}</div>` : '';
     const catBadges = (e.cats || []).map((c) => `<span class="tag" style="margin:0 6px 6px 0;display:inline-block">${esc(c.label)}${c.headcount ? ` ×${c.headcount}` : ''}</span>`).join('');
     let applied = '';
     if (e.applied) {
@@ -5243,7 +5247,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
         ? `<div class="muted" style="font-size:12.5px;margin-top:6px">🎯 ${t('apply.station')}: <b style="color:var(--ink)">${esc(ap.station)}${ap.station_loc ? ' · ' + esc(ap.station_loc) : ''}</b></div>` : '';
       applied = `<div style="margin-top:10px">${mpStatusBadge(ap.status, L)} <span class="muted" style="font-size:12.5px">${t('apply.appliedAs', { cat: esc(CAT_LABEL[ap.category] || ap.category) })}</span>${stn}</div>`;
     }
-    const hay = [e.name, e.location].filter(Boolean).join(' ').toLowerCase();
+    const hay = [e.name, e.location, e.city].filter(Boolean).join(' ').toLowerCase();
     return `<a href="/acara/${esc(e.id)}?lang=${L}" class="card ev-card ev-item" data-status="${esc(e.status || '')}" data-cat="${esc(e.category || '')}" data-search="${esc(hay)}" style="display:block;text-decoration:none;color:inherit;margin-top:12px">
       ${eventCover(e, L)}
       <div style="min-width:0"><b style="font-size:16px">${esc(e.name)}</b>${dateLine}${locLine}</div>
@@ -5314,11 +5318,11 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const dateLine = event.starts_at ? `${fmtDay(event.starts_at)}${event.ends_at ? ' – ' + fmtDay(event.ends_at) : ''}` : '';
-  const locLine = event.location ? `<div class="muted" style="font-size:13.5px;margin-top:6px">📍 ${esc(event.location)}</div>` : '';
+  const locLine = (event.location || event.city) ? `<div class="muted" style="font-size:13.5px;margin-top:6px">📍 ${esc(locCity(event))}</div>` : '';
   let action;
   if (myApplication && myApplication.status === 'approved') {
     const detailRow = (icon, label, value) => `<div style="margin-top:10px;font-size:14px">${icon} <span class="muted">${esc(label)}:</span> <b>${value}</b></div>`;
-    const locRow = event.location ? detailRow('📍', t('apply.eventLoc'), esc(event.location)) : '';
+    const locRow = (event.location || event.city) ? detailRow('📍', t('apply.eventLoc'), esc(locCity(event))) : '';
     const stationRow = myApplication.station
       ? detailRow('🎯', t('apply.station'), esc(myApplication.station) + (myApplication.station_loc ? ' · ' + esc(myApplication.station_loc) : ''))
       : `<div class="muted" style="font-size:13px;margin-top:10px">🎯 ${t('apply.stationPending')}</div>`;
@@ -6811,7 +6815,7 @@ function adminEventDetail({ staff, event, view, positionsMaster, flash, lang }) 
       <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
     </div>
   </div>
-  ${e.location ? `<div class="muted" style="margin-top:8px">📍 ${esc(e.location)}</div>` : ''}
+  ${(e.location || e.city) ? `<div class="muted" style="margin-top:8px">📍 ${esc(locCity(e))}</div>` : ''}
   ${eventRolesManager(e, view, positionsMaster, flash, '/admin/events', L)}
   <div class="muted" style="font-size:13px;margin-top:8px">${t('eo.ev.th.applies')}: <b style="color:var(--ink)">${view.applyCount}</b></div>
   <div class="section-head" style="margin-top:26px"><h2 style="margin:0">${t('stat.pos.title')}</h2></div>
@@ -7899,7 +7903,7 @@ function talentPositionCard(e, lang, filterable) {
   // Each position chip deep-links to that position's jobdesk on the detail page.
   // Chips sit above the whole-card "stretched" link (higher z-index) so they win the click.
   const posLine = (e.openPositions || []).map((p) => `<a href="/event/${esc(e.id)}?lang=${L}#pos-${esc(p.position_id)}" class="tag" style="margin:0 6px 6px 0;display:inline-block;text-decoration:none;color:inherit">${esc(posLabel(p, L))}</a>`).join('');
-  const hay = [e.name, e.location, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
+  const hay = [e.name, e.location, e.city, e.category, e.eoName].filter(Boolean).join(' ').toLowerCase();
   const cls = filterable ? 'card ev-card ev-item' : 'card ev-card';
   const hooks = filterable ? ` data-status="${esc(e.status || '')}" data-cat="${esc(e.category || '')}" data-search="${esc(hay)}"` : '';
   return `<div class="${cls}"${hooks} style="position:relative;margin-top:12px">
@@ -7908,7 +7912,7 @@ function talentPositionCard(e, lang, filterable) {
     <div><b style="font-size:16px">${esc(e.name)}</b>${e.category ? ` <span class="muted" style="font-size:12.5px">· ${esc(e.category)}</span>` : ''}</div>
     ${e.eoName ? `<div class="muted" style="font-size:12.5px;margin-top:3px">🏢 ${esc(e.eoName)}</div>` : ''}
     ${date ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📅 ${date}</div>` : ''}
-    ${e.location ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(e.location)}</div>` : ''}
+    ${(e.location || e.city) ? `<div class="muted" style="font-size:12.5px;margin-top:3px">📍 ${esc(locCity(e))}</div>` : ''}
     ${e.reg_deadline ? `<div class="muted" style="font-size:12.5px;margin-top:3px">⏳ ${t('ta.closes')}: ${fmtDay(e.reg_deadline)}</div>` : ''}
     <div style="margin-top:10px;position:relative;z-index:2">${posLine}</div>
     ${e.applied ? `<div style="margin-top:8px">${talentStatusBadge(e.myStatus || 'applied', L)} <span class="muted" style="font-size:12px">${t('ta.alreadyApplied')}</span></div>` : ''}
@@ -7964,7 +7968,7 @@ function talentEventApply({ account, event, ctx, lang, saved, cities }) {
 
   // Event-level info chips (shared by every position).
   const chip = (icon, txt) => txt ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--bg-soft,#f5f5f7);border:1px solid var(--line);border-radius:999px;padding:5px 11px;margin:5px 6px 0 0">${icon} ${esc(txt)}</span>` : '';
-  const chips = `<div style="margin-top:10px">${chip('📍', e.location)}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
+  const chips = `<div style="margin-top:10px">${chip('📍', locCity(e))}${chip('📅', date)}${chip('🗓️', workType)}${e.created_at ? chip('🕒', t('ta.posted') + ': ' + fmtDay(e.created_at)) : ''}${e.reg_deadline ? chip('⏳', t('ta.closes') + ': ' + fmtDay(e.reg_deadline)) : ''}</div>`;
 
   // Per-position "job listing" cards.
   const HIDDEN_POSITION_KEYS = ['judge'];
