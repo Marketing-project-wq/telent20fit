@@ -1548,7 +1548,8 @@ async function openPositionEvents(st, talentId) {
 // with `regOpen`. Open events (reg window live + a free slot) link to their
 // detail/apply page; closed/past events stay as a greyed, non-clickable poster
 // (owner's choice — the archive never disappears). "Coming soon" events whose
-// registration hasn't opened yet are left out so they aren't mislabelled closed.
+// registration hasn't opened yet are listed as `soon` with `opensAt` (UTC ms) so
+// the card can show a live countdown and unlock itself when registration opens.
 async function landingEvents(st) {
   const [events, apps, choices, staff] = await Promise.all([st.listEvents(), st.listApplications(), st.listApplicationChoices(), st.listStaff()]);
   const eoName = new Map(staff.map((s) => [s.id, s.name]));
@@ -1561,15 +1562,21 @@ async function landingEvents(st) {
     const view = eoEventView(ev, positions, apps, choices);
     const openPos = view.positions.filter((p) => !p.closed_at && !p.full);
     const regOpen = eventRegOpen(ev) && openPos.length > 0;
-    if (!regOpen && regNotYetOpen(ev)) return;           // coming soon → hide until reg opens
+    const soon = !regOpen && regNotYetOpen(ev) && openPos.length > 0; // coming soon → countdown card
+    if (!regOpen && regNotYetOpen(ev) && !soon) return;
     out.push(Object.assign({}, ev, {
       openPositions: openPos, eoName: eoName.get(ev.created_by) || '',
-      status: eventStatusOf(ev), regOpen,
+      status: eventStatusOf(ev), regOpen, soon,
+      // reg_open + reg_open_time are WIB (UTC+7).
+      opensAt: soon ? Date.parse(String(ev.reg_open).slice(0, 10) + 'T' + (ev.reg_open_time || '00:00') + ':00+07:00') : null,
     }));
   });
-  // Open events first (soonest deadline), then the greyed archive (newest first).
+  // Open events first (soonest deadline), then coming soon (opens soonest), then the
+  // greyed archive (newest first).
+  const rank = (e) => (e.regOpen ? 0 : e.soon ? 1 : 2);
   out.sort((a, b) => {
-    if (a.regOpen !== b.regOpen) return a.regOpen ? -1 : 1;
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    if (a.soon) return (a.opensAt || 0) - (b.opensAt || 0);
     if (a.regOpen) return String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999'));
     return String(b.starts_at || '').localeCompare(String(a.starts_at || ''));
   });
