@@ -51,6 +51,7 @@ const auth = require('./auth');
 const authApi = require('./authApi');
 const payPdf = require('./payments-pdf');
 const llm = require('./llm');
+const idCities = require('./cities');
 const mailer = require('./mailer');
 const cert = require('./cert');
 const i18n = require('./i18n');
@@ -1605,11 +1606,12 @@ function eventSearchText(e) {
   const pos = (e.openPositions || []).map((p) => `${p.key || ''} ${p.label_id || ''} ${p.label_en || ''}`).join(' ');
   return `${e.name || ''} ${e.location || ''} ${e.eoName || ''} ${pos}`.toLowerCase();
 }
-const eventCity = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
-// City filter: keep events whose location contains the chosen city (empty = all).
-const eventInCity = (e, city) => !city || String(e.location || '').toLowerCase().includes(String(city).toLowerCase());
-// Distinct cities of a set of events, for the Location dropdown.
-const eventCityList = (events) => Array.from(new Set((events || []).map((e) => eventCity(e.location)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'id'));
+// City filter: keep events whose location belongs to the chosen Indonesian city
+// (venue/district names count, e.g. "Menteng" -> Jakarta). Empty city = all.
+const eventInCity = (e, city) => idCities.locationInCity(e.location, city);
+// The Location dropdown lists Indonesian cities (fixed list), not raw event
+// locations; `events` is kept in the signature so existing callers don't change.
+const eventCityList = () => idCities.CITY_NAMES.slice();
 // Cities of currently-open events, for the unified header's search dropdown on
 // public pages. Cached briefly so it doesn't re-scan every event on each load.
 let _cityCache = { at: 0, list: [] };
@@ -1638,7 +1640,7 @@ app.get('/api/events/search', async (req, res) => {
       .slice(0, 8)
       .map((e) => ({
         name: e.name,
-        city: eventCity(e.location),
+        city: idCities.cityOfLocation(e.location) || String(e.location || '').split(',').pop().trim(),
         url: '/event/' + (e.slug || e.id) + '?lang=' + L,
         thumb: e.mockup_url || null,
       }));

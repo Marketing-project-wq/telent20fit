@@ -1,6 +1,7 @@
 'use strict';
 
 const { t: tr, normLang } = require('./i18n');
+const idCities = require('./cities');
 
 // ── Talent confirmation window ───────────────────────────────────────────────
 // How long a talent has to confirm (Agree) a spot they were accepted for before
@@ -368,7 +369,7 @@ const NAV_CSS = `
 :root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:38px;width:auto;max-width:230px;object-fit:contain;object-position:left center;display:block}
+.lp-nav-logo .lp-logo{height:30px;width:auto;max-width:180px;object-fit:contain;object-position:left center;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -396,7 +397,7 @@ const NAV_CSS = `
 .lp-loc-check{flex:0 0 auto;opacity:0;color:var(--red)}
 .lp-loc-opt.is-active .lp-loc-check{opacity:1}
 .lp-search-btn{flex:0 0 auto;box-sizing:border-box;min-height:42px;display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:0 24px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 4px 12px rgba(228,18,31,.22)}
-.lp-search-btn:hover{background:var(--red-hover)}
+.lp-search-btn:hover{background:var(--red-hover,#c80f1b)}
 .lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
 .lp-search-menu.show{display:block}
 .lp-sr{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;color:var(--lp-tx)}
@@ -423,7 +424,7 @@ const NAV_CSS = `
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
-@media(max-width:600px){.lp-nav-logo .lp-logo{height:28px;max-width:160px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:24px;max-width:130px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
   /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}
@@ -875,7 +876,8 @@ function landingPage(lang, opts = {}) {
   const gradCover = (seed, label, big) => { const [c1, c2, icon] = evCoverPick(seed); const txt = big ? label : (String(label || '?').trim().charAt(0).toUpperCase() || '?'); return `<div class="lp-ev-cover lp-ev-grad" style="background:linear-gradient(135deg,${c1},${c2})"><span class="lp-ev-word">${esc(txt)}</span><span class="lp-ev-ico" aria-hidden="true">${icon}</span></div>`; };
   // Group each still-open position into one of three public badge categories.
   const posCatKey = (key) => key === 'kol' ? 'kol' : ((key === 'fotografer' || key === 'videografer') ? 'photo' : 'manpower');
-  const cityOf = (loc) => { const parts = String(loc || '').split(','); return (parts[parts.length - 1] || '').trim(); };
+  // Same Indonesian-city mapping as the Location filter (venue/district -> city).
+  const cityOf = (loc) => idCities.cityOfLocation(loc) || (String(loc || '').split(',').pop() || '').trim();
   const evCardHtml = evList.map((e) => {
     const city = cityOf(e.location);
     // Closed/past event: the poster stays but greyed out and NOT a link — can't
@@ -987,7 +989,7 @@ a{text-decoration:none}
 :root:not([data-theme="light"]) .lp-nav{background:rgba(20,20,25,0.85);border-bottom-color:rgba(255,255,255,0.08)}
 .lp-nav-in{position:relative;max-width:1760px;margin:0 auto;padding:8px 28px;display:flex;align-items:center;gap:16px}
 .lp-nav-logo{display:inline-flex;align-items:center;flex:0 0 auto}
-.lp-nav-logo .lp-logo{height:38px;width:auto;max-width:230px;object-fit:contain;object-position:left center;display:block}
+.lp-nav-logo .lp-logo{height:30px;width:auto;max-width:180px;object-fit:contain;object-position:left center;display:block}
 /* Header event search — job-board style: keyword field + Location dropdown + Search button */
 .lp-search{position:relative;flex:1 1 auto;max-width:560px;min-width:0}
 .lp-search-toggle{display:none;flex:0 0 auto;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--lp-line);background:var(--lp-card);color:var(--lp-tx2);border-radius:999px;cursor:pointer}
@@ -1015,7 +1017,7 @@ a{text-decoration:none}
 .lp-loc-check{flex:0 0 auto;opacity:0;color:var(--red)}
 .lp-loc-opt.is-active .lp-loc-check{opacity:1}
 .lp-search-btn{flex:0 0 auto;box-sizing:border-box;min-height:42px;display:inline-flex;align-items:center;justify-content:center;border:0;cursor:pointer;background:var(--red);color:#fff;border-radius:999px;padding:0 24px;font:700 14.5px/1 Barlow,sans-serif;box-shadow:0 4px 12px rgba(228,18,31,.22)}
-.lp-search-btn:hover{background:var(--red-hover)}
+.lp-search-btn:hover{background:var(--red-hover,#c80f1b)}
 .lp-search-menu{position:absolute;left:0;right:0;top:calc(100% + 9px);background:var(--lp-card);border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.18);padding:6px;max-height:min(68vh,430px);overflow:auto;z-index:60;display:none}
 .lp-search-menu.show{display:block}
 .lp-sr{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:10px;color:var(--lp-tx)}
@@ -1042,7 +1044,7 @@ a{text-decoration:none}
 .lp-acct-menu a:hover{background:var(--lp-chip)}
 /* Header horizontal padding steps down by breakpoint (desktop 32 -> tablet/large-mobile 20 -> small-mobile 16), keeping logo + buttons near the edges with breathing room. */
 @media(max-width:768px){.lp-nav-in{padding:11px 20px;gap:10px}}
-@media(max-width:600px){.lp-nav-logo .lp-logo{height:28px;max-width:160px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
+@media(max-width:600px){.lp-nav-logo .lp-logo{height:24px;max-width:130px}.lp-tog-b{padding:7px 11px;font-size:14px}.lp-acct>summary{padding:10px 13px}.lp-acct>summary span{display:none}}
 @media(max-width:600px){
   /* Mobile: collapse to a search icon; tapping opens a full-width panel below the header with the fields stacked. */
   .lp-search{position:static;flex:0 0 auto;max-width:none}

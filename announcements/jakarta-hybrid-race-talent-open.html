@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light only">
 <meta name="theme-color" content="#E4121F">
-<title>Pendaftaran Talent Dibuka — Jakarta Hybrid Race | 20FIT</title>
+<title>Pendaftaran Talent — Livin' by Mandiri | VISA × Jakarta Hybrid Race | 20FIT</title>
 <style>
   /* 20FIT light theme (same values as talent.20fit.id). Colours are locked:
      no dark-mode overrides, so it looks the same in every WebView. */
@@ -24,13 +24,11 @@
     padding:calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
   }
   .wrap{max-width:480px;margin:0 auto}
-  .brand{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-  .brand-logo{display:block;height:28px;width:auto;max-width:220px;object-fit:contain;object-position:left center}
   .card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(23,23,29,.06)}
   .hero{background:var(--red);color:#fff;padding:22px 20px 20px;position:relative;overflow:hidden}
   .hero::after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.10)}
   .kicker{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.92}
-  h1{font-size:25px;line-height:1.2;font-weight:900;margin-top:8px;position:relative;z-index:1}
+  h1{font-size:25px;line-height:1.2;font-weight:900;margin-top:0;position:relative;z-index:1}
   .body{padding:20px}
   .lead{font-size:16px;font-weight:700}
   .lead b{color:var(--red)}
@@ -69,9 +67,13 @@
   .step-n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center}
   .step-p{font-size:13.5px;color:var(--muted);margin:6px 0 12px}
   .step .actions{margin-top:0}
+  .cta-box{margin-top:18px}
+  .app-box{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--card2)}
+  .app-h{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:10px;text-align:center}
 
   /* Event logo (hidden automatically if it can't load) */
-  .ev-logo{display:block;max-width:100%;max-height:96px;width:auto;margin:0 auto 14px;position:relative;z-index:1}
+  .ev-logo-wrap{display:flex;justify-content:center;padding:18px 20px 16px}
+  .ev-logo{display:block;height:32px;width:auto;max-width:240px;object-fit:contain}
   .hero.has-logo{text-align:center}
 
   /* About the event */
@@ -100,33 +102,26 @@
 </head>
 <body>
 <main class="wrap" id="page">
-  <div class="brand">
-    <!-- 20FIT TALENT logo (new primary logo from media.20fit.id). If it can't load
-         (offline / blocked WebView) it falls back to the embedded copy below. -->
-    <img class="brand-logo" alt="20FIT Talent" src="https://media.20fit.id/wp-content/uploads/2026/10/20FIT-TALENT-PRIMARY-1-scaled.png"
-         onerror="this.onerror=null;this.src=this.getAttribute('data-fallback')" data-fallback="data:image/png;base64,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">
-  </div>
 
   <article class="card">
+    <!-- 20FIT TALENT logo in its original colours, embedded in this file (base64),
+         so it shows even offline, in file previews, or when external images are blocked. -->
+      <div class="ev-logo-wrap"><img class="ev-logo" alt="20FIT Talent" width="297" height="41" src="data:image/png;base64,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"></div>
     <header class="hero has-logo">
-      <!-- Event logo. Linked (not embedded) because the file couldn't be fetched for
-           embedding; if it can't load (offline / blocked WebView) it hides itself. -->
-      <img class="ev-logo" src="https://media.20fit.id/wp-content/uploads/2026/07/Untitled-design-6.png" alt="Livin' by Mandiri | VISA × Jakarta Hybrid Race" onerror="this.style.display='none'">
-      <div class="kicker">Open Recruitment Talent</div>
       <h1>Livin' by Mandiri | VISA × Jakarta Hybrid Race</h1>
     </header>
 
     <div class="body">
-      <p class="lead">Pendaftaran talent <b>DIBUKA</b> 13 Oktober 2026, pukul 19:00 WIB.</p>
+      <p class="lead">Pendaftaran talent <b>dibuka</b> mulai 13 Oktober 2026 pukul 19:00 WIB.</p>
 
       <div class="when">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#E4121F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <div><strong>Dibuka: Selasa, 13 Okt 2026, 19:00 WIB</strong>Ditutup: Senin, 19 Okt 2026, 23:59 WIB</div>
+        <div><strong>Dibuka: Selasa, 13 Oktober 2026, 19:00 WIB</strong>Ditutup: Senin, 19 Oktober 2026, 23:59 WIB</div>
       </div>
 
       <!-- Before opening: countdown. After opening: badge. Switched by the script below. -->
       <div class="count" id="count" aria-live="polite">
-        <div class="count-label">Dibuka dalam</div>
+        <div class="count-label">Pendaftaran dibuka dalam</div>
         <div class="grid">
           <div class="cell"><span class="num" id="d">--</span><span class="unit">Hari</span></div>
           <div class="cell"><span class="num" id="h">--</span><span class="unit">Jam</span></div>
@@ -137,9 +132,16 @@
       <div class="badge" id="badge" role="status"><span class="dot" aria-hidden="true"></span>Pendaftaran Dibuka</div>
       <div class="badge-closed" role="status">Pendaftaran Ditutup</div>
 
-      <div class="step">
-        <div class="step-h"><span class="step-n">1</span>Download aplikasi 20FIT</div>
-        <p class="step-p">Wajib. Buat akun 20FIT di aplikasi. Akun ini yang dipakai untuk masuk ke website talent.</p>
+      <div class="cta-box">
+        <p class="step-p" style="margin-top:0">Pendaftaran dilakukan melalui situs talent.20fit.id. Jika belum memiliki akun, Anda dapat membuatnya saat mendaftar.</p>
+        <div class="actions" style="margin-top:0">
+          <a class="btn btn-primary" id="cta" aria-disabled="true" role="link">Dibuka 13 Okt, 19:00 WIB</a>
+          <noscript><a class="btn btn-primary" href="https://talent.20fit.id/event/ce923a16-2f43-41f1-8eab-1809848fb63d" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
+        </div>
+      </div>
+
+      <div class="app-box">
+        <p class="app-h">Lihat event lain yang sedang membuka pendaftaran melalui aplikasi 20FIT</p>
         <div class="stores">
           <!-- Download links for the 20FIT app (share links provided by 20FIT) -->
           <a class="btn btn-secondary" href="https://share.google/SZETwYLrydJ6yPvCn" target="_blank" rel="noopener" aria-label="Download aplikasi 20FIT di Google Play">
@@ -153,26 +155,17 @@
         </div>
       </div>
 
-      <div class="step">
-        <div class="step-h"><span class="step-n">2</span>Daftar sebagai talent</div>
-        <p class="step-p">Masuk ke talent.20fit.id dengan email &amp; password akun aplikasi 20FIT kamu.</p>
-        <div class="actions">
-          <a class="btn btn-primary" id="cta" aria-disabled="true" role="link">Dibuka 13 Okt, 19:00 WIB</a>
-          <noscript><a class="btn btn-primary" href="https://talent.20fit.id/event/ce923a16-2f43-41f1-8eab-1809848fb63d" target="_blank" rel="noopener" style="pointer-events:auto;background:#E4121F;color:#fff">Daftar Sekarang</a></noscript>
-        </div>
-      </div>
-
       <section class="sec about">
-        <h2>Tentang event</h2>
-        <p><b>Livin' by Mandiri | VISA × Jakarta Hybrid Race</b> adalah kompetisi hybrid race dengan pengalaman simulasi HYROX penuh: lari dan stasiun functional workout digabung dalam satu race kompetitif berintensitas tinggi untuk pelari, pegiat gym, dan everyday athletes.</p>
-        <p>Menggunakan peralatan resmi <b>CENTR | HYROX</b> dan digelar di <b>20FIT Arena</b> (Official HYROX Training Club), ini adalah hybrid fitness race utama di Jakarta.</p>
+        <h2>Tentang Event</h2>
+        <p><b>Livin' by Mandiri | VISA × Jakarta Hybrid Race</b> adalah kompetisi <i>hybrid race</i> yang menghadirkan simulasi HYROX secara lengkap. Peserta akan berlari dan menyelesaikan rangkaian latihan fungsional dalam satu perlombaan berintensitas tinggi. Kompetisi ini terbuka untuk pelari, pegiat gym, maupun masyarakat umum yang aktif berolahraga.</p>
+        <p>Perlombaan menggunakan peralatan resmi <b>CENTR | HYROX</b> dan diselenggarakan di <b>20FIT Arena</b>, <i>Official HYROX Training Club</i> di Jakarta.</p>
         <ul class="facts">
           <li><span class="ic" aria-hidden="true">📅</span><span><b>Tanggal</b>Sabtu–Minggu, 7–8 November 2026</span></li>
           <li><span class="ic" aria-hidden="true">📍</span><span><b>Lokasi</b>20FIT Arena, Menteng Prada, Jakarta Pusat</span></li>
           <li><span class="ic" aria-hidden="true">⚙️</span><span><b>Peralatan</b>CENTR | HYROX</span></li>
-          <li><span class="ic" aria-hidden="true">🏃</span><span><b>Format</b>8 Stasiun × 4 Line: lari 500 m, lalu selesaikan 1 stasiun functional workout. Diulang 8 kali.</span></li>
+          <li><span class="ic" aria-hidden="true">🏃</span><span><b>Format</b>8 stasiun × 4 lintasan. Peserta berlari 500 m, kemudian menyelesaikan 1 stasiun latihan. Rangkaian ini diulang sebanyak 8 kali.</span></li>
         </ul>
-        <h2 style="margin-top:16px;font-size:15px">8 Stasiun Workout</h2>
+        <h2 style="margin-top:16px;font-size:15px">8 Stasiun Latihan</h2>
         <ol class="stations">
           <li>SkiErg</li><li>Sled Push</li><li>Sled Pull</li><li>Burpee Broad Jump</li>
           <li>Rowing</li><li>Farmers Carry</li><li>Sandbag Lunges</li><li>Wall Balls</li>
@@ -180,7 +173,7 @@
       </section>
 
       <section class="sec">
-        <h2>Posisi yang dibuka</h2>
+        <h2>Posisi yang Dibutuhkan</h2>
         <p class="pos-cat">Man Power</p>
         <ul class="pos">
           <li>Judges Hybrid Race</li>
@@ -197,15 +190,17 @@
         <ul class="pos"><li>KOL</li></ul>
         <p class="pos-cat">Fotografer &amp; Videografer</p>
         <ul class="pos"><li>Fotografer</li><li>Videografer</li></ul>
-        <p class="muted">Kuota terbatas. Jobdesk, requirement, dan kuota tiap posisi bisa dilihat di halaman event.</p>
+        <p class="muted">Kuota setiap posisi terbatas. Rincian tugas, persyaratan, dan kuota dapat dilihat di halaman event.</p>
       </section>
 
       <section class="sec">
-        <h2>Cara daftar</h2>
+        <h2>Cara Mendaftar</h2>
         <ol class="steps">
-          <li>Download aplikasi <b>20FIT</b> dan buat akun.</li>
-          <li>Buka <b>talent.20fit.id</b>, masuk pakai akun 20FIT yang sama.</li>
-          <li>Klik <b>Daftar Sekarang</b> di halaman ini (aktif mulai 13 Okt, 19:00 WIB), pilih posisi, lalu klik <b>Lamar</b>. Kamu bisa memilih sampai 3 posisi.</li>
+          <li>Buka situs <b>talent.20fit.id</b> atau tekan tombol <b>Daftar Sekarang</b> di atas.</li>
+          <li>Buat akun talent baru, atau masuk apabila Anda sudah memiliki akun.</li>
+          <li>Pilih event <b>Livin' by Mandiri | VISA × Jakarta Hybrid Race</b>.</li>
+          <li>Pilih posisi yang Anda minati, lalu tekan tombol <b>Lamar</b>. Anda dapat melamar hingga 3 posisi.</li>
+          <li>Status lamaran dapat dipantau melalui menu <b>Dashboard</b> pada akun talent Anda.</li>
         </ol>
       </section>
     </div>
