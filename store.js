@@ -436,9 +436,12 @@ function supabaseStore() {
     // survive an edit, updated_at is maintained, and quota changes flow through
     // the DB guard/log triggers. Callers guard against removing a role that has
     // applicants and against dropping quota below approved.
-    async setEventPositions(eventId, positions) {
+    // opts.closeInstead: position ids that are unticked but must not be deleted
+    // (they have applicants) — they are closed instead, so the applications stay.
+    async setEventPositions(eventId, positions, opts = {}) {
+      const closeInstead = opts.closeInstead || new Set();
       const incoming = (positions || []).filter((p) => p && p.position_id && p.quota > 0);
-      const ex = await sb.from('talent_event_positions').select('id,position_id,is_custom').eq('event_id', eventId);
+      const ex = await sb.from('talent_event_positions').select('id,position_id,is_custom,closed_at').eq('event_id', eventId);
       if (ex.error) throw new Error(ex.error.message);
       const exByPos = new Map((ex.data || []).map((r) => [String(r.position_id), r]));
       const keep = new Set();
@@ -457,7 +460,13 @@ function supabaseStore() {
       // Custom ("Tambahan") roles are managed on the detail page, not the form —
       // never drop them just because they aren't among the form's checkboxes.
       const toDelete = (ex.data || []).filter((r) => !r.is_custom && !keep.has(String(r.position_id)));
-      for (const r of toDelete) { const d = await sb.from('talent_event_positions').delete().eq('id', r.id); if (d.error) throw new Error(d.error.message); }
+      for (const r of toDelete) {
+        if (closeInstead.has(String(r.position_id))) {
+          if (!r.closed_at) { const c = await sb.from('talent_event_positions').update({ closed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', r.id); if (c.error) throw new Error(c.error.message); }
+          continue;
+        }
+        const d = await sb.from('talent_event_positions').delete().eq('id', r.id); if (d.error) throw new Error(d.error.message);
+      }
     },
     // --- Role templates (per event type) --------------------------------------
     // jobdesk/requirement come from migration 20261013_role_templates_texts.sql;
@@ -1125,7 +1134,8 @@ function memoryStore() {
     async listEventPositions(eventId) {
       return eventPositions.filter((ep) => ep.event_id === eventId).map((ep) => { const m = positions.find((p) => p.id === ep.position_id) || {}; return { id: ep.id, position_id: ep.position_id, quota: ep.quota, closed_at: ep.closed_at || null, division: ep.division || m.division || null, sort_order: (ep.sort_order != null ? ep.sort_order : (m.sort || 0)), updated_at: ep.updated_at || null, is_optional: !!ep.is_optional, is_custom: !!ep.is_custom, jobdesk: ep.jobdesk || null, requirement: ep.requirement || null, fee: ep.fee || null, fee_amount: ep.fee_amount != null ? ep.fee_amount : null, ...pickPosDetails(ep), key: m.key, talent_category: m.talent_category || null, label_id: m.label_id, label_en: m.label_en, sort: m.sort || 0 }; }).sort((a, b) => (a.sort_order - b.sort_order) || (a.sort - b.sort));
     },
-    async setEventPositions(eventId, poss) {
+    async setEventPositions(eventId, poss, opts = {}) {
+      const closeInstead = opts.closeInstead || new Set();
       const incoming = (poss || []).filter((p) => p && p.position_id && p.quota > 0);
       const keep = new Set();
       incoming.forEach((p) => {
@@ -1135,7 +1145,12 @@ function memoryStore() {
         if (found) Object.assign(found, cols);
         else eventPositions.push(Object.assign({ id: 'ep-' + (++seq), event_id: eventId, position_id: p.position_id }, cols));
       });
-      for (let j = eventPositions.length - 1; j >= 0; j--) { const ep = eventPositions[j]; if (ep.event_id === eventId && !ep.is_custom && !keep.has(String(ep.position_id))) eventPositions.splice(j, 1); }
+      for (let j = eventPositions.length - 1; j >= 0; j--) {
+        const ep = eventPositions[j];
+        if (ep.event_id !== eventId || ep.is_custom || keep.has(String(ep.position_id))) continue;
+        if (closeInstead.has(String(ep.position_id))) { if (!ep.closed_at) { ep.closed_at = now(); ep.updated_at = now(); } continue; }
+        eventPositions.splice(j, 1);
+      }
     },
     // --- Role templates (memory mirror) ---------------------------------------
     async listRoleTemplates(eventTypeId) {
