@@ -4240,8 +4240,8 @@ function pastEventBadge(a, L) {
   const nAtt = past.filter((p) => p.attended).length;
   const title = past.map((p) => (p.attended ? '✓ ' : '• ') + p.name).join('\n');
   return nAtt
-    ? `<span class="pill" style="background:#e3f6ea;color:#17803d;border:1px solid #b6e3c5" title="${esc(title)}">★ ${t('mpr.pastAttended', { n: nAtt })}</span>`
-    : `<span class="pill" style="background:#e8f0fe;color:#1a56b8;border:1px solid #c5d7f7" title="${esc(title)}">↺ ${t('mpr.pastJoined', { n: past.length })}</span>`;
+    ? `<span class="pill" style="background:#e3f6ea;color:#17803d;border:1px solid #b6e3c5" title="${esc(title)}">★ ${(nAtt === 1 ? t('mpr.pastAttended1') : t('mpr.pastAttended', { n: nAtt }))}</span>`
+    : `<span class="pill" style="background:#e8f0fe;color:#1a56b8;border:1px solid #c5d7f7" title="${esc(title)}">↺ ${(past.length === 1 ? t('mpr.pastJoined1') : t('mpr.pastJoined', { n: past.length }))}</span>`;
 }
 // One EO applicant card. Module-level so the AJAX in-place update can re-render a
 // single card server-side (source of truth) after a propose/mark action.
