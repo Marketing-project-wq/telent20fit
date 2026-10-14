@@ -7517,9 +7517,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
   }
   const flashBanner = flash === 'accept' ? `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr2.dm.flashAccept')}</div>`
-    : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>`
-    : flash === 'backup' ? `<div class="card" style="margin-top:14px;font-size:14px">🔖 ${t('mpr2.dm.flashBackup')}</div>`
-    : flash === 'unbackup' ? `<div class="card" style="margin-top:14px;font-size:14px">${t('mpr2.dm.flashUnbackup')}</div>` : '';
+    : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>` : '';
   const nextUrl = `${decisionUrl}?event=${esc(event.id)}`;
   const groupCards = groups.length ? groups.map((g) => {
     const rowHtml = (backup) => (e) => {
