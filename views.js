@@ -7057,7 +7057,7 @@ function adminApplicantCard(a, L, cat) {
       </div>` : ''}
       ${lapis1}
       <div class="rv-msg" role="alert" hidden style="margin-top:10px;font-size:12.5px;color:var(--err);background:var(--err-soft);border-radius:8px;padding:8px 10px"></div>
-      <details${a.status === 'approved' ? '' : ' open'} style="margin-top:14px">
+      <details style="margin-top:14px">
         <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;user-select:none;padding:4px 0">${t('mpr.detailToggle')}</summary>
         <div style="margin-top:10px">
           <div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700">${t('adm.profile.title')}</div>
