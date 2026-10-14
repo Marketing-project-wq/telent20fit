@@ -1575,13 +1575,11 @@
   "mpr2.dm.backupTitle": "Backup",
   "mpr2.dm.backupHint": "Replacements if someone drops out or the quota is not filled yet. Click Final Accept to place them in this position.",
   "mpr2.dm.backupCount": "{n} backup",
-  "mpr2.dm.flashBackup": "Talent set as backup.",
   "mpr2.reviewedBy": "Reviewed by",
   "mpr2.unmarkHint": "Click to remove the reviewed mark",
   "mpr2.dm.setBackup": "Set as Backup",
   "mpr2.dm.isBackup": "Backup",
   "mpr2.dm.unbackupHint": "Click to remove from backup",
   "mpr2.dm.backupBy": "Set as backup by",
-  "mpr2.dm.flashUnbackup": "Backup removed — talent is back in the main list.",
   "mpr2.dm.listCount": "{n} proposed/reviewed"
 }

@@ -1575,13 +1575,11 @@
   "mpr2.dm.backupTitle": "Cadangan",
   "mpr2.dm.backupHint": "Pengganti bila ada yang batal atau kuota masih kurang. Klik Terima Final untuk memasukkan ke posisi ini.",
   "mpr2.dm.backupCount": "{n} cadangan",
-  "mpr2.dm.flashBackup": "Talent dijadikan cadangan.",
   "mpr2.reviewedBy": "Direview oleh",
   "mpr2.unmarkHint": "Klik untuk membatalkan tanda direview",
   "mpr2.dm.setBackup": "Jadikan Cadangan",
   "mpr2.dm.isBackup": "Cadangan",
   "mpr2.dm.unbackupHint": "Klik untuk membatalkan cadangan",
   "mpr2.dm.backupBy": "Dijadikan cadangan oleh",
-  "mpr2.dm.flashUnbackup": "Cadangan dibatalkan — talent kembali ke daftar utama.",
   "mpr2.dm.listCount": "{n} diusulkan/direview"
 }
