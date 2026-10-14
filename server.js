@@ -3509,8 +3509,8 @@ app.get('/eo/decision', requireEo, async (req, res, next) => {
   try {
     const st = db(); if (!st) return needConfig(req, res);
     const eventId = String(req.query.event || '');
-    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll] = await Promise.all([
-      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(),
+    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll, reviewMarks] = await Promise.all([
+      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(), st.listReviewMarks(),
     ]);
     const myEventIds = new Set(events.filter((e) => e.created_by === req.staff.id).map((e) => e.id));
     const posById = new Map(positions.map((p) => [p.id, p]));
@@ -3523,8 +3523,7 @@ app.get('/eo/decision', requireEo, async (req, res, next) => {
     (logsAll || []).forEach((l) => { const arr = logByApp.get(l.application_id) || []; arr.push(l); logByApp.set(l.application_id, arr); });
     const mount = { appBase: '/eo/applicants', resetPath: 'reset', decisionUrl: '/eo/decision', backUrl: '/eo/talents', active: 'talents' };
     if (!eventId) {
-      const cnt = new Map();
-      (proposalsAll || []).forEach((p) => { const a = appById.get(p.application_id); if (a && myEventIds.has(a.event_id)) cnt.set(a.event_id, (cnt.get(a.event_id) || 0) + 1); });
+      const cnt = decisionEventCounts(apps, proposalsAll, reviewMarks, (eid) => myEventIds.has(eid));
       const picker = [...cnt.entries()].map(([eid, n]) => ({ id: eid, name: (eventById.get(eid) || {}).name || '—', count: n }));
       return res.send(V.decisionMeeting({ staff: eoCtx(req), event: null, picker, groups: [], lang: req.lang, mount }));
     }
@@ -3555,6 +3554,7 @@ app.get('/eo/decision', requireEo, async (req, res, next) => {
       const acceptedHere = acceptedCountByPos.get(pid) || 0;
       return { position_id: pid, label_id: pp.label_id, label_en: pp.label_en, key: pp.key, quota, acceptedHere, full: quota > 0 && acceptedHere >= quota, entries: entries.sort((a, b) => (b.proposers.length - a.proposers.length) || String(a.app.name).localeCompare(String(b.app.name))) };
     }).sort((a, b) => b.entries.length - a.entries.length);
+    addBackupsToGroups(groups, { eventId, appById, proposalsAll, reviewMarks, choicesAll, posById, talentById, quotaByPos, acceptedCountByPos, acceptedByApp, logByApp });
     res.send(V.decisionMeeting({ staff: eoCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || ''), mount }));
   } catch (e) { next(e); }
 });
@@ -4291,6 +4291,52 @@ app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_ad
   } catch (e) { next(e); }
 });
 
+// Decision Meeting "Backup" (cadangan) section: applicants of this event with a
+// review mark ("Set as Backup") and NO proposal, listed under their P1 position
+// with the same accept / reject actions. Reads existing review marks only — no
+// new table, nothing written. Groups for positions without proposals are added.
+function addBackupsToGroups(groups, c) {
+  const propApps = new Set((c.proposalsAll || []).map((p) => p.application_id));
+  const marksByApp = new Map();
+  (c.reviewMarks || []).forEach((r) => { const arr = marksByApp.get(r.application_id) || []; arr.push(r.reviewer_name); marksByApp.set(r.application_id, arr); });
+  const choicesByApp = new Map();
+  (c.choicesAll || []).forEach((ch) => { const arr = choicesByApp.get(ch.application_id) || []; arr.push(ch); choicesByApp.set(ch.application_id, arr); });
+  groups.forEach((g) => { g.backups = g.backups || []; });
+  marksByApp.forEach((names, appId) => {
+    if (propApps.has(appId)) return;
+    const a = c.appById.get(appId);
+    if (!a || a.event_id !== c.eventId) return;
+    const p1 = (choicesByApp.get(appId) || []).slice().sort((x, y) => x.priority - y.priority)[0];
+    if (!p1) return;
+    let g = groups.find((x) => x.position_id === p1.position_id);
+    if (!g) {
+      const pp = c.posById.get(p1.position_id) || {};
+      const quota = c.quotaByPos.get(p1.position_id) || 0;
+      const acceptedHere = c.acceptedCountByPos.get(p1.position_id) || 0;
+      g = { position_id: p1.position_id, label_id: pp.label_id, label_en: pp.label_en, key: pp.key, quota, acceptedHere, full: quota > 0 && acceptedHere >= quota, entries: [], backups: [] };
+      groups.push(g);
+    }
+    const tt = c.talentById.get(a.talent_id) || {};
+    const decidedLog = (c.logByApp.get(a.id) || []).filter((l) => l.to_status === 'approved' || l.to_status === 'rejected').slice(-1)[0];
+    g.backups.push({
+      app: { id: a.id, status: a.status, name: tt.name || '—', login: tt.login || '', created_at: a.created_at, acceptedPositionId: c.acceptedByApp.get(a.id) || null, decidedBy: decidedLog ? (decidedLog.actor_name || '') : '', decidedAt: decidedLog ? decidedLog.changed_at : '' },
+      proposers: [...new Set(names)].map((n) => ({ name: n, note: null })),
+    });
+  });
+  groups.forEach((g) => g.backups.sort((x, y) => String(x.app.name).localeCompare(String(y.app.name))));
+  return groups;
+}
+// Events (id -> count) that have proposals or backups, for the meeting picker.
+function decisionEventCounts(apps, proposalsAll, reviewMarks, keep) {
+  const appById = new Map((apps || []).map((a) => [a.id, a]));
+  const propApps = new Set((proposalsAll || []).map((p) => p.application_id));
+  const cnt = new Map();
+  const add = (appId) => { const a = appById.get(appId); if (a && (!keep || keep(a.event_id))) cnt.set(a.event_id, (cnt.get(a.event_id) || 0) + 1); };
+  (proposalsAll || []).forEach((p) => add(p.application_id));
+  new Set((reviewMarks || []).map((r) => r.application_id)).forEach((id) => { if (!propApps.has(id)) add(id); });
+  return cnt;
+}
+
 // LAPIS 2 — the decision meeting. Shows ONLY proposed applicants for one event,
 // grouped by the position they were proposed for, with proposers + notes. The
 // final accept / reject buttons live only here.
@@ -4299,8 +4345,8 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
     const st = db();
     if (!st) return needConfig(req, res);
     const eventId = String(req.query.event || '');
-    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll] = await Promise.all([
-      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(),
+    const [apps, events, talents, choicesAll, positions, proposalsAll, logsAll, reviewMarks] = await Promise.all([
+      st.listApplications(), st.listEvents(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listProposals(), st.listStatusLogs(), st.listReviewMarks(),
     ]);
     const posById = new Map(positions.map((p) => [p.id, p]));
     const talentById = new Map(talents.map((tt) => [tt.id, tt]));
@@ -4309,8 +4355,6 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
     const propByApp = new Map();
     (proposalsAll || []).forEach((p) => { const arr = propByApp.get(p.application_id) || []; arr.push(p); propByApp.set(p.application_id, arr); });
     const appById = new Map(apps.map((a) => [a.id, a]));
-    const eventsWithProps = new Map();
-    (proposalsAll || []).forEach((p) => { const a = appById.get(p.application_id); if (a) eventsWithProps.set(a.event_id, (eventsWithProps.get(a.event_id) || 0) + 1); });
     const eventChoices = new Map();
     (choicesAll || []).forEach((c) => { const arr = eventChoices.get(c.application_id) || []; arr.push(c); eventChoices.set(c.application_id, arr); });
     const acceptedByApp = new Map();
@@ -4320,7 +4364,7 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
 
     // No event chosen → render a small picker of events that have proposals.
     if (!eventId) {
-      const picker = [...eventsWithProps.entries()].map(([eid, n]) => ({ id: eid, name: (eventById.get(eid) || {}).name || '—', count: n }));
+      const picker = [...decisionEventCounts(apps, proposalsAll, reviewMarks).entries()].map(([eid, n]) => ({ id: eid, name: (eventById.get(eid) || {}).name || '—', count: n }));
       return res.send(V.decisionMeeting({ staff: staffCtx(req), event: null, picker, groups: [], lang: req.lang }));
     }
     const ev = eventById.get(eventId) || null;
@@ -4360,6 +4404,7 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
         entries: entries.sort((a, b) => (b.proposers.length - a.proposers.length) || String(a.app.name).localeCompare(String(b.app.name))),
       };
     }).sort((a, b) => b.entries.length - a.entries.length);
+    addBackupsToGroups(groups, { eventId, appById, proposalsAll, reviewMarks, choicesAll, posById, talentById, quotaByPos, acceptedCountByPos, acceptedByApp, logByApp });
     res.send(V.decisionMeeting({ staff: staffCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || '') }));
   } catch (e) { next(e); }
 });
