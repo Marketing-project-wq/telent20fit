@@ -4072,11 +4072,15 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     // picks fall back to talent_type. Optional server-side search on name/email/phone.
     const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
     const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
-    const inCat = applications.filter((a) => reviewCatsOf(a.choices, a.talent_type).has(cat)
-      && (!q || [a.talent_name, a.talent_login, a.profile && a.profile.phone].filter(Boolean).join(' ').toLowerCase().indexOf(q) >= 0));
     // One event at a time: no ?event → show the event picker; ?event=<id> → that
     // event's own dashboard (summary/filters/list all scoped to it), so events never mix.
     const selEv = String(req.query.event || '');
+    // ?q narrows the event picker only. On an event's page the search box filters
+    // in the browser (and keeps q in the URL), so the server must send every row —
+    // otherwise a refresh with ?q left only the matches and Reset Filter couldn't
+    // bring the rest back.
+    const inCat = applications.filter((a) => reviewCatsOf(a.choices, a.talent_type).has(cat)
+      && (selEv || !q || [a.talent_name, a.talent_login, a.profile && a.profile.phone].filter(Boolean).join(' ').toLowerCase().indexOf(q) >= 0));
     if (!selEv) {
       const evCount = new Map();
       inCat.forEach((a) => evCount.set(a.event_id, (evCount.get(a.event_id) || 0) + 1));
