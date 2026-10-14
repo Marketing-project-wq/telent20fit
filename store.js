@@ -66,6 +66,20 @@ function supabaseStore() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   const sb = createClient(url, key, { auth: { persistSession: false } });
+  // PostgREST returns at most 1000 rows per request (Supabase max-rows), so a plain
+  // select of a whole table silently drops everything past row 1000. selectAll
+  // reads it page by page. build() must return a fresh query each call; 'id' is
+  // added as a tiebreaker so pages never overlap or skip rows.
+  const PAGE = 1000;
+  async function selectAll(build) {
+    const rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await build().order('id').range(from, from + PAGE - 1);
+      if (error) return { data: null, error };
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE) return { data: rows, error: null };
+    }
+  }
 
   return {
     mode: 'supabase',
@@ -79,7 +93,7 @@ function supabaseStore() {
       return data || null;
     },
     async listCampaigns() {
-      const { data, error } = await sb.from('kol_campaigns').select('*').order('created_at');
+      const { data, error } = await selectAll(() => sb.from('kol_campaigns').select('*').order('created_at'));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -164,9 +178,9 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     async listSubmissions() {
-      const { data, error } = await sb.from('kol_submissions')
+      const { data, error } = await selectAll(() => sb.from('kol_submissions')
         .select('id,kol_name,campaign_id,image_urls,post_links,created_at,talent_id')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -208,9 +222,9 @@ function supabaseStore() {
     },
     // Talents who uploaded a HYROX certificate (for the staff verification queue).
     async listHyroxCerts() {
-      const { data, error } = await sb.from('talent_accounts')
+      const { data, error } = await selectAll(() => sb.from('talent_accounts')
         .select('id,talent_type,name,login,city,instagram,hyrox_cert_path,hyrox_cert_status,hyrox_cert_verified_at,hyrox_cert_note')
-        .not('hyrox_cert_path', 'is', null);
+        .not('hyrox_cert_path', 'is', null));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -305,7 +319,7 @@ function supabaseStore() {
     // login type talent_type). Needs migration 20261014_talent_accounts_category.sql;
     // until it runs, reads return null and writes throw NO_MIGRATION.
     async listTalentCategories() {
-      const { data, error } = await sb.from('talent_accounts').select('id,talent_category');
+      const { data, error } = await selectAll(() => sb.from('talent_accounts').select('id,talent_category'));
       if (error) { if (isMissingColumn(error)) return null; throw new Error(error.message); }
       const m = new Map(); (data || []).forEach((r) => m.set(r.id, r.talent_category || null)); return m;
     },
@@ -340,11 +354,13 @@ function supabaseStore() {
       return data || [];
     },
     async listTalents(talentType) {
-      let q = sb.from('talent_accounts')
-        .select('id,talent_type,name,full_name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status,cv_path,portfolio_url,hyrox_cert_path')
-        .order('name');
-      if (talentType) q = q.eq('talent_type', talentType);
-      const { data, error } = await q;
+      const { data, error } = await selectAll(() => {
+        let q = sb.from('talent_accounts')
+          .select('id,talent_type,name,full_name,login,phone,city,province,birthdate,gender,instagram,instagram_followers,experience,ktp,profile_completed_at,hyrox_cert_status,cv_path,portfolio_url,hyrox_cert_path')
+          .order('name');
+        if (talentType) q = q.eq('talent_type', talentType);
+        return q;
+      });
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -390,8 +406,8 @@ function supabaseStore() {
     },
     async listEvents() {
       const [ev, nd] = await Promise.all([
-        sb.from('talent_events').select('*').order('created_at', { ascending: false }),
-        sb.from('talent_event_needs').select('*'),
+        selectAll(() => sb.from('talent_events').select('*').order('created_at', { ascending: false })),
+        selectAll(() => sb.from('talent_event_needs').select('*')),
       ]);
       if (ev.error) throw new Error(ev.error.message);
       const byEvent = new Map();
@@ -557,7 +573,7 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     async listApplicationChoices() {
-      const { data, error } = await sb.from('talent_application_choices').select('id,application_id,position_id,priority,accepted');
+      const { data, error } = await selectAll(() => sb.from('talent_application_choices').select('id,application_id,position_id,priority,accepted'));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -581,7 +597,7 @@ function supabaseStore() {
       if (error && !/duplicate|unique/i.test(error.message)) throw new Error(error.message);
     },
     async listAssignments() {
-      const { data, error } = await sb.from('talent_event_assignments').select('*').order('assigned_at', { ascending: false });
+      const { data, error } = await selectAll(() => sb.from('talent_event_assignments').select('*').order('assigned_at', { ascending: false }));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -602,7 +618,7 @@ function supabaseStore() {
       return data;
     },
     async listApplications() {
-      const { data, error } = await sb.from('talent_applications').select('*').order('created_at', { ascending: false });
+      const { data, error } = await selectAll(() => sb.from('talent_applications').select('*').order('created_at', { ascending: false }));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -706,8 +722,8 @@ function supabaseStore() {
     // reviewer_name) so multiple reviewers can propose the same applicant, one
     // reviewer can propose several positions, and re-proposing just updates the note.
     async listProposals() {
-      const { data, error } = await sb.from('talent_application_proposals')
-        .select('id,application_id,position_id,reviewer_name,note,created_at').order('created_at');
+      const { data, error } = await selectAll(() => sb.from('talent_application_proposals')
+        .select('id,application_id,position_id,reviewer_name,note,created_at').order('created_at'));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -730,8 +746,8 @@ function supabaseStore() {
     },
     // "Reviewed but not proposed" optional marks, per (application, reviewer_name).
     async listReviewMarks() {
-      const { data, error } = await sb.from('talent_application_reviews')
-        .select('id,application_id,reviewer_name,created_at').order('created_at');
+      const { data, error } = await selectAll(() => sb.from('talent_application_reviews')
+        .select('id,application_id,reviewer_name,created_at').order('created_at'));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -761,8 +777,8 @@ function supabaseStore() {
       return data || [];
     },
     async listStatusLogs() {
-      const { data, error } = await sb.from('talent_application_status_log')
-        .select('id,application_id,from_status,to_status,changed_by,actor_name,changed_at').order('changed_at');
+      const { data, error } = await selectAll(() => sb.from('talent_application_status_log')
+        .select('id,application_id,from_status,to_status,changed_by,actor_name,changed_at').order('changed_at'));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -795,7 +811,7 @@ function supabaseStore() {
       return data || [];
     },
     async listCertificates() {
-      const { data, error } = await sb.from('talent_certificates').select('*').order('issued_at', { ascending: false });
+      const { data, error } = await selectAll(() => sb.from('talent_certificates').select('*').order('issued_at', { ascending: false }));
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -813,7 +829,7 @@ function supabaseStore() {
       if (error) throw new Error(error.message);
     },
     async listProofs() {
-      const { data, error } = await sb.from('talent_post_proofs').select('*').order('created_at', { ascending: false });
+      const { data, error } = await selectAll(() => sb.from('talent_post_proofs').select('*').order('created_at', { ascending: false }));
       if (error) throw new Error(error.message);
       return data || [];
     },
