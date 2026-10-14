@@ -1574,5 +1574,6 @@
   "mpr2.backupBy": "Set as backup by",
   "mpr2.dm.backupTitle": "Backup",
   "mpr2.dm.backupHint": "Replacements if someone drops out or the quota is not filled yet. Accept to place them in this position.",
-  "mpr2.dm.backupCount": "{n} backup"
+  "mpr2.dm.backupCount": "{n} backup",
+  "mpr2.dm.flashBackup": "Talent moved to Backup."
 }
