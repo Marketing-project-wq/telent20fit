@@ -1562,5 +1562,7 @@
   "asg.searchPh": "Type a talent's name or email…",
   "asg.pickFromList": "Pick a talent from the list.",
   "filter.search": "Search",
-  "eo.ap.searchPhFull": "Search name, email or phone…"
+  "eo.ap.searchPhFull": "Search name, email or phone…",
+  "mpr.pastAttended": "Attended {n} past 20FIT event(s)",
+  "mpr.pastJoined": "Joined {n} past 20FIT event(s)"
 }
