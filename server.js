@@ -796,6 +796,30 @@ function wibDayBoundaryISO(dstr, endOfDay) {
   return isNaN(dt.getTime()) ? null : dt.toISOString();
 }
 
+// talent_id -> [{ event_id, name, attended }] for the 20FIT events a talent took
+// part in: marked attended, or accepted (approved/assigned/completed) at an event
+// that has already ended (completed_at, or its last day is before today in WIB).
+// Oldest first; one entry per event.
+const PAST_ACCEPTED = new Set(['approved', 'assigned', 'completed']);
+function pastEventsByTalent(apps, eventById, now = Date.now()) {
+  const out = new Map();
+  (apps || []).forEach((a) => {
+    const ev = eventById.get(a.event_id);
+    if (!ev || !a.talent_id) return;
+    const endIso = wibDayBoundaryISO(ev.ends_at || ev.starts_at, true);
+    const ended = !!ev.completed_at || (endIso ? new Date(endIso).getTime() < now : false);
+    const attended = !!a.attended;
+    if (!attended && !(ended && PAST_ACCEPTED.has(a.status))) return;
+    const arr = out.get(a.talent_id) || [];
+    const ex = arr.find((x) => x.event_id === a.event_id);
+    if (ex) { ex.attended = ex.attended || attended; return; }
+    arr.push({ event_id: a.event_id, name: ev.name || '—', attended, at: String(ev.starts_at || '') });
+    out.set(a.talent_id, arr);
+  });
+  out.forEach((arr) => arr.sort((x, y) => x.at.localeCompare(y.at)));
+  return out;
+}
+
 // Build the store filter object from the /admin/proofs query string.
 function proofFiltersFromQuery(q) {
   const f = {};
@@ -3355,7 +3379,8 @@ async function buildAdminApplicant(st, appId) {
   const certificate = (certs || []).find((cc) => cc.talent_id === app.talent_id && cc.event_id === app.event_id) || null;
   const proposals = (proposalsAll || []).filter((p) => p.application_id === app.id).map((p) => { const mp = posById.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; });
   const reviewMarks = (reviewMarksAll || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name);
-  return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks };
+  const pastEvents = (pastEventsByTalent((apps || []).filter((a) => a.talent_id === app.talent_id), new Map((events || []).map((e) => [e.id, e]))).get(app.talent_id) || []).filter((p) => p.event_id !== app.event_id);
+  return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks, pastEvents };
 }
 // After a lapis-1 mutation: return just the re-rendered card for an AJAX (fetch)
 // request so the page can swap it in place; otherwise redirect as before. Handles
@@ -4034,9 +4059,14 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     await Promise.all(posEventIds.map(async (eid) => evPositions.set(eid, await st.listEventPositions(eid))));
     const acceptedCount = new Map();
     (choicesAll || []).forEach((c) => { if (!c.accepted) return; const a = appById.get(c.application_id); if (!a) return; const k = a.event_id + '|' + c.position_id; acceptedCount.set(k, (acceptedCount.get(k) || 0) + 1); });
+    // Track record per talent across OTHER 20FIT events, so reviewers spot returning
+    // crew: attended (checked in via /absensi or marked by admin) or accepted at an
+    // event that has already finished (attendance may not have been recorded then).
+    const pastByTalent = pastEventsByTalent(apps, eventById);
     const applications = apps.map((a) => {
       const tt = talentById.get(a.talent_id) || {};
       const ev = eventById.get(a.event_id) || {};
+      const pastEvents = (pastByTalent.get(a.talent_id) || []).filter((p) => p.event_id !== a.event_id);
       const choices = (choicesByApp.get(a.id) || []).slice().sort((x, y) => x.priority - y.priority)
         .map((c) => {
           const p = posById.get(c.position_id) || {};
@@ -4053,7 +4083,7 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
-        proposals, reviewMarks,
+        proposals, reviewMarks, pastEvents,
       };
     });
     // Attendance links: one per event that has any approved talent, for on-site PICs.

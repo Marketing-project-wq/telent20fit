@@ -4230,6 +4230,19 @@ function mprReviewerBadges(a, L) {
   if (!proposers.length && !revs.length) out.push(`<span class="pill" style="background:transparent;border:1px dashed var(--red);color:var(--red)">• ${t('mpr2.badgeUnreviewed')}</span>`);
   return `<span class="rv-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap">${out.join('')}</span>`;
 }
+// Returning-crew marker next to the applicant's name: green "attended before" when
+// they were checked in at an earlier 20FIT event, blue "joined before" when they were
+// accepted at a finished event without a recorded check-in. Event names in the title.
+function pastEventBadge(a, L) {
+  const t = (k, v) => tr(L, k, v);
+  const past = a.pastEvents || [];
+  if (!past.length) return '';
+  const nAtt = past.filter((p) => p.attended).length;
+  const title = past.map((p) => (p.attended ? '✓ ' : '• ') + p.name).join('\n');
+  return nAtt
+    ? `<span class="pill" style="background:#e3f6ea;color:#17803d;border:1px solid #b6e3c5" title="${esc(title)}">★ ${t('mpr.pastAttended', { n: nAtt })}</span>`
+    : `<span class="pill" style="background:#e8f0fe;color:#1a56b8;border:1px solid #c5d7f7" title="${esc(title)}">↺ ${t('mpr.pastJoined', { n: past.length })}</span>`;
+}
 // One EO applicant card. Module-level so the AJAX in-place update can re-render a
 // single card server-side (source of truth) after a propose/mark action.
 // --- Accepted / Not-Accepted / Pending summary + bulk select-and-reject, shared
@@ -7002,7 +7015,7 @@ function adminApplicantCard(a, L, cat) {
   return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc([a.talent_name, a.talent_login, a.profile && a.profile.phone, a.profile && a.profile.instagram].filter(Boolean).join(' ').toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${rejectable ? `<input type="checkbox" class="ap-cb" data-id="${esc(a.id)}" aria-label="select" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">` : ''}<b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${rejectable ? `<input type="checkbox" class="ap-cb" data-id="${esc(a.id)}" aria-label="select" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">` : ''}<b style="font-size:16px">${esc(a.talent_name || '—')}</b>${pastEventBadge(a, L)}${mprReviewerBadges(a, L)}</div>
           <div class="muted" style="font-size:12.5px;margin-top:2px">${a.talent_login ? esc(a.talent_login) + ' · ' : ''}${t('mpr.appliedOn', { date: fmtDate(a.created_at) })}</div>
           <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="muted" style="font-size:12px">${t('prof.completeness')}</span>${strengthBadge(a.profile, L)}${fol != null ? `<span class="muted" style="font-size:12px">·</span><span class="muted" style="font-size:12px">${t('filter.followers')}</span><b style="font-size:13px">${fmtNum(fol)}</b>` : ''}</div>
           <div style="margin-top:6px;font-size:14px">${esc(a.event_name || '—')}${a.role ? ` <span class="muted">·</span> <span class="tag">${esc(a.role)}</span>` : ''}</div>
