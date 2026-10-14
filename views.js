@@ -3904,10 +3904,12 @@ function proposalDisplayHtml(a, L) {
   const t = (k, v) => tr(L, k, v);
   const byPos = new Map();
   (a.proposals || []).forEach((p) => { const g = byPos.get(p.position_id) || { label: posLabel(p, L), names: [], notes: [] }; g.names.push(p.reviewer_name); if (p.note) g.notes.push(p.reviewer_name + ': ' + p.note); byPos.set(p.position_id, g); });
-  const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b> <span style="font-weight:600">→ ${t('mpr2.toDm')}</span>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
-  // A review mark = "Backup" (cadangan). Shown in the Decision Meeting's Backup
-  // section unless the talent is also proposed (then the proposal wins).
-  const rev = (a.reviewMarks || []).length ? `<div style="font-size:13px;margin-top:5px;color:#8a6100">🟡 ${t('mpr2.backupBy')} <b>${esc(a.reviewMarks.join(', '))}</b>${byPos.size ? '' : ` <span style="font-weight:600">→ ${t('mpr2.toDmBackup')}</span>`}</div>` : '';
+  // A review mark = "Backup" (cadangan). Latest action wins: a backup mark newer
+  // than the latest proposal puts the talent in the meeting's Backup list.
+  const latestProp = (a.proposals || []).reduce((m, p) => (String(p.created_at || '') > m ? String(p.created_at || '') : m), '');
+  const backupNow = (a.reviewMarks || []).length && (!byPos.size || String(a.reviewMarkAt || '') > latestProp);
+  const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b>${backupNow ? '' : ` <span style="font-weight:600">→ ${t('mpr2.toDm')}</span>`}${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
+  const rev = (a.reviewMarks || []).length ? `<div style="font-size:13px;margin-top:5px">🔖 ${t('mpr2.backupBy')} <b>${esc(a.reviewMarks.join(', '))}</b>${backupNow ? ` <span style="font-weight:600">→ ${t('mpr2.toDmBackup')}</span>` : ''}</div>` : '';
   return (lines || rev) ? `<div style="margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px">${lines}${rev}</div>` : '';
 }
 // LAPIS-1 controls: propose per open position / mark reviewed / (decided → status+undo).
@@ -3955,7 +3957,7 @@ function lapis1CardControls(a, L, appBase, nextUrl, resetPath, rejectPath) {
     <input type="text" class="prop-note-input" maxlength="500" placeholder="${esc(t('mpr2.notePh'))}" style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:13px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${posBtns}</div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm" style="border-color:#e8c766;color:#8a6100">🟡 ${t('mpr2.markReviewed')}</button></form>
+      <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">🔖 ${t('mpr2.markReviewed')}</button></form>
       <form class="inline-form unmark-form needs-reviewer" method="post" action="${appBase}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
       ${rejectOneBtn}
     </div>
@@ -4247,7 +4249,7 @@ function mprReviewerBadges(a, L) {
   const trunc = (arr) => arr.slice(0, 2).map(esc).join(', ') + (arr.length > 2 ? ' +' + (arr.length - 2) : '');
   const out = [];
   if (proposers.length) out.push(`<span class="pill pill-ok" title="${esc(t('mpr2.proposedBy') + ' ' + proposers.join(', '))}">✔ ${trunc(proposers)}</span>`);
-  if (revs.length) out.push(`<span class="pill" style="background:#fff4d6;color:#8a6100" title="${esc(t('mpr2.reviewedNP') + ': ' + revs.join(', '))}">🟡 ${t('mpr2.reviewedNP')} · ${trunc(revs)}</span>`);
+  if (revs.length) out.push(`<span class="pill pill-off" title="${esc(t('mpr2.reviewedNP') + ': ' + revs.join(', '))}">🔖 ${t('mpr2.reviewedNP')} · ${trunc(revs)}</span>`);
   if (!proposers.length && !revs.length) out.push(`<span class="pill" style="background:transparent;border:1px dashed var(--red);color:var(--red)">• ${t('mpr2.badgeUnreviewed')}</span>`);
   return `<span class="rv-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap">${out.join('')}</span>`;
 }
@@ -7517,7 +7519,8 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
   }
   const flashBanner = flash === 'accept' ? `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr2.dm.flashAccept')}</div>`
-    : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>` : '';
+    : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>`
+    : flash === 'backup' ? `<div class="card" style="margin-top:14px;font-size:14px">${t('mpr2.dm.flashBackup')}</div>` : '';
   const nextUrl = `${decisionUrl}?event=${esc(event.id)}`;
   const groupCards = groups.length ? groups.map((g) => {
     const rowHtml = (backup) => (e) => {
@@ -7535,16 +7538,18 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
         action = `<span class="pill" style="background:var(--err-soft);color:var(--err)">${t('ta.status.rejected')}</span><form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/${resetPath}"><input type="hidden" class="acname" name="actor_name" value=""><input type="hidden" name="next" value="${nextUrl}"><button class="btn btn-ghost btn-sm">${t('eo.ap.undo')}</button></form>`;
       } else if (g.full) {
         action = `<span class="pill pill-off">${t('eo.ap.posFull')}</span>
+          ${backup ? '' : `<form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/dm-backup"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm">${t('mpr2.markReviewed')}</button></form>`}
           <form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
       } else {
         action = `<form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-accept"><input type="hidden" name="position_id" value="${esc(g.position_id)}"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-sm">✅ ${t('mpr2.dm.finalAccept')}</button></form>
+          ${backup ? '' : `<form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/dm-backup"><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm">${t('mpr2.markReviewed')}</button></form>`}
           <form class="inline-form needs-actor" method="post" action="${appBase}/${esc(a.id)}/final-reject" ${jsConfirm(t('mpr2.dm.rejectConfirm'))}><input type="hidden" class="acname" name="actor_name" value=""><button class="btn btn-ghost btn-sm" style="color:var(--red)">🚫 ${t('mpr2.dm.finalReject')}</button></form>`;
       }
       return `<div class="card" style="margin-top:10px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
           <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.login ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(a.login)}</div>` : ''}
             ${backup
-              ? `<div style="font-size:13px;margin-top:6px;color:#8a6100">🟡 ${t('mpr2.backupBy')} <b>${esc(proposers.join(', '))}</b></div>`
+              ? `<div style="font-size:13px;margin-top:6px">${t('mpr2.backupBy')} <b>${esc(proposers.join(', '))}</b>${(e.proposedBy || []).length ? ` <span class="muted">· ${t('mpr2.proposedBy')} ${esc(e.proposedBy.map((p) => p.name).join(', '))}</span>` : ''}</div>`
               : `<div style="font-size:13px;margin-top:6px">👍 ${t('mpr2.proposedBy')} <b>${esc(proposers.join(', '))}</b> <span class="muted">(${proposers.length})</span></div>`}
             ${notes.length ? `<div class="muted" style="font-size:12.5px;margin-top:4px;white-space:pre-wrap">📝 ${esc(notes.join(' | '))}</div>` : ''}
           </div>
@@ -7555,8 +7560,8 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     };
     const rows = g.entries.map(rowHtml(false)).join('');
     const backups = g.backups || [];
-    const backupBlock = backups.length ? `<div style="margin-top:14px;padding:12px 14px;border:1px dashed #e8c766;border-radius:12px;background:#fffbef">
-        <div style="font-weight:800;font-size:14px;color:#8a6100">🟡 ${t('mpr2.dm.backupTitle')} <span style="font-weight:600;font-size:12.5px">· ${t('mpr2.dm.backupCount', { n: backups.length })}</span></div>
+    const backupBlock = backups.length ? `<div style="margin-top:16px">
+        <div style="font-weight:700;font-size:14px">${t('mpr2.dm.backupTitle')} <span class="muted" style="font-weight:600;font-size:12.5px">· ${t('mpr2.dm.backupCount', { n: backups.length })}</span></div>
         <div class="muted" style="font-size:12.5px;margin-top:2px">${t('mpr2.dm.backupHint')}</div>
         ${backups.map(rowHtml(true)).join('')}
       </div>` : '';

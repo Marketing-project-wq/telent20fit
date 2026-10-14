@@ -2449,14 +2449,14 @@ app.get('/eo/talents', requireEo, async (req, res, next) => {
         if (key && !posKeySeen.has(key)) posKeySeen.set(key, { key, label_id: mp.label_id, label_en: mp.label_en });
         return { priority: c.priority, position_id: c.position_id, key, label_id: mp.label_id, label_en: mp.label_en, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
       });
-      const proposals = (proposalsByApp.get(a.id) || []).map((p) => { const mp2 = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp2.label_id, label_en: mp2.label_en, key: mp2.key }; });
+      const proposals = (proposalsByApp.get(a.id) || []).map((p) => { const mp2 = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, created_at: p.created_at, label_id: mp2.label_id, label_en: mp2.label_en, key: mp2.key }; });
       const reviewMarks = (reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name);
       applicants.push({
         id: a.id, eventId: a.event_id, eventName: eventName.get(a.event_id) || '—',
         name: tt.name || '—', type: a.talent_type || tt.talent_type || null,
         phone: tt.phone || null, city: tt.city || null, instagram: tt.instagram || null, login: tt.login || null,
         hyroxStatus: tt.hyrox_cert_status || 'none', profile: tt,
-        status: a.status || 'applied', createdAt: a.created_at, choices, proposals, reviewMarks,
+        status: a.status || 'applied', createdAt: a.created_at, choices, proposals, reviewMarks, reviewMarkAt: latestAt(reviewsByApp.get(a.id)),
       });
     }
     applicants.sort((x, y) => String(y.createdAt || '').localeCompare(String(x.createdAt || '')));
@@ -3357,8 +3357,9 @@ async function buildEoApplicant(st, staffId, appId) {
     instagram: (tt && tt.instagram) || null, login: (tt && tt.login) || null,
     hyroxStatus: (tt && tt.hyrox_cert_status) || 'none', profile: tt || {},
     status: app.status || 'applied', createdAt: app.created_at, choices,
-    proposals: (proposals || []).map((p) => { const mp = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; }),
+    proposals: (proposals || []).map((p) => { const mp = posMaster.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, created_at: p.created_at, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; }),
     reviewMarks: (allReviewMarks || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name),
+    reviewMarkAt: latestAt((allReviewMarks || []).filter((r) => r.application_id === app.id)),
   };
 }
 // Rebuild one Super Admin applicant into the shape adminApplicantCard() expects,
@@ -3383,10 +3384,10 @@ async function buildAdminApplicant(st, appId) {
     return { position_id: c.position_id, priority: c.priority, label_id: p.label_id, label_en: p.label_en, key: p.key, custom_label: ep.custom_label || null, accepted: !!c.accepted, full };
   });
   const certificate = (certs || []).find((cc) => cc.talent_id === app.talent_id && cc.event_id === app.event_id) || null;
-  const proposals = (proposalsAll || []).filter((p) => p.application_id === app.id).map((p) => { const mp = posById.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; });
+  const proposals = (proposalsAll || []).filter((p) => p.application_id === app.id).map((p) => { const mp = posById.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, created_at: p.created_at, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; });
   const reviewMarks = (reviewMarksAll || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name);
   const pastEvents = (pastEventsByTalent((apps || []).filter((a) => a.talent_id === app.talent_id), new Map((events || []).map((e) => [e.id, e])), Date.now(), new Set((apps || []).filter((a) => a.attended).map((a) => a.event_id))).get(app.talent_id) || []).filter((p) => p.event_id !== app.event_id);
-  return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks, pastEvents };
+  return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks, reviewMarkAt: latestAt((reviewMarksAll || []).filter((r) => r.application_id === app.id)), pastEvents };
 }
 // After a lapis-1 mutation: return just the re-rendered card for an AJAX (fetch)
 // request so the page can swap it in place; otherwise redirect as before. Handles
@@ -3579,6 +3580,16 @@ app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next)
   } catch (e) { next(e); }
 });
 
+app.post('/eo/applicants/:appId/dm-backup', requireEo, async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const found = await eoOwnedApp(st, req.staff.id, req.params.appId);
+    if (!found) return res.redirect('/eo/decision');
+    const actor = cleanReviewer(req.body.actor_name);
+    if (actor) { await st.removeReviewMark(found.app.id, actor); await st.addReviewMark(found.app.id, actor); }
+    res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + '&done=backup');
+  } catch (e) { next(e); }
+});
 app.post('/eo/applicants/:appId/final-reject', requireEo, async (req, res, next) => {
   try {
     const st = db(); if (!st) return needConfig(req, res);
@@ -4083,13 +4094,13 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
         });
       const proposals = (proposalsByApp.get(a.id) || []).map((p) => {
         const pp = posById.get(p.position_id) || {};
-        return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: pp.label_id, label_en: pp.label_en, key: pp.key };
+        return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, created_at: p.created_at, label_id: pp.label_id, label_en: pp.label_en, key: pp.key };
       });
       const reviewMarks = (reviewsByApp.get(a.id) || []).map((r) => r.reviewer_name);
       return {
         ...a, event_name: eventName.get(a.event_id) || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt,
         event_completed: !!ev.completed_at, certificate: certByKey.get(a.talent_id + '|' + a.event_id) || null, choices,
-        proposals, reviewMarks, pastEvents,
+        proposals, reviewMarks, reviewMarkAt: latestAt(reviewsByApp.get(a.id)), pastEvents,
       };
     });
     // Attendance links: one per event that has any approved talent, for on-site PICs.
@@ -4295,15 +4306,37 @@ app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_ad
 // review mark ("Set as Backup") and NO proposal, listed under their P1 position
 // with the same accept / reject actions. Reads existing review marks only — no
 // new table, nothing written. Groups for positions without proposals are added.
+// Latest created_at (ISO string) of a list of rows, '' when none.
+function latestAt(rows) { return (rows || []).reduce((m, r) => (String(r.created_at || '') > m ? String(r.created_at || '') : m), ''); }
+// "Backup" wins when the talent has a backup mark made AFTER their latest proposal
+// (latest action wins) — or a mark and no proposal at all.
+function backupWins(propRows, markRows) {
+  if (!(markRows || []).length) return false;
+  if (!(propRows || []).length) return true;
+  return latestAt(markRows) > latestAt(propRows);
+}
 function addBackupsToGroups(groups, c) {
-  const propApps = new Set((c.proposalsAll || []).map((p) => p.application_id));
-  const marksByApp = new Map();
-  (c.reviewMarks || []).forEach((r) => { const arr = marksByApp.get(r.application_id) || []; arr.push(r.reviewer_name); marksByApp.set(r.application_id, arr); });
+  const propsByApp = new Map();
+  (c.proposalsAll || []).forEach((p) => { const arr = propsByApp.get(p.application_id) || []; arr.push(p); propsByApp.set(p.application_id, arr); });
+  const markRowsByApp = new Map();
+  (c.reviewMarks || []).forEach((r) => { const arr = markRowsByApp.get(r.application_id) || []; arr.push(r); markRowsByApp.set(r.application_id, arr); });
+  const marksByApp = new Map([...markRowsByApp.entries()].map(([k, rows]) => [k, rows.map((r) => r.reviewer_name)]));
   const choicesByApp = new Map();
   (c.choicesAll || []).forEach((ch) => { const arr = choicesByApp.get(ch.application_id) || []; arr.push(ch); choicesByApp.set(ch.application_id, arr); });
-  groups.forEach((g) => { g.backups = g.backups || []; });
+  const isBackup = (appId) => backupWins(propsByApp.get(appId), markRowsByApp.get(appId));
+  // Proposed talents later set as backup move from the proposed list to the
+  // backup list of the same position(s).
+  groups.forEach((g) => {
+    g.backups = g.backups || [];
+    const keep = [];
+    g.entries.forEach((e) => {
+      if (isBackup(e.app.id)) g.backups.push({ app: e.app, proposers: [...new Set(marksByApp.get(e.app.id) || [])].map((n) => ({ name: n, note: null })), proposedBy: e.proposers });
+      else keep.push(e);
+    });
+    g.entries = keep;
+  });
   marksByApp.forEach((names, appId) => {
-    if (propApps.has(appId)) return;
+    if (propsByApp.has(appId)) return;
     const a = c.appById.get(appId);
     if (!a || a.event_id !== c.eventId) return;
     const p1 = (choicesByApp.get(appId) || []).slice().sort((x, y) => x.priority - y.priority)[0];
@@ -4430,6 +4463,21 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
     }
     const outcome = await acceptIntoPosition(st, app0, positionId, req.staff.id, actor || null);
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
+  } catch (e) { next(e); }
+});
+
+// LAPIS 2 — "Set as Backup" from the meeting: (re)records the operator's backup
+// mark so it is the latest action (backup wins over earlier proposals). Proposals
+// are kept; nothing is deleted except refreshing this operator's own mark.
+app.post('/admin/applications/:id/dm-backup', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const actor = cleanReviewer(req.body.actor_name);
+    const app = (await st.listApplications()).find((a) => a.id === req.params.id);
+    if (!app) return res.redirect('/admin/applications/decision');
+    if (actor) { await st.removeReviewMark(app.id, actor); await st.addReviewMark(app.id, actor); }
+    res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app.event_id) + '&done=backup');
   } catch (e) { next(e); }
 });
 

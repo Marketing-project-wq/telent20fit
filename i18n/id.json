@@ -1574,5 +1574,6 @@
   "mpr2.backupBy": "Dijadikan cadangan oleh",
   "mpr2.dm.backupTitle": "Cadangan",
   "mpr2.dm.backupHint": "Pengganti bila ada yang batal atau kuota masih kurang. Terima untuk memasukkan ke posisi ini.",
-  "mpr2.dm.backupCount": "{n} cadangan"
+  "mpr2.dm.backupCount": "{n} cadangan",
+  "mpr2.dm.flashBackup": "Talent dipindah ke Cadangan."
 }
