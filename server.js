@@ -799,17 +799,23 @@ function wibDayBoundaryISO(dstr, endOfDay) {
 // talent_id -> [{ event_id, name, attended }] for the 20FIT events a talent took
 // part in: marked attended, or accepted (approved/assigned/completed) at an event
 // that has already ended (completed_at, or its last day is before today in WIB).
+// Events run before system attendance existed (nobody at the event is marked
+// attended, e.g. ISS JHR Sep 2026) count every accepted talent as attended; at an
+// event that did use attendance, only checked-in talents do. Display only — the
+// stored attended flag (certificates, payments) is never changed here.
 // Oldest first; one entry per event.
 const PAST_ACCEPTED = new Set(['approved', 'assigned', 'completed']);
-function pastEventsByTalent(apps, eventById, now = Date.now()) {
+function pastEventsByTalent(apps, eventById, now = Date.now(), eventsWithAttendance = null) {
   const out = new Map();
+  const tracked = eventsWithAttendance || new Set((apps || []).filter((a) => a.attended).map((a) => a.event_id));
   (apps || []).forEach((a) => {
     const ev = eventById.get(a.event_id);
     if (!ev || !a.talent_id) return;
     const endIso = wibDayBoundaryISO(ev.ends_at || ev.starts_at, true);
     const ended = !!ev.completed_at || (endIso ? new Date(endIso).getTime() < now : false);
-    const attended = !!a.attended;
-    if (!attended && !(ended && PAST_ACCEPTED.has(a.status))) return;
+    const accepted = ended && PAST_ACCEPTED.has(a.status);
+    const attended = !!a.attended || (accepted && !tracked.has(a.event_id));
+    if (!attended && !accepted) return;
     const arr = out.get(a.talent_id) || [];
     const ex = arr.find((x) => x.event_id === a.event_id);
     if (ex) { ex.attended = ex.attended || attended; return; }
@@ -3379,7 +3385,7 @@ async function buildAdminApplicant(st, appId) {
   const certificate = (certs || []).find((cc) => cc.talent_id === app.talent_id && cc.event_id === app.event_id) || null;
   const proposals = (proposalsAll || []).filter((p) => p.application_id === app.id).map((p) => { const mp = posById.get(p.position_id) || {}; return { position_id: p.position_id, reviewer_name: p.reviewer_name, note: p.note, label_id: mp.label_id, label_en: mp.label_en, key: mp.key }; });
   const reviewMarks = (reviewMarksAll || []).filter((r) => r.application_id === app.id).map((r) => r.reviewer_name);
-  const pastEvents = (pastEventsByTalent((apps || []).filter((a) => a.talent_id === app.talent_id), new Map((events || []).map((e) => [e.id, e]))).get(app.talent_id) || []).filter((p) => p.event_id !== app.event_id);
+  const pastEvents = (pastEventsByTalent((apps || []).filter((a) => a.talent_id === app.talent_id), new Map((events || []).map((e) => [e.id, e])), Date.now(), new Set((apps || []).filter((a) => a.attended).map((a) => a.event_id))).get(app.talent_id) || []).filter((p) => p.event_id !== app.event_id);
   return { ...app, event_name: ev.name || null, talent_name: tt.name || null, talent_login: tt.login || null, profile: tt, event_completed: !!ev.completed_at, certificate, choices, proposals, reviewMarks, pastEvents };
 }
 // After a lapis-1 mutation: return just the re-rendered card for an AJAX (fetch)
