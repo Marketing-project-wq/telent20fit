@@ -1560,5 +1560,7 @@
   "tcat.srcAdmin": "Admin",
   "tcat.noLogs": "No changes yet.",
   "asg.searchPh": "Type a talent's name or email…",
-  "asg.pickFromList": "Pick a talent from the list."
+  "asg.pickFromList": "Pick a talent from the list.",
+  "filter.search": "Search",
+  "eo.ap.searchPhFull": "Search name, email or phone…"
 }

@@ -6999,7 +6999,7 @@ function adminApplicantCard(a, L, cat) {
   const lapis1 = choices.length ? (proposalDisplayHtml(a, L) + lapis1CardControls(a, L, '/admin/applications/' + esc(a.id), nextUrl, 'reset-position', 'reject-position')) : stationForm;
   const prStatus = (a.proposals && a.proposals.length) ? 'proposed' : ((a.reviewMarks && a.reviewMarks.length) ? 'reviewednp' : 'unreviewed');
   const rejectable = a.status === 'applied' || a.status === 'under_review' || a.status === 'pending';
-  return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc(((a.talent_name || '') + ' ' + (a.talent_login || '')).toLowerCase())}" style="margin-top:14px">
+  return `<div class="card adm-ap-item" id="ap-${esc(a.id)}" data-status="${esc(a.status)}" data-prstatus="${prStatus}" data-p1pos="${esc(p1keyOf(a))}" data-category="${p1catOf(a)}" data-followers="${fol != null ? fol : ''}" data-created="${createdMs}" data-search="${esc([a.talent_name, a.talent_login, a.profile && a.profile.phone, a.profile && a.profile.instagram].filter(Boolean).join(' ').toLowerCase())}" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${rejectable ? `<input type="checkbox" class="ap-cb" data-id="${esc(a.id)}" aria-label="select" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">` : ''}<b style="font-size:16px">${esc(a.talent_name || '—')}</b>${mprReviewerBadges(a, L)}</div>
@@ -7146,12 +7146,23 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   const p1PosSeen = new Set(); const p1PosOpts = [];
   applications.forEach((a) => { const c = a.choices && a.choices[0]; if (c && c.key && !p1PosSeen.has(c.key)) { p1PosSeen.add(c.key); p1PosOpts.push(`<option value="${esc(c.key)}">${esc(posLabel(c, L))}</option>`); } });
   const stOpts = Array.from(new Set(applications.map((a) => a.status))).map((s) => `<option value="${esc(s)}">${esc(t('ta.status.' + s))}</option>`).join('');
-  const filterBar = `<div class="card" style="margin-top:14px;padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.position')}<select id="admPosFilter" style="min-width:150px"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('filter.status')}<select id="admStatusFilter" style="min-width:150px"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)">${t('mpr2.filterProposal')}<select id="admPrFilter" style="min-width:190px"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
-    <input type="text" id="admSearch" placeholder="${esc(t('eo.ap.searchPh'))}" autocomplete="off" style="flex:1;min-width:150px;box-sizing:border-box">
-    <button type="button" id="admReset" class="btn btn-ghost btn-sm">↺ ${t('filter.reset')}</button>
+  const filterBar = `<style>
+    .adm-fb{margin-top:14px;padding:14px;display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr)) auto;gap:10px 12px;align-items:end}
+    .adm-fb label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);min-width:0}
+    .adm-fb select,.adm-fb input{width:100%;box-sizing:border-box;min-width:0;height:44px}
+    .adm-fb .adm-fb-reset{height:44px;white-space:nowrap}
+    .adm-fb input{border:1px solid var(--line);border-radius:10px;padding:0 14px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-weight:400;-webkit-appearance:none;appearance:none}
+    .adm-fb select{font-weight:400}
+    .adm-fb input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(228,18,31,.12)}
+    @media(max-width:900px){.adm-fb{grid-template-columns:repeat(3,minmax(0,1fr))}.adm-fb .adm-fb-q{grid-column:1/-1}.adm-fb .adm-fb-reset{grid-column:1/-1}}
+    @media(max-width:560px){.adm-fb{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}.adm-fb .adm-fb-pr{grid-column:1/-1}}
+  </style>
+  <div class="card adm-fb">
+    <label class="adm-fb-q">${t('filter.search')}<input type="search" id="admSearch" placeholder="${esc(t('eo.ap.searchPhFull'))}" autocomplete="off" inputmode="search"></label>
+    <label>${t('filter.position')}<select id="admPosFilter"><option value="">${esc(t('filter.allPositions'))}</option>${p1PosOpts.join('')}</select></label>
+    <label>${t('filter.status')}<select id="admStatusFilter"><option value="">${esc(t('filter.allStatuses'))}</option>${stOpts}</select></label>
+    <label class="adm-fb-pr">${t('mpr2.filterProposal')}<select id="admPrFilter"><option value="">${esc(t('mpr2.prAll'))}</option><option value="unreviewed">${esc(t('mpr2.prUnreviewed'))}</option><option value="proposed">${esc(t('mpr2.prProposed'))}</option><option value="reviewednp">${esc(t('mpr2.prReviewedNp'))}</option></select></label>
+    <button type="button" id="admReset" class="btn btn-ghost btn-sm adm-fb-reset">↺ ${t('filter.reset')}</button>
   </div>
   <p class="muted" id="admNoMatch" style="margin-top:14px;display:none">${t('eo.ap.noMatch')}</p>`;
 
@@ -7185,7 +7196,6 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   ${staffHead(staff, catTitle, L)}
   ${flashBanner}
   <a href="/admin/applications?cat=${esc(cat)}&lang=${L}" class="btn btn-ghost btn-sm" style="margin-top:8px">← ${t('mpr.backToEvents')}</a>
-  ${apSearchForm(cat, q, event && event.id, L)}
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px">
     <p class="muted" style="font-size:13px;margin:0">${event && event.name ? '<b>' + esc(event.name) + '</b> · ' : ''}${t('mpr.count', { n: applications.length })}</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">

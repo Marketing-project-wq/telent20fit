@@ -1560,5 +1560,7 @@
   "tcat.srcAdmin": "Admin",
   "tcat.noLogs": "Belum ada perubahan.",
   "asg.searchPh": "Ketik nama atau email talent…",
-  "asg.pickFromList": "Pilih talent dari daftar."
+  "asg.pickFromList": "Pilih talent dari daftar.",
+  "filter.search": "Cari",
+  "eo.ap.searchPhFull": "Cari nama, email, atau no. HP…"
 }
