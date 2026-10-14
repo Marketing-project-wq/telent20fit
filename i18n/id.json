@@ -1564,5 +1564,7 @@
   "filter.search": "Cari",
   "eo.ap.searchPhFull": "Cari nama, email, atau no. HP…",
   "mpr.pastAttended": "Pernah hadir di {n} event 20FIT",
-  "mpr.pastJoined": "Pernah ikut {n} event 20FIT"
+  "mpr.pastJoined": "Pernah ikut {n} event 20FIT",
+  "mpr.pastAttended1": "Pernah hadir di 1 event 20FIT",
+  "mpr.pastJoined1": "Pernah ikut 1 event 20FIT"
 }

@@ -1563,6 +1563,8 @@
   "asg.pickFromList": "Pick a talent from the list.",
   "filter.search": "Search",
   "eo.ap.searchPhFull": "Search name, email or phone…",
-  "mpr.pastAttended": "Attended {n} past 20FIT event(s)",
-  "mpr.pastJoined": "Joined {n} past 20FIT event(s)"
+  "mpr.pastAttended": "Attended {n} previous 20FIT events",
+  "mpr.pastJoined": "Joined {n} previous 20FIT events",
+  "mpr.pastAttended1": "Attended 1 previous 20FIT event",
+  "mpr.pastJoined1": "Joined 1 previous 20FIT event"
 }
