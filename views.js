@@ -7148,9 +7148,9 @@ function adminApplications({ staff, applications, attendanceLinks, lang, flash, 
   const stOpts = Array.from(new Set(applications.map((a) => a.status))).map((s) => `<option value="${esc(s)}">${esc(t('ta.status.' + s))}</option>`).join('');
   const filterBar = `<style>
     .adm-fb{margin-top:14px;padding:14px;display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr)) auto;gap:10px 12px;align-items:end}
-    .adm-fb label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);min-width:0}
+    .adm-fb label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);min-width:0;margin:0}
     .adm-fb select,.adm-fb input{width:100%;box-sizing:border-box;min-width:0;height:44px}
-    .adm-fb .adm-fb-reset{height:44px;white-space:nowrap}
+    .adm-fb .adm-fb-reset{height:44px;margin:0;align-self:end;white-space:nowrap}
     .adm-fb input{border:1px solid var(--line);border-radius:10px;padding:0 14px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-weight:400;-webkit-appearance:none;appearance:none}
     .adm-fb select{font-weight:400}
     .adm-fb input:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(228,18,31,.12)}
