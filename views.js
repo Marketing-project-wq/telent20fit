@@ -7555,7 +7555,12 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">${action}</div>
       </div>`;
     };
-    const rows = g.entries.map(rowHtml(false)).join('');
+    const accepted = g.accepted || [];
+    const acceptedBlock = accepted.length ? `<div style="margin-top:10px">
+        <div style="font-weight:700;font-size:14px;color:var(--ok,#17803d)">✓ ${t('mpr2.dm.acceptedTitle')} <span class="muted" style="font-weight:600;font-size:12.5px">· ${g.quota ? t('mpr2.dm.accepted', { n: g.acceptedHere, q: g.quota }) : accepted.length}</span></div>
+        ${accepted.map((e) => rowHtml(!!e.backupBy)(e)).join('')}
+      </div>` : '';
+    const rows = g.entries.length ? `<div style="margin-top:${accepted.length ? 16 : 10}px">${accepted.length ? `<div style="font-weight:700;font-size:14px">${t('mpr2.dm.pendingTitle')} <span class="muted" style="font-weight:600;font-size:12.5px">· ${g.entries.length}</span></div>` : ''}${g.entries.map(rowHtml(false)).join('')}</div>` : '';
     const backups = g.backups || [];
     const backupBlock = backups.length ? `<div style="margin-top:16px">
         <div style="font-weight:700;font-size:14px">${t('mpr2.dm.backupTitle')} <span class="muted" style="font-weight:600;font-size:12.5px">· ${t('mpr2.dm.backupCount', { n: backups.length })}</span></div>
@@ -7564,6 +7569,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
       </div>` : '';
     return `<div style="margin-top:18px">
       <div style="font-weight:800;font-size:16px">${esc(posLabelOf(g))} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr2.dm.listCount', { n: g.entries.length })}${backups.length ? ` · ${t('mpr2.dm.backupCount', { n: backups.length })}` : ''}${g.quota ? ` · ${t('mpr2.dm.accepted', { n: g.acceptedHere, q: g.quota })}` : ''}</span></div>
+      ${acceptedBlock}
       ${rows}
       ${backupBlock}
     </div>`;
