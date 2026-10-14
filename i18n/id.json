@@ -1581,5 +1581,7 @@
   "mpr2.dm.isBackup": "Cadangan",
   "mpr2.dm.unbackupHint": "Klik untuk membatalkan cadangan",
   "mpr2.dm.backupBy": "Dijadikan cadangan oleh",
-  "mpr2.dm.listCount": "{n} diusulkan/direview"
+  "mpr2.dm.listCount": "{n} diusulkan/direview",
+  "mpr2.dm.acceptedTitle": "Diterima",
+  "mpr2.dm.pendingTitle": "Diusulkan / Direview"
 }

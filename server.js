@@ -4304,7 +4304,8 @@ app.post('/admin/applications/:id/unmark-reviewed', auth.requireStaff(['super_ad
 // Decision Meeting lists, per position: talents PROPOSED for it, plus talents only
 // marked "Reviewed" (no proposal) under their P1 position — both with Final
 // Accept / Set as Backup / Final Reject. A talent set as backup in the meeting
-// (answers.__dm_backup, set by the operator) moves to that position's Backup list.
+// (answers.__dm_backup, set by the operator) moves to that position's Backup list;
+// anyone finally accepted for the position moves to its Accepted list.
 // Reads existing data only; the backup flag is the one thing the meeting writes.
 function dmBackupOf(a) { const b = a && a.answers && a.answers.__dm_backup; return b && typeof b === 'object' ? b : null; }
 function addReviewedAndBackups(groups, c) {
@@ -4338,13 +4339,21 @@ function addReviewedAndBackups(groups, c) {
       proposers: [], reviewers: names,
     });
   });
+  // Split each position into: accepted here (final decision made), backups not yet
+  // accepted, and everyone else (proposed / reviewed, or rejected).
   groups.forEach((g) => {
     g.backups = [];
+    g.accepted = [];
     const keep = [];
     g.entries.forEach((e) => {
       const b = dmBackupOf(c.appById.get(e.app.id));
-      if (b) { e.backupBy = b.by || ''; g.backups.push(e); } else keep.push(e);
+      if (b) e.backupBy = b.by || '';
+      const acceptedHere = (e.app.status === 'approved' || e.app.status === 'assigned') && e.app.acceptedPositionId === g.position_id;
+      if (acceptedHere) g.accepted.push(e);
+      else if (b) g.backups.push(e);
+      else keep.push(e);
     });
+    g.accepted.sort((x, y) => String(x.app.name).localeCompare(String(y.app.name)));
     g.entries = keep.sort((x, y) => (y.proposers.length - x.proposers.length) || String(x.app.name).localeCompare(String(y.app.name)));
     g.backups.sort((x, y) => String(x.app.name).localeCompare(String(y.app.name)));
   });

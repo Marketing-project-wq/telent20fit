@@ -1581,5 +1581,7 @@
   "mpr2.dm.isBackup": "Backup",
   "mpr2.dm.unbackupHint": "Click to remove from backup",
   "mpr2.dm.backupBy": "Set as backup by",
-  "mpr2.dm.listCount": "{n} proposed/reviewed"
+  "mpr2.dm.listCount": "{n} proposed/reviewed",
+  "mpr2.dm.acceptedTitle": "Accepted",
+  "mpr2.dm.pendingTitle": "Proposed / Reviewed"
 }
