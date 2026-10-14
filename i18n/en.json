@@ -1566,5 +1566,7 @@
   "mpr.pastAttended": "Attended {n} previous 20FIT events",
   "mpr.pastJoined": "Joined {n} previous 20FIT events",
   "mpr.pastAttended1": "Attended 1 previous 20FIT event",
-  "mpr.pastJoined1": "Joined 1 previous 20FIT event"
+  "mpr.pastJoined1": "Joined 1 previous 20FIT event",
+  "adm.profile.xpCount": "{n} experiences",
+  "adm.profile.xpMore": "Show {n} more"
 }
