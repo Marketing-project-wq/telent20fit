@@ -3904,8 +3904,10 @@ function proposalDisplayHtml(a, L) {
   const t = (k, v) => tr(L, k, v);
   const byPos = new Map();
   (a.proposals || []).forEach((p) => { const g = byPos.get(p.position_id) || { label: posLabel(p, L), names: [], notes: [] }; g.names.push(p.reviewer_name); if (p.note) g.notes.push(p.reviewer_name + ': ' + p.note); byPos.set(p.position_id, g); });
-  const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
-  const rev = (a.reviewMarks || []).length ? `<div class="muted" style="font-size:12.5px;margin-top:5px">👀 ${t('mpr2.reviewedNP')}: ${esc(a.reviewMarks.join(', '))}</div>` : '';
+  const lines = [...byPos.values()].map((g) => `<div style="font-size:13px;margin-top:5px;color:#0f7a45">✅ <b>${esc(g.label)}</b> · ${t('mpr2.proposedBy')} <b>${esc(g.names.join(', '))}</b> <span style="font-weight:600">→ ${t('mpr2.toDm')}</span>${g.notes.length ? `<div class="muted" style="font-size:12px;margin-top:2px;white-space:pre-wrap">📝 ${esc(g.notes.join(' | '))}</div>` : ''}</div>`).join('');
+  // A review mark = "Backup" (cadangan). Shown in the Decision Meeting's Backup
+  // section unless the talent is also proposed (then the proposal wins).
+  const rev = (a.reviewMarks || []).length ? `<div style="font-size:13px;margin-top:5px;color:#8a6100">🟡 ${t('mpr2.backupBy')} <b>${esc(a.reviewMarks.join(', '))}</b>${byPos.size ? '' : ` <span style="font-weight:600">→ ${t('mpr2.toDmBackup')}</span>`}</div>` : '';
   return (lines || rev) ? `<div style="margin-top:10px;padding:10px 12px;background:var(--card2);border-radius:10px">${lines}${rev}</div>` : '';
 }
 // LAPIS-1 controls: propose per open position / mark reviewed / (decided → status+undo).
@@ -3953,7 +3955,7 @@ function lapis1CardControls(a, L, appBase, nextUrl, resetPath, rejectPath) {
     <input type="text" class="prop-note-input" maxlength="500" placeholder="${esc(t('mpr2.notePh'))}" style="width:100%;box-sizing:border-box;margin-bottom:8px;font-size:13px">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${posBtns}</div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">👀 ${t('mpr2.markReviewed')}</button></form>
+      <form class="inline-form mark-form needs-reviewer" method="post" action="${appBase}/mark-reviewed"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm" style="border-color:#e8c766;color:#8a6100">🟡 ${t('mpr2.markReviewed')}</button></form>
       <form class="inline-form unmark-form needs-reviewer" method="post" action="${appBase}/unmark-reviewed" style="display:none"><input type="hidden" class="rvname" name="reviewer_name" value="">${nx}<button class="btn btn-ghost btn-sm">✖ ${t('mpr2.unmarkReviewed')}</button></form>
       ${rejectOneBtn}
     </div>
@@ -4245,7 +4247,7 @@ function mprReviewerBadges(a, L) {
   const trunc = (arr) => arr.slice(0, 2).map(esc).join(', ') + (arr.length > 2 ? ' +' + (arr.length - 2) : '');
   const out = [];
   if (proposers.length) out.push(`<span class="pill pill-ok" title="${esc(t('mpr2.proposedBy') + ' ' + proposers.join(', '))}">✔ ${trunc(proposers)}</span>`);
-  if (revs.length) out.push(`<span class="pill pill-off" title="${esc(t('mpr2.reviewedNP') + ': ' + revs.join(', '))}">👁 ${trunc(revs)}</span>`);
+  if (revs.length) out.push(`<span class="pill" style="background:#fff4d6;color:#8a6100" title="${esc(t('mpr2.reviewedNP') + ': ' + revs.join(', '))}">🟡 ${t('mpr2.reviewedNP')} · ${trunc(revs)}</span>`);
   if (!proposers.length && !revs.length) out.push(`<span class="pill" style="background:transparent;border:1px dashed var(--red);color:var(--red)">• ${t('mpr2.badgeUnreviewed')}</span>`);
   return `<span class="rv-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap">${out.join('')}</span>`;
 }
@@ -7518,7 +7520,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     : flash === 'reject' ? `<div class="card" style="margin-top:14px;border:1px solid var(--warn);background:var(--warn-soft);font-size:14px">${t('mpr2.dm.flashReject')}</div>` : '';
   const nextUrl = `${decisionUrl}?event=${esc(event.id)}`;
   const groupCards = groups.length ? groups.map((g) => {
-    const rows = g.entries.map((e) => {
+    const rowHtml = (backup) => (e) => {
       const a = e.app;
       const proposers = e.proposers.map((p) => p.name);
       const notes = e.proposers.filter((p) => p.note).map((p) => p.name + ': ' + p.note);
@@ -7541,21 +7543,31 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
       return `<div class="card" style="margin-top:10px;padding:14px 16px">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
           <div style="min-width:0"><b style="font-size:15px">${esc(a.name)}</b>${a.login ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(a.login)}</div>` : ''}
-            <div style="font-size:13px;margin-top:6px">👍 ${t('mpr2.proposedBy')} <b>${esc(proposers.join(', '))}</b> <span class="muted">(${proposers.length})</span></div>
+            ${backup
+              ? `<div style="font-size:13px;margin-top:6px;color:#8a6100">🟡 ${t('mpr2.backupBy')} <b>${esc(proposers.join(', '))}</b></div>`
+              : `<div style="font-size:13px;margin-top:6px">👍 ${t('mpr2.proposedBy')} <b>${esc(proposers.join(', '))}</b> <span class="muted">(${proposers.length})</span></div>`}
             ${notes.length ? `<div class="muted" style="font-size:12.5px;margin-top:4px;white-space:pre-wrap">📝 ${esc(notes.join(' | '))}</div>` : ''}
           </div>
           ${talentStatusBadge(a.status, L)}
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:12px">${action}</div>
       </div>`;
-    }).join('');
+    };
+    const rows = g.entries.map(rowHtml(false)).join('');
+    const backups = g.backups || [];
+    const backupBlock = backups.length ? `<div style="margin-top:14px;padding:12px 14px;border:1px dashed #e8c766;border-radius:12px;background:#fffbef">
+        <div style="font-weight:800;font-size:14px;color:#8a6100">🟡 ${t('mpr2.dm.backupTitle')} <span style="font-weight:600;font-size:12.5px">· ${t('mpr2.dm.backupCount', { n: backups.length })}</span></div>
+        <div class="muted" style="font-size:12.5px;margin-top:2px">${t('mpr2.dm.backupHint')}</div>
+        ${backups.map(rowHtml(true)).join('')}
+      </div>` : '';
     return `<div style="margin-top:18px">
-      <div style="font-weight:800;font-size:16px">${esc(posLabelOf(g))} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr2.dm.proposedCount', { n: g.entries.length })}${g.quota ? ` · ${t('mpr2.dm.accepted', { n: g.acceptedHere, q: g.quota })}` : ''}</span></div>
+      <div style="font-weight:800;font-size:16px">${esc(posLabelOf(g))} <span class="muted" style="font-weight:600;font-size:13px">· ${t('mpr2.dm.proposedCount', { n: g.entries.length })}${backups.length ? ` · ${t('mpr2.dm.backupCount', { n: backups.length })}` : ''}${g.quota ? ` · ${t('mpr2.dm.accepted', { n: g.acceptedHere, q: g.quota })}` : ''}</span></div>
       ${rows}
+      ${backupBlock}
     </div>`;
   }).join('') : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr2.dm.noProposals')}</p></div>`;
 
-  const knownActors = Array.from(new Set(groups.flatMap((g) => g.entries.flatMap((e) => e.proposers.map((p) => p.name))))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
+  const knownActors = Array.from(new Set(groups.flatMap((g) => g.entries.concat(g.backups || []).flatMap((e) => e.proposers.map((p) => p.name))))).filter(Boolean).sort((x, y) => String(x).localeCompare(String(y)));
   const actorBar = `<div class="card" style="margin-top:14px;padding:12px 14px;border-left:4px solid var(--red)">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13.5px">👤 ${t('mpr2.dm.actor')}: <b id="acNameShow" style="color:var(--red)">—</b></span>
