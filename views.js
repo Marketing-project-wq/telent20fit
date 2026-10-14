@@ -2530,6 +2530,25 @@ function maskPhone(v) {
 }
 // Render free text with any URLs turned into tidy named links (the domain + ↗)
 // instead of raw addresses. Non-URL text is HTML-escaped.
+// Talent experience as tidy boxes instead of one long numbered block. Each line
+// ("1. Event sebagai Role", "- Event as Role", …) becomes a card: event in bold,
+// role below. First 6 shown; the rest behind a native <details> toggle (no JS).
+// A single free-text paragraph is shown as before.
+const XP_SHOW = 6;
+function experienceHtml(text, t) {
+  const lines = String(text || '').split(/\r?\n/)
+    .map((l) => l.replace(/^\s*(?:\d+\s*[.)\-:]|[-•*·–])\s*/, '').trim()).filter(Boolean);
+  if (lines.length < 2) return `<div style="white-space:pre-wrap;line-height:1.55">${linkifyText(text)}</div>`;
+  const item = (l) => {
+    const m = l.match(/^(.+?)\s+(?:sebagai|as)\s+(.+)$/i);
+    const ev = m ? m[1] : l; const role = m ? m[2] : '';
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--card);min-width:0">
+      <div style="font-weight:700;font-size:13.5px;line-height:1.35;word-break:break-word">${linkifyText(ev)}</div>${role ? `<div class="muted" style="font-size:12.5px;margin-top:2px;line-height:1.35;word-break:break-word">${linkifyText(role)}</div>` : ''}</div>`;
+  };
+  const grid = (arr) => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:6px">${arr.map(item).join('')}</div>`;
+  const rest = lines.slice(XP_SHOW);
+  return `<div class="muted" style="font-size:12px">${esc(t('adm.profile.xpCount', { n: lines.length }))}</div>${grid(lines.slice(0, XP_SHOW))}${rest.length ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--red);padding:4px 0">${esc(t('adm.profile.xpMore', { n: rest.length }))}</summary>${grid(rest)}</details>` : ''}`;
+}
 function linkifyText(text) {
   const s = String(text == null ? '' : text);
   const re = /(https?:\/\/[^\s<]+)/g;
@@ -2622,7 +2641,7 @@ function talentProfileBlock(profile, lang, opts = {}) {
     const link = (profile.hyrox_cert_path && profile.id) ? ` · <a href="/admin/hyrox/${esc(profile.id)}/file" target="_blank" rel="noopener">${t('adm.profile.hyroxView')} ↗</a>` : '';
     return `${lbl}${link}`;
   })();
-  const expCell = profile.experience ? `<div style="white-space:pre-wrap;line-height:1.55">${linkifyText(profile.experience)}</div>` : NA;
+  const expCell = profile.experience ? experienceHtml(profile.experience, t) : NA;
   const skills = `<div style="margin-top:16px">${groupHead(t('adm.profile.grpSkills'))}
     <div style="display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start">${field(t('adm.profile.cv'), cvCell)}${field(t('adm.profile.portfolio'), pfCell)}${field(t('adm.profile.hyrox'), hxCell)}</div>
     <div style="margin-top:12px">${field(t('adm.profile.experience'), expCell)}</div></div>`;
