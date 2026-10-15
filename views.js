@@ -131,6 +131,7 @@ a{color:var(--red)}
 .nav-cb{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 .sidebar{position:fixed;left:0;top:0;bottom:0;width:236px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:200}
 .side-logo{padding:22px 22px 18px;line-height:1;text-decoration:none;display:flex;justify-content:center}
+.side-logo .brand-img,.side-logo .brand-dark{height:22px;max-width:140px;object-position:center}
 .side-nav{display:flex;flex-direction:column;gap:3px;padding:8px 12px;flex:1;overflow-y:auto}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14.5px}
 .side-nav a svg{width:20px;height:20px;flex-shrink:0}
