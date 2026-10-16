@@ -2475,9 +2475,14 @@ function evCoverPick(seed) {
 /** Full-bleed gradient "cover" for an event card, with initial, icon & status badge. */
 function eventCover(e, lang) {
   const L = normLang(lang);
+  // Badge follows REGISTRATION first (these cards are for applying): open →
+  // "Registration open"; not yet open → "Coming soon"; otherwise the event's own
+  // timing (ongoing) or "Registration closed". Lists without the flag keep the
+  // old date-based label.
   const ongoing = e.status === 'ongoing';
-  const badgeColor = ongoing ? '#0f9d6a' : '#E4121F';
-  const badgeText = tr(L, ongoing ? 'ev.status.ongoing' : 'ev.status.upcoming');
+  const kind = e.soon ? 'soon' : e.regOpen === true ? 'open' : ongoing ? 'ongoing' : e.regOpen === false ? 'closed' : 'upcoming';
+  const badgeColor = { open: '#0f9d6a', ongoing: '#0f9d6a', closed: '#6b7280' }[kind] || '#E4121F';
+  const badgeText = tr(L, { open: 'ev.status.regOpen', soon: 'ev.status.upcoming', ongoing: 'ev.status.ongoing', closed: 'ev.status.regClosed', upcoming: 'ev.status.upcoming' }[kind]);
   const badge = `<span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>`;
   // With a poster, show the full image at its natural aspect ratio (no crop);
   // otherwise fall back to the generated gradient cover.
