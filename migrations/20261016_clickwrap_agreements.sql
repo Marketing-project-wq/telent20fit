@@ -3,6 +3,10 @@
 -- FILE ONLY — NOT APPLIED. Review, then run once in the Supabase SQL editor
 -- (or via apply_migration) BEFORE deploying the code that uses it.
 --
+-- Scope: applies to upcoming events, starting with Livin' by Mandiri | VISA × Jakarta
+-- Hybrid Race. Past events (ISS, Sep 2026) are exempt — their rows stay untouched
+-- except agreement_required=false (section 7).
+--
 -- Additive only: new tables, new nullable/defaulted columns, new functions.
 -- No existing row is updated or deleted, except the explicit, reviewed
 -- backfill in section 7 (agreement_required=false for the 26 already
@@ -142,6 +146,7 @@ create table if not exists public.talent_agreement_acceptances (
   user_agent        text,                       -- taken server-side from the request header
   acceptance_method text not null default 'clickwrap',
   lang              text,
+  body_rendered_html text not null,             -- exact agreement text shown (placeholders filled), the evidence
   pdf_path          text                        -- private bucket path; filled once after the PDF is generated
 );
 create index if not exists taa_event_idx  on public.talent_agreement_acceptances(event_id);
@@ -174,6 +179,108 @@ returns text language sql immutable as $$
 $$;
 
 -- ---------------------------------------------------------------------
+-- 4b) Rendering. Templates may contain placeholders, filled PER APPLICATION from
+--     the database so one template serves every event (several events close
+--     together each get their own name/date/session):
+--       {{nama_event}} {{tanggal_event}} {{lokasi}} {{posisi}} {{sesi}}
+--       {{jam_bertugas}} {{jam_tiba}} {{daftar_sesi}} {{nama_talent}}
+--     ONE renderer, used both for display (server calls it) and for the stored
+--     evidence (talent_accept_agreement), so what is shown == what is stored.
+-- ---------------------------------------------------------------------
+create or replace function public.agreement_html_esc(p text)
+returns text language sql immutable as $$
+  select replace(replace(replace(replace(coalesce(p, ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;')
+$$;
+
+create or replace function public.agreement_fmt_date(p date, p_lang text)
+returns text language sql immutable as $$
+  select case when p is null then null else
+    extract(day from p)::int || ' ' ||
+    (case when coalesce(p_lang, 'id') = 'en'
+      then (array['January','February','March','April','May','June','July','August','September','October','November','December'])[extract(month from p)::int]
+      else (array['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'])[extract(month from p)::int] end)
+    || ' ' || extract(year from p)::int end
+$$;
+
+-- "7 November 2026" or "7–8 November 2026" / "30 November – 1 Desember 2026"
+create or replace function public.agreement_fmt_range(p_start date, p_end date, p_lang text)
+returns text language sql immutable as $$
+  select case
+    when p_start is null then null
+    when p_end is null or p_end = p_start then agreement_fmt_date(p_start, p_lang)
+    when date_trunc('month', p_start) = date_trunc('month', p_end)
+      then extract(day from p_start)::int || '–' || agreement_fmt_date(p_end, p_lang)
+    else agreement_fmt_date(p_start, p_lang) || ' – ' || agreement_fmt_date(p_end, p_lang) end
+$$;
+
+create or replace function public.agreement_render(p_app_id uuid, p_lang text default 'id')
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  a talent_applications%rowtype; ev record; pos record; tpl record; ses record; acc record;
+  v_en boolean := coalesce(p_lang, 'id') = 'en';
+  v_tbd text := case when coalesce(p_lang, 'id') = 'en' then 'To be determined' else 'Belum ditentukan' end;
+  v_list text; v_n int; v_num text; v_body text; v_title text;
+  v_sesi text; v_jam text; v_tiba text; v_pos text; v_date text; v_loc text;
+begin
+  select * into a from talent_applications where id = p_app_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  select name, starts_at, ends_at, location, city into ev from talent_events where id = a.event_id;
+  select coalesce(nullif(btrim(full_name), ''), name) as legal_name into acc from talent_accounts where id = a.talent_id;
+  select p.label_id, p.label_en, coalesce(p.talent_category, 'manpower') as cat, ep.custom_label into pos
+    from talent_application_choices c join talent_positions p on p.id = c.position_id
+    left join talent_event_positions ep on ep.event_id = a.event_id and ep.position_id = c.position_id
+   where c.application_id = a.id and c.accepted limit 1;
+  if not found then return jsonb_build_object('ok', false, 'error', 'no_position'); end if;
+  select * into tpl from agreement_templates where talent_category = pos.cat and is_active limit 1;
+  if not found then return jsonb_build_object('ok', false, 'error', 'no_template', 'category', pos.cat); end if;
+  select id, name, name_en, session_date, start_time, end_time into ses from event_sessions where id = a.session_id;
+
+  -- Session list of THIS event, e.g. "2 (dua) sesi, yaitu Sesi Pagi pukul 06.00–13.30 WIB dan Sesi Siang pukul 13.30–20.30 WIB"
+  select count(*),
+         string_agg(case when v_en then coalesce(nullif(name_en, ''), name) else name end
+                    || coalesce(' (' || agreement_fmt_date(session_date, p_lang) || ')', '')
+                    || case when v_en then ' at ' else ' pukul ' end
+                    || to_char(start_time, 'HH24.MI') || '–' || to_char(end_time, 'HH24.MI') || ' WIB',
+                    case when v_en then ', ' else ', ' end order by sort_order, start_time)
+    into v_n, v_list from event_sessions where event_id = a.event_id;
+  if v_n = 0 then
+    v_list := v_tbd;
+  else
+    v_num := v_n || ' (' || (case when v_en then (array['one','two','three','four','five','six','seven','eight'])[least(v_n, 8)]
+                                 else (array['satu','dua','tiga','empat','lima','enam','tujuh','delapan'])[least(v_n, 8)] end) || ')';
+    -- "A, B dan C" (last separator)
+    if v_n > 1 then v_list := regexp_replace(v_list, ', ([^,]*)$', case when v_en then ' and \1' else ' dan \1' end); end if;
+    v_list := v_num || case when v_en then (case when v_n = 1 then ' session, namely ' else ' sessions, namely ' end) else ' sesi, yaitu ' end || v_list;
+  end if;
+
+  v_sesi := case when ses.id is null then v_tbd else (case when v_en then coalesce(nullif(ses.name_en, ''), ses.name) else ses.name end)
+            || coalesce(' — ' || agreement_fmt_date(ses.session_date, p_lang), '') end;
+  v_jam  := case when ses.id is null then v_tbd else to_char(ses.start_time, 'HH24.MI') || '–' || to_char(ses.end_time, 'HH24.MI') || ' WIB' end;
+  v_tiba := case when ses.id is null then v_tbd else to_char(event_session_arrival(ses.start_time), 'HH24.MI') || ' WIB' end;
+  v_pos  := coalesce(pos.custom_label, case when v_en then coalesce(pos.label_en, pos.label_id) else coalesce(pos.label_id, pos.label_en) end);
+  v_date := agreement_fmt_range(ev.starts_at, ev.ends_at, p_lang);
+  v_loc  := concat_ws(', ', nullif(ev.location, ''), nullif(ev.city, ''));
+
+  v_body := case when v_en and nullif(tpl.body_en_html, '') is not null then tpl.body_en_html else tpl.body_html end;
+  v_title := case when v_en and nullif(tpl.title_en, '') is not null then tpl.title_en else tpl.title end;
+  v_body := replace(v_body, '{{nama_event}}',    agreement_html_esc(ev.name));
+  v_body := replace(v_body, '{{tanggal_event}}', agreement_html_esc(v_date));
+  v_body := replace(v_body, '{{lokasi}}',        agreement_html_esc(v_loc));
+  v_body := replace(v_body, '{{posisi}}',        agreement_html_esc(v_pos));
+  v_body := replace(v_body, '{{sesi}}',          agreement_html_esc(v_sesi));
+  v_body := replace(v_body, '{{jam_bertugas}}',  agreement_html_esc(v_jam));
+  v_body := replace(v_body, '{{jam_tiba}}',      agreement_html_esc(v_tiba));
+  v_body := replace(v_body, '{{daftar_sesi}}',   agreement_html_esc(v_list));
+  v_body := replace(v_body, '{{nama_talent}}',   agreement_html_esc(acc.legal_name));
+
+  return jsonb_build_object('ok', true, 'template_id', tpl.id, 'version', tpl.version, 'category', pos.cat,
+    'title', v_title, 'body_html', v_body, 'legal_name', acc.legal_name,
+    'details', jsonb_build_object('event', ev.name, 'date', v_date, 'location', v_loc, 'position', v_pos,
+      'session', v_sesi, 'hours', v_jam, 'arrival', v_tiba, 'session_id', ses.id,
+      'starts_at', ev.starts_at, 'ends_at', ev.ends_at));
+end $$;
+
+-- ---------------------------------------------------------------------
 -- 5) ONE function for the whole acceptance (single transaction).
 --    In this app the admin's "Final Accept" sets status 'approved' (offer);
 --    accepting the agreement is the talent's confirmation → 'assigned'.
@@ -185,7 +292,7 @@ create or replace function public.talent_accept_agreement(
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   a   talent_applications%rowtype;
-  acc record; ev record; tpl record; ses record; pos record;
+  acc record; tpl record; ses record; r jsonb;
   v_id uuid; v_at timestamptz; v_existing record;
 begin
   select * into a from talent_applications where id = p_app_id for update;
@@ -207,39 +314,25 @@ begin
     return jsonb_build_object('ok', false, 'error', 'name_mismatch');
   end if;
 
-  -- Accepted position (decides the template category).
-  select p.id, p.label_id, p.label_en, coalesce(p.talent_category, 'manpower') as cat, ep.custom_label
-    into pos
-    from talent_application_choices c
-    join talent_positions p on p.id = c.position_id
-    left join talent_event_positions ep on ep.event_id = a.event_id and ep.position_id = c.position_id
-   where c.application_id = a.id and c.accepted
-   limit 1;
-  if not found then
-    return jsonb_build_object('ok', false, 'error', 'no_position');
+  -- Same renderer as the screen: the exact text + details shown are what is stored.
+  r := agreement_render(a.id, p_lang);
+  if not (r->>'ok')::boolean then
+    return r;
   end if;
-
-  select * into tpl from agreement_templates where talent_category = pos.cat and is_active limit 1;
-  if not found then
-    return jsonb_build_object('ok', false, 'error', 'no_template', 'category', pos.cat);
-  end if;
-
-  select name, starts_at, ends_at, location, city into ev from talent_events where id = a.event_id;
+  select * into tpl from agreement_templates where id = (r->>'template_id')::uuid;
   select id, name, session_date, start_time, end_time into ses from event_sessions where id = a.session_id;
 
   v_at := now();
   insert into talent_agreement_acceptances (
     application_id, talent_id, event_id, session_id, session_snapshot, assignment_snapshot,
-    template_id, template_version, accepted_at, typed_name, ip_address, user_agent, acceptance_method, lang)
+    template_id, template_version, accepted_at, typed_name, ip_address, user_agent, acceptance_method, lang, body_rendered_html)
   values (
     a.id, a.talent_id, a.event_id, a.session_id,
     case when ses.id is null then null else jsonb_build_object(
       'name', ses.name, 'date', ses.session_date, 'start', to_char(ses.start_time, 'HH24:MI'),
       'end', to_char(ses.end_time, 'HH24:MI'), 'arrival', to_char(event_session_arrival(ses.start_time), 'HH24:MI')) end,
-    jsonb_build_object('event', ev.name, 'starts_at', ev.starts_at, 'ends_at', ev.ends_at,
-      'location', ev.location, 'city', ev.city,
-      'position', coalesce(pos.custom_label, pos.label_id, pos.label_en), 'category', pos.cat),
-    tpl.id, tpl.version, v_at, btrim(p_typed_name), p_ip, left(p_user_agent, 1000), 'clickwrap', p_lang)
+    (r->'details') || jsonb_build_object('category', r->>'category', 'title', r->>'title'),
+    tpl.id, tpl.version, v_at, btrim(p_typed_name), p_ip, left(p_user_agent, 1000), 'clickwrap', p_lang, r->>'body_html')
   returning id into v_id;
 
   update talent_applications
@@ -280,6 +373,8 @@ end $$;
 revoke all on function public.talent_accept_agreement(uuid, uuid, text, inet, text, text) from public, anon, authenticated;
 revoke all on function public.talent_decline_assignment(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.agreement_publish_version(text, text, text, text, text, uuid) from public, anon, authenticated;
+revoke all on function public.agreement_render(uuid, text) from public, anon, authenticated;
+grant execute on function public.agreement_render(uuid, text) to service_role;
 grant execute on function public.talent_accept_agreement(uuid, uuid, text, inet, text, text) to service_role;
 grant execute on function public.talent_decline_assignment(uuid, uuid) to service_role;
 grant execute on function public.agreement_publish_version(text, text, text, text, text, uuid) to service_role;
@@ -296,13 +391,12 @@ comment on function public.talent_offer_substitute(uuid, uuid, uuid, uuid, uuid,
 comment on function public.talent_confirm_substitute(uuid, uuid)         is 'DEPRECATED 2026-10: substitute flow not used by talent.20fit.id.';
 
 -- ---------------------------------------------------------------------
--- 7) Existing data — PENDING DECISION (see plan). Proposed: the 26 'assigned'
---    applications all belong to the finished ISS event (11–13 Sep 2026) and
---    already confirmed via the old Agree button → exempt them.
+-- 7) Existing data (decided): the finished ISS event (11–13 Sep 2026) is exempt.
+--    Its 26 'assigned' rows already confirmed via the old Agree button; no
+--    row is deleted or changed except this flag.
 -- ---------------------------------------------------------------------
 update public.talent_applications set agreement_required = false
- where status = 'assigned' and agreement_accepted_at is null
-   and event_id = '6da616eb-d0f1-4a73-a104-6c70f9b6229d';
+ where event_id = '6da616eb-d0f1-4a73-a104-6c70f9b6229d' and agreement_required;
 
 -- ---------------------------------------------------------------------
 -- 8) Seed: agreement v1 for Man Power (text from docs/clickwrap-talent.html)
@@ -314,7 +408,7 @@ select 'manpower', 1, 'Perjanjian Penugasan Talent', 'Talent Assignment Agreemen
 <h3>Pasal 1 — Ruang Lingkup Penugasan</h3>
 <ol>
 <li>Talent bertanggung jawab untuk melaksanakan tugas sesuai dengan posisi, tanggal, waktu, dan lokasi yang tercantum dalam rincian penugasan event.</li>
-<li>Pelaksanaan penugasan dibagi ke dalam 2 (dua) sesi, yaitu Sesi Pagi pukul 06.00&ndash;13.30 WIB dan Sesi Siang pukul 13.30&ndash;20.30 WIB. Talent wajib hadir sesuai dengan sesi dan jadwal kehadiran yang telah ditentukan serta diinformasikan oleh Penyelenggara melalui grup komunikasi yang digunakan untuk koordinasi event. Penugasan berakhir setelah seluruh rangkaian acara pada sesi tersebut selesai, termasuk kegiatan pembongkaran dan perapian area, kecuali terdapat ketentuan lain yang telah disepakati. Ketidakhadiran atau keterlambatan yang tidak sesuai dengan jadwal dan tanpa alasan yang dapat diterima dapat menjadi bahan evaluasi bagi Penyelenggara.</li>
+<li>Pelaksanaan penugasan dibagi ke dalam {{daftar_sesi}}. Talent wajib hadir sesuai dengan sesi dan jadwal kehadiran yang telah ditentukan serta diinformasikan oleh Penyelenggara melalui grup komunikasi yang digunakan untuk koordinasi event. Penugasan berakhir setelah seluruh rangkaian acara pada sesi tersebut selesai, termasuk kegiatan pembongkaran dan perapian area, kecuali terdapat ketentuan lain yang telah disepakati. Ketidakhadiran atau keterlambatan yang tidak sesuai dengan jadwal dan tanpa alasan yang dapat diterima dapat menjadi bahan evaluasi bagi Penyelenggara.</li>
 <li>Talent wajib tiba di lokasi event selambat-lambatnya 1 (satu) jam sebelum sesi penugasannya dimulai, untuk keperluan registrasi kehadiran, pengambilan atribut, dan pengarahan singkat dari koordinator. Keterlambatan dari ketentuan ini dapat menjadi bahan evaluasi bagi Penyelenggara.</li>
 <li>Talent yang telah ditempatkan pada sesi tertentu tidak diperkenankan mengajukan permohonan pemindahan jadwal, kecuali terdapat Talent lain pada posisi yang sama yang bersedia menukar sesi penugasannya. Pertukaran sesi tersebut wajib disepakati oleh kedua Talent yang bersangkutan dan dilaporkan kepada koordinator untuk mendapat persetujuan sebelum pelaksanaan event. Pertukaran yang dilakukan tanpa persetujuan koordinator dianggap sebagai ketidakhadiran.</li>
 <li>Penyelenggara berhak menyesuaikan atau memindahkan posisi Talent ke posisi lain dengan tingkat tanggung jawab yang setara apabila diperlukan berdasarkan kebutuhan dan kondisi di lapangan.</li>
