@@ -5057,7 +5057,8 @@ function sessionLabel(x, L) {
   const hm = (v) => String(v || '').slice(0, 5).replace(':', '.');
   const m = /^(\d{2}):(\d{2})/.exec(String(x.start_time || ''));
   const arr = m ? (() => { const mins = (Number(m[1]) * 60 + Number(m[2]) - 60 + 1440) % 1440; return String(Math.floor(mins / 60)).padStart(2, '0') + '.' + String(mins % 60).padStart(2, '0'); })() : '';
-  return ((L === 'en' && x.name_en) || x.name) + (x.session_date ? ' (' + fmtDay(x.session_date) + ')' : '') + ' · ' + hm(x.start_time) + '–' + hm(x.end_time) + (arr ? ' · ' + tr(L, 'cw.adm.arrive', { t: arr }) : '');
+  const load = x.quota ? ' · ' + (x.full ? tr(L, 'cw.adm.full', { n: x.filled, q: x.quota }) : tr(L, 'cw.adm.filled', { n: x.filled || 0, q: x.quota })) : '';
+  return ((L === 'en' && x.name_en) || x.name) + (x.session_date ? ' (' + fmtDay(x.session_date) + ')' : '') + ' · ' + hm(x.start_time) + '–' + hm(x.end_time) + (arr ? ' · ' + tr(L, 'cw.adm.arrive', { t: arr }) : '') + load;
 }
 function agreementTimeLeft(deadline, L) {
   const t = (k, v) => tr(L, k, v);
@@ -7834,7 +7835,7 @@ function adminEventAgreements({ staff, event, sessions, rows, templates, default
   const hm = (v) => String(v || '').slice(0, 5);
   const wibTime = (iso) => { const d = new Date(iso); if (isNaN(d.getTime())) return '—'; const w = new Date(d.getTime() + 7 * 3600000); const p = (n) => String(n).padStart(2, '0'); return `${p(w.getUTCDate())}/${p(w.getUTCMonth() + 1)}/${w.getUTCFullYear()} ${p(w.getUTCHours())}:${p(w.getUTCMinutes())} WIB`; };
   const flashMsg = { session: t('cw.adm.ok.session'), deleted: t('cw.adm.ok.deleted'), settings: t('cw.adm.ok.settings'), assigned: t('cw.adm.ok.assigned') }[flash];
-  const errMsg = { session: t('cw.adm.err.session'), inuse: t('cw.adm.err.inuse') }[err];
+  const errMsg = { session: t('cw.adm.err.session'), inuse: t('cw.adm.err.inuse'), full: t('cw.adm.err.full') }[err];
   const activeCats = new Set((templates || []).filter((x) => x.is_active).map((x) => x.talent_category));
   const noSession = rs.filter((r) => !r.session_id);
   // talents per session per position
@@ -7851,6 +7852,7 @@ function adminEventAgreements({ staff, event, sessions, rows, templates, default
       <label class="cw-l">${t('cw.adm.sDate')}<input type="date" name="session_date" value="${esc(x && x.session_date ? String(x.session_date).slice(0, 10) : '')}"></label>
       <label class="cw-l cw-s">${t('cw.adm.sStart')}<input type="time" name="start_time" required value="${esc(x ? hm(x.start_time) : '')}"></label>
       <label class="cw-l cw-s">${t('cw.adm.sEnd')}<input type="time" name="end_time" required value="${esc(x ? hm(x.end_time) : '')}"></label>
+      <label class="cw-l cw-s">${t('cw.adm.sQuota')}<input type="number" min="1" name="quota" value="${esc(x && x.quota ? x.quota : '')}" placeholder="∞" style="width:80px"></label>
       <label class="cw-l cw-s">${t('cw.adm.sOrder')}<input type="number" name="sort_order" value="${esc(x ? x.sort_order : sess.length + 1)}" style="width:70px"></label>
       <button class="btn btn-sm" type="submit">${x ? t('btn.save') : '+ ' + t('cw.adm.addSession')}</button>
       ${x ? `<button class="btn btn-ghost btn-sm" type="submit" name="action" value="delete" style="color:var(--red)" ${jsConfirm(t('cw.adm.delConfirm'))}>${t('cw.adm.delete')}</button>` : ''}
@@ -7861,7 +7863,15 @@ function adminEventAgreements({ staff, event, sessions, rows, templates, default
     const late = r.deadline && new Date(r.deadline).getTime() < Date.now();
     return `<span class="pill" style="background:${late ? 'var(--err-soft,#fdecec);color:var(--err,#b91c1c)' : '#fff4d6;color:#8a6100'}">${late ? '⚠️ ' + t('cw.adm.st.late') : '⏳ ' + t('cw.adm.st.waiting')}</span>${r.deadline ? ` <span class="muted" style="font-size:12px">${t('cw.adm.deadline')} ${esc(wibTime(r.deadline))}</span>` : ''}`;
   };
-  const sessOptions = (sel) => `<option value="">${esc(t('cw.adm.pickSession'))}</option>` + sess.map((x) => `<option value="${esc(x.id)}"${x.id === sel ? ' selected' : ''}>${esc(sessionLabel(x, L))}</option>`).join('');
+  const sessOptions = (sel) => `<option value="">${esc(t('cw.adm.pickSession'))}</option>` + sess.map((x) => `<option value="${esc(x.id)}"${x.id === sel ? ' selected' : ''}${x.full && x.id !== sel ? ' disabled' : ''}>${esc(sessionLabel(x, L))}</option>`).join('');
+  // Who is in each session (approved + assigned), so the coordinator sees the roster.
+  const roster = sess.concat([{ id: null, name: t('cw.adm.noSessionCol') }]).map((x) => {
+    const people = rs.filter((r) => (r.session_id || null) === x.id);
+    if (x.id === null && !people.length) return '';
+    const head = x.id ? `${esc((L === 'en' && x.name_en) || x.name)} <span class="muted" style="font-weight:600;font-size:12.5px">· ${hm(x.start_time).replace(':', '.')}–${hm(x.end_time).replace(':', '.')} · ${x.quota ? (x.full ? `<span style="color:var(--err,#b91c1c)">${esc(t('cw.adm.full', { n: x.filled, q: x.quota }))}</span>` : esc(t('cw.adm.filled', { n: x.filled || 0, q: x.quota }))) : esc(t('cw.adm.count', { n: people.length }))}</span>` : `<span style="color:var(--err,#b91c1c)">${esc(x.name)}</span> <span class="muted" style="font-size:12.5px">· ${people.length}</span>`;
+    const listHtml = people.length ? `<ol style="margin:6px 0 0;padding-left:20px;font-size:13.5px;line-height:1.7">${people.map((r) => `<li>${esc(r.name)} <span class="muted">· ${esc(r.position)}</span>${r.acceptance ? ' <span style="color:var(--ok,#17803d)">✓</span>' : ''}</li>`).join('')}</ol>` : `<p class="muted" style="font-size:13px;margin:6px 0 0">${t('cw.adm.empty')}</p>`;
+    return `<details class="cw-roster" style="border-top:1px solid var(--line);padding:10px 0"${people.length && people.length <= 40 ? ' open' : ''}><summary style="cursor:pointer;font-weight:700">${head}</summary>${listHtml}</details>`;
+  }).join('');
   const list = rs.length ? rs.map((r) => `<div class="card" style="margin-top:10px;padding:12px 14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
       <div style="min-width:0;flex:1 1 240px"><b>${esc(r.name)}</b> <span class="muted" style="font-size:12.5px">· ${esc(r.position)}</span>
         <div style="margin-top:4px">${status(r)}</div></div>
@@ -7875,7 +7885,7 @@ function adminEventAgreements({ staff, event, sessions, rows, templates, default
   const agreedN = rs.filter((r) => r.required && r.acceptance).length;
   const reqN = rs.filter((r) => r.required).length;
   const body = `<div class="wrap">
-    <style>.cw-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted);flex:1 1 140px;min-width:0}.cw-l input{width:100%;box-sizing:border-box}.cw-s{flex:0 1 110px}</style>
+    <style>.cw-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted);flex:1 1 140px;min-width:0;margin:0}.cw-l input{width:100%;box-sizing:border-box;height:44px;margin:0;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:var(--card);color:var(--ink);font:inherit;font-size:14px;font-weight:400}.cw-s{flex:0 1 130px}form .btn-sm{height:44px}</style>
     ${staffHead(staff, t('cw.adm.title'))}
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <p class="sub" style="margin:0">📁 ${esc(e.name)}</p>
@@ -7898,6 +7908,10 @@ function adminEventAgreements({ staff, event, sessions, rows, templates, default
         <button class="btn btn-sm" type="submit">${t('btn.save')}</button>
       </form>
       <p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('cw.adm.deadlineNote')}</p>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 4px;font-size:16px">${t('cw.adm.roster')}</h3>
+      ${roster || `<p class="muted" style="margin:0">${t('cw.adm.noTalents')}</p>`}
     </div>
     <div class="card" style="margin-top:14px">
       <h3 style="margin:0 0 8px;font-size:16px">${t('cw.adm.perSession')}</h3>
@@ -7947,7 +7961,7 @@ function adminAgreementTemplates({ staff, templates, cat, view, flash, err, lang
   return appLayout({ title: t('cw.adm.templates') + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
 }
 
-function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, sessions, sessionId, agreement, lang, mount }) {
+function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, sessions, sessionId, sessionErr, agreement, lang, mount }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const m = mount || {};
@@ -7970,7 +7984,9 @@ function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, 
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <form method="post" action="${appBase}/${esc(appId)}/final-accept" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
           ${(sessions || []).length ? `<label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);min-width:220px">${t('cw.adm.session')}
-            <select name="session_id" required><option value="">${esc(t('cw.adm.pickSession'))}</option>${sessions.map((x) => `<option value="${esc(x.id)}"${x.id === sessionId ? ' selected' : ''}>${esc(sessionLabel(x, L))}</option>`).join('')}</select></label>` : `<p class="muted" style="font-size:12.5px;margin:0;flex-basis:100%">⚠️ ${t('cw.adm.noSessions')}</p>`}
+            <select name="session_id" required><option value="">${esc(t('cw.adm.pickSession'))}</option>${sessions.map((x) => `<option value="${esc(x.id)}"${x.id === sessionId ? ' selected' : ''}${x.full && x.id !== sessionId ? ' disabled' : ''}>${esc(sessionLabel(x, L))}</option>`).join('')}</select></label>
+          ${sessionErr === 'full' ? `<p style="font-size:12.5px;margin:0;flex-basis:100%;color:var(--err,#b91c1c)">⚠️ ${t('cw.adm.err.full')}</p>` : ''}
+          ${sessions.every((x) => x.full && x.id !== sessionId) ? `<p style="font-size:12.5px;margin:0;flex-basis:100%;color:var(--err,#b91c1c)">⚠️ ${t('cw.adm.allFull')}</p>` : ''}` : `<p class="muted" style="font-size:12.5px;margin:0;flex-basis:100%">⚠️ ${t('cw.adm.noSessions')}</p>`}
           <input type="hidden" name="position_id" value="${esc(positionId)}">
           <input type="hidden" name="actor_name" value="${esc(actorName || '')}">
           <input type="hidden" name="confirmed" value="1">

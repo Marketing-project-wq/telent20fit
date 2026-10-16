@@ -1678,5 +1678,13 @@
   "cw.tpl.invalid": "Judul dan isi perjanjian wajib diisi.",
   "ev.status.regOpen": "Pendaftaran dibuka",
   "ev.status.regClosed": "Pendaftaran ditutup",
-  "ev.status.notStarted": "Akan datang"
+  "ev.status.notStarted": "Akan datang",
+  "cw.adm.filled": "{n}/{q} terisi",
+  "cw.adm.full": "PENUH {n}/{q}",
+  "cw.adm.count": "{n} talent",
+  "cw.adm.sQuota": "Kuota",
+  "cw.adm.err.full": "Sesi ini sudah penuh. Pilih sesi lain atau naikkan kuotanya di Sesi & Perjanjian.",
+  "cw.adm.allFull": "Semua sesi sudah penuh. Naikkan kuota sesi atau tambah sesi baru di Sesi & Perjanjian.",
+  "cw.adm.roster": "Daftar talent per sesi",
+  "cw.adm.empty": "Belum ada talent di sesi ini."
 }

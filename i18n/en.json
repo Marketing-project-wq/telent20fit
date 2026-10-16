@@ -1678,5 +1678,13 @@
   "cw.tpl.invalid": "Title and agreement text are required.",
   "ev.status.regOpen": "Registration open",
   "ev.status.regClosed": "Registration closed",
-  "ev.status.notStarted": "Upcoming"
+  "ev.status.notStarted": "Upcoming",
+  "cw.adm.filled": "{n}/{q} filled",
+  "cw.adm.full": "FULL {n}/{q}",
+  "cw.adm.count": "{n} talents",
+  "cw.adm.sQuota": "Quota",
+  "cw.adm.err.full": "This session is full. Choose another session or raise its quota under Sessions & Agreement.",
+  "cw.adm.allFull": "All sessions are full. Raise a session quota or add a session under Sessions & Agreement.",
+  "cw.adm.roster": "Talents per session",
+  "cw.adm.empty": "No talents in this session yet."
 }

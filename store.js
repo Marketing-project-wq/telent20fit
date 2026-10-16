@@ -692,12 +692,12 @@ function supabaseStore() {
       return data || [];
     },
     async addEventSession(eventId, row) {
-      const { error } = await sb.from('event_sessions').insert({ event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: row.start_time, end_time: row.end_time, sort_order: row.sort_order || 0 });
+      const { error } = await sb.from('event_sessions').insert({ event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: row.start_time, end_time: row.end_time, sort_order: row.sort_order || 0, quota: row.quota || null });
       if (error) throw new Error(error.message);
     },
     async updateEventSession(id, row) {
       const patch = {};
-      ['name', 'name_en', 'session_date', 'start_time', 'end_time', 'sort_order'].forEach((k) => { if (row[k] !== undefined) patch[k] = row[k] === '' ? null : row[k]; });
+      ['name', 'name_en', 'session_date', 'start_time', 'end_time', 'sort_order', 'quota'].forEach((k) => { if (row[k] !== undefined) patch[k] = row[k] === '' ? null : row[k]; });
       const { error } = await sb.from('event_sessions').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
     },
@@ -1415,8 +1415,8 @@ function memoryStore() {
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
     // ---- Assignment sessions + clickwrap agreement (memory mirror of the SQL functions) ----
     async listEventSessions(eventId) { return eventSessions.filter((x) => x.event_id === eventId).map((x) => ({ ...x })).sort((a, b) => (a.sort_order - b.sort_order) || String(a.start_time).localeCompare(String(b.start_time))); },
-    async addEventSession(eventId, row) { eventSessions.push({ id: 'ses-' + (++seq), event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: memTime(row.start_time), end_time: memTime(row.end_time), sort_order: Number(row.sort_order) || 0 }); },
-    async updateEventSession(id, row) { const x = eventSessions.find((y) => y.id === id); if (!x) return; ['name', 'name_en', 'session_date', 'sort_order'].forEach((k) => { if (row[k] !== undefined) x[k] = row[k] === '' ? null : row[k]; }); if (row.start_time !== undefined) x.start_time = memTime(row.start_time); if (row.end_time !== undefined) x.end_time = memTime(row.end_time); },
+    async addEventSession(eventId, row) { eventSessions.push({ id: 'ses-' + (++seq), event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: memTime(row.start_time), end_time: memTime(row.end_time), sort_order: Number(row.sort_order) || 0, quota: row.quota || null }); },
+    async updateEventSession(id, row) { const x = eventSessions.find((y) => y.id === id); if (!x) return; ['name', 'name_en', 'session_date', 'sort_order', 'quota'].forEach((k) => { if (row[k] !== undefined) x[k] = row[k] === '' ? null : row[k]; }); if (row.start_time !== undefined) x.start_time = memTime(row.start_time); if (row.end_time !== undefined) x.end_time = memTime(row.end_time); },
     async deleteEventSession(id) { const i = eventSessions.findIndex((y) => y.id === id); if (i >= 0) eventSessions.splice(i, 1); applications.forEach((a) => { if (a.session_id === id) a.session_id = null; }); },
     async setApplicationSession(appId, sessionId) { const a = applications.find((x) => x.id === appId); if (a) a.session_id = sessionId || null; },
     async renderAgreement(appId, lang) { return memRenderAgreement(appId, lang); },
