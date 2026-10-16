@@ -138,7 +138,7 @@ function teaserEvents(events) {
       if (ends && ends < today) status = 'past';
       else if (starts && starts > today) status = 'upcoming';
       else status = 'ongoing';
-      return { id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, status };
+      return { id: e.id, name: e.name, starts_at: e.starts_at, ends_at: e.ends_at, status, regOpen: eventRegOpen(e), soon: regNotYetOpen(e) };
     })
     .filter((e) => e.status !== 'past')
     .sort((a, b) => (rank[a.status] - rank[b.status]) || (String(a.starts_at || '') < String(b.starts_at || '') ? -1 : 1));
@@ -1517,7 +1517,7 @@ app.get('/acara/:id', requireTalentBrowse('kol'), async (req, res, next) => {
     const ev = allEvents.find((e) => e.id === req.params.id);
     if (!ev || !ev.is_active) return res.redirect('/acara?lang=' + req.lang);
     const myApplication = myApps.find((a) => a.event_id === ev.id) || null;
-    const event = await attachMockups(st, { ...ev, status: eventStatusOf(ev) });
+    const event = await attachMockups(st, { ...ev, status: eventStatusOf(ev), regOpen: eventRegOpen(ev), soon: regNotYetOpen(ev) });
     res.send(V.kolEventDetail({ account: req.account, event, cats: eventCats(ev), myApplication, lang: req.lang }));
   } catch (e) { next(e); }
 });

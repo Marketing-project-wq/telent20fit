@@ -1677,5 +1677,6 @@
   "cw.tpl.published": "New version published and active.",
   "cw.tpl.invalid": "Title and agreement text are required.",
   "ev.status.regOpen": "Registration open",
-  "ev.status.regClosed": "Registration closed"
+  "ev.status.regClosed": "Registration closed",
+  "ev.status.notStarted": "Upcoming"
 }
