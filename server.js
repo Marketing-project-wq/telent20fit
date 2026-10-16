@@ -1090,6 +1090,23 @@ async function setAssignmentDetails(st, app, sessionId) {
   }
   if (Object.keys(patch).length) await st.updateApplication(app.id, patch);
 }
+// Sessions of an event with their load: filled = approved + assigned talents
+// placed in the session; full = quota reached. A full session can't be chosen
+// for anyone new (Final Accept / change session); rejecting or declining a
+// talent frees the seat automatically (their status leaves approved/assigned).
+const SESSION_SEAT_STATUSES = ['approved', 'assigned'];
+async function sessionsWithLoad(st, eventId, apps) {
+  const [sessions, all] = await Promise.all([st.listEventSessions(eventId), apps ? Promise.resolve(apps) : st.listApplications()]);
+  return sessions.map((x) => {
+    const filled = all.filter((a) => a.event_id === eventId && a.session_id === x.id && SESSION_SEAT_STATUSES.includes(a.status)).length;
+    return Object.assign({}, x, { filled, full: !!x.quota && filled >= x.quota });
+  });
+}
+// True when putting `app` into session `sid` would exceed its quota.
+function sessionIsFullFor(sessions, sid, app) {
+  const x = (sessions || []).find((y) => y.id === sid);
+  return !!(x && x.full && app.session_id !== sid);
+}
 // Client IP as seen by the server (Railway proxy -> trust proxy -> req.ip). Never
 // taken from the request body. Strips the IPv4-mapped IPv6 prefix.
 function serverIp(req) {
@@ -3709,8 +3726,15 @@ app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next)
     try { const evp = await st.listEventPositions(found.ev.id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
     const mount = { appBase: '/eo/applicants', decisionUrl: '/eo/decision', active: 'talents' };
     if (!confirmed) {
-      const sessions = await st.listEventSessions(found.ev.id);
+      const sessions = await sessionsWithLoad(st, found.ev.id);
       return res.send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, sessions, sessionId: found.app.session_id || '', agreement: agreementRequired(found.app), lang: req.lang, mount }));
+    }
+    {
+      const sid = String(req.body.session_id || '');
+      const sessions = await sessionsWithLoad(st, found.ev.id);
+      if (sid && sessionIsFullFor(sessions, sid, found.app)) {
+        return res.status(409).send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, sessions, sessionId: '', sessionErr: 'full', agreement: agreementRequired(found.app), lang: req.lang, mount }));
+      }
     }
     const outcome = await acceptIntoPosition(st, found.app, positionId, req.staff.id, actor || null, { sessionId: req.body.session_id !== undefined ? String(req.body.session_id || '') || null : undefined });
     res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
@@ -4611,8 +4635,15 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
     let posName = '';
     try { const evp = await st.listEventPositions(app0.event_id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
     if (!confirmed) {
-      const sessions = await st.listEventSessions(app0.event_id);
+      const sessions = await sessionsWithLoad(st, app0.event_id);
       return res.send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, sessions, sessionId: app0.session_id || '', agreement: agreementRequired(app0), lang: req.lang }));
+    }
+    {
+      const sid = String(req.body.session_id || '');
+      const sessions = await sessionsWithLoad(st, app0.event_id);
+      if (sid && sessionIsFullFor(sessions, sid, app0)) {
+        return res.status(409).send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, sessions, sessionId: '', sessionErr: 'full', agreement: agreementRequired(app0), lang: req.lang }));
+      }
     }
     const outcome = await acceptIntoPosition(st, app0, positionId, req.staff.id, actor || null, { sessionId: req.body.session_id !== undefined ? String(req.body.session_id || '') || null : undefined });
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
@@ -5552,7 +5583,8 @@ function sessionFromBody(b) {
   const start = parseHHMM(b.start_time), end = parseHHMM(b.end_time);
   if (!name || !start || !end || end <= start) return null;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.session_date || '')) ? String(b.session_date) : null;
-  return { name, name_en: String(b.name_en || '').trim().slice(0, 80) || null, session_date: date, start_time: start, end_time: end, sort_order: parseInt(b.sort_order, 10) || 0 };
+  const q = parseInt(b.quota, 10);
+  return { name, name_en: String(b.name_en || '').trim().slice(0, 80) || null, session_date: date, start_time: start, end_time: end, sort_order: parseInt(b.sort_order, 10) || 0, quota: q >= 1 ? q : null };
 }
 // Strip active content from admin-authored agreement HTML (defence in depth —
 // only super admins can publish, but the text is shown to every talent).
@@ -5588,6 +5620,7 @@ app.get('/admin/events/:id/agreements', auth.requireStaff(['super_admin']), asyn
     const event = (await st.listEvents()).find((e) => e.id === req.params.id);
     if (!event) return res.redirect('/admin/manage');
     const data = await agreementEventData(st, event.id);
+    data.sessions = await sessionsWithLoad(st, event.id);
     const templates = await st.listAgreementTemplates();
     res.send(V.adminEventAgreements({ staff: staffCtx(req), event, sessions: data.sessions, rows: data.rows, templates, defaultHours: AGREEMENT_DEFAULT_HOURS, flash: String(req.query.ok || ''), err: String(req.query.err || ''), lang: req.lang }));
   } catch (e) { next(e); }
@@ -5637,7 +5670,8 @@ app.post('/admin/applications/:id/session', auth.requireStaff(['super_admin']), 
     const app0 = await st.getApplication(req.params.id);
     if (!app0) return res.redirect('/admin/manage');
     const sid = String(req.body.session_id || '');
-    const sessions = await st.listEventSessions(app0.event_id);
+    const sessions = await sessionsWithLoad(st, app0.event_id);
+    if (sid && sessionIsFullFor(sessions, sid, app0)) return res.redirect('/admin/events/' + encodeURIComponent(app0.event_id) + '/agreements?lang=' + req.lang + '&err=full');
     await st.setApplicationSession(app0.id, sessions.some((x) => x.id === sid) ? sid : null);
     res.redirect(safeNext(req.body.next) || ('/admin/events/' + encodeURIComponent(app0.event_id) + '/agreements?lang=' + req.lang + '&ok=assigned'));
   } catch (e) { next(e); }
