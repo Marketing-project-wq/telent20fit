@@ -7672,7 +7672,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     const list = (picker && picker.length)
       ? picker.map((p) => `<a href="${decisionUrl}?event=${esc(p.id)}&lang=${L}" class="card" style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;text-decoration:none;color:inherit;padding:14px 16px;align-items:center"><b>${esc(p.name)}</b><span class="pill pill-off">${t('mpr2.dm.proposedCount', { n: p.count })}</span></a>`).join('')
       : `<div class="card" style="margin-top:14px"><p class="muted" style="margin:0">${t('mpr2.dm.noProposalsAny')}</p></div>`;
-    const body = `<div class="wrap">${staffHead(staff, t('mpr2.dm.title'), L)}<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><p class="sub" style="margin:0">${t('mpr2.dm.pickEvent')}</p><a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>${list}</div>`;
+    const body = `<div class="wrap">${staffHead(staff, t('mpr2.dm.title'), L)}<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><p class="sub" style="margin:0">${t('mpr2.dm.pickEvent')}</p><a href="${backUrl}${backUrl.includes('?') ? '&' : '?'}lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>${list}</div>`;
     return appLayout({ title: t('mpr2.dm.title') + ' — 20FIT', body, role: (staff && staff.role) || 'super_admin', active: activeNav, user: staff && staff.name, lang: L });
   }
   const flashBanner = flash === 'accept' ? `<div class="card" style="margin-top:14px;border:1px solid var(--ok);background:var(--ok-soft);font-size:14px">✅ ${t('mpr2.dm.flashAccept')}</div>`
@@ -7758,7 +7758,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     ${staffHead(staff, t('mpr2.dm.title'), L)}
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <p class="sub" style="margin:0">📁 ${esc(event.name)}</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${appBase === '/admin/applications' ? `<a href="/admin/events/${esc(event.id)}/agreements?lang=${L}" class="btn btn-ghost btn-sm">📝 ${t('cw.adm.title')}</a>` : ''}<a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${appBase === '/admin/applications' ? `<a href="/admin/events/${esc(event.id)}/agreements?lang=${L}" class="btn btn-ghost btn-sm">📝 ${t('cw.adm.title')}</a>` : ''}<a href="${backUrl}${backUrl.includes('?') ? '&' : '?'}lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>
     </div>
     <div class="banner banner-warn" style="margin-top:12px;font-size:13px">⚠️ ${t('mpr2.dm.warn')}</div>
     ${flashBanner}

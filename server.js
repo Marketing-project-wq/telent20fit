@@ -3664,6 +3664,7 @@ app.get('/eo/decision', requireEo, async (req, res, next) => {
       return res.send(V.decisionMeeting({ staff: eoCtx(req), event: null, picker, groups: [], lang: req.lang, mount }));
     }
     if (!myEventIds.has(eventId)) return res.redirect('/eo/decision');
+    mount.backUrl = '/eo/talents?event=' + encodeURIComponent(eventId);
     const ev = eventById.get(eventId) || null;
     const evPositions = await st.listEventPositions(eventId).catch(() => []);
     const quotaByPos = new Map((evPositions || []).map((p) => [p.position_id, p.quota]));
@@ -4254,6 +4255,8 @@ app.get('/admin/applications', auth.requireStaff(['super_admin']), async (req, r
     // so a cross-category applicant shows in each relevant tab; older apps without
     // picks fall back to talent_type. Optional server-side search on name/email/phone.
     const cat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat)) ? String(req.query.cat) : 'man_power';
+    // Remember the last category tab so the Decision Meeting's back button returns here.
+    try { res.cookie('adm_cat', cat, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 86400 * 1000 }); } catch (_) { /* best-effort */ }
     const q = String(req.query.q || '').trim().toLowerCase().slice(0, 100);
     // One event at a time: no ?event → show the event picker; ?event=<id> → that
     // event's own dashboard (summary/filters/list all scoped to it), so events never mix.
@@ -4586,7 +4589,8 @@ app.get('/admin/applications/decision', auth.requireStaff(['super_admin']), asyn
       };
     }).sort((a, b) => b.entries.length - a.entries.length);
     addReviewedAndBackups(groups, { eventId, appById, proposalsAll, reviewMarks, choicesAll, posById, talentById, quotaByPos, acceptedCountByPos, acceptedByApp, logByApp });
-    res.send(V.decisionMeeting({ staff: staffCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || '') }));
+    const backCat = ['kol', 'creative', 'man_power'].includes(String(req.query.cat || (req.cookies && req.cookies.adm_cat))) ? String(req.query.cat || req.cookies.adm_cat) : 'man_power';
+    res.send(V.decisionMeeting({ staff: staffCtx(req), event: ev, picker: null, groups, lang: req.lang, flash: String(req.query.done || ''), mount: { backUrl: '/admin/applications?cat=' + encodeURIComponent(backCat) + '&event=' + encodeURIComponent(ev ? ev.id : eventId) } }));
   } catch (e) { next(e); }
 });
 
