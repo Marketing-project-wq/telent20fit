@@ -514,4 +514,51 @@ async function sendResultAnnouncementEmail({ to, name }) {
   return { delivered: true };
 }
 
-module.exports = { configured, sendResetEmail, sendVerifyEmail, sendReminderEmail, sendUnderReviewEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendResultAnnouncementEmail, underReviewEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, resultAnnouncementEmailHtml };
+// Clickwrap: copy of the accepted agreement, PDF attached (Resend attachments).
+function agreementCopyEmailHtml({ name, eventName, lang }) {
+  const en = lang === 'en';
+  const title = en ? 'Attendance Confirmed' : 'Kehadiran Terkonfirmasi';
+  const body = en
+    ? 'Thank you for accepting the Talent Assignment Agreement for <b>' + esc(eventName || 'the event') + '</b>. A PDF copy of the agreement and your acceptance record is attached to this email. The coordinator will share the briefing details.'
+    : 'Terima kasih telah menyetujui Perjanjian Penugasan Talent untuk <b>' + esc(eventName || 'event') + '</b>. Salinan perjanjian beserta data persetujuan Anda terlampir dalam bentuk PDF. Informasi briefing akan disampaikan koordinator.';
+  const link = APP_BASE + '/talent?lang=' + (en ? 'en' : 'id');
+  return `<!doctype html><html lang="${en ? 'en' : 'id'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+  <body style="margin:0;padding:0;background:#eef1f6;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#17171d">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f6"><tr><td align="center" style="padding:28px 14px">
+    <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e4e8ee;box-shadow:0 8px 26px rgba(20,24,40,.08)">
+      ${logoBar()}
+      <tr><td bgcolor="#178a54" style="background:#178a54;background:linear-gradient(135deg,#1fa866,#137a49);padding:30px;text-align:center">
+        <div style="font-size:21px;font-weight:800;color:#fffffe">✓ ${esc(title)}</div>
+      </td></tr>
+      <tr><td style="padding:28px 30px 6px">
+        <p style="margin:0 0 10px;font-size:17px;font-weight:800;color:#17171d">${en ? 'Hi' : 'Halo'} ${esc(name || '')},</p>
+        <p style="margin:0;font-size:14px;line-height:1.65;color:#4a4e57">${body}</p>
+      </td></tr>
+      <tr><td style="padding:22px 30px 28px;text-align:center">
+        <a href="${esc(link)}" style="display:inline-block;background:#E4121F;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 30px;border-radius:10px">${en ? 'Open 20FIT Talent' : 'Buka 20FIT Talent'}</a>
+      </td></tr>
+    </table>
+  </td></tr></table></body></html>`;
+}
+async function sendAgreementCopyEmail({ to, name, eventName, lang, pdf, filename }) {
+  const subject = lang === 'en' ? 'Your Talent Assignment Agreement — ' + (eventName || '20FIT') : 'Perjanjian Penugasan Talent — ' + (eventName || '20FIT');
+  if (!API_KEY || process.env.MAIL_MOCK === '1') {
+    console.log('[mail] email service not configured — agreement copy for ' + to);
+    return { delivered: false };
+  }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: FROM, to: [to], subject, html: agreementCopyEmailHtml({ name, eventName, lang }),
+      attachments: pdf ? [{ filename: filename || 'Perjanjian-20FIT.pdf', content: Buffer.from(pdf).toString('base64') }] : undefined }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401 || /invalid api key/i.test(body)) return { delivered: false, error: 'Invalid API key' };
+    throw new Error('Resend ' + res.status + ': ' + body.slice(0, 300));
+  }
+  return { delivered: true };
+}
+
+module.exports = { configured, sendResetEmail, sendVerifyEmail, sendReminderEmail, sendUnderReviewEmail, sendGroupInviteEmail, sendApplicationReceivedEmail, sendResultAnnouncementEmail, sendAgreementCopyEmail, agreementCopyEmailHtml, underReviewEmailHtml, groupInviteEmailHtml, applicationReceivedEmailHtml, resultAnnouncementEmailHtml };

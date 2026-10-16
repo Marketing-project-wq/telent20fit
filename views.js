@@ -4771,6 +4771,52 @@ function kolProofPage({ talent, events, proofs, assignments, errors, lang, setti
 }
 
 /** Talent's own profile (Data Diri) + earned certificates, in the app shell. */
+// Clickwrap modal + banner styles — extends the existing .rj-* pop-up and .cf-*
+// banner (same tokens), only adding what the agreement needs (scroll area, form).
+const AGREEMENT_CSS = `
+.cf-wrap{display:flex;flex-direction:column;gap:12px;margin:4px 0 20px}
+.cf-card{border:1.5px solid #178a54;border-radius:16px;padding:18px 20px;background:linear-gradient(135deg,rgba(23,138,84,.10),rgba(23,138,84,.03));box-shadow:0 6px 20px rgba(23,138,84,.10)}
+.cf-badge{display:inline-block;font:800 11px/1 Barlow,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#0f7a48;background:rgba(23,138,84,.14);border-radius:999px;padding:6px 12px}
+.cf-title{font:800 18px/1.25 Barlow,sans-serif;color:var(--ink);margin-top:10px}
+.cf-meta{font-size:13px;color:var(--muted);margin-top:6px}
+.cf-meta b{color:var(--ink)}
+.cf-sub{font-size:13px;line-height:1.55;color:var(--muted);margin-top:10px}
+.cf-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.cf-agree{background:#178a54;border-color:#178a54;color:#fff;font-weight:800}
+.cf-agree:hover{background:#0f7a48}
+.cf-decline{color:#b91c1c}
+@media(max-width:520px){.cf-actions form{flex:1}.cf-actions .btn{width:100%}}
+.rj-overlay{position:fixed;inset:0;z-index:400;background:rgba(10,12,20,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+.rj-overlay[hidden]{display:none}
+.rj-modal{position:relative;background:var(--panel);border-radius:20px;max-width:400px;width:100%;padding:32px 26px 26px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);border:1px solid var(--line)}
+.rj-close{position:absolute;top:10px;right:12px;background:none;border:0;font-size:26px;line-height:1;color:var(--muted);cursor:pointer;padding:2px 8px;border-radius:8px}
+.cw-modal{max-width:600px;text-align:left;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto;padding:26px 22px 20px}
+.cw-kicker{font-size:12.5px;font-weight:800;color:var(--red);letter-spacing:.02em}
+.cw-title{font:800 21px/1.25 Barlow,sans-serif;margin:4px 0 2px;color:var(--ink)}
+.cw-sub{font-size:13.5px;color:var(--muted);margin:0 0 10px}
+.cw-meta{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;font-size:13.5px;margin:0 0 14px;border-top:1px solid var(--line);padding-top:12px}
+.cw-meta dt{color:var(--muted)}.cw-meta dd{margin:0;font-weight:600;word-break:break-word}
+.cw-doc{border:1px solid var(--line);border-radius:10px;padding:14px 16px;max-height:300px;overflow-y:auto;font-size:13.5px;line-height:1.55;background:var(--card)}
+.cw-doc p,.cw-doc li{text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+.cw-doc p{margin:0 0 10px}.cw-doc ol,.cw-doc ul{margin:0 0 10px;padding-left:20px}.cw-doc li{margin-bottom:5px}
+.cw-doc h3{font-size:13.5px;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.4px;color:var(--red)}
+.cw-hint{font-size:12.5px;color:var(--muted);margin:8px 0 0}.cw-hint.ok{color:var(--ok,#17803d)}
+.cw-check{display:flex;gap:10px;align-items:flex-start;margin:14px 0 12px;cursor:pointer;font-size:14px;line-height:1.5}
+.cw-check input{margin-top:3px;width:18px;height:18px;accent-color:var(--red);flex:none}
+.cw-field{display:block;margin:0}.cw-field span{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px;font-weight:700}
+.cw-field input{width:100%;box-sizing:border-box}
+.cw-small{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+.cw-err{font-size:12.5px;color:var(--err,#b91c1c);margin:6px 0 0}
+.cw-actions{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+.cw-actions .btn{width:100%;justify-content:center;min-height:46px}
+.cw-submit[disabled]{opacity:.5;cursor:not-allowed}
+.cw-decline{margin:10px 0 0;text-align:center}
+.cw-decline-btn{background:none;border:0;color:var(--muted);text-decoration:underline;font-size:13px;cursor:pointer;padding:6px}
+.cw-banner .cf-card{margin-top:14px}
+.cw-done{display:flex;gap:12px;align-items:flex-start;margin-top:14px;border:1px solid #b6e3c5;background:#f1f8f4}
+.cw-done-tick{font-size:26px;line-height:1;color:var(--ok,#17803d)}
+@media(max-width:520px){.cw-modal{padding:22px 16px 16px;border-radius:16px}.cw-meta{grid-template-columns:100px 1fr}.cw-doc{max-height:42vh}}
+`;
 const PROFILE_CSS = `
 .tp-wrap{max-width:1120px}
 .tp-card-kicker{font:800 11px/1 Barlow,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -4941,7 +4987,8 @@ function applicationHistoryBlock(events, isCreator, L, opts = {}) {
 function confirmationBanner(events, lang) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
-  const pending = (events || []).filter((e) => e.status === 'approved' && e.appId);
+  // Legacy only: new events confirm through the clickwrap agreement instead.
+  const pending = (events || []).filter((e) => e.status === 'approved' && e.appId && e.agreementRequired === false);
   if (!pending.length) return '';
   const cards = pending.map((e) => {
     const posLbl = e.position ? posLabel(e.position, L) : (e.role || '');
@@ -4983,6 +5030,113 @@ function rejectionPopup(events, lang) {
       <button type="submit" name="next" value="/events?lang=${L}" class="btn rj-cta">${t('reject.cta')} →</button>
     </form>
   </div>`;
+}
+
+// Clickwrap agreement (replaces the old "confirm your spot" Agree button for new
+// events). One modal per pending agreement — every detail and the text itself
+// are rendered per application from the database, so several events close
+// together each get their own. Built on the existing .rj-overlay/.rj-modal
+// pop-up + .cf-* banner styles. The modal can be closed (never a screen lock):
+// a persistent banner then shows the event, the time left and a re-open button.
+// Rules copied from the reference: the checkbox + name field stay locked until
+// the text is scrolled to the end; the checkbox is never pre-ticked; the button
+// enables only when the typed name matches the account name (loose match — the
+// server re-checks everything inside one Postgres function).
+// "Sesi Pagi · 06.00–13.30 (tiba 05.00)" — admin pickers / lists.
+function sessionLabel(x, L) {
+  const hm = (v) => String(v || '').slice(0, 5).replace(':', '.');
+  const m = /^(\d{2}):(\d{2})/.exec(String(x.start_time || ''));
+  const arr = m ? (() => { const mins = (Number(m[1]) * 60 + Number(m[2]) - 60 + 1440) % 1440; return String(Math.floor(mins / 60)).padStart(2, '0') + '.' + String(mins % 60).padStart(2, '0'); })() : '';
+  return ((L === 'en' && x.name_en) || x.name) + (x.session_date ? ' (' + fmtDay(x.session_date) + ')' : '') + ' · ' + hm(x.start_time) + '–' + hm(x.end_time) + (arr ? ' · ' + tr(L, 'cw.adm.arrive', { t: arr }) : '');
+}
+function agreementTimeLeft(deadline, L) {
+  const t = (k, v) => tr(L, k, v);
+  if (!deadline) return '';
+  const ms = new Date(deadline).getTime() - Date.now();
+  if (!(ms > 0)) return t('cw.overdue');
+  const h = Math.floor(ms / 3600000);
+  return h >= 48 ? t('cw.leftDays', { n: Math.floor(h / 24) }) : (h >= 1 ? t('cw.leftHours', { n: h }) : t('cw.leftSoon'));
+}
+function agreementCenter({ agreements, open, err, agreed, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const list = agreements || [];
+  const okCard = agreed ? `<div class="card cw-done" role="status"><div class="cw-done-tick">✓</div><div><b>${t('cw.doneTitle')}</b><div class="muted" style="font-size:13px;margin-top:2px">${t('cw.doneBody')}</div>
+      <a href="/talent/agreement/${esc(agreed)}/pdf?lang=${L}" class="btn btn-ghost btn-sm" style="margin-top:8px">⬇ ${t('cw.download')}</a></div></div>` : '';
+  if (!list.length) return okCard ? `<style>${AGREEMENT_CSS}</style>${okCard}` : '';
+  const errMsg = (code) => ({ name_mismatch: t('cw.err.name'), no_check: t('cw.err.check'), bad_status: t('cw.err.status'), not_found: t('cw.err.status'), no_template: t('cw.err.template') })[code] || t('cw.err.generic');
+  const banner = `<div class="cw-banner" id="cwBanner">${list.map((a) => `<div class="cf-card cw-bcard">
+      <div class="cf-badge">📝 ${t('cw.bannerBadge')}</div>
+      <div class="cf-title">${esc(a.details.event || '—')}</div>
+      <div class="cf-meta">${esc(a.details.position || '')}${a.details.date ? ' · ' + esc(a.details.date) : ''}${a.deadline ? ' · <b>' + esc(agreementTimeLeft(a.deadline, L)) + '</b>' : ''}</div>
+      <div class="cf-actions"><button type="button" class="btn cf-agree" data-cw-open="${esc(a.appId)}">${t('cw.open')}</button></div>
+    </div>`).join('')}</div>`;
+  const row = (k, v, strong) => `<dt>${esc(k)}</dt><dd>${strong === false ? `<span class="muted">${esc(v || '—')}</span>` : esc(v || '—')}</dd>`;
+  const modals = list.map((a) => {
+    const d = a.details || {};
+    const tbd = (v) => v === 'Belum ditentukan' || v === 'To be determined';
+    const isErr = err && open === a.appId;
+    return `<div class="rj-overlay cw-overlay" id="cw-${esc(a.appId)}" data-cw="${esc(a.appId)}" hidden>
+    <div class="rj-modal cw-modal" role="dialog" aria-modal="true" aria-labelledby="cwT-${esc(a.appId)}">
+      <button type="button" class="rj-close" data-cw-close aria-label="${esc(t('cw.close'))}">&times;</button>
+      <div class="cw-kicker">🎉 ${t('cw.kicker')}</div>
+      <h2 class="cw-title" id="cwT-${esc(a.appId)}">${esc(a.title || t('cw.title'))}</h2>
+      <p class="cw-sub">${t('cw.sub')}</p>
+      <dl class="cw-meta">
+        ${row(t('cw.f.event'), d.event)}${row(t('cw.f.position'), d.position)}${row(t('cw.f.date'), d.date)}
+        ${row(t('cw.f.session'), d.session, !tbd(d.session))}${row(t('cw.f.hours'), d.hours, !tbd(d.hours))}${row(t('cw.f.arrival'), d.arrival, !tbd(d.arrival))}
+        ${row(t('cw.f.location'), d.location)}
+      </dl>
+      <div class="cw-doc" tabindex="0">${a.bodyHtml}</div>
+      <p class="cw-hint" data-cw-hint>↓ ${t('cw.scrollHint')}</p>
+      <form method="post" action="/talent/agreement/${esc(a.appId)}/accept?lang=${L}" class="cw-form" data-name="${esc(a.legalName || '')}">
+        <label class="cw-check"><input type="checkbox" name="agree" value="1" disabled data-cw-agree><span>${t('cw.checkLabel')}</span></label>
+        <label class="cw-field"><span>${t('cw.nameLabel')}</span>
+          <input type="text" name="typed_name" autocomplete="name" placeholder="${esc(t('cw.namePh'))}" disabled data-cw-name></label>
+        <p class="cw-small">${t('cw.nameHint')} <b>${esc(a.legalName || '—')}</b></p>
+        <p class="cw-err" data-cw-err${isErr ? '' : ' hidden'}>${isErr ? esc(errMsg(err)) : esc(t('cw.err.name'))}</p>
+        <div class="cw-actions">
+          <button type="submit" class="btn cw-submit" disabled data-cw-submit>${t('cw.submit')}</button>
+          <a class="btn btn-ghost" href="/talent/agreement/${esc(a.appId)}/pdf?lang=${L}">⬇ ${t('cw.download')}</a>
+        </div>
+      </form>
+      <form method="post" action="/talent/agreement/${esc(a.appId)}/decline?lang=${L}" class="cw-decline" ${jsConfirm(t('cw.declineConfirm'))}>
+        <button type="submit" class="cw-decline-btn">${t('cw.decline')}</button>
+      </form>
+    </div>
+  </div>`;
+  }).join('');
+  const script = `<script>(function(){
+  function norm(s){ return String(s||'').toLowerCase().replace(/[^\\p{L}\\p{N}\\s]/gu,'').replace(/\\s+/g,' ').trim(); }
+  var KEY='cw_closed_';
+  function closed(id){ try{return sessionStorage.getItem(KEY+id)==='1';}catch(e){return false;} }
+  function setClosed(id){ try{sessionStorage.setItem(KEY+id,'1');}catch(e){} }
+  function openM(id){ var m=document.getElementById('cw-'+id); if(!m) return; m.hidden=false; document.body.style.overflow='hidden'; arm(m); }
+  function closeM(m){ m.hidden=true; document.body.style.overflow=''; setClosed(m.getAttribute('data-cw')); }
+  function arm(m){
+    if(m._armed) return; m._armed=true;
+    var doc=m.querySelector('.cw-doc'), hint=m.querySelector('[data-cw-hint]'), agree=m.querySelector('[data-cw-agree]'), name=m.querySelector('[data-cw-name]'),
+        btn=m.querySelector('[data-cw-submit]'), err=m.querySelector('[data-cw-err]'), form=m.querySelector('.cw-form'), want=norm(form.getAttribute('data-name'));
+    function unlock(){ agree.disabled=false; name.disabled=false; hint.textContent=${JSON.stringify('✓ ' + t('cw.scrolled')).replace(/</g, '\\u003c')}; hint.classList.add('ok'); }
+    function onScroll(){ if(doc.scrollTop+doc.clientHeight>=doc.scrollHeight-24){ unlock(); doc.removeEventListener('scroll',onScroll); } }
+    doc.addEventListener('scroll',onScroll);
+    setTimeout(function(){ if(doc.scrollHeight<=doc.clientHeight+4) unlock(); },0);
+    function check(){ var v=norm(name.value), ok=!!v && v===want; if(err && !err.hasAttribute('data-server')) err.hidden=!(name.value.trim().length>3 && !ok); btn.disabled=!(agree.checked && ok); }
+    if(err && !err.hidden) err.setAttribute('data-server','1');
+    agree.addEventListener('change',check); name.addEventListener('input',function(){ if(err) err.removeAttribute('data-server'); check(); });
+    form.addEventListener('submit',function(e){ if(btn.disabled){ e.preventDefault(); return; } btn.disabled=true; });
+  }
+  [].forEach.call(document.querySelectorAll('.cw-overlay'),function(m){
+    m.querySelector('[data-cw-close]').addEventListener('click',function(){ closeM(m); });
+    m.addEventListener('click',function(e){ if(e.target===m) closeM(m); });
+  });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ [].forEach.call(document.querySelectorAll('.cw-overlay:not([hidden])'),closeM); } });
+  [].forEach.call(document.querySelectorAll('[data-cw-open]'),function(b){ b.addEventListener('click',function(){ openM(b.getAttribute('data-cw-open')); }); });
+  var want=${JSON.stringify(list.some((a) => a.appId === open) ? open : '').replace(/</g, '\\u003c')}, ids=${JSON.stringify(list.map((a) => a.appId)).replace(/</g, '\\u003c')};
+  var first=ids.indexOf(want)>=0 ? want : ids.filter(function(id){ return !closed(id); })[0];
+  if(first) openM(first);
+})();</script>`;
+  return `<style>${AGREEMENT_CSS}</style>${okCard}${banner}${modals}${script}`;
 }
 
 // Point 4: "Join Event Group" CTA for an assigned application. Shows the join
@@ -5027,7 +5181,7 @@ function assignedGroupBanner(events, lang) {
 // application tracker) + Certificates on the left, and Profile strength +
 // Personal details (collapsible) + My documents on the right. All values come
 // from the talent's real record — no fabricated ratings/skills.
-function kolProfilePage({ account, certs, events, stats, bankMissing, lang }) {
+function kolProfilePage({ account, certs, events, stats, bankMissing, agreements, agreementOpen, agreementErr, agreedId, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -5097,6 +5251,7 @@ function kolProfilePage({ account, certs, events, stats, bankMissing, lang }) {
   </div>
 
   ${confirmationBanner(events, L)}
+  ${agreementCenter({ agreements, open: agreementOpen, err: agreementErr, agreed: agreedId, lang: L })}
   ${bankMissing ? `<div class="card" style="margin-top:14px;border:1px solid #f1dca4;background:#fff8e6;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><b>💳 ${t('bank.bannerTitle')}</b><div class="muted" style="font-size:13px;margin-top:2px">${t('bank.bannerSub')}</div></div><a href="/talent/bank?lang=${L}" class="btn btn-sm">${t('bank.bannerBtn')}</a></div>` : ''}
   ${assignedGroupBanner(events, L)}
   ${rejectionPopup(events, L)}
@@ -5149,7 +5304,7 @@ function kolProfilePage({ account, certs, events, stats, bankMissing, lang }) {
 // Dedicated "My Applications" page for creator talents (bottom-nav item). The full
 // application history + status filter, moved out of the profile (which now shows a
 // 2-item summary + a link here). Reuses applicationHistoryBlock() so cards match.
-function talentApplicationsPage({ account, events, lang }) {
+function talentApplicationsPage({ account, events, agreements, agreementOpen, agreementErr, lang }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -5159,6 +5314,7 @@ function talentApplicationsPage({ account, events, lang }) {
   <div class="tp-sec-head" style="margin-top:4px"><h2>${t('ta.applications.title')}</h2></div>
   <p class="sub" style="margin:2px 0 14px">${t('ta.applications.sub')}</p>
   ${confirmationBanner(events, L)}
+  ${agreementCenter({ agreements, open: agreementOpen, err: agreementErr, lang: L })}
   ${applicationHistoryBlock(events, isCreator, L, { withFilter: true })}
 
   <div class="tp-morecta" style="margin-top:28px;border-radius:18px;padding:26px 28px;background:linear-gradient(135deg,var(--red),var(--red-hover));color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;box-shadow:0 14px 34px var(--red-soft)">
@@ -5533,7 +5689,7 @@ function mpAnswerLabel(val, lang) {
  * Man Power dashboard: "Event Baru Untukmu" (events opening MP slots the talent
  * hasn't applied to) + "Aplikasi Saya" (their applications with live status).
  */
-function mainPowerDashboard({ talent, account, openEvents, eoEvents, myApps, certs, lang, applied }) {
+function mainPowerDashboard({ talent, account, openEvents, eoEvents, myApps, certs, agreements, agreementOpen, agreementErr, lang, applied }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const acc = account || {};
@@ -5588,6 +5744,7 @@ function mainPowerDashboard({ talent, account, openEvents, eoEvents, myApps, cer
   <h1>${t('mp.dash.title')}</h1>
   <p class="sub">${t('mp.dash.greeting', { name: esc((talent && talent.name) || '') })}</p>
   ${applied ? `<div class="banner banner-ok">${t('mp.applied')}</div>` : ''}
+  ${agreementCenter({ agreements, open: agreementOpen, err: agreementErr, lang: L })}
 
   <a href="/dokumen?lang=${L}" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;text-decoration:none;color:inherit">
     <span style="min-width:0"><b>📄 ${t('doc.title')}</b><div class="muted" style="font-size:12.5px;margin-top:2px">${t('doc.manageHyrox')}</div></span>
@@ -6913,6 +7070,7 @@ function adminEventDetail({ staff, event, view, positionsMaster, flash, lang }) 
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a href="/admin/applications?lang=${L}" class="btn btn-ghost btn-sm">${t('adm.event.manageApps')} →</a>
       <a href="/admin/role-templates?lang=${L}" class="btn btn-ghost btn-sm">${t('tpl.manageLink')}</a>
+      <a href="/admin/events/${esc(e.id)}/agreements?lang=${L}" class="btn btn-ghost btn-sm">📝 ${t('cw.adm.title')}</a>
       <a href="/admin/events/${esc(e.id)}/payments?lang=${L}" class="btn btn-ghost btn-sm">💰 ${t('pay.title')}</a>
       <a href="/admin/events/${esc(e.id)}/edit?lang=${L}" class="btn btn-ghost btn-sm">✎ ${t('btn.edit')}</a>
     </div>
@@ -7600,7 +7758,7 @@ function decisionMeeting({ staff, event, picker, groups, lang, flash, mount }) {
     ${staffHead(staff, t('mpr2.dm.title'), L)}
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
       <p class="sub" style="margin:0">📁 ${esc(event.name)}</p>
-      <a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${appBase === '/admin/applications' ? `<a href="/admin/events/${esc(event.id)}/agreements?lang=${L}" class="btn btn-ghost btn-sm">📝 ${t('cw.adm.title')}</a>` : ''}<a href="${backUrl}?lang=${L}" class="btn btn-ghost btn-sm">← ${t('mpr2.dm.back')}</a></div>
     </div>
     <div class="banner banner-warn" style="margin-top:12px;font-size:13px">⚠️ ${t('mpr2.dm.warn')}</div>
     ${flashBanner}
@@ -7652,7 +7810,134 @@ function dmActorScript() {
 // LAPIS 2 — confirmation interstitial before a FINAL accept (irreversible: it
 // emails the talent). All reviewers share one login, so this summary makes the
 // operator confirm exactly who will be accepted + emailed before it happens.
-function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, lang, mount }) {
+// Super Admin: assignment sessions + clickwrap agreement status for one event.
+// Sessions (add/edit/delete), the agreement deadline, talents per session per
+// position (spots a session short of people), a warning for assigned/approved
+// talents without a session, and each talent's agreement state + proof PDF.
+function adminEventAgreements({ staff, event, sessions, rows, templates, defaultHours, flash, err, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const e = event || {};
+  const base = `/admin/events/${esc(e.id)}`;
+  const sess = sessions || [];
+  const rs = rows || [];
+  const hm = (v) => String(v || '').slice(0, 5);
+  const wibTime = (iso) => { const d = new Date(iso); if (isNaN(d.getTime())) return '—'; const w = new Date(d.getTime() + 7 * 3600000); const p = (n) => String(n).padStart(2, '0'); return `${p(w.getUTCDate())}/${p(w.getUTCMonth() + 1)}/${w.getUTCFullYear()} ${p(w.getUTCHours())}:${p(w.getUTCMinutes())} WIB`; };
+  const flashMsg = { session: t('cw.adm.ok.session'), deleted: t('cw.adm.ok.deleted'), settings: t('cw.adm.ok.settings'), assigned: t('cw.adm.ok.assigned') }[flash];
+  const errMsg = { session: t('cw.adm.err.session'), inuse: t('cw.adm.err.inuse') }[err];
+  const activeCats = new Set((templates || []).filter((x) => x.is_active).map((x) => x.talent_category));
+  const noSession = rs.filter((r) => !r.session_id);
+  // talents per session per position
+  const positions = [...new Set(rs.map((r) => r.position))];
+  const cols = sess.concat([{ id: null, name: t('cw.adm.noSessionCol') }]);
+  const count = (pos, sid) => rs.filter((r) => r.position === pos && (r.session_id || null) === sid).length;
+  const matrix = positions.length ? `<div style="overflow-x:auto"><table class="tbl" style="width:100%;font-size:13.5px;border-collapse:collapse">
+      <thead><tr><th style="text-align:left;padding:8px">${t('cw.adm.position')}</th>${cols.map((c) => `<th style="text-align:right;padding:8px">${esc(c.name)}</th>`).join('')}<th style="text-align:right;padding:8px">${t('cw.adm.total')}</th></tr></thead>
+      <tbody>${positions.map((pos) => `<tr style="border-top:1px solid var(--line)"><td style="padding:8px">${esc(pos)}</td>${cols.map((c) => { const n = count(pos, c.id); return `<td style="text-align:right;padding:8px;${c.id === null && n ? 'color:var(--err,#b91c1c);font-weight:700' : ''}">${n}</td>`; }).join('')}<td style="text-align:right;padding:8px;font-weight:700">${rs.filter((r) => r.position === pos).length}</td></tr>`).join('')}</tbody>
+    </table></div>` : `<p class="muted" style="margin:0">${t('cw.adm.noTalents')}</p>`;
+  const sessForm = (x) => `<form method="post" action="${base}/sessions${x ? '/' + esc(x.id) : ''}?lang=${L}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+      <label class="cw-l">${t('cw.adm.sName')}<input type="text" name="name" required maxlength="80" value="${esc(x ? x.name : '')}" placeholder="Sesi Pagi"></label>
+      <label class="cw-l">${t('cw.adm.sNameEn')}<input type="text" name="name_en" maxlength="80" value="${esc(x ? x.name_en || '' : '')}" placeholder="Morning Session"></label>
+      <label class="cw-l">${t('cw.adm.sDate')}<input type="date" name="session_date" value="${esc(x && x.session_date ? String(x.session_date).slice(0, 10) : '')}"></label>
+      <label class="cw-l cw-s">${t('cw.adm.sStart')}<input type="time" name="start_time" required value="${esc(x ? hm(x.start_time) : '')}"></label>
+      <label class="cw-l cw-s">${t('cw.adm.sEnd')}<input type="time" name="end_time" required value="${esc(x ? hm(x.end_time) : '')}"></label>
+      <label class="cw-l cw-s">${t('cw.adm.sOrder')}<input type="number" name="sort_order" value="${esc(x ? x.sort_order : sess.length + 1)}" style="width:70px"></label>
+      <button class="btn btn-sm" type="submit">${x ? t('btn.save') : '+ ' + t('cw.adm.addSession')}</button>
+      ${x ? `<button class="btn btn-ghost btn-sm" type="submit" name="action" value="delete" style="color:var(--red)" ${jsConfirm(t('cw.adm.delConfirm'))}>${t('cw.adm.delete')}</button>` : ''}
+    </form>`;
+  const status = (r) => {
+    if (!r.required) return `<span class="pill pill-off">${t('cw.adm.st.legacy')}</span>`;
+    if (r.acceptance) return `<span class="pill pill-ok">✓ ${t('cw.adm.st.agreed')}</span> <span class="muted" style="font-size:12px">${esc(wibTime(r.acceptance.accepted_at))} · v${esc(r.acceptance.template_version)}</span>`;
+    const late = r.deadline && new Date(r.deadline).getTime() < Date.now();
+    return `<span class="pill" style="background:${late ? 'var(--err-soft,#fdecec);color:var(--err,#b91c1c)' : '#fff4d6;color:#8a6100'}">${late ? '⚠️ ' + t('cw.adm.st.late') : '⏳ ' + t('cw.adm.st.waiting')}</span>${r.deadline ? ` <span class="muted" style="font-size:12px">${t('cw.adm.deadline')} ${esc(wibTime(r.deadline))}</span>` : ''}`;
+  };
+  const sessOptions = (sel) => `<option value="">${esc(t('cw.adm.pickSession'))}</option>` + sess.map((x) => `<option value="${esc(x.id)}"${x.id === sel ? ' selected' : ''}>${esc(sessionLabel(x, L))}</option>`).join('');
+  const list = rs.length ? rs.map((r) => `<div class="card" style="margin-top:10px;padding:12px 14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <div style="min-width:0;flex:1 1 240px"><b>${esc(r.name)}</b> <span class="muted" style="font-size:12.5px">· ${esc(r.position)}</span>
+        <div style="margin-top:4px">${status(r)}</div></div>
+      <form method="post" action="/admin/applications/${esc(r.id)}/session?lang=${L}" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="next" value="${base}/agreements?lang=${L}&ok=assigned">
+        <select name="session_id" style="min-width:200px${r.session_id ? '' : ';border-color:var(--err,#b91c1c)'}">${sessOptions(r.session_id)}</select>
+        <button class="btn btn-ghost btn-sm" type="submit">${t('btn.save')}</button>
+      </form>
+      ${r.required ? `<a class="btn btn-ghost btn-sm" href="/admin/agreements/${esc(r.id)}/pdf?lang=${L}" target="_blank" rel="noopener">⬇ ${r.acceptance ? t('cw.adm.proof') : t('cw.adm.preview')}</a>` : ''}
+    </div>`).join('') : `<div class="card" style="margin-top:10px"><p class="muted" style="margin:0">${t('cw.adm.noTalents')}</p></div>`;
+  const agreedN = rs.filter((r) => r.required && r.acceptance).length;
+  const reqN = rs.filter((r) => r.required).length;
+  const body = `<div class="wrap">
+    <style>.cw-l{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted);flex:1 1 140px;min-width:0}.cw-l input{width:100%;box-sizing:border-box}.cw-s{flex:0 1 110px}</style>
+    ${staffHead(staff, t('cw.adm.title'))}
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px">
+      <p class="sub" style="margin:0">📁 ${esc(e.name)}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a href="/admin/agreement-templates?lang=${L}" class="btn btn-ghost btn-sm">📄 ${t('cw.adm.templates')}</a><a href="${base}?lang=${L}" class="btn btn-ghost btn-sm">${t('common.back')}</a></div>
+    </div>
+    ${flashMsg ? `<div class="banner banner-ok" style="margin-top:12px">${esc(flashMsg)}</div>` : ''}
+    ${errMsg ? `<div class="banner banner-warn" style="margin-top:12px">${esc(errMsg)}</div>` : ''}
+    ${noSession.length ? `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('cw.adm.warnNoSession', { n: noSession.length })}</div>` : ''}
+    ${!activeCats.has('manpower') ? `<div class="banner banner-warn" style="margin-top:12px">⚠️ ${t('cw.adm.warnNoTemplate')}</div>` : ''}
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 4px;font-size:16px">${t('cw.adm.sessions')}</h3>
+      <p class="muted" style="font-size:13px;margin:0">${t('cw.adm.sessionsHint')}</p>
+      ${sess.map(sessForm).join('')}
+      <div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:2px">${sessForm(null)}</div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 8px;font-size:16px">${t('cw.adm.settings')}</h3>
+      <form method="post" action="${base}/agreement-settings?lang=${L}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <label class="cw-l" style="flex:0 1 260px">${t('cw.adm.deadlineHours', { n: defaultHours })}<input type="number" min="1" max="720" name="agreement_deadline_hours" value="${esc(e.agreement_deadline_hours || '')}" placeholder="${esc(defaultHours)}"></label>
+        <button class="btn btn-sm" type="submit">${t('btn.save')}</button>
+      </form>
+      <p class="muted" style="font-size:12.5px;margin:8px 0 0">${t('cw.adm.deadlineNote')}</p>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 8px;font-size:16px">${t('cw.adm.perSession')}</h3>
+      ${matrix}
+    </div>
+    <h3 style="margin:20px 0 4px;font-size:16px">${t('cw.adm.talents')} <span class="muted" style="font-weight:600;font-size:13px">· ${t('cw.adm.agreedCount', { n: agreedN, total: reqN })}</span></h3>
+    ${list}
+  </div>`;
+  return appLayout({ title: t('cw.adm.title') + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
+// Super Admin: agreement templates per talent category, append-only versions.
+function adminAgreementTemplates({ staff, templates, cat, view, flash, err, lang }) {
+  const L = normLang(lang);
+  const t = (k, v) => tr(L, k, v);
+  const all = templates || [];
+  const cats = ['manpower', 'kol', 'photographer'];
+  const mine = all.filter((x) => x.talent_category === cat).sort((a, b) => b.version - a.version);
+  const active = mine.find((x) => x.is_active) || null;
+  const shown = mine.find((x) => x.id === view) || null;
+  const fmtW = (iso) => { const d = new Date(iso); if (isNaN(d.getTime())) return '—'; const w = new Date(d.getTime() + 7 * 3600000); const p = (n) => String(n).padStart(2, '0'); return `${p(w.getUTCDate())}/${p(w.getUTCMonth() + 1)}/${w.getUTCFullYear()} ${p(w.getUTCHours())}:${p(w.getUTCMinutes())} WIB`; };
+  const tabs = cats.map((c) => `<a href="/admin/agreement-templates?lang=${L}&cat=${c}" class="ev-chip${c === cat ? ' is-on' : ''}" style="text-decoration:none">${esc(t('cat.' + c))}</a>`).join('');
+  const history = mine.length ? mine.map((x) => `<div style="display:flex;gap:10px;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap">
+      <div><b>v${esc(x.version)}</b> · ${esc(x.title)} ${x.is_active ? `<span class="pill pill-ok">${t('cw.tpl.active')}</span>` : ''}<div class="muted" style="font-size:12px">${esc(fmtW(x.published_at))}</div></div>
+      <a class="btn btn-ghost btn-sm" href="/admin/agreement-templates?lang=${L}&cat=${cat}&view=${esc(x.id)}">${t('cw.tpl.view')}</a></div>`).join('') : `<p class="muted" style="margin:0">${t('cw.tpl.none')}</p>`;
+  const body = `<div class="wrap">
+    ${staffHead(staff, t('cw.adm.templates'))}
+    <p class="sub" style="margin:6px 0 0">${t('cw.tpl.intro')}</p>
+    ${flash === 'published' ? `<div class="banner banner-ok" style="margin-top:12px">${t('cw.tpl.published')}</div>` : ''}
+    ${err ? `<div class="banner banner-warn" style="margin-top:12px">${t('cw.tpl.invalid')}</div>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${tabs}</div>
+    <div class="card" style="margin-top:14px"><h3 style="margin:0 0 6px;font-size:16px">${t('cw.tpl.history')}</h3>${history}</div>
+    ${shown ? `<div class="card" style="margin-top:14px"><h3 style="margin:0 0 6px;font-size:16px">v${esc(shown.version)} · ${esc(shown.title)}</h3><div class="cw-doc" style="max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:13.5px">${shown.body_html}</div>${shown.body_en_html ? `<h4 style="margin:14px 0 6px">EN</h4><div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:13.5px">${shown.body_en_html}</div>` : ''}</div>` : ''}
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin:0 0 4px;font-size:16px">${t('cw.tpl.newVersion', { n: (mine[0] ? mine[0].version : 0) + 1 })}</h3>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">${t('cw.tpl.placeholders')} <code>{{nama_event}} {{tanggal_event}} {{lokasi}} {{posisi}} {{sesi}} {{jam_bertugas}} {{jam_tiba}} {{daftar_sesi}} {{nama_talent}}</code></p>
+      <form method="post" action="/admin/agreement-templates?lang=${L}" ${jsConfirm(t('cw.tpl.publishConfirm'))}>
+        <input type="hidden" name="cat" value="${esc(cat)}">
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--muted)">${t('cw.tpl.titleId')}<input type="text" name="title" required maxlength="200" value="${esc(active ? active.title : 'Perjanjian Penugasan Talent')}" style="width:100%;box-sizing:border-box;margin-top:4px"></label>
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-top:10px">${t('cw.tpl.titleEn')}<input type="text" name="title_en" maxlength="200" value="${esc(active ? active.title_en || '' : '')}" style="width:100%;box-sizing:border-box;margin-top:4px"></label>
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-top:10px">${t('cw.tpl.bodyId')}<textarea name="body_html" required rows="16" style="width:100%;box-sizing:border-box;margin-top:4px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">${esc(active ? active.body_html : '')}</textarea></label>
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--muted);margin-top:10px">${t('cw.tpl.bodyEn')}<textarea name="body_en_html" rows="8" style="width:100%;box-sizing:border-box;margin-top:4px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">${esc(active ? active.body_en_html || '' : '')}</textarea></label>
+        <button class="btn" type="submit" style="margin-top:12px">${t('cw.tpl.publish')}</button>
+      </form>
+    </div>
+  </div>`;
+  return appLayout({ title: t('cw.adm.templates') + ' — 20FIT', body, role: 'super_admin', active: 'manage', user: staff && staff.name, lang: L });
+}
+
+function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, eventId, positionId, positionName, actorName, sessions, sessionId, agreement, lang, mount }) {
   const L = normLang(lang);
   const t = (k, v) => tr(L, k, v);
   const m = mount || {};
@@ -7671,9 +7956,11 @@ function finalAcceptConfirm({ staff, appId, talentName, talentLogin, eventName, 
         <div>✉️ ${t('mpr2.cf.email')}: <b>${esc(talentLogin || '—')}</b></div>
         ${actorName ? `<div>🖊️ ${t('mpr2.cf.actor')}: <b>${esc(actorName)}</b></div>` : ''}
       </div>
-      <p class="muted" style="font-size:13px;margin:14px 0 16px">${t('mpr2.cf.note', { hours: CONFIRM_WINDOW_HOURS })}</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <form method="post" action="${appBase}/${esc(appId)}/final-accept">
+      <p class="muted" style="font-size:13px;margin:14px 0 16px">${agreement === false ? t('mpr2.cf.note', { hours: CONFIRM_WINDOW_HOURS }) : t('cw.adm.cfNote')}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <form method="post" action="${appBase}/${esc(appId)}/final-accept" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          ${(sessions || []).length ? `<label style="display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);min-width:220px">${t('cw.adm.session')}
+            <select name="session_id" required><option value="">${esc(t('cw.adm.pickSession'))}</option>${sessions.map((x) => `<option value="${esc(x.id)}"${x.id === sessionId ? ' selected' : ''}>${esc(sessionLabel(x, L))}</option>`).join('')}</select></label>` : `<p class="muted" style="font-size:12.5px;margin:0;flex-basis:100%">⚠️ ${t('cw.adm.noSessions')}</p>`}
           <input type="hidden" name="position_id" value="${esc(positionId)}">
           <input type="hidden" name="actor_name" value="${esc(actorName || '')}">
           <input type="hidden" name="confirmed" value="1">
@@ -8390,6 +8677,8 @@ function adminTalentCategories({ staff, lang, ready, counts, cat, q, page, pages
 module.exports = {
   adminTalentCategories,
   CONFIRM_WINDOW_HOURS,
+  adminEventAgreements,
+  adminAgreementTemplates,
   talentStatusBadge, talentOpenEvents, talentEventApply,
   esc, fmtDate, landingPage, joinEventSection, aboutPage, talentPicker, kolForm, kolSuccess, kolProofPage, kolProfilePage, talentApplicationsPage, kolEventsPage,
   kolEventDetail, kolApplyForm, kolApplyDone, certVerifyPage, CAT_LABEL, CAT_FIELDS, CREATOR_ROLES, TALENT_CATEGORIES, positionCategory, REVIEW_CAT, hasCreatorDocs,
