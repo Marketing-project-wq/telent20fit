@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perjanjian Penugasan Talent — 20FIT</title>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#ffffff; --card:#ffffff; --text:#14161a; --muted:#6b7280;
+    --line:#e3e5e9; --accent:#e11b22; --accent-weak:#fdeaea; --ok:#0f7b3f; --ok-weak:#f1f8f4;
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *,*::before,*::after{box-sizing:inherit}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{
+    margin:0; background:#ffffff; color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; font-size:15px;
+  }
+  .wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+  .brand{display:flex;align-items:center;gap:8px;margin-bottom:18px}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+  .brand b{letter-spacing:.5px}
+  .demo-note{
+    background:var(--accent-weak);border:1px solid var(--accent);border-radius:10px;
+    padding:10px 12px;font-size:13px;margin-bottom:16px;color:var(--text)
+  }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 16px;margin-bottom:14px}
+  h1{font-size:21px;margin:0 0 4px;line-height:1.25}
+  h2{font-size:15px;margin:18px 0 6px}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+  .meta{display:grid;grid-template-columns:118px 1fr;gap:6px 10px;font-size:13.5px;margin:12px 0 0;
+        border-top:1px solid var(--line);padding-top:12px}
+  .meta dt{color:var(--muted)}
+  .meta dd{margin:0;font-weight:600}
+  .doc{
+    border:1px solid var(--line);border-radius:10px;padding:16px;
+    max-height:300px;overflow-y:auto;font-size:13.5px;background:#ffffff
+  }
+  .doc p, .doc li{text-align:justify;text-justify:inter-word;hyphens:auto;-webkit-hyphens:auto}
+  .doc p{margin:0 0 10px}
+  .doc ol{margin:0 0 10px;padding-left:20px}
+  .doc li{margin-bottom:5px}
+  .doc h3{font-size:13.5px;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.4px;color:var(--accent)}
+  .scrollhint{font-size:12.5px;color:var(--muted);margin:8px 0 0;display:flex;align-items:center;gap:6px}
+  label.check{display:flex;gap:10px;align-items:flex-start;margin:16px 0 14px;cursor:pointer;font-size:14px}
+  label.check input{margin-top:3px;width:18px;height:18px;accent-color:var(--accent);flex:none}
+  .field label{display:block;font-size:12.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:6px}
+  .field input[type=text]{
+    width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;font-size:15px;
+    background:var(--card);color:var(--text)
+  }
+  .field input:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .hint{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+  .err{font-size:12.5px;color:var(--accent);margin:6px 0 0;display:none}
+  .actions{display:flex;flex-direction:column;gap:9px;margin-top:18px}
+  button{font:inherit;font-weight:700;border-radius:10px;min-height:48px;cursor:pointer;border:1px solid transparent}
+  .primary{background:var(--accent);color:#fff}
+  .primary:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+  .ghost{background:transparent;color:var(--text);border-color:var(--line);font-weight:600}
+  .danger-link{background:none;border:none;color:var(--muted);text-decoration:underline;min-height:0;font-weight:500;font-size:13px;padding:4px}
+  .done{background:var(--ok-weak);border:1px solid var(--ok);border-radius:12px;padding:16px;text-align:center}
+  .done .tick{font-size:30px;line-height:1}
+  .done h2{margin:6px 0 4px;font-size:18px;color:var(--ok)}
+  .record{font-size:12.5px;color:var(--muted);text-align:left;margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .record div{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+  .record span:last-child{font-weight:600;color:var(--text);text-align:right;word-break:break-all}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- STATE 1 -->
+  <div id="form">
+    <div class="card">
+      <h1>Selamat, Anda diterima</h1>
+      <p class="sub">Silakan baca perjanjian berikut, kemudian konfirmasikan kesediaan Anda.</p>
+      <dl class="meta">
+        <dt>Event</dt><dd>Livin' by Mandiri | VISA × Jakarta Hybrid Race</dd>
+        <dt>Posisi</dt><dd>Crew Water Station</dd>
+        <dt>Tanggal</dt><dd>7 Desember 2026</dd>
+        <dt>Jam bertugas</dt><dd>06.00 – 20.30 WIB</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Perjanjian Penugasan Talent</h2>
+
+      <div class="doc" id="doc">
+        <p>Perjanjian ini merupakan kesepakatan antara <b>20FIT</b>, selanjutnya disebut sebagai Penyelenggara, dan individu yang menerima penugasan untuk terlibat dalam event yang diselenggarakan atau dikelola oleh 20FIT, selanjutnya disebut sebagai Talent. Perjanjian ini dibuat untuk mengatur ketentuan kerja sama antara Penyelenggara dan Talent, termasuk tugas, tanggung jawab, jadwal, lokasi, serta posisi Talent sebagaimana tercantum dalam detail event.</p>
+        <p>Dengan menyetujui perjanjian ini, Talent menyatakan bahwa dirinya telah membaca, memahami, dan bersedia mematuhi seluruh ketentuan yang berlaku selama pelaksanaan event. Talent juga bersedia menjalankan tugas sesuai dengan posisi dan arahan yang diberikan oleh Penyelenggara, menjaga sikap profesional, serta bertanggung jawab atas tugas yang telah disepakati agar pelaksanaan event dapat berjalan dengan tertib dan lancar.</p>
+
+        <h3>Pasal 1 — Ruang Lingkup Penugasan</h3>
+          <ol>
+          <li>Talent bertanggung jawab untuk melaksanakan tugas sesuai dengan posisi, tanggal, waktu, dan lokasi yang tercantum dalam rincian penugasan event.</li>
+          <li>Pelaksanaan penugasan dibagi ke dalam 2 (dua) sesi, yaitu Sesi Pagi pukul 06.00&ndash;13.30 WIB dan Sesi Siang pukul 13.30&ndash;20.30 WIB. Talent wajib hadir sesuai dengan sesi dan jadwal kehadiran yang telah ditentukan serta diinformasikan oleh Penyelenggara melalui grup komunikasi yang digunakan untuk koordinasi event. Penugasan berakhir setelah seluruh rangkaian acara pada sesi tersebut selesai, termasuk kegiatan pembongkaran dan perapian area, kecuali terdapat ketentuan lain yang telah disepakati. Ketidakhadiran atau keterlambatan yang tidak sesuai dengan jadwal dan tanpa alasan yang dapat diterima dapat menjadi bahan evaluasi bagi Penyelenggara.</li>
+          <li>Talent wajib tiba di lokasi event selambat-lambatnya 1 (satu) jam sebelum sesi penugasannya dimulai, untuk keperluan registrasi kehadiran, pengambilan atribut, dan pengarahan singkat dari koordinator. Keterlambatan dari ketentuan ini dapat menjadi bahan evaluasi bagi Penyelenggara.</li>
+          <li>Talent yang telah ditempatkan pada sesi tertentu tidak diperkenankan mengajukan permohonan pemindahan jadwal, kecuali terdapat Talent lain pada posisi yang sama yang bersedia menukar sesi penugasannya. Pertukaran sesi tersebut wajib disepakati oleh kedua Talent yang bersangkutan dan dilaporkan kepada koordinator untuk mendapat persetujuan sebelum pelaksanaan event. Pertukaran yang dilakukan tanpa persetujuan koordinator dianggap sebagai ketidakhadiran.</li>
+          <li>Penyelenggara berhak menyesuaikan atau memindahkan posisi Talent ke posisi lain dengan tingkat tanggung jawab yang setara apabila diperlukan berdasarkan kebutuhan dan kondisi di lapangan.</li>
+          <li>Talent wajib mengikuti briefing yang dijadwalkan oleh Penyelenggara untuk memahami alur acara, pembagian tugas, serta arahan teknis sebelum bertugas. Ketidakhadiran tanpa alasan yang dapat diterima dapat mengakibatkan pembatalan penugasan.</li>
+          </ol>
+        <h3>Pasal 2 — Kehadiran dan Pembatalan</h3>
+          <ol>
+          <li>Dengan menyetujui perjanjian ini, Talent menyatakan kesediaan dan kesanggupannya untuk hadir serta melaksanakan tugas sesuai dengan tanggal, waktu, dan lokasi penugasan yang telah disepakati.</li>
+          <li>Apabila Talent berhalangan hadir, Talent wajib menyampaikan pemberitahuan kepada koordinator yang bertanggung jawab selambat-lambatnya 1 (satu) hari sebelum pelaksanaan event.</li>
+          <li>Apabila terjadi keadaan darurat yang menyebabkan Talent tidak dapat hadir, Talent wajib segera menginformasikan kondisi tersebut kepada koordinator disertai penjelasan yang sesuai.</li>
+          <li>Ketidakhadiran tanpa pemberitahuan atau pembatalan secara sepihak dapat dicatat dalam riwayat penugasan Talent dan menjadi bahan pertimbangan dalam proses seleksi untuk penugasan berikutnya.</li>
+          </ol>
+        <h3>Pasal 3 — Pelaksanaan Tugas</h3>
+          <ol>
+          <li>Talent wajib mengenakan seragam, tanda pengenal, gelang akses, atau atribut lain yang ditentukan oleh Penyelenggara selama bertugas, serta mengembalikan perlengkapan yang dipinjamkan setelah penugasan selesai.</li>
+          <li>Talent wajib menjalankan tugas sesuai dengan deskripsi pekerjaan, arahan koordinator, dan prosedur operasional yang berlaku di lokasi event, termasuk mematuhi ketentuan keselamatan dan keamanan.</li>
+          <li>Talent tidak diperkenankan meninggalkan pos atau area penugasan selama jam kerja tanpa izin dari koordinator, kecuali dalam keadaan darurat.</li>
+          <li>Talent dilarang mengonsumsi minuman beralkohol atau menggunakan obat-obatan terlarang selama menjalankan tugas maupun berada dalam kondisi yang dapat mengganggu pelaksanaan pekerjaan.</li>
+          <li>Talent wajib menjaga sikap profesional, berkomunikasi dengan sopan, serta menghormati peserta, sesama Talent, panitia, dan seluruh pihak yang terlibat dalam event.</li>
+          </ol>
+        <h3>Pasal 4 — Pembayaran</h3>
+          <ol>
+          <li>Besaran pembayaran untuk Talent mengikuti nominal dan ketentuan yang tercantum pada rincian penugasan atau kesepakatan yang telah disetujui oleh kedua belah pihak. Pembayaran dilakukan melalui transfer ke rekening bank atas nama Talent sendiri, kecuali disepakati lain secara tertulis.</li>
+          <li>Talent bertanggung jawab untuk memastikan bahwa data rekening yang diberikan kepada Penyelenggara benar, lengkap, dan masih aktif. Apabila terjadi keterlambatan pembayaran akibat kesalahan data rekening yang diberikan oleh Talent, proses pembayaran dapat ditunda sampai data yang benar diterima.</li>
+          <li>Pembayaran dilakukan sesuai dengan jadwal dan ketentuan yang telah diinformasikan oleh Penyelenggara.</li>
+          <li>Talent yang tidak hadir tanpa alasan yang dapat diterima atau meninggalkan penugasan sebelum waktunya tanpa persetujuan koordinator dapat dikenai penyesuaian atau pembatalan pembayaran sesuai dengan ketentuan yang telah disepakati oleh kedua belah pihak.</li>
+          </ol>
+        <h3>Pasal 5 — Dokumentasi dan Penggunaan Materi</h3>
+          <ol>
+          <li>Talent memahami bahwa selama pelaksanaan event, Penyelenggara atau pihak yang ditunjuk dapat mengambil foto dan video yang menampilkan Talent untuk keperluan dokumentasi kegiatan.</li>
+          <li>Penggunaan foto dan video Talent untuk keperluan publikasi, promosi, atau materi komunikasi event oleh Penyelenggara dan sponsor resmi harus didasarkan pada persetujuan Talent serta memperhatikan tujuan dan ruang lingkup penggunaan yang telah diinformasikan.</li>
+          <li>Talent wajib membuat dan mengunggah konten Threads pada akun media sosial pribadinya yang berisi pengalaman selama mengikuti event yang diselenggarakan oleh 20FIT bersama brand mitra, dengan menandai akun resmi 20FIT dan brand terkait. Konten tersebut wajib diunggah setelah pelaksanaan event sesuai arahan yang disampaikan Penyelenggara, serta tidak memuat informasi yang bersifat rahasia sebagaimana diatur dalam Pasal 6.</li>
+          </ol>
+        <h3>Pasal 6 — Kerahasiaan Informasi</h3>
+          <ol>
+          <li>Talent wajib menjaga kerahasiaan informasi internal yang diperoleh selama penugasan, termasuk data peserta, informasi operasional, susunan acara yang belum dipublikasikan, serta informasi kerja sama dengan sponsor yang bersifat rahasia.</li>
+          <li>Talent dilarang menyebarluaskan informasi rahasia kepada pihak yang tidak berwenang, baik secara lisan, tertulis, melalui media sosial, maupun melalui media komunikasi lainnya.</li>
+          <li>Talent tidak diperkenankan memberikan pernyataan resmi, membuat pengumuman, atau bertindak atas nama Penyelenggara maupun sponsor tanpa izin dari pihak yang berwenang.</li>
+          <li>Kewajiban menjaga kerahasiaan tetap berlaku setelah penugasan berakhir untuk informasi yang masih bersifat rahasia.</li>
+          </ol>
+        <h3>Pasal 7 — Pelindungan Data Pribadi</h3>
+          <ol>
+          <li>Talent memahami bahwa data pribadi yang diberikan melalui platform 20FIT Talent atau selama proses penugasan akan digunakan untuk keperluan administrasi, komunikasi, penempatan tugas, dan pembayaran sesuai dengan tujuan yang telah diinformasikan.</li>
+          <li>Penyelenggara wajib mengelola dan melindungi data pribadi Talent sesuai dengan ketentuan peraturan perundang-undangan yang berlaku, termasuk Undang-Undang Nomor 27 Tahun 2022 tentang Pelindungan Data Pribadi.</li>
+          <li>Talent bertanggung jawab untuk memberikan data yang benar dan memperbarui informasi apabila terdapat perubahan yang relevan dengan pelaksanaan penugasan.</li>
+          </ol>
+        <h3>Pasal 8 — Ketentuan Penutup</h3>
+          <ol>
+          <li>Perjanjian ini berlaku khusus untuk penugasan pada event yang tercantum dalam rincian penugasan dan tidak secara otomatis berlaku untuk event lainnya.</li>
+          <li>Perjanjian ini tidak dengan sendirinya membentuk hubungan kerja tetap antara Penyelenggara dan Talent. Status dan hubungan hukum para pihak mengikuti sifat penugasan serta ketentuan peraturan perundang-undangan yang berlaku.</li>
+          <li>Perjanjian ini berakhir setelah penugasan selesai dilaksanakan dan seluruh kewajiban yang disepakati oleh kedua belah pihak telah dipenuhi, termasuk pembayaran apabila berlaku.</li>
+          <li>Hal-hal yang belum diatur dalam perjanjian ini akan dibahas dan diselesaikan melalui musyawarah antara Penyelenggara dan Talent dengan tetap memperhatikan ketentuan peraturan perundang-undangan yang berlaku.</li>
+          <li>Dengan menyetujui perjanjian ini melalui platform 20FIT Talent atau mekanisme persetujuan yang disediakan, Talent menyatakan telah membaca, memahami, dan menyetujui seluruh ketentuan yang tercantum di dalamnya.</li>
+          </ol>
+      </div>
+      <p class="scrollhint" id="hint">↓ Gulir sampai bawah untuk melanjutkan</p>
+
+      <label class="check">
+        <input type="checkbox" id="agree" disabled>
+        <span>Saya telah membaca dan menyetujui seluruh ketentuan di atas, serta menyatakan kesediaan untuk bertugas pada event tersebut.</span>
+      </label>
+
+      <div class="field">
+        <label for="nama">Ketik nama lengkap sebagai tanda tangan</label>
+        <input type="text" id="nama" placeholder="Tulis nama lengkap Anda" autocomplete="name" disabled>
+        <p class="hint">Harus sama dengan nama pada akun: <b>Niyata Hananta Karunawan</b></p>
+        <p class="err" id="err">Nama belum cocok dengan nama pada akun.</p>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="submit" disabled>Setuju &amp; Konfirmasi Kehadiran</button>
+        <button class="ghost" id="dl">Unduh salinan (PDF)</button>
+        <button class="danger-link" id="decline">Saya tidak bisa hadir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div id="done" class="hidden">
+    <div class="card">
+      <div class="done">
+        <div class="tick">✓</div>
+        <h2>Kehadiran terkonfirmasi</h2>
+        <p class="sub" style="margin:0">Salinan perjanjian telah dikirim ke email Anda. Informasi briefing akan disampaikan koordinator.</p>
+        <div class="record" id="rec"></div>
+      </div>
+      <div class="actions">
+        <button class="ghost" id="dl2">Unduh salinan (PDF)</button>
+        <button class="danger-link" id="reset">↺ Ulangi demo</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  var doc=document.getElementById('doc'), hint=document.getElementById('hint'),
+      agree=document.getElementById('agree'), nama=document.getElementById('nama'),
+      submit=document.getElementById('submit'), err=document.getElementById('err'),
+      NAMA_AKUN='niyata hananta karunawan';
+
+  function unlockAfterScroll(){
+    if(doc.scrollTop + doc.clientHeight >= doc.scrollHeight - 24){
+      agree.disabled=false; nama.disabled=false;
+      hint.textContent='✓ Kamu sudah membaca sampai bawah';
+      doc.removeEventListener('scroll', unlockAfterScroll);
+    }
+  }
+  doc.addEventListener('scroll', unlockAfterScroll);
+  if(doc.scrollHeight <= doc.clientHeight+4){ agree.disabled=false; nama.disabled=false; hint.textContent=''; }
+
+  function cek(){
+    var cocok = nama.value.trim().toLowerCase() === NAMA_AKUN;
+    err.style.display = (nama.value.trim().length>3 && !cocok) ? 'block' : 'none';
+    submit.disabled = !(agree.checked && cocok);
+  }
+  agree.addEventListener('change', cek);
+  nama.addEventListener('input', cek);
+
+  function wib(){
+    var d=new Date(), p=function(n){return String(n).padStart(2,'0')},
+        w=new Date(d.getTime()+(7*60+d.getTimezoneOffset())*60000);
+    return p(w.getDate())+'/'+p(w.getMonth()+1)+'/'+w.getFullYear()+' '+p(w.getHours())+':'+p(w.getMinutes())+':'+p(w.getSeconds())+' WIB';
+  }
+
+  submit.addEventListener('click', function(){
+    var rows=[
+      ['Nama',nama.value.trim()],
+      ['Dokumen','Perjanjian Penugasan Talent v1.0'],
+      ['Waktu setuju',wib()],
+      ['Alamat IP','103.xxx.xxx.xx'],
+      ['Perangkat',(navigator.userAgent||'').slice(0,42)+'…'],
+      ['ID bukti','AGR-7F3C21A9']
+    ], html='';
+    rows.forEach(function(r){ html+='<div><span>'+r[0]+'</span><span>'+r[1]+'</span></div>'; });
+    document.getElementById('rec').innerHTML=html;
+    document.getElementById('form').classList.add('hidden');
+    document.getElementById('done').classList.remove('hidden');
+    window.scrollTo(0,0);
+  });
+
+  document.getElementById('reset').addEventListener('click', function(){
+    agree.checked=false; nama.value=''; submit.disabled=true; err.style.display='none';
+    document.getElementById('done').classList.add('hidden');
+    document.getElementById('form').classList.remove('hidden');
+    window.scrollTo(0,0);
+  });
+
+  function demo(){ alert('Demo: di versi asli, tombol ini mengunduh PDF perjanjian beserta data persetujuan.'); }
+  document.getElementById('dl').addEventListener('click', demo);
+  document.getElementById('dl2').addEventListener('click', demo);
+  document.getElementById('decline').addEventListener('click', function(){
+    alert('Demo: slot kamu dilepas dan ditawarkan ke kandidat cadangan.');
+  });
+})();
+</script>
+</body>
+</html>

@@ -54,6 +54,7 @@ const llm = require('./llm');
 const idCities = require('./cities');
 const mailer = require('./mailer');
 const cert = require('./cert');
+const APDF = require('./agreement-pdf');
 const i18n = require('./i18n');
 
 const PORT = process.env.PORT || 3000;
@@ -1016,7 +1017,7 @@ async function buildAppliedEvents(st, myApps, eventById) {
       // confirmTimeout: rejected specifically because the approved talent never confirmed
       // in time → the dashboard explains why an accepted spot became rejected.
       const confirmTimeout = a.status === 'rejected' && a.note === CONFIRM_TIMEOUT_NOTE;
-      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, confirmTimeout, groupUrl: ev.group_url || null };
+      return { appId: a.id, name: ev.name, ref, location: ev.location || null, starts_at: ev.starts_at, ends_at: ev.ends_at, status: a.status, station: a.station || null, position, role: a.role, note: a.note || null, picks, acceptedPos, otherPos, rejectSeenAt: a.reject_seen_at || null, rejectNotify, confirmTimeout, groupUrl: ev.group_url || null, agreementRequired: agreementRequired(a), agreementAcceptedAt: a.agreement_accepted_at || null };
     })
     .filter(Boolean);
 }
@@ -1047,7 +1048,8 @@ app.get('/talent', requireAnyTalentBrowse(), async (req, res, next) => {
     if (myApps.some((a) => a.status === 'assigned')) {
       try { bankMissing = !bankComplete((await st.getBankInfo([req.talent.id])).get(req.talent.id)); } catch (_) { /* best-effort */ }
     }
-    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, bankMissing, lang: req.lang }));
+    const agreements = await pendingAgreementsFor(st, req.talent.id, req.lang).catch(() => []);
+    res.send(V.kolProfilePage({ account: req.account, certs, events: appliedEvents, stats, bankMissing, agreements, agreementOpen: String(req.query.agreement || ''), agreementErr: String(req.query.cwerr || ''), agreedId: String(req.query.agreed || ''), lang: req.lang }));
   } catch (e) { next(e); }
 });
 
@@ -1062,9 +1064,71 @@ app.get('/talent/applications', requireAnyTalentBrowse(), async (req, res, next)
     const [myApps, events] = await Promise.all([st.listApplicationsForTalent(req.talent.id), st.listEvents()]);
     const eventById = new Map(events.map((e) => [e.id, e]));
     const appliedEvents = await buildAppliedEvents(st, myApps, eventById);
-    res.send(V.talentApplicationsPage({ account: req.account, events: appliedEvents, lang: req.lang }));
+    const agreements = await pendingAgreementsFor(st, req.talent.id, req.lang).catch(() => []);
+    res.send(V.talentApplicationsPage({ account: req.account, events: appliedEvents, agreements, agreementOpen: String(req.query.agreement || ''), agreementErr: String(req.query.cwerr || ''), lang: req.lang }));
   } catch (e) { next(e); }
 });
+
+// ---- Clickwrap agreement (replaces the old Agree / 48h confirmation) --------
+// Admin "Final Accept" -> status 'approved' (offer) + session + agreement_deadline.
+// The talent accepts the agreement (one Postgres function, one transaction) ->
+// 'assigned'. Declining releases the slot. Past the deadline nothing is
+// cancelled; the admin only sees "not yet agreed". Applications with
+// agreement_required = false (past events) keep the legacy Agree button.
+const AGREEMENT_DEFAULT_HOURS = 48;
+const agreementRequired = (a) => !!a && a.agreement_required !== false;
+async function setAssignmentDetails(st, app, sessionId) {
+  const patch = {};
+  if (sessionId !== undefined) {
+    const sessions = await st.listEventSessions(app.event_id);
+    patch.session_id = sessions.some((x) => x.id === sessionId) ? sessionId : null;
+  }
+  if (agreementRequired(app)) {
+    const ev = (await st.listEvents()).find((e) => e.id === app.event_id) || {};
+    const hours = Number(ev.agreement_deadline_hours) || AGREEMENT_DEFAULT_HOURS;
+    patch.agreement_deadline = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+  }
+  if (Object.keys(patch).length) await st.updateApplication(app.id, patch);
+}
+// Client IP as seen by the server (Railway proxy -> trust proxy -> req.ip). Never
+// taken from the request body. Strips the IPv4-mapped IPv6 prefix.
+function serverIp(req) {
+  const ip = String(req.ip || (req.socket && req.socket.remoteAddress) || '').replace(/^::ffff:/, '').trim();
+  return /^[0-9a-f:.]+$/i.test(ip) ? ip : null;
+}
+// Pending agreements for a talent: approved applications that need the agreement,
+// each rendered from the database (event, date, session, hours, arrival, text).
+async function pendingAgreementsFor(st, talentId, lang) {
+  if (!st.renderAgreement) return [];
+  const apps = (await st.listApplicationsForTalent(talentId)).filter((a) => a.status === 'approved' && agreementRequired(a));
+  const out = [];
+  for (const a of apps) {
+    try {
+      const r = await st.renderAgreement(a.id, lang);
+      if (r && r.ok) out.push({ appId: a.id, title: r.title, bodyHtml: r.body_html, details: r.details, legalName: r.legal_name, version: r.version, deadline: a.agreement_deadline || null });
+    } catch (e) { console.warn('[agreement] render failed for ' + a.id + ':', e && e.message); }
+  }
+  return out;
+}
+// Build the PDF copy for an accepted agreement, store it (private bucket, path
+// written once on the evidence row) and email it. Best-effort, after the commit.
+async function finishAcceptedAgreement(st, appId, lang) {
+  const accRow = await st.getAgreementAcceptance(appId);
+  if (!accRow) return null;
+  const snap = accRow.assignment_snapshot || {};
+  const pdf = await APDF.renderAgreementPdf({ title: snap.title || 'Perjanjian Penugasan Talent', bodyHtml: accRow.body_rendered_html, details: snap, acceptance: accRow, lang: accRow.lang || lang });
+  if (!accRow.pdf_path) {
+    const pdfPath = 'agreements/' + accRow.event_id + '/' + accRow.application_id + '-v' + accRow.template_version + '.pdf';
+    try { await st.uploadAgreementPdf(pdfPath, pdf); await st.setAgreementPdfPath(accRow.id, pdfPath); } catch (e) { console.warn('[agreement] pdf store failed:', e && e.message); }
+  }
+  try {
+    const acct = await st.getAccountById(accRow.talent_id);
+    if (acct && acct.login && mailer.sendAgreementCopyEmail) {
+      await mailer.sendAgreementCopyEmail({ to: acct.login, name: acct.full_name || acct.name, eventName: snap.event, lang: accRow.lang || lang, pdf, filename: 'Perjanjian-20FIT-' + String(snap.event || 'event').replace(/[^\w]+/g, '-').slice(0, 50) + '.pdf' });
+    }
+  } catch (e) { console.warn('[agreement] copy email failed:', e && e.message); }
+  return pdf;
+}
 
 // Talent confirms (Agree) the spot an EO accepted them for → status becomes
 // "assigned" (shows in the EO/Super Admin selected list). Only an application that
@@ -1074,6 +1138,8 @@ app.post('/talent/applications/:appId/agree', requireAnyTalentBrowse(), async (r
     const st = db();
     if (!st) return needConfig(req, res);
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
+    // New flow: confirmation happens only through the agreement (no bypass).
+    if (app && agreementRequired(app)) return res.redirect('/talent?lang=' + req.lang + '&agreement=' + encodeURIComponent(app.id));
     const agreed = !!(app && app.status === 'approved');
     if (agreed) {
       await st.updateApplication(app.id, { status: 'assigned' });
@@ -1098,7 +1164,9 @@ app.post('/talent/applications/:appId/decline', requireAnyTalentBrowse(), async 
     const st = db();
     if (!st) return needConfig(req, res);
     const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
-    if (app && app.status === 'approved') {
+    if (app && app.status === 'approved' && agreementRequired(app)) {
+      await st.declineAssignment(app.id, req.talent.id);
+    } else if (app && app.status === 'approved') {
       await st.clearApplicationAccepted(app.id); // free the reserved slot → position reopens
       await st.updateApplication(app.id, { status: 'rejected', note: DECLINED_BY_TALENT });
     }
@@ -1119,6 +1187,70 @@ app.post('/talent/applications/:appId/reject-seen', requireAnyTalentBrowse(), as
     res.redirect(safeNext(req.body.next) || ('/talent?lang=' + req.lang));
   } catch (e) { next(e); }
 });
+
+// Talent accepts the clickwrap agreement. The checkbox + typed name come from the
+// form; IP + user agent are read HERE from the request (never from the body).
+// Everything (validation, evidence, status 'assigned') happens in ONE Postgres
+// function. PDF copy + email + group invite follow, best-effort.
+app.post('/talent/agreement/:appId/accept', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const back = (code) => res.redirect('/talent?lang=' + req.lang + '&agreement=' + encodeURIComponent(req.params.appId) + (code ? '&cwerr=' + encodeURIComponent(code) : ''));
+    if (req.body.agree !== '1' && req.body.agree !== 'on') return back('no_check');
+    const typed = String(req.body.typed_name || '').slice(0, 160);
+    const r = await st.acceptAgreement({ appId: req.params.appId, talentId: req.talent.id, typedName: typed, ip: serverIp(req), userAgent: String(req.get('user-agent') || '').slice(0, 1000), lang: req.lang });
+    if (!r || !r.ok) return back((r && r.error) || 'error');
+    if (!r.already) {
+      finishAcceptedAgreement(st, req.params.appId, req.lang).catch((e) => console.warn('[agreement] finish failed:', e && e.message));
+      try {
+        const app = await st.getApplication(req.params.appId);
+        const ev = (await st.listEvents()).find((e) => e.id === (app && app.event_id));
+        if (ev && ev.group_url) await notifyGroupForAssigned(st, ev);
+      } catch (err) { console.warn('[mail] group-invite on agreement failed: ' + (err && err.message)); }
+    }
+    let needBank = false;
+    try { needBank = !bankComplete((await st.getBankInfo([req.talent.id])).get(req.talent.id)); } catch (_) { /* best-effort */ }
+    res.redirect(needBank ? '/talent/bank?lang=' + req.lang + '&after=agree' : '/talent?lang=' + req.lang + '&agreed=' + encodeURIComponent(req.params.appId));
+  } catch (e) { next(e); }
+});
+
+// "Saya tidak bisa hadir": releases the slot (same outcome as the old decline).
+app.post('/talent/agreement/:appId/decline', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    await st.declineAssignment(req.params.appId, req.talent.id);
+    res.redirect('/talent?lang=' + req.lang + '&declined=1');
+  } catch (e) { next(e); }
+});
+
+// Download the agreement PDF: the signed copy once accepted (stored file, or
+// rebuilt from the immutable evidence row), otherwise a marked unsigned copy.
+app.get('/talent/agreement/:appId/pdf', requireAnyTalentBrowse(), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const app = (await st.listApplicationsForTalent(req.talent.id)).find((a) => a.id === req.params.appId);
+    if (!app) return res.status(404).send('Not found');
+    const pdf = await agreementPdfFor(st, app, req.lang);
+    if (!pdf) return res.status(404).send('Not found');
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'attachment; filename="Perjanjian-20FIT.pdf"');
+    res.send(pdf);
+  } catch (e) { next(e); }
+});
+async function agreementPdfFor(st, app, lang) {
+  const accRow = await st.getAgreementAcceptance(app.id);
+  if (accRow) {
+    if (accRow.pdf_path) { const b = await st.downloadAgreementPdf(accRow.pdf_path); if (b) return b; }
+    const snap = accRow.assignment_snapshot || {};
+    return APDF.renderAgreementPdf({ title: snap.title, bodyHtml: accRow.body_rendered_html, details: snap, acceptance: accRow, lang: accRow.lang || lang });
+  }
+  const r = await st.renderAgreement(app.id, lang);
+  if (!r || !r.ok) return null;
+  return APDF.renderAgreementPdf({ title: r.title, bodyHtml: r.body_html, details: r.details, lang });
+}
 
 // Talent downloads their own certificate PDF.
 app.get('/sertifikat/:id', requireAnyTalentReady(), async (req, res, next) => {
@@ -1929,7 +2061,8 @@ async function renderMpHome(req, res, st) {
   const myAppsEnriched = myApps.map((a) => ({ ...a, event_name: eventName.get(a.event_id) || null }));
   const eoEvents = await openPositionEvents(st, req.talent.id);
   const certs = await st.listCertificatesForTalent(req.talent.id);
-  res.send(V.mainPowerDashboard({ talent: req.talent, account: req.account || req.talent, openEvents, eoEvents, myApps: myAppsEnriched, certs, lang: req.lang, applied: req.query.applied === '1' }));
+  const agreements = await pendingAgreementsFor(st, req.talent.id, req.lang).catch(() => []);
+  res.send(V.mainPowerDashboard({ talent: req.talent, account: req.account || req.talent, openEvents, eoEvents, myApps: myAppsEnriched, certs, agreements, agreementOpen: String(req.query.agreement || ''), agreementErr: String(req.query.cwerr || ''), lang: req.lang, applied: req.query.applied === '1' }));
 }
 
 app.get('/lamar/:eventId', requireTalentReady('main_power'), async (req, res, next) => {
@@ -3261,10 +3394,13 @@ async function autoDeclineOtherApps(st, apps, eventId, talentId, keepAppId, revi
 // event role + quota guard + status log, all in one transaction). Keeps the
 // app-side side effects: auto-decline the talent's other still-open picks and
 // email the acceptance once. Returns 'ok' | 'full' | 'skip' | 'not_found'.
-async function acceptIntoPosition(st, app, positionId, reviewerId, actorName) {
+async function acceptIntoPosition(st, app, positionId, reviewerId, actorName, opts = {}) {
   const wasApproved = app && app.status === 'approved';
   const outcome = await st.approveApplicationChoice(app.id, positionId, reviewerId, actorName || null);
   if (outcome === 'ok') {
+    // Clickwrap: the talent confirms by accepting the agreement. Record the session
+    // (if chosen) and the agreement deadline (flag only — never auto-cancels).
+    try { await setAssignmentDetails(st, app, opts.sessionId); } catch (e) { console.warn('[agreement] set session/deadline failed:', e && e.message); }
     const apps = await st.listApplications();
     await autoDeclineOtherApps(st, apps, app.event_id, app.talent_id, app.id, reviewerId);
     app.status = 'approved';
@@ -3572,9 +3708,10 @@ app.post('/eo/applicants/:appId/final-accept', requireEo, async (req, res, next)
     try { const evp = await st.listEventPositions(found.ev.id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
     const mount = { appBase: '/eo/applicants', decisionUrl: '/eo/decision', active: 'talents' };
     if (!confirmed) {
-      return res.send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, lang: req.lang, mount }));
+      const sessions = await st.listEventSessions(found.ev.id);
+      return res.send(V.finalAcceptConfirm({ staff: eoCtx(req), appId: found.app.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: found.ev.name || '—', eventId: found.ev.id, positionId, positionName: posName, actorName: actor, sessions, sessionId: found.app.session_id || '', agreement: agreementRequired(found.app), lang: req.lang, mount }));
     }
-    const outcome = await acceptIntoPosition(st, found.app, positionId, req.staff.id, actor || null);
+    const outcome = await acceptIntoPosition(st, found.app, positionId, req.staff.id, actor || null, { sessionId: req.body.session_id !== undefined ? String(req.body.session_id || '') || null : undefined });
     res.redirect('/eo/decision?event=' + encodeURIComponent(found.ev.id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
   } catch (e) { next(e); }
 });
@@ -4470,9 +4607,10 @@ app.post('/admin/applications/:id/final-accept', auth.requireStaff(['super_admin
     let posName = '';
     try { const evp = await st.listEventPositions(app0.event_id); const p = evp.find((x) => x.position_id === positionId); if (p) posName = p.custom_label || p.label_en || p.label_id || ''; } catch (_) { /* label best-effort */ }
     if (!confirmed) {
-      return res.send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, lang: req.lang }));
+      const sessions = await st.listEventSessions(app0.event_id);
+      return res.send(V.finalAcceptConfirm({ staff: staffCtx(req), appId: app0.id, talentName: (account && account.name) || '—', talentLogin: (account && account.login) || '', eventName: ev.name || '—', eventId: app0.event_id, positionId, positionName: posName, actorName: actor, sessions, sessionId: app0.session_id || '', agreement: agreementRequired(app0), lang: req.lang }));
     }
-    const outcome = await acceptIntoPosition(st, app0, positionId, req.staff.id, actor || null);
+    const outcome = await acceptIntoPosition(st, app0, positionId, req.staff.id, actor || null, { sessionId: req.body.session_id !== undefined ? String(req.body.session_id || '') || null : undefined });
     res.redirect('/admin/applications/decision?event=' + encodeURIComponent(app0.event_id) + (outcome === 'full' ? '&done=full' : '&done=accept'));
   } catch (e) { next(e); }
 });
@@ -4683,6 +4821,7 @@ async function runConfirmTimeouts(st) {
   let n = 0;
   for (const a of apps) {
     if (a.status !== 'approved') continue; // only pending-confirmation spots
+    if (agreementRequired(a)) continue;     // clickwrap flow: a missed deadline is flagged, never auto-cancelled
     const startMs = a.reviewed_at ? new Date(a.reviewed_at).getTime() : 0;
     if (!startMs || startMs < sinceMs) continue; // grandfathered (approved before enforcement) or no timestamp
     if (now - startMs < windowMs) continue;      // still within the confirmation window
@@ -5398,6 +5537,138 @@ app.get('/admin/events/:id', auth.requireStaff(['super_admin']), async (req, res
     const view = eoEventView(event, evPos, apps, choices);
     const flash = { ok: String(req.query.ok || ''), err: String(req.query.err || ''), n: String(req.query.n || '') };
     res.send(V.adminEventDetail({ staff: staffCtx(req), event, view, positionsMaster, flash, lang: req.lang }));
+  } catch (e) { next(e); }
+});
+
+// ---- Admin: assignment sessions + clickwrap agreement status per event -------
+const AGR_CATS = ['manpower', 'kol', 'photographer'];
+function parseHHMM(v) { const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(v || '').trim()); if (!m) return null; const h = Number(m[1]), mi = Number(m[2]); return (h < 24 && mi < 60) ? String(h).padStart(2, '0') + ':' + m[2] : null; }
+function sessionFromBody(b) {
+  const name = String(b.name || '').trim().slice(0, 80);
+  const start = parseHHMM(b.start_time), end = parseHHMM(b.end_time);
+  if (!name || !start || !end || end <= start) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.session_date || '')) ? String(b.session_date) : null;
+  return { name, name_en: String(b.name_en || '').trim().slice(0, 80) || null, session_date: date, start_time: start, end_time: end, sort_order: parseInt(b.sort_order, 10) || 0 };
+}
+// Strip active content from admin-authored agreement HTML (defence in depth —
+// only super admins can publish, but the text is shown to every talent).
+function sanitizeAgreementHtml(html) {
+  return String(html || '')
+    .replace(/<\s*(script|style|iframe|object|embed|form|input|button|textarea|select|link|meta)\b[\s\S]*?(<\s*\/\s*\1\s*>|$)/gi, '')
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1="#"')
+    .trim();
+}
+async function agreementEventData(st, eventId) {
+  const [apps, talents, choices, positions, evPos, sessions, accepts] = await Promise.all([
+    st.listApplications(), st.listTalents(), st.listApplicationChoices(), st.listPositions(), st.listEventPositions(eventId), st.listEventSessions(eventId), st.listAgreementAcceptances(eventId)]);
+  const posById = new Map(positions.map((p) => [p.id, p]));
+  const epByPos = new Map((evPos || []).map((p) => [p.position_id, p]));
+  const talentById = new Map(talents.map((x) => [x.id, x]));
+  const acceptedPos = new Map();
+  choices.forEach((c) => { if (c.accepted) acceptedPos.set(c.application_id, c.position_id); });
+  const accByApp = new Map(accepts.map((a) => [a.application_id, a]));
+  const rows = apps.filter((a) => a.event_id === eventId && (a.status === 'approved' || a.status === 'assigned') && acceptedPos.has(a.id)).map((a) => {
+    const pid = acceptedPos.get(a.id); const p = posById.get(pid) || {}; const ep = epByPos.get(pid) || {};
+    const tt = talentById.get(a.talent_id) || {};
+    return { id: a.id, status: a.status, name: tt.full_name || tt.name || '—', login: tt.login || '', position_id: pid, position: ep.custom_label || p.label_id || p.label_en || '—',
+      session_id: a.session_id || null, required: a.agreement_required !== false, deadline: a.agreement_deadline || null, acceptance: accByApp.get(a.id) || null };
+  }).sort((x, y) => String(x.position).localeCompare(String(y.position)) || String(x.name).localeCompare(String(y.name)));
+  return { sessions, rows };
+}
+app.get('/admin/events/:id/agreements', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db();
+    if (!st) return needConfig(req, res);
+    const event = (await st.listEvents()).find((e) => e.id === req.params.id);
+    if (!event) return res.redirect('/admin/manage');
+    const data = await agreementEventData(st, event.id);
+    const templates = await st.listAgreementTemplates();
+    res.send(V.adminEventAgreements({ staff: staffCtx(req), event, sessions: data.sessions, rows: data.rows, templates, defaultHours: AGREEMENT_DEFAULT_HOURS, flash: String(req.query.ok || ''), err: String(req.query.err || ''), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+app.post('/admin/events/:id/sessions', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const back = '/admin/events/' + encodeURIComponent(req.params.id) + '/agreements?lang=' + req.lang;
+    const row = sessionFromBody(req.body);
+    if (!row) return res.redirect(back + '&err=session');
+    await st.addEventSession(req.params.id, row);
+    res.redirect(back + '&ok=session');
+  } catch (e) { next(e); }
+});
+app.post('/admin/events/:id/sessions/:sid', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const back = '/admin/events/' + encodeURIComponent(req.params.id) + '/agreements?lang=' + req.lang;
+    const sessions = await st.listEventSessions(req.params.id);
+    if (!sessions.some((x) => x.id === req.params.sid)) return res.redirect(back);
+    if (req.body.action === 'delete') {
+      const inUse = (await st.listApplications()).some((a) => a.session_id === req.params.sid);
+      if (inUse) return res.redirect(back + '&err=inuse');
+      await st.deleteEventSession(req.params.sid);
+      return res.redirect(back + '&ok=deleted');
+    }
+    const row = sessionFromBody(req.body);
+    if (!row) return res.redirect(back + '&err=session');
+    await st.updateEventSession(req.params.sid, row);
+    res.redirect(back + '&ok=session');
+  } catch (e) { next(e); }
+});
+app.post('/admin/events/:id/agreement-settings', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const h = parseInt(req.body.agreement_deadline_hours, 10);
+    await st.updateEvent(req.params.id, { agreement_deadline_hours: h >= 1 && h <= 720 ? h : null });
+    res.redirect('/admin/events/' + encodeURIComponent(req.params.id) + '/agreements?lang=' + req.lang + '&ok=settings');
+  } catch (e) { next(e); }
+});
+// Set / change a talent's session (before the event). The agreement evidence
+// keeps the session agreed to at acceptance time (snapshot), so a later change
+// never rewrites what was accepted.
+app.post('/admin/applications/:id/session', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const app0 = await st.getApplication(req.params.id);
+    if (!app0) return res.redirect('/admin/manage');
+    const sid = String(req.body.session_id || '');
+    const sessions = await st.listEventSessions(app0.event_id);
+    await st.setApplicationSession(app0.id, sessions.some((x) => x.id === sid) ? sid : null);
+    res.redirect(safeNext(req.body.next) || ('/admin/events/' + encodeURIComponent(app0.event_id) + '/agreements?lang=' + req.lang + '&ok=assigned'));
+  } catch (e) { next(e); }
+});
+app.get('/admin/agreements/:appId/pdf', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const app0 = await st.getApplication(req.params.appId);
+    if (!app0) return res.status(404).send('Not found');
+    const pdf = await agreementPdfFor(st, app0, req.lang);
+    if (!pdf) return res.status(404).send('Not found');
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="Perjanjian-' + app0.id.slice(0, 8) + '.pdf"');
+    res.send(pdf);
+  } catch (e) { next(e); }
+});
+// Agreement templates per category — append-only versions (publishing creates
+// the next version and makes it active; older versions stay as evidence).
+app.get('/admin/agreement-templates', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const templates = await st.listAgreementTemplates();
+    const cat = AGR_CATS.includes(String(req.query.cat)) ? String(req.query.cat) : 'manpower';
+    res.send(V.adminAgreementTemplates({ staff: staffCtx(req), templates, cat, view: String(req.query.view || ''), flash: String(req.query.ok || ''), err: String(req.query.err || ''), lang: req.lang }));
+  } catch (e) { next(e); }
+});
+app.post('/admin/agreement-templates', auth.requireStaff(['super_admin']), async (req, res, next) => {
+  try {
+    const st = db(); if (!st) return needConfig(req, res);
+    const cat = AGR_CATS.includes(String(req.body.cat)) ? String(req.body.cat) : '';
+    const title = String(req.body.title || '').trim().slice(0, 200);
+    const body = sanitizeAgreementHtml(req.body.body_html);
+    if (!cat || !title || body.length < 20) return res.redirect('/admin/agreement-templates?lang=' + req.lang + '&cat=' + encodeURIComponent(cat || 'manpower') + '&err=invalid');
+    await st.publishAgreementVersion({ category: cat, title, titleEn: String(req.body.title_en || '').trim().slice(0, 200) || null, bodyHtml: body, bodyEnHtml: sanitizeAgreementHtml(req.body.body_en_html) || null, createdBy: req.staff.id });
+    res.redirect('/admin/agreement-templates?lang=' + req.lang + '&cat=' + encodeURIComponent(cat) + '&ok=published');
   } catch (e) { next(e); }
 });
 

@@ -14,6 +14,7 @@ const { createClient } = require('@supabase/supabase-js');
 const MODE = process.env.KOL_STORE_MODE || 'supabase';
 const BUCKET = 'kol-uploads';
 const LANDING_BUCKET = 'landing-assets'; // public; landing hero photos
+const AGREEMENT_BUCKET = 'talent-agreements'; // private; clickwrap agreement PDF copies
 
 // Optional per-position detail fields (all nullable text). General fields apply
 // to every category; the kol_* / photo_* fields only carry data for KOL /
@@ -397,6 +398,7 @@ function supabaseStore() {
       if (patch.status !== undefined) row.status = patch.status;
       if (patch.reg_closed_at !== undefined) row.reg_closed_at = patch.reg_closed_at;
       if (patch.group_url !== undefined) row.group_url = patch.group_url || null;
+      if (patch.agreement_deadline_hours !== undefined) row.agreement_deadline_hours = patch.agreement_deadline_hours || null;
       if (Object.keys(row).length) { const r = await sb.from('talent_events').update(row).eq('id', id); if (r.error) throw new Error(r.error.message); }
       if (patch.needs) {
         await sb.from('talent_event_needs').delete().eq('event_id', id);
@@ -678,6 +680,84 @@ function supabaseStore() {
     async updateApplication(id, patch) {
       const { error } = await sb.from('talent_applications').update(patch).eq('id', id);
       if (error) throw new Error(error.message);
+    },
+    // ---- Assignment sessions (event_sessions) + clickwrap agreement ----
+    // Everything below runs with the service role; the agreement functions are
+    // SECURITY DEFINER and only executable by service_role (see migration
+    // 20261016_clickwrap_agreements.sql). Before that migration, reads degrade to
+    // empty / null instead of failing the page.
+    async listEventSessions(eventId) {
+      const { data, error } = await sb.from('event_sessions').select('*').eq('event_id', eventId).order('sort_order').order('start_time');
+      if (error) { if (isMissingRelation(error)) return []; throw new Error(error.message); }
+      return data || [];
+    },
+    async addEventSession(eventId, row) {
+      const { error } = await sb.from('event_sessions').insert({ event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: row.start_time, end_time: row.end_time, sort_order: row.sort_order || 0 });
+      if (error) throw new Error(error.message);
+    },
+    async updateEventSession(id, row) {
+      const patch = {};
+      ['name', 'name_en', 'session_date', 'start_time', 'end_time', 'sort_order'].forEach((k) => { if (row[k] !== undefined) patch[k] = row[k] === '' ? null : row[k]; });
+      const { error } = await sb.from('event_sessions').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async deleteEventSession(id) {
+      const { error } = await sb.from('event_sessions').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    },
+    async setApplicationSession(appId, sessionId) {
+      const { error } = await sb.from('talent_applications').update({ session_id: sessionId || null }).eq('id', appId);
+      if (error) throw new Error(error.message);
+    },
+    async renderAgreement(appId, lang) {
+      const { data, error } = await sb.rpc('agreement_render', { p_app_id: appId, p_lang: lang === 'en' ? 'en' : 'id' });
+      if (error) { if (/agreement_render|PGRST202|42883/i.test(error.message + ' ' + (error.code || ''))) return { ok: false, error: 'no_migration' }; throw new Error(error.message); }
+      return data;
+    },
+    async acceptAgreement({ appId, talentId, typedName, ip, userAgent, lang }) {
+      const { data, error } = await sb.rpc('talent_accept_agreement', { p_app_id: appId, p_talent_id: talentId, p_typed_name: typedName, p_ip: ip || null, p_user_agent: userAgent || null, p_lang: lang === 'en' ? 'en' : 'id' });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async declineAssignment(appId, talentId) {
+      const { data, error } = await sb.rpc('talent_decline_assignment', { p_app_id: appId, p_talent_id: talentId });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async listAgreementTemplates() {
+      const { data, error } = await sb.from('agreement_templates').select('*').order('talent_category').order('version', { ascending: false });
+      if (error) { if (isMissingRelation(error)) return []; throw new Error(error.message); }
+      return data || [];
+    },
+    async publishAgreementVersion({ category, title, titleEn, bodyHtml, bodyEnHtml, createdBy }) {
+      const { data, error } = await sb.rpc('agreement_publish_version', { p_category: category, p_title: title, p_title_en: titleEn || null, p_body_html: bodyHtml, p_body_en_html: bodyEnHtml || null, p_created_by: createdBy || null });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    async listAgreementAcceptances(eventId) {
+      let q = sb.from('talent_agreement_acceptances').select('*');
+      if (eventId) q = q.eq('event_id', eventId);
+      const { data, error } = await q;
+      if (error) { if (isMissingRelation(error)) return []; throw new Error(error.message); }
+      return data || [];
+    },
+    async getAgreementAcceptance(appId) {
+      const { data, error } = await sb.from('talent_agreement_acceptances').select('*').eq('application_id', appId).maybeSingle();
+      if (error) { if (isMissingRelation(error)) return null; throw new Error(error.message); }
+      return data || null;
+    },
+    async setAgreementPdfPath(acceptanceId, pdfPath) {
+      const { error } = await sb.from('talent_agreement_acceptances').update({ pdf_path: pdfPath }).eq('id', acceptanceId).is('pdf_path', null);
+      if (error) throw new Error(error.message);
+    },
+    async uploadAgreementPdf(pdfPath, buffer) {
+      const { error } = await sb.storage.from(AGREEMENT_BUCKET).upload(pdfPath, buffer, { contentType: 'application/pdf', upsert: false });
+      if (error && !/exists|duplicate/i.test(error.message)) throw new Error(error.message);
+    },
+    async downloadAgreementPdf(pdfPath) {
+      const { data, error } = await sb.storage.from(AGREEMENT_BUCKET).download(pdfPath);
+      if (error || !data) return null;
+      return Buffer.from(await data.arrayBuffer());
     },
     async getApplicationForEvent(talentId, eventId) {
       const { data } = await sb.from('talent_applications').select('*').eq('talent_id', talentId).eq('event_id', eventId).maybeSingle();
@@ -1020,6 +1100,54 @@ function memoryStore() {
   const proposals = []; // LAPIS 1 reviewer proposals: { application_id, position_id, reviewer_name, note, created_at }
   const reviewMarks = []; // "reviewed, not proposed" marks: { application_id, reviewer_name, created_at }
   const statusLogs = []; // status transitions: { id, application_id, from_status, to_status, changed_by, actor_name, changed_at }
+  // Clickwrap agreement mirror (memory mode): sessions, versioned templates, acceptances.
+  const eventSessions = [];
+  const acceptances = [];
+  const agreementPdfs = new Map();
+  const agreementTemplates = [{ id: 'tpl-mp-1', talent_category: 'manpower', version: 1, title: 'Perjanjian Penugasan Talent', title_en: 'Talent Assignment Agreement',
+    body_html: '<p>Perjanjian penugasan untuk {{nama_event}} ({{tanggal_event}}) di {{lokasi}} sebagai {{posisi}}.</p><h3>Pasal 1 — Ruang Lingkup Penugasan</h3><ol><li>Pelaksanaan penugasan dibagi ke dalam {{daftar_sesi}}.</li><li>Talent wajib tiba selambat-lambatnya 1 (satu) jam sebelum sesi penugasannya dimulai.</li></ol>' + '<p>Ketentuan lanjutan.</p>'.repeat(40),
+    body_en_html: null, is_active: true, published_at: now(), created_by: null }];
+  const memTime = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? (m[1].padStart(2, '0') + ':' + m[2] + ':00') : null; };
+  const hhmm = (t) => String(t || '').slice(0, 5).replace(':', '.');
+  const arrivalOf = (t) => { const m = /^(\d{2}):(\d{2})/.exec(String(t || '')); if (!m) return ''; const mins = (Number(m[1]) * 60 + Number(m[2]) - 60 + 1440) % 1440; return String(Math.floor(mins / 60)).padStart(2, '0') + '.' + String(mins % 60).padStart(2, '0'); };
+  const normName = (p) => String(p || '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  const htmlEsc = (p) => String(p == null ? '' : p).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const MONTHS = { id: ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'], en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] };
+  const fmtD = (d, lang) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || '')); return m ? Number(m[3]) + ' ' + MONTHS[lang][Number(m[2]) - 1] + ' ' + m[1] : null; };
+  const fmtRange = (a, b, lang) => { if (!a) return null; if (!b || b === a) return fmtD(a, lang); if (String(a).slice(0, 7) === String(b).slice(0, 7)) return Number(String(a).slice(8, 10)) + '–' + fmtD(b, lang); return fmtD(a, lang) + ' – ' + fmtD(b, lang); };
+  function memRenderAgreement(appId, lang) {
+    const L = lang === 'en' ? 'en' : 'id'; const en = L === 'en'; const tbd = en ? 'To be determined' : 'Belum ditentukan';
+    const a = applications.find((x) => x.id === appId);
+    if (!a) return { ok: false, error: 'not_found' };
+    const ev = events.find((e) => e.id === a.event_id) || {};
+    const acc = accounts.find((x) => x.id === a.talent_id) || {};
+    const ch = applicationChoices.find((c) => c.application_id === appId && c.accepted);
+    if (!ch) return { ok: false, error: 'no_position' };
+    const pos = positions.find((p) => p.id === ch.position_id) || {};
+    const ep = eventPositions.find((x) => x.event_id === a.event_id && x.position_id === ch.position_id) || {};
+    const cat = pos.talent_category || 'manpower';
+    const tpl = agreementTemplates.find((x) => x.talent_category === cat && x.is_active);
+    if (!tpl) return { ok: false, error: 'no_template', category: cat };
+    const ses = eventSessions.find((x) => x.id === a.session_id) || null;
+    const all = eventSessions.filter((x) => x.event_id === a.event_id).sort((p, q) => (p.sort_order - q.sort_order) || String(p.start_time).localeCompare(String(q.start_time)));
+    let list = tbd;
+    if (all.length) {
+      const words = en ? ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'] : ['satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan'];
+      const parts = all.map((x) => ((en && x.name_en) || x.name) + (x.session_date ? ' (' + fmtD(x.session_date, L) + ')' : '') + (en ? ' at ' : ' pukul ') + hhmm(x.start_time) + '–' + hhmm(x.end_time) + ' WIB');
+      const joined = parts.length > 1 ? parts.slice(0, -1).join(', ') + (en ? ' and ' : ' dan ') + parts[parts.length - 1] : parts[0];
+      list = all.length + ' (' + words[Math.min(all.length, 8) - 1] + ')' + (en ? (all.length === 1 ? ' session, namely ' : ' sessions, namely ') : ' sesi, yaitu ') + joined;
+    }
+    const legal = (acc.full_name && String(acc.full_name).trim()) || acc.name || '';
+    const posName = ep.custom_label || (en ? (pos.label_en || pos.label_id) : (pos.label_id || pos.label_en));
+    const details = { event: ev.name, date: fmtRange(ev.starts_at, ev.ends_at, L), location: [ev.location, ev.city].filter(Boolean).join(', '), position: posName,
+      session: ses ? (((en && ses.name_en) || ses.name) + (ses.session_date ? ' — ' + fmtD(ses.session_date, L) : '')) : tbd,
+      hours: ses ? hhmm(ses.start_time) + '–' + hhmm(ses.end_time) + ' WIB' : tbd, arrival: ses ? arrivalOf(ses.start_time) + ' WIB' : tbd,
+      session_id: ses ? ses.id : null, starts_at: ev.starts_at, ends_at: ev.ends_at };
+    let body = (en && tpl.body_en_html) || tpl.body_html;
+    const fill = { nama_event: ev.name, tanggal_event: details.date, lokasi: details.location, posisi: posName, sesi: details.session, jam_bertugas: details.hours, jam_tiba: details.arrival, daftar_sesi: list, nama_talent: legal };
+    Object.keys(fill).forEach((k) => { body = body.split('{{' + k + '}}').join(htmlEsc(fill[k])); });
+    return { ok: true, template_id: tpl.id, version: tpl.version, category: cat, title: (en && tpl.title_en) || tpl.title, body_html: body, legal_name: legal, details };
+  }
   const applications = [
     { id: 'app-budi', event_id: 'ev-jakarta', talent_id: 'mp-budi', talent_type: 'main_power', role: 'Judges', answers: { q1: 'Ya', q2: 'Ya', q3: 'Jakarta Marathon 2024 (finish line)', q4: 'Ya' }, status: 'pending', station: null, station_loc: null, note: null, reviewed_by: null, reviewed_at: null, created_at: now() },
   ];
@@ -1132,6 +1260,7 @@ function memoryStore() {
       if (patch.reg_open_time !== undefined) ev.reg_open_time = patch.reg_open_time || null;
       if (patch.reg_deadline_time !== undefined) ev.reg_deadline_time = patch.reg_deadline_time || null;
       if (patch.status !== undefined) ev.status = patch.status;
+      if (patch.agreement_deadline_hours !== undefined) ev.agreement_deadline_hours = patch.agreement_deadline_hours || null;
       if (patch.reg_closed_at !== undefined) ev.reg_closed_at = patch.reg_closed_at;
       if (patch.group_url !== undefined) ev.group_url = patch.group_url || null;
       if (patch.needs) {
@@ -1284,6 +1413,57 @@ function memoryStore() {
     async listExportLogs() { return exportLogs.slice(); },
     async getApplication(id) { return applications.find((a) => a.id === id) || null; },
     async updateApplication(id, patch) { const a = applications.find((a) => a.id === id); if (a) Object.assign(a, patch); },
+    // ---- Assignment sessions + clickwrap agreement (memory mirror of the SQL functions) ----
+    async listEventSessions(eventId) { return eventSessions.filter((x) => x.event_id === eventId).map((x) => ({ ...x })).sort((a, b) => (a.sort_order - b.sort_order) || String(a.start_time).localeCompare(String(b.start_time))); },
+    async addEventSession(eventId, row) { eventSessions.push({ id: 'ses-' + (++seq), event_id: eventId, name: row.name, name_en: row.name_en || null, session_date: row.session_date || null, start_time: memTime(row.start_time), end_time: memTime(row.end_time), sort_order: Number(row.sort_order) || 0 }); },
+    async updateEventSession(id, row) { const x = eventSessions.find((y) => y.id === id); if (!x) return; ['name', 'name_en', 'session_date', 'sort_order'].forEach((k) => { if (row[k] !== undefined) x[k] = row[k] === '' ? null : row[k]; }); if (row.start_time !== undefined) x.start_time = memTime(row.start_time); if (row.end_time !== undefined) x.end_time = memTime(row.end_time); },
+    async deleteEventSession(id) { const i = eventSessions.findIndex((y) => y.id === id); if (i >= 0) eventSessions.splice(i, 1); applications.forEach((a) => { if (a.session_id === id) a.session_id = null; }); },
+    async setApplicationSession(appId, sessionId) { const a = applications.find((x) => x.id === appId); if (a) a.session_id = sessionId || null; },
+    async renderAgreement(appId, lang) { return memRenderAgreement(appId, lang); },
+    async acceptAgreement({ appId, talentId, typedName, ip, userAgent, lang }) {
+      const a = applications.find((x) => x.id === appId);
+      if (!a || a.talent_id !== talentId) return { ok: false, error: 'not_found' };
+      const ex = acceptances.find((x) => x.application_id === appId);
+      if (ex) return { ok: true, id: ex.id, version: ex.template_version, accepted_at: ex.accepted_at, already: true };
+      if (a.status !== 'approved') return { ok: false, error: 'bad_status', status: a.status };
+      const acc = accounts.find((x) => x.id === a.talent_id) || {};
+      const legal = (acc.full_name && String(acc.full_name).trim()) || acc.name || '';
+      if (!normName(typedName) || normName(typedName) !== normName(legal)) return { ok: false, error: 'name_mismatch' };
+      const r = memRenderAgreement(appId, lang);
+      if (!r.ok) return r;
+      const ses = eventSessions.find((x) => x.id === a.session_id) || null;
+      const at = now();
+      const row = { id: 'agr-' + (++seq), application_id: appId, talent_id: a.talent_id, event_id: a.event_id, session_id: a.session_id || null,
+        session_snapshot: ses ? { name: ses.name, date: ses.session_date, start: ses.start_time.slice(0, 5), end: ses.end_time.slice(0, 5), arrival: arrivalOf(ses.start_time).replace('.', ':') } : null,
+        assignment_snapshot: Object.assign({}, r.details, { category: r.category, title: r.title }), template_id: r.template_id, template_version: r.version,
+        accepted_at: at, typed_name: String(typedName).trim(), ip_address: ip || null, user_agent: userAgent || null, acceptance_method: 'clickwrap', lang: lang === 'en' ? 'en' : 'id', body_rendered_html: r.body_html, pdf_path: null };
+      acceptances.push(row);
+      Object.assign(a, { status: 'assigned', agreement_accepted_at: at, confirmed_at: at });
+      statusLogs.push({ id: 'sl-' + (++seq), application_id: appId, from_status: 'approved', to_status: 'assigned', changed_by: null, actor_name: 'talent: clickwrap v' + r.version, changed_at: at });
+      return { ok: true, id: row.id, version: r.version, accepted_at: at };
+    },
+    async declineAssignment(appId, talentId) {
+      const a = applications.find((x) => x.id === appId);
+      if (!a || a.talent_id !== talentId) return { ok: false, error: 'not_found' };
+      if (a.status !== 'approved') return { ok: false, error: 'bad_status', status: a.status };
+      applicationChoices.forEach((c) => { if (c.application_id === appId) c.accepted = false; });
+      Object.assign(a, { status: 'rejected', note: 'Declined by talent', reviewed_at: now() });
+      statusLogs.push({ id: 'sl-' + (++seq), application_id: appId, from_status: 'approved', to_status: 'rejected', changed_by: null, actor_name: 'talent: declined assignment', changed_at: now() });
+      return { ok: true };
+    },
+    async listAgreementTemplates() { return agreementTemplates.map((x) => ({ ...x })).sort((a, b) => a.talent_category.localeCompare(b.talent_category) || b.version - a.version); },
+    async publishAgreementVersion({ category, title, titleEn, bodyHtml, bodyEnHtml, createdBy }) {
+      const v = agreementTemplates.filter((x) => x.talent_category === category).reduce((m, x) => Math.max(m, x.version), 0) + 1;
+      agreementTemplates.forEach((x) => { if (x.talent_category === category) x.is_active = false; });
+      const id = 'tpl-' + (++seq);
+      agreementTemplates.push({ id, talent_category: category, version: v, title, title_en: titleEn || null, body_html: bodyHtml, body_en_html: bodyEnHtml || null, is_active: true, published_at: now(), created_by: createdBy || null });
+      return id;
+    },
+    async listAgreementAcceptances(eventId) { return acceptances.filter((x) => !eventId || x.event_id === eventId).map((x) => ({ ...x })); },
+    async getAgreementAcceptance(appId) { const x = acceptances.find((y) => y.application_id === appId); return x ? { ...x } : null; },
+    async setAgreementPdfPath(acceptanceId, pdfPath) { const x = acceptances.find((y) => y.id === acceptanceId); if (x && !x.pdf_path) x.pdf_path = pdfPath; },
+    async uploadAgreementPdf(pdfPath, buffer) { if (!agreementPdfs.has(pdfPath)) agreementPdfs.set(pdfPath, buffer); },
+    async downloadAgreementPdf(pdfPath) { return agreementPdfs.get(pdfPath) || null; },
     async getApplicationForEvent(talentId, eventId) { return applications.find((a) => a.talent_id === talentId && a.event_id === eventId) || null; },
     async addApplicationChoices(applicationId, choices) { (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
     async replaceApplicationChoices(applicationId, choices) { for (let j = applicationChoices.length - 1; j >= 0; j--) if (applicationChoices[j].application_id === applicationId) applicationChoices.splice(j, 1); (choices || []).forEach((c) => applicationChoices.push({ id: 'ac-' + (++seq), application_id: applicationId, position_id: c.position_id, priority: c.priority, accepted: false })); },
