@@ -1494,7 +1494,7 @@ app.get('/acara', requireTalentBrowse('kol'), async (req, res, next) => {
     const eoIds = new Set(eoEvents.map((e) => e.id));
     const events = allEvents.filter((e) => e.is_active && !eoIds.has(e.id))
       .map((e) => ({
-        id: e.id, name: e.name, location: e.location, category: e.category, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), cats: eventCats(e),
+        id: e.id, name: e.name, location: e.location, category: e.category, starts_at: e.starts_at, ends_at: e.ends_at, mockup_path: e.mockup_path, status: eventStatusOf(e), regOpen: eventRegOpen(e), cats: eventCats(e),
         applied: appByEvent.has(e.id) ? {
           category: appByEvent.get(e.id).talent_type, status: appByEvent.get(e.id).status,
           station: appByEvent.get(e.id).station, station_loc: appByEvent.get(e.id).station_loc,
@@ -1699,7 +1699,7 @@ async function openPositionEvents(st, talentId) {
     const myApp = myAppByEvent.get(ev.id) || null;
     open.push(Object.assign({}, ev, {
       openPositions: openPos, eoName: eoName.get(ev.created_by) || '',
-      applied: !!myApp, myStatus: myApp ? myApp.status : null, status: eventStatusOf(ev),
+      applied: !!myApp, myStatus: myApp ? myApp.status : null, status: eventStatusOf(ev), regOpen: true,
     }));
   }
   open.sort((a, b) => String(a.reg_deadline || '9999').localeCompare(String(b.reg_deadline || '9999')));

@@ -1675,5 +1675,7 @@
   "cw.tpl.publish": "Publish new version",
   "cw.tpl.publishConfirm": "Publish a new version? It is used for the next acceptances right away; earlier acceptances keep their version.",
   "cw.tpl.published": "New version published and active.",
-  "cw.tpl.invalid": "Title and agreement text are required."
+  "cw.tpl.invalid": "Title and agreement text are required.",
+  "ev.status.regOpen": "Registration open",
+  "ev.status.regClosed": "Registration closed"
 }

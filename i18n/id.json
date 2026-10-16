@@ -1675,5 +1675,7 @@
   "cw.tpl.publish": "Terbitkan versi baru",
   "cw.tpl.publishConfirm": "Terbitkan versi baru? Versi ini langsung dipakai untuk persetujuan berikutnya; persetujuan lama tetap memakai versinya.",
   "cw.tpl.published": "Versi baru diterbitkan dan aktif.",
-  "cw.tpl.invalid": "Judul dan isi perjanjian wajib diisi."
+  "cw.tpl.invalid": "Judul dan isi perjanjian wajib diisi.",
+  "ev.status.regOpen": "Pendaftaran dibuka",
+  "ev.status.regClosed": "Pendaftaran ditutup"
 }
