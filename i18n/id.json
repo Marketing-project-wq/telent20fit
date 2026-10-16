@@ -1677,5 +1677,6 @@
   "cw.tpl.published": "Versi baru diterbitkan dan aktif.",
   "cw.tpl.invalid": "Judul dan isi perjanjian wajib diisi.",
   "ev.status.regOpen": "Pendaftaran dibuka",
-  "ev.status.regClosed": "Pendaftaran ditutup"
+  "ev.status.regClosed": "Pendaftaran ditutup",
+  "ev.status.notStarted": "Akan datang"
 }

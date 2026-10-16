@@ -2476,13 +2476,13 @@ function evCoverPick(seed) {
 function eventCover(e, lang) {
   const L = normLang(lang);
   // Badge follows REGISTRATION first (these cards are for applying): open →
-  // "Registration open"; not yet open → "Coming soon"; otherwise the event's own
-  // timing (ongoing) or "Registration closed". Lists without the flag keep the
-  // old date-based label.
+  // "Registration open"; registration not yet open → "Coming soon" (ONLY then);
+  // otherwise the event's own timing (ongoing) or "Registration closed". Lists
+  // without the flag fall back to "Upcoming" — never "Coming soon".
   const ongoing = e.status === 'ongoing';
   const kind = e.soon ? 'soon' : e.regOpen === true ? 'open' : ongoing ? 'ongoing' : e.regOpen === false ? 'closed' : 'upcoming';
   const badgeColor = { open: '#0f9d6a', ongoing: '#0f9d6a', closed: '#6b7280' }[kind] || '#E4121F';
-  const badgeText = tr(L, { open: 'ev.status.regOpen', soon: 'ev.status.upcoming', ongoing: 'ev.status.ongoing', closed: 'ev.status.regClosed', upcoming: 'ev.status.upcoming' }[kind]);
+  const badgeText = tr(L, { open: 'ev.status.regOpen', soon: 'ev.status.upcoming', ongoing: 'ev.status.ongoing', closed: 'ev.status.regClosed', upcoming: 'ev.status.notStarted' }[kind]);
   const badge = `<span class="ev-cover-badge" style="color:${badgeColor}">● ${esc(badgeText)}</span>`;
   // With a poster, show the full image at its natural aspect ratio (no crop);
   // otherwise fall back to the generated gradient cover.
@@ -2501,10 +2501,15 @@ function eventCover(e, lang) {
 }
 
 /** Small status badge for an event teaser: ongoing (ok) / coming soon (warn). */
-function eventStatusBadge(status, lang) {
+// "Coming soon" only when registration hasn't opened yet; open registration says
+// so; otherwise ongoing / upcoming by date.
+function eventStatusBadge(status, lang, e) {
   const L = normLang(lang);
+  const ev = e || {};
+  if (ev.soon) return `<span class="dl-when" style="background:var(--red-soft);color:var(--red)">${tr(L, 'ev.status.upcoming')}</span>`;
+  if (ev.regOpen) return `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${tr(L, 'ev.status.regOpen')}</span>`;
   if (status === 'ongoing') return `<span class="dl-when" style="background:var(--ok-soft);color:var(--ok)">${tr(L, 'ev.status.ongoing')}</span>`;
-  return `<span class="dl-when" style="background:var(--red-soft);color:var(--red)">${tr(L, 'ev.status.upcoming')}</span>`;
+  return `<span class="dl-when" style="background:var(--card2);color:var(--muted)">${tr(L, 'ev.status.notStarted')}</span>`;
 }
 
 /**
@@ -2695,7 +2700,7 @@ function talentDataDiri(type, opts = {}) {
         const dateLine = e.starts_at ? `<div class="muted" style="font-size:12.5px;margin-top:3px">${fmtDay(e.starts_at)}${e.ends_at ? ' – ' + fmtDay(e.ends_at) : ''}</div>` : '';
         return `<div class="dl-item" style="align-items:flex-start">
           <div style="min-width:0"><b>${esc(e.name)}</b>${dateLine}</div>
-          ${eventStatusBadge(e.status, L)}
+          ${eventStatusBadge(e.status, L, e)}
         </div>`;
       }).join('')}</div>`
     : `<p class="muted" style="margin-top:12px">${t('dd.noEvents')}</p>`;
@@ -5511,7 +5516,7 @@ function kolEventsPage({ account, events, eoEvents, lang, cities }) {
   <div class="card" style="margin-top:14px;padding:12px 14px">
     <input type="text" id="evSearch" placeholder="${esc(t('ev.searchPh'))}" autocomplete="off" inputmode="search" style="width:100%;box-sizing:border-box">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-      ${chip('all', t('ev.filterAll'))}${chip('ongoing', t('ev.status.ongoing'))}${chip('upcoming', t('ev.status.upcoming'))}
+      ${chip('all', t('ev.filterAll'))}${chip('ongoing', t('ev.status.ongoing'))}${chip('upcoming', t('ev.status.notStarted'))}
     </div>
     ${typeRow}
   </div>` : '';
@@ -5594,7 +5599,7 @@ function kolEventDetail({ account, event, cats, myApplication, lang }) {
   <h1 style="margin-top:0">${esc(event.name)}</h1>
   ${dateLine ? `<p class="sub" style="margin-bottom:2px">${esc(dateLine)}</p>` : ''}
   ${locLine}
-  <div style="margin-top:10px">${eventStatusBadge(event.status, L)}</div>
+  <div style="margin-top:10px">${eventStatusBadge(event.status, L, event)}</div>
   ${(() => { const d = langText(event.description, event.description_en, '', L); return d.text ? `<p style="white-space:pre-wrap;margin-top:14px;text-align:justify">${esc(d.text)}</p>${d.fb ? `<div class="muted" style="font-size:12px;font-style:italic;margin-top:6px">${esc(t('common.transPending'))}</div>` : ''}` : ''; })()}
   ${action}
 </div>`;
